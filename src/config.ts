@@ -1,5 +1,5 @@
 /** Release information and the built-in free AI access. */
-export const APP_VERSION = '0.2.0';
+export const APP_VERSION = '0.1.0';
 
 /**
  * Free default: OpenRouter with NVIDIA Nemotron (free model). The key is NOT part of the source code:
