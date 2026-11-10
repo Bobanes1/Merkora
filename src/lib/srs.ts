@@ -121,8 +121,8 @@ export type Level = 'new' | 'learning' | 'familiar' | 'mastered';
 export const LEVELS: { id: Level; label: string; color: string; hint: string }[] = [
   { id: 'new', label: 'Neu', color: '#d9d9d9', hint: 'Noch nie gelernt' },
   { id: 'learning', label: 'Lernend', color: '#f2b84b', hint: 'Gerade erst gesehen oder vergessen' },
-  { id: 'familiar', label: 'Vertraut', color: '#b993de', hint: 'Sitzt schon ganz gut' },
-  { id: 'mastered', label: 'Gemeistert', color: '#7e3bb5', hint: 'Intervall von 21 Tagen oder mehr' },
+  { id: 'familiar', label: 'Vertraut', color: '#62bc8b', hint: 'Sitzt schon ganz gut' },
+  { id: 'mastered', label: 'Gemeistert', color: '#0f8552', hint: 'Intervall von 21 Tagen oder mehr' },
 ];
 
 export function levelOf(s: Srs): Level {

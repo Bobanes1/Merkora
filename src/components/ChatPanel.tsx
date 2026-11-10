@@ -10,14 +10,14 @@ const SUGGESTIONS = ['Fasse dieses Deck für mich zusammen.', 'Stell mir eine pr
 export function TutorFace({ size = 64 }: { size?: number }) {
   return (
     <svg viewBox="0 0 40 40" width={size} height={size} aria-hidden="true">
-      <circle cx="20" cy="22" r="15" fill="#7e3bb5" />
-      <circle cx="20" cy="27" r="8" fill="#b993de" />
+      <circle cx="20" cy="22" r="15" fill="#0f8552" />
+      <circle cx="20" cy="27" r="8" fill="#62bc8b" />
       <circle cx="14" cy="19" r="5.5" fill="#fff" />
       <circle cx="26" cy="19" r="5.5" fill="#fff" />
-      <circle cx="14.5" cy="19.5" r="2.4" fill="#271748" />
-      <circle cx="25.5" cy="19.5" r="2.4" fill="#271748" />
+      <circle cx="14.5" cy="19.5" r="2.4" fill="#002c17" />
+      <circle cx="25.5" cy="19.5" r="2.4" fill="#002c17" />
       <path d="M18 24h4l-2 3z" fill="#f2b84b" />
-      <path d="M8 10l5 4M32 10l-5 4" stroke="#7e3bb5" strokeWidth="3" strokeLinecap="round" />
+      <path d="M8 10l5 4M32 10l-5 4" stroke="#0f8552" strokeWidth="3" strokeLinecap="round" />
     </svg>
   );
 }

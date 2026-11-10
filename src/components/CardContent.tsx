@@ -81,7 +81,7 @@ audio, video { max-width: 100%; }
 table { border-collapse: collapse; margin: 0 auto; }
 td, th { border: 1px solid #d5d9e0; padding: 4px 8px; }
 .cloze { font-weight: 700; color: #2563eb; }
-details.hint summary { cursor: pointer; color: #7e3bb5; }
+details.hint summary { cursor: pointer; color: #0f8552; }
 .media-missing { min-width: 60px; min-height: 40px; outline: 2px dashed #d5d9e0; }
 .io-header { margin-bottom: 8px; }
 .io-wrap { position: relative; display: inline-block; max-width: 100%; }
@@ -92,9 +92,9 @@ details.hint summary { cursor: pointer; color: #7e3bb5; }
 .io-revealed { fill: rgba(255, 142, 142, 0.12); stroke: #e5484d; stroke-width: 2.5px; }
 .io-text { position: absolute; font-weight: 700; color: #000; font-size: 0.9em; }
 .io-extra { margin-top: 10px; }
-.card.nightMode { color: #e6e1ee; }
+.card.nightMode { color: #dae8df; }
 .nightMode .cloze { color: #8ab4ff; }
-.nightMode td, .nightMode th { border-color: #3a3644; }
+.nightMode td, .nightMode th { border-color: #2e3d34; }
 `;
 
 const hasMath = (s: string) => /\\\(|\\\[|\$\$/.test(s);

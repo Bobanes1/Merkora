@@ -11,7 +11,7 @@ const TOOLS: { id: Tool; label: string; icon: string }[] = [
   { id: 'text', label: 'Text', icon: 'T' },
   { id: 'eraser', label: 'Radierer', icon: '⌫' },
 ];
-const COLORS = ['#271748', '#7e3bb5', '#e5484d', '#f07d1a', '#f2b84b', '#3cba6f', '#4aa8ff', '#ffffff'];
+const COLORS = ['#002c17', '#0f8552', '#e5484d', '#f07d1a', '#f2b84b', '#3cba6f', '#4aa8ff', '#ffffff'];
 const W = 960;
 const H = 600;
 

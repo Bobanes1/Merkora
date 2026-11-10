@@ -21,10 +21,10 @@ const ICON_PATHS: Record<string, string> = {
 
 const svgUrl = (svg: string) => 'data:image/svg+xml,' + encodeURIComponent(svg);
 const OWL = svgUrl(
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><circle cx="20" cy="22" r="15" fill="#7e3bb5"/><circle cx="14" cy="19" r="5.5" fill="#fff"/><circle cx="26" cy="19" r="5.5" fill="#fff"/><circle cx="14.5" cy="19.5" r="2.4" fill="#271748"/><circle cx="25.5" cy="19.5" r="2.4" fill="#271748"/><path d="M18 25h4l-2 3z" fill="#f2b84b"/><path d="M8 10l5 4M32 10l-5 4" stroke="#7e3bb5" stroke-width="3" stroke-linecap="round"/></svg>',
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><circle cx="20" cy="22" r="15" fill="#0f8552"/><circle cx="14" cy="19" r="5.5" fill="#fff"/><circle cx="26" cy="19" r="5.5" fill="#fff"/><circle cx="14.5" cy="19.5" r="2.4" fill="#002c17"/><circle cx="25.5" cy="19.5" r="2.4" fill="#002c17"/><path d="M18 25h4l-2 3z" fill="#f2b84b"/><path d="M8 10l5 4M32 10l-5 4" stroke="#0f8552" stroke-width="3" stroke-linecap="round"/></svg>',
 );
 const RING = svgUrl(
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" fill="none" stroke="#efe6f8" stroke-width="4"/><circle cx="18" cy="18" r="15" fill="none" stroke="#7e3bb5" stroke-width="4" stroke-dasharray="68 94" stroke-linecap="round" transform="rotate(-90 18 18)"/></svg>',
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" fill="none" stroke="#ddf0e4" stroke-width="4"/><circle cx="18" cy="18" r="15" fill="none" stroke="#0f8552" stroke-width="4" stroke-dasharray="68 94" stroke-linecap="round" transform="rotate(-90 18 18)"/></svg>',
 );
 const iconUrl = (name: string) =>
   'data:image/svg+xml,' +
@@ -144,7 +144,7 @@ function PhoneMock() {
           <b>72%</b>
         </div>
         <small className="mk-center">Beherrschung</small>
-        {['#7e3bb5', '#b993de', '#f2b84b', '#d9d9d9'].map((c, i) => (
+        {['#0f8552', '#62bc8b', '#f2b84b', '#d9d9d9'].map((c, i) => (
           <div className="mk-level" key={c}>
             <i style={{ background: c }} />
             <span className="mk-bar" style={{ width: `${[70, 46, 30, 18][i]}%` }} />
@@ -201,13 +201,13 @@ export function HeroCarousel() {
             <div className="hero-stage">
               <PhoneMock />
               <Tile className="t-pod" color="linear-gradient(160deg,#ffb36b,#f07d1a)" icon="flame" alt="Lernserie" />
-              <Tile className="t-card" color="linear-gradient(160deg,#a66be0,#7e3bb5)" icon="star" alt="Lernpfad" />
+              <Tile className="t-card" color="linear-gradient(160deg,#1ca66a,#0f8552)" icon="star" alt="Lernpfad" />
             </div>
           </div>
           <div className="hero-slide" role="group" aria-hidden={i !== 2}>
             <div className="hero-stage">
               <DocMock />
-              <Tile className="t-tutor" color="linear-gradient(160deg,#a66be0,#7e3bb5)" icon="chat" alt="Tutor" />
+              <Tile className="t-tutor" color="linear-gradient(160deg,#1ca66a,#0f8552)" icon="chat" alt="Tutor" />
               <Tile className="t-edit" color="linear-gradient(160deg,#ff8a80,#ef5350)" icon="note" alt="Notizen" />
               <Tile className="t-spark" color="linear-gradient(160deg,#ffd54f,#f5b300)" icon="sparkle" alt="KI" />
             </div>

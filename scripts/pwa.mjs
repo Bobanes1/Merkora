@@ -64,12 +64,12 @@ const inEllipse = (x, y, cx, cy, rx, ry, rot) => {
 function icon(x, y) {
   const k = 0.82, o = 18 * (1 - k);
   const X = (x - o) / k, Y = (y - o) / k;
-  if (inEllipse(X, Y, 27.2, 7, 4, 1.8, -0.7)) return hex('#3cba6f');
-  if (inEllipse(X, Y, 19.6, 9.2, 3, 1.4, 0.7)) return hex('#2f9e5b');
-  if (X >= 21 && X <= 23 && Y >= 9 && Y <= 14.5) return hex('#2f9e5b');
+  if (inEllipse(X, Y, 27.2, 7, 4, 1.8, -0.7)) return hex('#a3e635');
+  if (inEllipse(X, Y, 19.6, 9.2, 3, 1.4, 0.7)) return hex('#65a30d');
+  if (X >= 21 && X <= 23 && Y >= 9 && Y <= 14.5) return hex('#65a30d');
   if (inRound(X, Y, 10, 19.5, 12, 2, 1) || inRound(X, Y, 10, 24, 9, 2, 1)) return hex('#ffffff');
-  if (inRound(X, Y, 6, 14, 24, 17, 4)) return hex('#7e3bb5');
-  return hex('#f3ebfa');
+  if (inRound(X, Y, 6, 14, 24, 17, 4)) return hex('#0f8552');
+  return hex('#e3f3e9');
 }
 for (const s of [192, 512]) writeFileSync(join(dist, `icon-${s}.png`), png(s, icon));
 writeFileSync(join(dist, 'apple-touch-icon.png'), png(180, icon));
