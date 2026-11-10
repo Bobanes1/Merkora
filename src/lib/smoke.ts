@@ -45,6 +45,16 @@ export async function runSmokeTest() {
       };
     });
   }
+  await step('exams', async () => {
+    const { addExam } = await import('./store');
+    const deck = getState().data.decks[0];
+    const date = new Date(Date.now() + 5 * 86_400_000).toISOString().slice(0, 10);
+    const exam = addExam({ title: 'Selbsttest-Prüfung', date, deckIds: [deck.id] });
+    await flush();
+    await new Promise((r) => setTimeout(r, 500));
+    const raw = (await invoke<string | null>('load_data')) ?? '';
+    return { saved: raw.includes(exam.id), deck: deck.name };
+  });
   await step('save', async () => {
     await flush();
     await new Promise((r) => setTimeout(r, 800));
