@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ChatPanel } from '../components/ChatPanel';
-import { IconCards, IconChart, IconChat, IconDoc, IconHeadphones, IconNote, IconPath, IconPlay, IconQuiz } from '../components/Icons';
+import { ExamDialog } from '../components/ExamDialog';
+import { countdownText, nextExamForDeck } from '../lib/exams';
+import { IconCalendar, IconCards, IconChart, IconChat, IconDoc, IconHeadphones, IconNote, IconPath, IconPlay, IconQuiz } from '../components/Icons';
 import PathTab from './tabs/PathTab';
 import { dueCards, findPath, useData } from '../lib/store';
 import CardsTab from './tabs/CardsTab';
@@ -33,6 +35,7 @@ export default function DeckPage() {
   const tabParam = params.get('tab') as TabId | null;
   const tab: TabId = TABS.some((t) => t.id === tabParam) ? (tabParam as TabId) : 'cards';
   const setTab = (t: TabId) => setParams({ tab: t });
+  const [examDialog, setExamDialog] = useState(false);
 
   useEffect(() => {
     if (deck) document.title = `${deck.name} – Merkora`;
@@ -50,6 +53,7 @@ export default function DeckPage() {
     );
 
   const due = dueCards(deck).length;
+  const exam = nextExamForDeck(data, deck.id);
 
   return (
     <div className={`deck-layout ${chat ? 'with-chat' : ''}`}>
@@ -63,6 +67,15 @@ export default function DeckPage() {
             <span className="crumb-current">{deck.name}</span>
           </nav>
           <div className="row-gap">
+            {exam ? (
+              <Link to="/calendar" className="exam-chip" title="Zum Kalender">
+                <IconCalendar size={14} /> {exam.title} · {countdownText(exam)}
+              </Link>
+            ) : (
+              <button type="button" className="btn ghost sm" onClick={() => setExamDialog(true)}>
+                <IconCalendar size={14} /> Prüfung verknüpfen
+              </button>
+            )}
             <button type="button" className={`btn ${chat ? 'soft' : 'outline'} sm`} onClick={() => setChat(!chat)}>
               <IconChat size={15} /> Tutor
             </button>
@@ -98,6 +111,7 @@ export default function DeckPage() {
         </div>
       </div>
       {chat && <ChatPanel deck={deck} onClose={() => setChat(false)} />}
+      {examDialog && <ExamDialog presetDeckId={deck.id} onClose={() => setExamDialog(false)} />}
     </div>
   );
 }

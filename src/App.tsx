@@ -10,6 +10,8 @@ import DeckPage from './pages/Deck';
 import ForgotKey from './pages/ForgotKey';
 import Library from './pages/Library';
 import Settings from './pages/Settings';
+import CalendarPage from './pages/Calendar';
+import Stats from './pages/Stats';
 import Setup from './pages/Setup';
 import { useStore } from './lib/store';
 
@@ -45,6 +47,8 @@ export default function App() {
         <Route path="/library/:ws/:course" element={<AppLayout><Library /></AppLayout>} />
         <Route path="/library/:ws/:course/:deck" element={<AppLayout><DeckPage /></AppLayout>} />
         <Route path="/settings" element={<AppLayout><Settings /></AppLayout>} />
+        <Route path="/calendar" element={<AppLayout><CalendarPage /></AppLayout>} />
+        <Route path="/stats" element={<AppLayout><Stats /></AppLayout>} />
         <Route path="/sync-callback" element={<SyncCallback />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

@@ -43,6 +43,7 @@ initStore()
     render();
     startJobRunner();
     startAutoSync();
+    void import('./lib/examReminders').then((m) => m.startExamReminders());
     if (isDesktop) void import('./lib/smoke').then((m) => m.runSmokeTest());
     if (isDesktop) void import('./lib/update').then((m) => m.startUpdateChecks());
   });

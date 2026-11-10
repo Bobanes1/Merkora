@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { kvDel, kvGet, kvSet, mediaDeleteMany, mediaKeys } from './db';
 import { desktop, isDesktop } from './desktop';
+import { capForExam, nextExamAt } from './exams';
 import { newSrs, schedule, type Rating, type Srs } from './srs';
 import { dayKey, uid, uniqueSlug } from './util';
 
@@ -15,6 +16,8 @@ export type Card = {
   /** Imported Anki cards: id of the note type look (CSS in `Deck.styles`) and the wrapping class (`card card1`). */
   styleId?: string;
   cardClass?: string;
+  /** Free tags (also taken over from Anki notes). */
+  tags?: string[];
   createdAt: number;
   updatedAt?: number;
   srs: Srs;
@@ -46,6 +49,19 @@ export type Deck = {
 export type Course = { id: string; workspaceId: string; name: string; slug: string };
 export type Workspace = { id: string; name: string; slug: string };
 export type Review = { deckId: string; cardId: string; at: number; rating: Rating };
+/** An exam date linked to the decks it covers. */
+export type Exam = {
+  id: string;
+  title: string;
+  /** YYYY-MM-DD */
+  date: string;
+  /** HH:MM (optional) */
+  time?: string;
+  deckIds: string[];
+  note?: string;
+  createdAt: number;
+  updatedAt?: number;
+};
 
 export type JobKind = 'summary' | 'quiz' | 'podcast' | 'cards';
 export type JobStatus = 'queued' | 'running' | 'done' | 'error';
@@ -81,6 +97,8 @@ export type Settings = {
   useFreeKey: boolean;
   /** Characters and animations. */
   animations: boolean;
+  /** Colour scheme. */
+  theme: 'system' | 'light' | 'dark';
   /** Use a different AI model for the chat (tutor, explanations, grading) than for generating content. */
   chatSeparate: boolean;
   chatProvider: Provider;
@@ -97,6 +115,8 @@ export type Data = {
   settings: Settings;
   game: Game;
   jobs: Job[];
+  /** Exam dates (calendar). */
+  exams: Exam[];
   /** Deleted ids with time – so a sync doesn't bring them back. */
   deleted?: Record<string, number>;
   /** When this copy was last saved (to pick the newest copy on start). */
@@ -139,6 +159,7 @@ const defaultSettings = (): Settings => ({
   claudeBatch: true,
   useFreeKey: true,
   animations: true,
+  theme: 'system',
   chatSeparate: false,
   chatProvider: 'openrouter',
   chatModel: '',
@@ -188,6 +209,7 @@ function sampleData(): Data {
     settings: defaultSettings(),
     game: { xpByDay: {}, dailyGoal: 50 },
     jobs: [],
+    exams: [],
   };
 }
 
@@ -216,6 +238,7 @@ function normalize(raw: unknown): Data | null {
     settings: { ...base.settings, ...(d.settings ?? {}) },
     game: { ...base.game, ...(d.game ?? {}) },
     jobs: d.jobs ?? [],
+    exams: d.exams ?? [],
     deleted: d.deleted ?? {},
     savedAt: d.savedAt,
   };
@@ -470,6 +493,7 @@ export function deleteDeck(id: string) {
     decks: d.decks.filter((x) => x.id !== id),
     reviews: d.reviews.filter((r) => r.deckId !== id),
     jobs: d.jobs.filter((j) => j.deckId !== id || j.status === 'running'),
+    exams: d.exams.map((e) => (e.deckIds.includes(id) ? { ...e, deckIds: e.deckIds.filter((x) => x !== id), updatedAt: Date.now() } : e)),
     deleted: tomb(d, [id]),
   }));
 }
@@ -479,7 +503,7 @@ export function updateDeck(id: string, patch: Partial<Deck> | ((d: Deck) => Part
     decks: d.decks.map((x) => (x.id === id ? { ...x, ...(typeof patch === 'function' ? patch(x) : patch), updatedAt: Date.now() } : x)),
   }));
 }
-export type NewCard = { front: string; back: string; html?: boolean; styleId?: string; cardClass?: string };
+export type NewCard = { front: string; back: string; html?: boolean; styleId?: string; cardClass?: string; tags?: string[]; srs?: Srs };
 export function addCards(deckId: string, pairs: NewCard[]) {
   const now = Date.now();
   const cards: Card[] = pairs.map((p) => ({
@@ -489,8 +513,9 @@ export function addCards(deckId: string, pairs: NewCard[]) {
     ...(p.html ? { html: true } : {}),
     ...(p.styleId ? { styleId: p.styleId } : {}),
     ...(p.cardClass ? { cardClass: p.cardClass } : {}),
+    ...(p.tags?.length ? { tags: p.tags } : {}),
     createdAt: now,
-    srs: newSrs(now),
+    srs: p.srs ?? newSrs(now),
   }));
   updateDeck(deckId, (x) => ({ cards: [...x.cards, ...cards] }));
 }
@@ -515,7 +540,12 @@ export function reviewCard(deckId: string, cardId: string, rating: Rating) {
     ...d,
     decks: d.decks.map((x) =>
       x.id === deckId
-        ? { ...x, cards: x.cards.map((c) => (c.id === cardId ? { ...c, srs: schedule(c.srs, rating, now) } : c)) }
+        ? {
+            ...x,
+            cards: x.cards.map((c) =>
+              c.id === cardId ? { ...c, srs: capForExam(schedule(c.srs, rating, now), nextExamAt(d, deckId, now), now) } : c,
+            ),
+          }
         : x,
     ),
     reviews: [...d.reviews, { deckId, cardId, at: now, rating }],
@@ -524,6 +554,19 @@ export function reviewCard(deckId: string, cardId: string, rating: Rating) {
 
 export function logReview(deckId: string, cardId: string, rating: Rating) {
   update((d) => ({ ...d, reviews: [...d.reviews, { deckId, cardId, at: Date.now(), rating }] }));
+}
+
+// ---------- exams ----------
+export function addExam(e: Omit<Exam, 'id' | 'createdAt'>): Exam {
+  const exam: Exam = { ...e, id: uid(), createdAt: Date.now() };
+  update((d) => ({ ...d, exams: [...d.exams, exam] }));
+  return exam;
+}
+export function updateExam(id: string, patch: Partial<Exam>) {
+  update((d) => ({ ...d, exams: d.exams.map((e) => (e.id === id ? { ...e, ...patch, updatedAt: Date.now() } : e)) }));
+}
+export function deleteExam(id: string) {
+  update((d) => ({ ...d, exams: d.exams.filter((e) => e.id !== id), deleted: tomb(d, [id]) }));
 }
 
 // ---------- gamification ----------

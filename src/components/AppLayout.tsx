@@ -12,6 +12,8 @@ import {
   IconLibrary,
   IconMenu,
   IconSettings,
+  IconCalendar,
+  IconChart,
 } from './Icons';
 import { InstallButton } from './InstallButton';
 import { JobsIndicator } from './Jobs';
@@ -120,6 +122,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </NavLink>
           <NavLink to="/library" end className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             <IconLibrary /> Bibliothek
+          </NavLink>
+          <NavLink to="/calendar" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            <IconCalendar /> Kalender
+          </NavLink>
+          <NavLink to="/stats" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            <IconChart /> Statistik
           </NavLink>
           <NavLink to="/settings" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             <IconSettings /> Einstellungen

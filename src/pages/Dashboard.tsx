@@ -9,6 +9,8 @@ import { Mascot } from '../components/Mascot';
 import { deckUrl, dueCards, useStore } from '../lib/store';
 import { levelCounts, masteryPercent, perDay, streak } from '../lib/stats';
 import { GameBar } from './tabs/PathTab';
+import { countdownText, dailyPlan, readiness, upcomingExams } from '../lib/exams';
+import { IconCalendar } from '../components/Icons';
 
 const WEEKDAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
 
@@ -60,6 +62,7 @@ export default function Dashboard() {
       {!apiKey && data.settings.provider !== 'custom' && !data.settings.useFreeKey && <NoKeyNotice />}
 
       <GameBar />
+      <UpcomingExams />
       {pathDeck && (
         <Link to={deckUrl(data, pathDeck.deck, 'path')} className="path-cta">
           <span className="path-cta-icon">
@@ -182,5 +185,38 @@ export default function Dashboard() {
       {create && <CreateWithAI onClose={() => setCreate(false)} />}
       {anki && <AnkiImport onClose={() => setAnki(false)} />}
     </div>
+  );
+}
+
+/** The next exams with countdown, readiness and today's cards. */
+function UpcomingExams() {
+  const data = useStore((s) => s.data);
+  const exams = upcomingExams(data).slice(0, 3);
+  if (!exams.length) return null;
+  return (
+    <section className="panel dash-exams">
+      <div className="panel-head">
+        <h2>
+          <IconCalendar size={18} /> Nächste Prüfungen
+        </h2>
+        <Link to="/calendar" className="small-link">
+          Kalender
+        </Link>
+      </div>
+      {exams.map((e) => {
+        const r = readiness(data, e);
+        const p = dailyPlan(data, e);
+        return (
+          <Link key={e.id} to="/calendar" className="dash-exam">
+            <b>{e.title}</b>
+            <span className="pill-count">{countdownText(e)}</span>
+            <span className="bar">
+              <i style={{ width: `${r.percent}%` }} />
+            </span>
+            <small>{r.total ? (p.left ? `heute ${p.left} Karten` : 'Tagesziel erreicht') : 'keine Decks'}</small>
+          </Link>
+        );
+      })}
+    </section>
   );
 }

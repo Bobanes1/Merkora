@@ -383,6 +383,7 @@ export function mergeData(local: Data, remote: Data): Data {
     courses: unionById(local.courses, remote.courses ?? [], isDel),
     decks: unionById(local.decks, remote.decks ?? [], isDel, (x, y) => mergeDeck(x, y, isDel)),
     reviews: reviews.sort((x, y) => x.at - y.at),
+    exams: unionById(local.exams ?? [], remote.exams ?? [], isDel, (x, y) => ((y.updatedAt ?? y.createdAt) > (x.updatedAt ?? x.createdAt) ? y : x)),
     game: { ...local.game, xpByDay: xp },
     deleted,
   };

@@ -37,7 +37,7 @@ export const JOB_LABEL: Record<JobKind, string> = {
 export const JOB_TAB: Record<JobKind, string> = { summary: 'summary', quiz: 'quiz', podcast: 'podcast', cards: 'cards' };
 
 // ---------- toasts ----------
-export type Toast = { id: string; text: string; jobId?: string; ok: boolean };
+export type Toast = { id: string; text: string; jobId?: string; ok: boolean; /** Link target (e.g. the calendar). */ to?: string; toLabel?: string; /** Stays until closed. */ sticky?: boolean };
 let toasts: Toast[] = [];
 const toastListeners = new Set<() => void>();
 export const getToasts = () => toasts;
@@ -49,7 +49,7 @@ export function pushToast(t: Omit<Toast, 'id'>) {
   const toast = { ...t, id: Math.random().toString(36).slice(2) };
   toasts = [...toasts, toast];
   toastListeners.forEach((l) => l());
-  setTimeout(() => dismissToast(toast.id), 9000);
+  if (!t.sticky) setTimeout(() => dismissToast(toast.id), 9000);
 }
 export function dismissToast(id: string) {
   toasts = toasts.filter((t) => t.id !== id);

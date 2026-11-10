@@ -145,6 +145,11 @@ export function Toaster() {
         return (
           <div key={t.id} className={`toast ${t.ok ? 'ok' : 'bad'}`}>
             <span>{t.text}</span>
+            {t.to && (
+              <Link to={t.to} onClick={() => dismissToast(t.id)}>
+                {t.toLabel ?? 'Ansehen'}
+              </Link>
+            )}
             {deck && job && t.ok && (
               <Link to={deckUrl(getState().data, deck, JOB_TAB[job.kind])} onClick={() => dismissToast(t.id)}>
                 Ansehen

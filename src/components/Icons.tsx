@@ -174,3 +174,17 @@ export const IconClaude = ({ size = 22 }: { size?: number }) => (
     </g>
   </svg>
 );
+
+export const IconCalendar = mk(
+  <>
+    <rect x="3.5" y="5" width="17" height="15" rx="2" />
+    <path d="M3.5 10h17M8 3v4M16 3v4" />
+  </>,
+);
+export const IconTag = mk(
+  <>
+    <path d="M3 12V4h8l9 9-8 8z" />
+    <circle cx="7.5" cy="8.5" r="1.3" />
+  </>,
+);
+export const IconMoon = mk(<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" />);

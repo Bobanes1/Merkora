@@ -5,12 +5,20 @@ import { Confetti, Mascot, praise, type Mood } from '../../components/Mascot';
 import { Markdown } from '../../components/Markdown';
 import { explainCard, gradeAnswer, hasKey } from '../../lib/ai';
 import { cardBackText, cardFrontText } from '../../lib/content';
-import { RATINGS, previewInterval, schedule, type Rating } from '../../lib/srs';
-import { addXp, logReview, reviewCard, type Deck } from '../../lib/store';
+import { RATINGS, formatDelay, schedule, type Rating, type Srs } from '../../lib/srs';
+import { addXp, logReview, reviewCard, useStore, type Deck } from '../../lib/store';
+import { capForExam, countdownText, nextExamAt, nextExamForDeck } from '../../lib/exams';
 
 type Grade = { score: number; verdict: string; feedback: string };
 
 export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => void }) {
+  const exams = useStore((s) => s.data.exams);
+  const exam = nextExamForDeck({ exams }, deck.id);
+  /** Time until the next review for a rating – never after the exam of this deck. */
+  const preview = (s: Srs, r: Rating) => {
+    const now = Date.now();
+    return formatDelay(capForExam(schedule(s, r, now), nextExamAt({ exams }, deck.id, now), now).due - now);
+  };
   const [mode, setMode] = useState<'due' | 'all' | null>(null);
   const [queue, setQueue] = useState<string[]>([]);
   const [flipped, setFlipped] = useState(false);
@@ -166,6 +174,11 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
   const total = done + queue.length;
   return (
     <div className="learn">
+      {exam && (
+        <div className="exam-hint">
+          Prüfung „{exam.title}“ {countdownText(exam)} – alle Karten kommen vorher noch einmal dran.
+        </div>
+      )}
       <div className="learn-progress">
         <span>
           {done} / {total}
@@ -231,7 +244,7 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
               onClick={() => rate(r.value)}
             >
               <b>{r.label}</b>
-              <small>{mode === 'due' ? previewInterval(card.srs, r.value) : `Taste ${r.key}`}</small>
+              <small>{mode === 'due' ? preview(card.srs, r.value) : `Taste ${r.key}`}</small>
             </button>
           ))}
         </div>
