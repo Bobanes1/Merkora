@@ -1,5 +1,5 @@
 // Checks the spaced-repetition intervals. Run: npm run test:srs
-import { formatDelay, newSrs, schedule, type Rating, type Srs } from '../src/lib/srs';
+import { ankiToSrs, formatDelay, newSrs, schedule, type Rating, type Srs } from '../src/lib/srs';
 import { capForExam, dailyPlan, examAt, toIcs } from '../src/lib/exams';
 
 const MIN = 60_000;
@@ -63,6 +63,16 @@ console.log('Prüfungsmodus');
   ok(plan.target === 10, `Tagesplan: 50 offene Karten, 5 Tage → ${plan.target} pro Tag`);
   const ics = toIcs([exam], []);
   ok(/DTSTART;VALUE=DATE:20261115/.test(ics) && /SUMMARY:Prüfung: Statistik/.test(ics), 'Kalenderdatei (.ics) korrekt');
+}
+
+console.log('Anki-Lernstand');
+{
+  const crt = 1_700_000_000;
+  const now = (crt + 100 * 86400) * 1000;
+  const r = ankiToSrs({ kind: 2, due: 120, ivl: 30, factor: 2300, reps: 7, lapses: 1 }, crt, now);
+  ok(r.interval === 30 && r.ease === 2.3 && r.due === (crt + 120 * 86400) * 1000 && r.step === undefined, 'Wiederholungskarte: Intervall, Leichtigkeit und Fälligkeit übernommen (in 20 Tagen)');
+  const l = ankiToSrs({ kind: 3, due: 0, ivl: 12, factor: 2000, reps: 9, lapses: 2 }, crt, now);
+  ok(l.step === 0 && l.lapseIvl === 12 && l.due === now, 'Karte im Neu-Lernen startet beim ersten Schritt');
 }
 
 console.log(failures ? `\n${failures} Test(s) fehlgeschlagen` : '\nAlle SRS-Tests bestanden');

@@ -6,10 +6,21 @@
 import { sanitize } from './content';
 import { importApkgBytes, importApkgPath, inTauri } from './desktop';
 import { uid } from './util';
+import type { AnkiProgress } from './srs';
 
-export type ImportedCard = { front: string; back: string; styleId?: string; cardClass?: string };
+export type ImportedCard = { front: string; back: string; styleId?: string; cardClass?: string; tags?: string[]; progress?: AnkiProgress };
 export type ImportedDeck = { name: string; cards: ImportedCard[] };
-export type AnkiResult = { decks: ImportedDeck[]; styles: Record<string, string>; media: number; missingMedia: number; skipped: number };
+export type AnkiResult = {
+  decks: ImportedDeck[];
+  styles: Record<string, string>;
+  media: number;
+  missingMedia: number;
+  skipped: number;
+  /** Creation time of the Anki collection (unix seconds), base of review due days. */
+  crt: number;
+  /** Cards that already have learning progress in Anki – the user is asked whether to keep it. */
+  withProgress: number;
+};
 
 /** `src` is a file chosen in the window or (desktop app) the path of a file opened with Merkora. */
 export async function readApkg(src: File | Blob | string, onProgress: (t: string) => void = () => undefined): Promise<AnkiResult> {
@@ -44,5 +55,13 @@ export async function readApkg(src: File | Blob | string, onProgress: (t: string
     );
     onProgress(`Bilder und Töne werden gespeichert … (${Math.min(i + 100, res.media.length)}/${res.media.length})`);
   }
-  return { decks: res.decks, styles: res.styles, media: res.media.length, missingMedia: res.missingMedia, skipped: res.skipped };
+  return {
+    decks: res.decks,
+    styles: res.styles,
+    media: res.media.length,
+    missingMedia: res.missingMedia,
+    skipped: res.skipped,
+    crt: res.crt,
+    withProgress: res.withProgress,
+  };
 }

@@ -224,3 +224,27 @@ fn template_sections() {
     render(&nodes, &ctx, &mut out);
     assert_eq!(out, "A[x]noY<details class=\"hint\"><summary>Hinweis</summary>x</details>");
 }
+
+#[test]
+fn progress_and_tags_are_read() {
+    let models = r#"{"1":{"type":0,"flds":[{"name":"Front","ord":0},{"name":"Back","ord":1}],"tmpls":[{"ord":0,"qfmt":"{{Front}}","afmt":"{{Back}}"}]}}"#;
+    let col = db_bytes(|db| {
+        db.execute_batch(OLD_SCHEMA).unwrap();
+        db.execute("INSERT INTO col VALUES (1,1700000000,0,0,11,0,0,0,'{}',?1,'{\"1\":{\"name\":\"Default\"}}','{}','{}')", [models]).unwrap();
+        db.execute_batch("
+INSERT INTO notes VALUES (1,'a',1,0,0,' bio wichtig ','Frage AAntwort A','',0,0,'');
+INSERT INTO notes VALUES (2,'b',1,0,0,'','Frage BAntwort B','',0,0,'');
+INSERT INTO cards VALUES (11,1,1,0,0,0,2,2,120,30,2300,7,1,0,0,0,0,'');
+INSERT INTO cards VALUES (12,2,1,0,0,0,0,0,5,0,0,0,0,0,0,0,0,'');").unwrap();
+    });
+    let zip = zip_files(&[("collection.anki2", col), ("media", b"{}".to_vec())]);
+    let r = parse_apkg(&zip, &mut counter()).unwrap();
+    assert_eq!(r.crt, 1700000000);
+    assert_eq!(r.with_progress, 1);
+    let cards = &r.decks[0].cards;
+    let a = cards.iter().find(|c| c.front == "Frage A").unwrap();
+    let p = a.progress.as_ref().unwrap();
+    assert_eq!((p.kind, p.due, p.ivl, p.factor, p.reps, p.lapses), (2, 120, 30, 2300, 7, 1));
+    assert_eq!(a.tags, vec!["bio", "wichtig"]);
+    assert!(cards.iter().find(|c| c.front == "Frage B").unwrap().progress.is_none());
+}

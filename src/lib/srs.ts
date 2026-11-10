@@ -133,3 +133,29 @@ export function levelOf(s: Srs): Level {
 }
 
 export const levelWeight: Record<Level, number> = { new: 0, learning: 0.25, familiar: 0.6, mastered: 1 };
+
+/** Learning state of a card in Anki (raw values from the collection). */
+export type AnkiProgress = { kind: number; due: number; ivl: number; factor: number; reps: number; lapses: number; suspended?: boolean };
+
+/**
+ * Turns Anki's learning state into Merkora's: review cards keep interval, ease and due day
+ * (Anki counts due days from the collection's creation `crt`); cards in (re)learning restart at the first step.
+ */
+export function ankiToSrs(p: AnkiProgress, crt: number, now = Date.now()): Srs {
+  const ease = Math.max(1.3, (p.factor || 2500) / 1000);
+  if (p.kind === 2) {
+    const interval = Math.max(1, p.ivl);
+    const due = crt > 0 ? (crt + p.due * 86400) * 1000 : now;
+    return { ease, interval, reps: Math.max(1, p.reps), lapses: p.lapses, due, last: Math.min(now, due - interval * DAY) };
+  }
+  return {
+    ease,
+    interval: 0,
+    reps: p.reps,
+    lapses: p.lapses,
+    due: now,
+    last: now,
+    step: 0,
+    ...(p.kind === 3 ? { lapseIvl: Math.max(1, p.ivl) } : {}),
+  };
+}

@@ -4,6 +4,7 @@
  * In the plain web version none of this exists and the app falls back to browser storage.
  */
 import { convertFileSrc, invoke, isTauri } from '@tauri-apps/api/core';
+import type { AnkiProgress } from './srs';
 
 export const inTauri = typeof window !== 'undefined' && isTauri();
 
@@ -86,11 +87,16 @@ export const mediaFileDelete = (ids: string[]) => invoke('media_delete', { ids }
 
 // ---------- Anki ----------
 export type RustAnkiResult = {
-  decks: { name: string; cards: { front: string; back: string; styleId?: string; cardClass: string }[] }[];
+  decks: {
+    name: string;
+    cards: { front: string; back: string; styleId?: string; cardClass: string; tags?: string[]; progress?: AnkiProgress }[];
+  }[];
   styles: Record<string, string>;
   media: number;
   missingMedia: number;
   skipped: number;
+  crt: number;
+  withProgress: number;
 };
 export function importApkgBytes(bytes: Uint8Array) {
   return invoke<RustAnkiResult>('import_apkg', bytes);

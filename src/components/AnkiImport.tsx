@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import type { AnkiResult } from '../lib/anki';
 import { addCards, addCourse, addDeck, addWorkspace, deckUrl, getState, updateDeck, useData } from '../lib/store';
 import { IconUpload } from './Icons';
+import { ankiToSrs } from '../lib/srs';
 import { Modal } from './Modal';
 
-type Done = { decks: { id: string; name: string; count: number }[]; media: number; missing: number; skipped: number; into?: string };
+type Done = { decks: { id: string; name: string; count: number }[]; media: number; missing: number; skipped: number; into?: string; kept?: boolean };
 
 export const isAnkiName = (name: string) => /\.(apkg|colpkg)$/i.test(name);
 const baseNameOf = (name: string) => name.replace(/^.*[\\/]/, '').replace(/\.(apkg|colpkg)$/i, '');
@@ -15,8 +16,20 @@ const baseNameOf = (name: string) => name.replace(/^.*[\\/]/, '').replace(/\.(ap
  * - `targetDeckId`: all cards go into this existing deck.
  * - otherwise every Anki deck becomes its own deck in `courseId` (or a new course named after the file).
  */
-export function storeImport(res: AnkiResult, opts: { fileName: string; targetDeckId?: string; courseId?: string; deckName?: string }) {
-  const toNew = (c: AnkiResult['decks'][number]['cards'][number]) => ({ ...c, html: true });
+export function storeImport(
+  res: AnkiResult,
+  opts: { fileName: string; targetDeckId?: string; courseId?: string; deckName?: string; /** keep Anki's learning progress */ keepProgress?: boolean },
+) {
+  const now = Date.now();
+  const toNew = (c: AnkiResult['decks'][number]['cards'][number]) => ({
+    front: c.front,
+    back: c.back,
+    html: true,
+    styleId: c.styleId,
+    cardClass: c.cardClass,
+    tags: c.tags,
+    ...(opts.keepProgress && c.progress ? { srs: ankiToSrs(c.progress, res.crt, now) } : {}),
+  });
   const target = opts.targetDeckId ? getState().data.decks.find((d) => d.id === opts.targetDeckId) : undefined;
   if (target) {
     const cards = res.decks.flatMap((d) => d.cards.map(toNew));
@@ -68,6 +81,7 @@ export function AnkiImport({
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [done, setDone] = useState<Done | null>(null);
+  const [ask, setAsk] = useState<AnkiResult | null>(null);
   const target = targetDeckId ? data.decks.find((d) => d.id === targetDeckId) : undefined;
   const fileName = file?.name ?? path?.replace(/^.*[\\/]/, '') ?? '';
 
@@ -79,14 +93,19 @@ export function AnkiImport({
     try {
       const { readApkg } = await import('../lib/anki');
       const res = await readApkg(src, setBusy);
-      setBusy('Karten werden angelegt …');
-      const created = storeImport(res, { fileName, targetDeckId: target?.id, courseId: courseId === '__new' ? undefined : courseId });
-      setDone({ decks: created, media: res.media, missing: res.missingMedia, skipped: res.skipped, into: target?.name });
+      // The file has learning progress from Anki: the user decides every time whether to keep it.
+      if (res.withProgress > 0) setAsk(res);
+      else finish(res, false);
     } catch (e) {
       setError(`Import fehlgeschlagen: ${(e as Error).message ?? e}`);
     } finally {
       setBusy('');
     }
+  };
+  const finish = (res: AnkiResult, keepProgress: boolean) => {
+    setAsk(null);
+    const created = storeImport(res, { fileName, targetDeckId: target?.id, courseId: courseId === '__new' ? undefined : courseId, keepProgress });
+    setDone({ decks: created, media: res.media, missing: res.missingMedia, skipped: res.skipped, into: target?.name, kept: keepProgress });
   };
 
   const open = (id: string, tab = 'cards') => {
@@ -104,6 +123,8 @@ export function AnkiImport({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  if (ask) return <ProgressQuestion res={ask} onAnswer={(keep) => finish(ask, keep)} onClose={onClose} />;
 
   if (done)
     return (
@@ -140,7 +161,9 @@ export function AnkiImport({
         )}
         {done.missing > 0 && <p className="muted small">{done.missing} Medien-Dateien fehlten in der Datei und werden nicht angezeigt.</p>}
         {done.skipped > 0 && <p className="muted small">{done.skipped} leere oder unlesbare Karten wurden übersprungen.</p>}
-        <p className="muted small">Alle Karten starten als neu – du beginnst ohne übernommenen Lernfortschritt.</p>
+        <p className="muted small">
+          {done.kept ? 'Der Lernfortschritt aus Anki wurde übernommen.' : 'Alle Karten starten als neu – du beginnst ohne übernommenen Lernfortschritt.'}
+        </p>
       </Modal>
     );
 
@@ -226,5 +249,38 @@ export function AnkiDropzone({
         }}
       />
     </div>
+  );
+}
+
+/** Asked on every Anki import whose file contains learning progress. */
+export function ProgressQuestion({ res, onAnswer, onClose }: { res: AnkiResult; onAnswer: (keep: boolean) => void; onClose: () => void }) {
+  const total = res.decks.reduce((a, d) => a + d.cards.length, 0);
+  return (
+    <Modal
+      title="Lernfortschritt aus Anki übernehmen?"
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="btn outline" onClick={() => onAnswer(false)}>
+            Nein, alle Karten neu lernen
+          </button>
+          <button type="button" className="btn primary" onClick={() => onAnswer(true)}>
+            Ja, Fortschritt übernehmen
+          </button>
+        </>
+      }
+    >
+      <p>
+        <b>{res.withProgress}</b> von {total} Karten hast du in Anki schon gelernt.
+      </p>
+      <ul className="muted small">
+        <li>
+          <b>Übernehmen:</b> Intervalle und Fälligkeiten bleiben wie in Anki – du machst nahtlos weiter.
+        </li>
+        <li>
+          <b>Neu lernen:</b> Alle Karten starten wieder bei null.
+        </li>
+      </ul>
+    </Modal>
   );
 }

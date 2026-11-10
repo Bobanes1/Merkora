@@ -21,6 +21,29 @@ pub struct AnkiCard {
     pub style_id: Option<String>,
     /// Class of the wrapping element, like Anki's `card card1`.
     pub card_class: String,
+    /// Tags of the note.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
+    /// Learning state in Anki (only for cards that were already studied).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub progress: Option<AnkiProgress>,
+}
+
+/// Raw scheduling data of an Anki card (converted to Merkora's scheduler in the app).
+#[derive(Serialize, Clone, Debug)]
+pub struct AnkiProgress {
+    /// 1 learning, 2 review, 3 relearning
+    pub kind: i64,
+    /// review: day number since collection creation; learning: unix seconds (or day number when > 1e9 is false)
+    pub due: i64,
+    /// interval in days (negative = seconds while learning)
+    pub ivl: i64,
+    /// ease in permille (2500 = 2.5)
+    pub factor: i64,
+    pub reps: i64,
+    pub lapses: i64,
+    /// suspended in Anki
+    pub suspended: bool,
 }
 
 #[derive(Serialize, Debug)]
@@ -41,6 +64,10 @@ pub struct Parsed {
     pub media: Vec<AnkiMedia>,
     pub missing: usize,
     pub skipped: usize,
+    /// Creation time of the collection (unix seconds) – base of review due days.
+    pub crt: i64,
+    /// Number of cards with learning progress in Anki.
+    pub with_progress: usize,
 }
 
 // ---------- small helpers ----------
@@ -692,7 +719,7 @@ fn parse_collection(
 
     let mut st = db
         .prepare(
-            "SELECT c.did, c.odid, c.ord, n.mid, n.flds, n.tags FROM cards c JOIN notes n ON n.id = c.nid ORDER BY c.did, c.due, n.id, c.ord",
+            "SELECT c.did, c.odid, c.ord, n.mid, n.flds, n.tags, c.type, c.queue, c.due, c.ivl, c.factor, c.reps, c.lapses, c.odue FROM cards c JOIN notes n ON n.id = c.nid ORDER BY c.did, c.due, n.id, c.ord",
         )
         .map_err(|e| e.to_string())?;
     let rows = st
@@ -704,6 +731,7 @@ fn parse_collection(
                 r.get::<_, i64>(3)?,
                 r.get::<_, String>(4)?,
                 r.get::<_, Option<String>>(5)?.unwrap_or_default(),
+                [6, 7, 8, 9, 10, 11, 12, 13].map(|i| r.get::<_, Option<i64>>(i).ok().flatten().unwrap_or(0)),
             ))
         })
         .map_err(|e| e.to_string())?;
@@ -714,9 +742,11 @@ fn parse_collection(
     let mut by_deck: HashMap<String, Vec<AnkiCard>> = HashMap::new();
     let mut styles: HashMap<String, String> = HashMap::new();
     let mut skipped = 0usize;
+    let mut with_progress = 0usize;
+    let crt: i64 = db.query_row("SELECT crt FROM col", [], |r| r.get(0)).unwrap_or(0);
 
     for row in rows {
-        let Ok((did, odid, ord, mid, flds, tags)) = row else {
+        let Ok((did, odid, ord, mid, flds, tags, sched)) = row else {
             skipped += 1;
             continue;
         };
@@ -796,11 +826,27 @@ fn parse_collection(
         if !by_deck.contains_key(&deck) {
             deck_order.push(deck.clone());
         }
+        let [ctype, queue, due, ivl, factor, reps, lapses, odue] = sched;
+        let progress = (ctype >= 1 && ctype <= 3).then(|| {
+            with_progress += 1;
+            AnkiProgress {
+                kind: ctype,
+                // cards in a filtered deck keep their original due date in odue
+                due: if odid != 0 && odue != 0 { odue } else { due },
+                ivl,
+                factor,
+                reps,
+                lapses,
+                suspended: queue == -1,
+            }
+        });
         by_deck.entry(deck).or_default().push(AnkiCard {
             front,
             back,
             style_id,
             card_class: format!("card card{}", ord + 1),
+            tags: tags.split_whitespace().map(str::to_string).collect(),
+            progress,
         });
     }
 
@@ -832,7 +878,7 @@ fn parse_collection(
     if decks.is_empty() {
         return Err("In dieser Datei wurden keine Karten gefunden.".to_string());
     }
-    Ok(Parsed { decks, styles, media: files, missing, skipped })
+    Ok(Parsed { decks, styles, media: files, missing, skipped, crt, with_progress })
 }
 
 /// Unknown note type: first field is the question, the rest the answer.

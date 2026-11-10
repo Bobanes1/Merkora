@@ -92,13 +92,25 @@ struct ImportResult {
     media: usize,
     missing_media: usize,
     skipped: usize,
+    /// Creation time of the Anki collection (unix seconds), base of review due days.
+    crt: i64,
+    /// Cards that already have learning progress in Anki.
+    with_progress: usize,
 }
 
 fn do_import(bytes: &[u8]) -> Result<ImportResult, String> {
     let mut uid = || uuid::Uuid::new_v4().simple().to_string()[..16].to_string();
     let p = anki::parse_apkg(bytes, &mut uid)?;
     let media = storage::media_put_many(p.media.into_iter().map(|m| (m.id, m.name, m.bytes)).collect())?;
-    Ok(ImportResult { decks: p.decks, styles: p.styles, media, missing_media: p.missing, skipped: p.skipped })
+    Ok(ImportResult {
+        decks: p.decks,
+        styles: p.styles,
+        media,
+        missing_media: p.missing,
+        skipped: p.skipped,
+        crt: p.crt,
+        with_progress: p.with_progress,
+    })
 }
 
 #[tauri::command]

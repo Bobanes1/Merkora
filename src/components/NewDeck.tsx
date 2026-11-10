@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { addDeck, deckUrl, getState, type Course } from '../lib/store';
-import { AnkiDropzone, storeImport } from './AnkiImport';
+import { AnkiDropzone, ProgressQuestion, storeImport } from './AnkiImport';
+import type { AnkiResult } from '../lib/anki';
 import { IconCards, IconSparkle, IconUpload } from './Icons';
 import { Modal } from './Modal';
 
@@ -15,6 +16,7 @@ export function NewDeckModal({ course, onClose, onAi }: { course: Course; onClos
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
+  const [ask, setAsk] = useState<AnkiResult | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -45,14 +47,23 @@ export function NewDeckModal({ course, onClose, onAi }: { course: Course; onClos
     try {
       const { readApkg } = await import('../lib/anki');
       const res = await readApkg(file, setBusy);
-      const created = storeImport(res, { fileName: file.name, courseId: course.id, deckName: name });
-      go(created[0].id);
+      if (res.withProgress > 0) setAsk(res);
+      else go(storeImport(res, { fileName: file.name, courseId: course.id, deckName: name })[0].id);
     } catch (e) {
       setError(`Import fehlgeschlagen: ${(e as Error).message ?? e}`);
     } finally {
       setBusy('');
     }
   };
+
+  if (ask && file)
+    return (
+      <ProgressQuestion
+        res={ask}
+        onClose={onClose}
+        onAnswer={(keep) => go(storeImport(ask, { fileName: file.name, courseId: course.id, deckName: name, keepProgress: keep })[0].id)}
+      />
+    );
 
   const can = start === 'ai' || (start === 'empty' ? !!name.trim() : !!file);
   const options: { id: Start; icon: JSX.Element; title: string; text: string }[] = [

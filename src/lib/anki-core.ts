@@ -7,10 +7,25 @@ import { unzipSync } from 'fflate';
 import { Decompress } from 'fzstd';
 import type { Database, SqlJsStatic, SqlValue } from 'sql.js';
 
-export type AnkiCard = { front: string; back: string; styleId?: string; cardClass?: string };
+export type AnkiCard = {
+  front: string;
+  back: string;
+  styleId?: string;
+  cardClass?: string;
+  tags?: string[];
+  progress?: { kind: number; due: number; ivl: number; factor: number; reps: number; lapses: number; suspended?: boolean };
+};
 export type AnkiDeck = { name: string; cards: AnkiCard[] };
 export type AnkiMedia = { id: string; name: string; type: string; bytes: Uint8Array };
-export type ParsedApkg = { decks: AnkiDeck[]; styles: Record<string, string>; media: AnkiMedia[]; missingMedia: number; skipped: number };
+export type ParsedApkg = {
+  decks: AnkiDeck[];
+  styles: Record<string, string>;
+  media: AnkiMedia[];
+  missingMedia: number;
+  skipped: number;
+  crt: number;
+  withProgress: number;
+};
 type Progress = (text: string) => void;
 export type ParseOptions = { sanitize: (html: string) => string; uid: () => string; onProgress?: Progress };
 // ---------- small helpers ----------
@@ -270,7 +285,7 @@ export async function parseApkg(zipBytes: Uint8Array, SQL: SqlJsStatic, opts: Pa
     await tick();
     const cardRows = rows(
       db,
-      'SELECT c.did, c.odid, c.ord, n.mid, n.flds, n.tags FROM cards c JOIN notes n ON n.id = c.nid ORDER BY c.did, c.due, n.id, c.ord',
+      'SELECT c.did, c.odid, c.ord, n.mid, n.flds, n.tags, c.type, c.queue, c.due, c.ivl, c.factor, c.reps, c.lapses, c.odue FROM cards c JOIN notes n ON n.id = c.nid ORDER BY c.did, c.due, n.id, c.ord',
     );
 
     const byDeck = new Map<string, AnkiCard[]>();
@@ -296,7 +311,9 @@ export async function parseApkg(zipBytes: Uint8Array, SQL: SqlJsStatic, opts: Pa
     let skipped = 0;
     let n = 0;
     const styles: Record<string, string> = {};
-    for (const [did, odid, ord, mid, flds, tags] of cardRows) {
+    const crt = Number(rows(db, 'SELECT crt FROM col')[0]?.[0] ?? 0);
+    let withProgress = 0;
+    for (const [did, odid, ord, mid, flds, tags, ctype, queue, due, ivl, factor, reps, lapses, odue] of cardRows) {
       const nt = noteTypes.get(String(mid));
       const deck = deckNames.get(String(Number(odid) ? odid : did)) ?? 'Anki-Import';
       const values = String(flds).split('\x1f');
@@ -323,7 +340,29 @@ export async function parseApkg(zipBytes: Uint8Array, SQL: SqlJsStatic, opts: Pa
       if (!byDeck.has(deck)) byDeck.set(deck, []);
       const styleId = nt?.css.trim() ? String(mid) : undefined;
       if (styleId && !styles[styleId]) styles[styleId] = nt!.css;
-      byDeck.get(deck)!.push({ front, back, ...(styleId ? { styleId } : {}), cardClass: `card card${Number(ord) + 1}` });
+      const kind = Number(ctype);
+      const progress =
+        kind >= 1 && kind <= 3
+          ? {
+              kind,
+              due: Number(Number(odid) && Number(odue) ? odue : due),
+              ivl: Number(ivl),
+              factor: Number(factor),
+              reps: Number(reps),
+              lapses: Number(lapses),
+              suspended: Number(queue) === -1,
+            }
+          : undefined;
+      if (progress) withProgress++;
+      const tagList = String(tags ?? '').split(/s+/).filter(Boolean);
+      byDeck.get(deck)!.push({
+        front,
+        back,
+        ...(styleId ? { styleId } : {}),
+        cardClass: `card card${Number(ord) + 1}`,
+        ...(tagList.length ? { tags: tagList } : {}),
+        ...(progress ? { progress } : {}),
+      });
       if (++n % 500 === 0) {
         onProgress(`Karten werden gelesen … (${n})`);
         await tick();
@@ -345,7 +384,7 @@ export async function parseApkg(zipBytes: Uint8Array, SQL: SqlJsStatic, opts: Pa
 
     const decks = [...byDeck.entries()].map(([name, cards]) => ({ name, cards }));
     if (!decks.length) throw new Error('In dieser Datei wurden keine Karten gefunden.');
-    return { decks, styles, media, missingMedia: missing, skipped };
+    return { decks, styles, media, missingMedia: missing, skipped, crt, withProgress };
   } finally {
     db.close();
   }
