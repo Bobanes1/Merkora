@@ -154,3 +154,18 @@ export async function smokeInfo() {
   }
 }
 export const smokeDone = (report: unknown) => invoke('smoke_done', { report });
+
+// ---------- files for the user (Downloads folder) ----------
+/** Saves a file into Downloads and shows it in the file manager. Returns the full path. */
+export async function saveDownload(name: string, data: Blob | string): Promise<string> {
+  const blob = typeof data === 'string' ? new Blob([data]) : data;
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  return invoke<string>('save_download', bytes, { headers: { 'x-name': encodeURIComponent(name) } });
+}
+export type ExportDeckPayload = {
+  name: string;
+  cards: { front: string; back: string; tags?: string[]; styleId?: string }[];
+  styles: Record<string, string>;
+};
+/** Writes the deck as Anki package (.apkg) into Downloads. Returns the full path. */
+export const exportApkg = (deck: ExportDeckPayload) => invoke<string>('export_apkg', { deck });

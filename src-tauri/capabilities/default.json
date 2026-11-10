@@ -32,6 +32,8 @@
     "allow-take-open-files",
     "allow-http-fetch",
     "allow-smoke-info",
-    "allow-smoke-done"
+    "allow-smoke-done",
+    "allow-save-download",
+    "allow-export-apkg"
   ]
 }

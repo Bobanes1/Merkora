@@ -18,6 +18,8 @@ const COMMANDS: &[&str] = &[
     "http_fetch",
     "smoke_info",
     "smoke_done",
+    "save_download",
+    "export_apkg",
 ];
 
 fn main() {

@@ -2330,6 +2330,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "sha1_smol",
  "tauri",
  "tauri-build",
  "tauri-plugin-process",
@@ -3819,6 +3820,12 @@ checksum = "b4eceb519ec34d8290aaf6e46f435102f2bfa63f22b05a144fb16ab266d3b198"
 dependencies = [
  "stable_deref_trait",
 ]
+
+[[package]]
+name = "sha1_smol"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbfa15b3dddfee50a0fff136974b3e1bde555604ba463834a7eb7deb6417705d"
 
 [[package]]
 name = "sha2"

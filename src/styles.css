@@ -4995,3 +4995,9 @@ a.deck-row:hover {
   color: var(--ink);
   box-shadow: var(--shadow-sm);
 }
+
+.export-options {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}

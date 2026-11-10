@@ -1,6 +1,7 @@
 //! Merkora desktop app: Rust core (save file, media, Anki import, AI requests) with the Merkora interface in its window.
 
 mod anki;
+mod export;
 mod server;
 mod storage;
 
@@ -125,6 +126,52 @@ async fn import_apkg_path(path: String) -> Result<ImportResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let bytes = std::fs::read(&path).map_err(|e| format!("Die Datei konnte nicht gelesen werden: {e}"))?;
         do_import(&bytes)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// ---------- export & files for the user ----------
+/// Writes a file into the user's Downloads folder (unique name) and shows it in the file manager.
+fn save_to_downloads(name: &str, bytes: &[u8]) -> Result<String, String> {
+    let dir = dirs::download_dir().or_else(dirs::document_dir).unwrap_or_else(storage::data_dir);
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let clean: String = name.chars().map(|c| if r#"<>:"/|?*"#.contains(c) || c.is_control() { '_' } else { c }).collect();
+    let (stem, ext) = match clean.rsplit_once('.') {
+        Some((s, e)) => (s.to_string(), format!(".{e}")),
+        None => (clean.clone(), String::new()),
+    };
+    let mut path = dir.join(&clean);
+    let mut i = 2;
+    while path.exists() {
+        path = dir.join(format!("{stem} ({i}){ext}"));
+        i += 1;
+    }
+    std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+    reveal(&path);
+    Ok(path.to_string_lossy().into_owned())
+}
+
+fn reveal(path: &std::path::Path) {
+    #[cfg(target_os = "windows")]
+    let _ = std::process::Command::new("explorer").arg(format!("/select,{}", path.display())).spawn();
+    #[cfg(target_os = "macos")]
+    let _ = std::process::Command::new("open").arg("-R").arg(path).spawn();
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let _ = path.parent().map(open::that_detached);
+}
+
+#[tauri::command]
+async fn save_download(request: Request<'_>) -> Result<String, String> {
+    let InvokeBody::Raw(bytes) = request.body() else { return Err("Keine Daten erhalten.".into()) };
+    save_to_downloads(&header(&request, "x-name"), bytes)
+}
+
+#[tauri::command]
+async fn export_apkg(deck: export::ExportDeck) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let bytes = export::build_apkg(&deck, &|id: &str| storage::media_get(id))?;
+        save_to_downloads(&format!("{}.apkg", deck.name), &bytes)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -296,6 +343,8 @@ pub fn run() {
             http_fetch,
             smoke_info,
             smoke_done,
+            save_download,
+            export_apkg,
         ])
         .setup(|app| {
             let handle = app.handle().clone();

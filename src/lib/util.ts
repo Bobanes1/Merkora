@@ -54,6 +54,19 @@ export function truncate(s: string, n: number) {
 
 export function download(filename: string, text: string, type = 'application/json') {
   const blob = new Blob([text], { type });
+  // Desktop app: straight into the Downloads folder (the window has no download bar).
+  if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+    void import('./desktop').then(async ({ saveDownload }) => {
+      const { pushToast } = await import('./jobs');
+      try {
+        const path = await saveDownload(filename, blob);
+        pushToast({ text: `Gespeichert: ${path}`, ok: true });
+      } catch (e) {
+        pushToast({ text: `Speichern fehlgeschlagen: ${(e as Error)?.message ?? e}`, ok: false });
+      }
+    });
+    return;
+  }
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
