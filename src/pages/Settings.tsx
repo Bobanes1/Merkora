@@ -262,7 +262,27 @@ export default function Settings() {
       <SyncPanel />
 
       <section className="panel">
-        <h2>Figuren & Animationen</h2>
+        <h2>Darstellung</h2>
+        <div className="seg" role="radiogroup" aria-label="Farbschema">
+          {(
+            [
+              ['system', 'Wie das System'],
+              ['light', 'Hell'],
+              ['dark', 'Dunkel'],
+            ] as const
+          ).map(([v, label]) => (
+            <button
+              key={v}
+              type="button"
+              role="radio"
+              aria-checked={(settings.theme ?? 'system') === v}
+              className={`seg-btn ${(settings.theme ?? 'system') === v ? 'on' : ''}`}
+              onClick={() => setSettings({ theme: v })}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <label className="check-row">
           <input type="checkbox" checked={settings.animations} onChange={(e) => setSettings({ animations: e.target.checked })} />
           <span>Pip, Flo und die Animationen beim Lernen anzeigen (Konfetti, Sterne, Karten-Drehungen).</span>

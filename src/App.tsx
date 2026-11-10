@@ -14,6 +14,7 @@ import CalendarPage from './pages/Calendar';
 import Stats from './pages/Stats';
 import Setup from './pages/Setup';
 import { useStore } from './lib/store';
+import { useApplyTheme } from './lib/theme';
 
 /** First visit: ask for the AI key (skippable) before showing the overview – instead of a login. */
 function DashboardGate() {
@@ -35,6 +36,7 @@ function useMotionSetting() {
 
 export default function App() {
   useMotionSetting();
+  useApplyTheme();
   return (
     <>
       <Routes>

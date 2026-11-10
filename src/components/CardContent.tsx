@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { sanitize } from '../lib/content';
 import { mediaUrl } from '../lib/db';
 import type { Card, Deck } from '../lib/store';
+import { useResolvedTheme } from '../lib/theme';
 
 /** How an imported Anki card looks: its note type CSS and the wrapping class (`card card1`). */
 export type CardLook = { css?: string; cls?: string };
@@ -91,6 +92,9 @@ details.hint summary { cursor: pointer; color: #7e3bb5; }
 .io-revealed { fill: rgba(255, 142, 142, 0.12); stroke: #e5484d; stroke-width: 2.5px; }
 .io-text { position: absolute; font-weight: 700; color: #000; font-size: 0.9em; }
 .io-extra { margin-top: 10px; }
+.card.nightMode { color: #e6e1ee; }
+.nightMode .cloze { color: #8ab4ff; }
+.nightMode td, .nightMode th { border-color: #3a3644; }
 `;
 
 const hasMath = (s: string) => /\\\(|\\\[|\$\$/.test(s);
@@ -129,6 +133,7 @@ export function CardContent({ text, html, className = '', look }: { text: string
   const styled = !!(html && look && (look.css || look.cls));
   const css = look?.css ?? '';
   const cls = look?.cls ?? 'card';
+  const dark = useResolvedTheme() === 'dark';
   useEffect(() => {
     const el = ref.current;
     if (!el || !html) return;
@@ -140,7 +145,7 @@ export function CardContent({ text, html, className = '', look }: { text: string
       base.textContent = BASE_CSS;
       const own = document.createElement('style');
       const wrap = document.createElement('div');
-      wrap.className = cls;
+      wrap.className = dark ? `${cls} nightMode night_mode` : cls;
       wrap.innerHTML = clean;
       root.append(base, own, wrap);
       if (css)
@@ -157,7 +162,7 @@ export function CardContent({ text, html, className = '', look }: { text: string
     return () => {
       cancelled = true;
     };
-  }, [clean, html, styled, css, cls]);
+  }, [clean, html, styled, css, cls, dark]);
   if (!html) {
     if (hasMath(text)) return <MathText text={text} className={className} />;
     return <div className={`card-content plain ${className}`}>{text}</div>;
