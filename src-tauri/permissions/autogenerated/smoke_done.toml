@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-smoke-done"
+description = "Enables the smoke_done command without any pre-configured scope."
+commands.allow = ["smoke_done"]
+
+[[permission]]
+identifier = "deny-smoke-done"
+description = "Denies the smoke_done command without any pre-configured scope."
+commands.deny = ["smoke_done"]

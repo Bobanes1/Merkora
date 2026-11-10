@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-import-apkg"
+description = "Enables the import_apkg command without any pre-configured scope."
+commands.allow = ["import_apkg"]
+
+[[permission]]
+identifier = "deny-import-apkg"
+description = "Denies the import_apkg command without any pre-configured scope."
+commands.deny = ["import_apkg"]

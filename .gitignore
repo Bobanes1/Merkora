@@ -1,0 +1,12 @@
+node_modules/
+dist/
+release/
+src-tauri/target/
+src-tauri/gen/
+*.log
+.DS_Store
+Thumbs.db
+
+# Contains the private free AI key – never commit
+.env.local
+.env.*.local

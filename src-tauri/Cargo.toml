@@ -1,0 +1,42 @@
+[package]
+name = "merkora"
+version = "0.2.0"
+description = "Merkora – Lernen mit Karteikarten, Lernpfad und KI"
+authors = ["Merkora"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "merkora_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-single-instance = "2"
+tauri-plugin-window-state = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+zstd = "0.13"
+rusqlite = { version = "0.32", features = ["bundled"] }
+regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "gzip"] }
+base64 = "0.22"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+percent-encoding = "2"
+unicode-normalization = "0.1"
+uuid = { version = "1", features = ["v4"] }
+dirs = "5"
+open = "5"
+tiny_http = "0.12"
+once_cell = "1"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
+panic = "abort"

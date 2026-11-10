@@ -1,0 +1,16 @@
+{
+  "name": "Merkora – Lernen mit KI",
+  "short_name": "Merkora",
+  "description": "Karteikarten, Lernpfad, Zusammenfassungen, Quiz und Podcast – mit deiner eigenen oder der kostenlosen KI.",
+  "lang": "de",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f9fafb",
+  "theme_color": "#7e3bb5",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-smoke-info"
+description = "Enables the smoke_info command without any pre-configured scope."
+commands.allow = ["smoke_info"]
+
+[[permission]]
+identifier = "deny-smoke-info"
+description = "Denies the smoke_info command without any pre-configured scope."
+commands.deny = ["smoke_info"]

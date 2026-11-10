@@ -1,0 +1,41 @@
+{
+    "name": "merkora",
+    "productName": "Merkora",
+    "description": "Merkora – Lernen mit Karteikarten, Lernpfad und KI",
+    "author": "Merkora",
+    "private": true,
+    "version": "0.2.0",
+    "type": "module",
+    "scripts": {
+        "dev": "vite",
+        "build": "tsc --noEmit && vite build && node scripts/routes.mjs && node scripts/pwa.mjs",
+        "test:anki": "tsx scripts/test-anki.mts",
+        "test:srs": "tsx scripts/test-srs.mts",
+        "tauri": "tauri",
+        "desktop": "tauri build",
+        "desktop:dev": "tauri dev"
+    },
+    "devDependencies": {
+        "@fontsource/manrope": "^5.1.0",
+        "@fontsource/outfit": "^5.1.0",
+        "@tauri-apps/api": "^2.12.4",
+        "@tauri-apps/cli": "^2.12.4",
+        "@types/katex": "^0.16.8",
+        "@types/react": "^18.3.12",
+        "@types/react-dom": "^18.3.1",
+        "@types/sql.js": "^1.4.11",
+        "@vitejs/plugin-react": "^4.3.4",
+        "dompurify": "^3.4.17",
+        "fflate": "^0.8.3",
+        "fzstd": "^0.1.1",
+        "katex": "^0.19.1",
+        "pdfjs-dist": "^4.10.38",
+        "react": "^18.3.1",
+        "react-dom": "^18.3.1",
+        "react-router-dom": "^6.28.0",
+        "sql.js": "^1.15.2",
+        "tsx": "^4.23.15",
+        "typescript": "^5.6.3",
+        "vite": "^5.4.11"
+    }
+}

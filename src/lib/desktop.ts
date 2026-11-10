@@ -1,0 +1,150 @@
+/**
+ * Bridge to the Merkora desktop app (Tauri, Rust core): save file with backups, media files on disk,
+ * Anki import, AI requests without browser restrictions and .apkg files opened with the app.
+ * In the plain web version none of this exists and the app falls back to browser storage.
+ */
+import { convertFileSrc, invoke, isTauri } from '@tauri-apps/api/core';
+
+export const inTauri = typeof window !== 'undefined' && isTauri();
+
+export type DesktopBridge = {
+  loadData: () => Promise<string | null>;
+  saveData: (json: string) => Promise<void>;
+  /** Saves right away and waits for it (used when the window closes). */
+  saveDataNow: (json: string) => Promise<void>;
+  dataFolder: () => Promise<string>;
+  openDataFolder: () => void;
+  /** Calls back with paths of .apkg files opened with the app (double-click, "Öffnen mit", second start). */
+  onOpenFile: (cb: (path: string) => void) => void;
+  /** Runs before the window closes. */
+  onClose: (cb: () => Promise<void> | void) => void;
+};
+
+let openFileCb: ((path: string) => void) | null = null;
+let openFileWired = false;
+
+function makeBridge(): DesktopBridge {
+  return {
+    loadData: () => invoke<string | null>('load_data'),
+    saveData: (json) => invoke('save_data', { json }),
+    saveDataNow: (json) => invoke('save_data_now', { json }),
+    dataFolder: () => invoke<string>('data_folder'),
+    openDataFolder: () => void invoke('open_data_folder'),
+    onOpenFile: (cb) => {
+      openFileCb = cb;
+      const take = () =>
+        invoke<string[]>('take_open_files')
+          .then((paths) => paths.forEach((p) => openFileCb?.(p)))
+          .catch(() => undefined);
+      if (!openFileWired) {
+        openFileWired = true;
+        void import('@tauri-apps/api/event').then(({ listen }) => listen('open-file', take));
+      }
+      void take();
+    },
+    onClose: (cb) => {
+      void import('@tauri-apps/api/window').then(({ getCurrentWindow }) =>
+        getCurrentWindow().onCloseRequested(async () => {
+          try {
+            await cb();
+          } catch {
+            /* close anyway */
+          }
+        }),
+      );
+    },
+  };
+}
+
+export const desktop: DesktopBridge | undefined = inTauri ? makeBridge() : undefined;
+export const isDesktop = !!desktop;
+
+/** Opens a web address in the normal browser. */
+export function openExternal(url: string) {
+  if (inTauri) void invoke('open_external', { url });
+  else window.open(url, '_blank', 'noopener');
+}
+
+// ---------- media ----------
+export const mediaFileUrl = (id: string) => convertFileSrc(id, 'media');
+
+export async function mediaPutFile(id: string, name: string, type: string, blob: Blob) {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  await invoke('media_put', bytes, { headers: { 'x-id': id, 'x-name': encodeURIComponent(name), 'x-type': type || '' } });
+}
+export async function mediaGetFile(id: string): Promise<{ blob: Blob; name: string; type: string } | undefined> {
+  try {
+    const [buf, type] = await Promise.all([invoke<ArrayBuffer>('media_get', { id }), invoke<string | null>('media_type', { id })]);
+    const t = type ?? 'application/octet-stream';
+    return { blob: new Blob([buf], { type: t }), name: id, type: t };
+  } catch {
+    return undefined;
+  }
+}
+export const mediaFileKeys = () => invoke<string[]>('media_keys');
+export const mediaFileDelete = (ids: string[]) => invoke('media_delete', { ids });
+
+// ---------- Anki ----------
+export type RustAnkiResult = {
+  decks: { name: string; cards: { front: string; back: string; styleId?: string; cardClass: string }[] }[];
+  styles: Record<string, string>;
+  media: number;
+  missingMedia: number;
+  skipped: number;
+};
+export function importApkgBytes(bytes: Uint8Array) {
+  return invoke<RustAnkiResult>('import_apkg', bytes);
+}
+export function importApkgPath(path: string) {
+  return invoke<RustAnkiResult>('import_apkg_path', { path });
+}
+
+// ---------- network (AI providers) ----------
+type FetchRes = { status: number; statusText: string; contentType: string; body: string };
+
+function b64ToBytes(b64: string) {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+/**
+ * fetch() for AI requests. In the desktop app the request is sent by the Rust core,
+ * so providers that block requests from browsers (CORS) and local servers work too.
+ */
+export async function netFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  if (!inTauri) return fetch(url, init);
+  if (init.signal?.aborted) throw new DOMException('Abgebrochen', 'AbortError');
+  const headers: Record<string, string> = {};
+  new Headers(init.headers ?? {}).forEach((v, k) => (headers[k] = v));
+  const body = typeof init.body === 'string' ? init.body : init.body == null ? undefined : String(init.body);
+  const call = invoke<FetchRes>('http_fetch', { req: { url, method: init.method ?? 'GET', headers, body } }).then(
+    (r) =>
+      new Response(r.status === 204 || r.status === 304 ? null : b64ToBytes(r.body), {
+        status: r.status,
+        statusText: r.statusText,
+        headers: r.contentType ? { 'content-type': r.contentType } : {},
+      }),
+    (e) => {
+      throw new TypeError(String(e));
+    },
+  );
+  if (!init.signal) return call;
+  const signal = init.signal;
+  return Promise.race([
+    call,
+    new Promise<Response>((_, reject) => signal.addEventListener('abort', () => reject(new DOMException('Abgebrochen', 'AbortError')), { once: true })),
+  ]);
+}
+
+// ---------- self-test used when building ----------
+export async function smokeInfo() {
+  if (!inTauri) return null;
+  try {
+    return await invoke<{ apkg: string | null } | null>('smoke_info');
+  } catch {
+    return null;
+  }
+}
+export const smokeDone = (report: unknown) => invoke('smoke_done', { report });

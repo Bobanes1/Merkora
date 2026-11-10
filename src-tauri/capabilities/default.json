@@ -1,0 +1,30 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Merkora main window (bundled app served from this computer)",
+  "windows": ["main"],
+  "remote": {
+    "urls": ["http://localhost:*", "http://127.0.0.1:*"]
+  },
+  "permissions": [
+    "core:default",
+    "window-state:default",
+    "allow-load-data",
+    "allow-save-data",
+    "allow-save-data-now",
+    "allow-data-folder",
+    "allow-open-data-folder",
+    "allow-open-external",
+    "allow-media-put",
+    "allow-media-get",
+    "allow-media-type",
+    "allow-media-keys",
+    "allow-media-delete",
+    "allow-import-apkg",
+    "allow-import-apkg-path",
+    "allow-take-open-files",
+    "allow-http-fetch",
+    "allow-smoke-info",
+    "allow-smoke-done"
+  ]
+}
