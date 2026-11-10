@@ -45,7 +45,7 @@ eingecheckt). Builds mit eingebautem Key nicht öffentlich weitergeben – der K
 ## Builds für alle Systeme
 
 GitHub Actions (`.github/workflows/build.yml`) baut bei jedem Push Installer für Windows, Linux und macOS
-(Intel und Apple Silicon) als Download-Artefakte. Ein Tag wie `v0.2.0` erstellt zusätzlich einen Release-Entwurf.
+(Apple Silicon) als Download-Artefakte. Ein Tag wie `v0.2.0` erstellt zusätzlich einen Release-Entwurf.
 
 ## Daten
 
