@@ -188,3 +188,10 @@ export const IconTag = mk(
   </>,
 );
 export const IconMoon = mk(<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" />);
+export const IconImage = mk(
+  <>
+    <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+    <circle cx="9" cy="10" r="1.6" />
+    <path d="m4 18 5.5-5.5 4 4 2.5-2.5 4.5 4.5" />
+  </>,
+);

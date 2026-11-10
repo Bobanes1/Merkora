@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { AnkiImport } from '../../components/AnkiImport';
+import { OcclusionEditor } from '../../components/OcclusionEditor';
 import { CardContent, lookOf } from '../../components/CardContent';
 import { CreateWithAI } from '../../components/CreateWithAI';
-import { IconEdit, IconPlay, IconPlus, IconSearch, IconSparkle, IconTrash, IconUpload } from '../../components/Icons';
+import { IconEdit, IconPlay, IconPlus, IconSearch, IconSparkle, IconTrash, IconImage, IconUpload } from '../../components/Icons';
 import { isActive, JobBanner, JobError, useJob } from '../../components/Jobs';
 import { ConfirmModal, Modal } from '../../components/Modal';
 import { RichField } from '../../components/RichField';
@@ -90,6 +91,7 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
   const [ai, setAi] = useState(false);
   const term = q.trim().toLowerCase();
   const [anki, setAnki] = useState(false);
+  const [occl, setOccl] = useState(false);
   const [limit, setLimit] = useState(100);
   const filtered = term ? deck.cards.filter((c) => (cardFrontText(c) + ' ' + cardBackText(c)).toLowerCase().includes(term)) : deck.cards;
   const cards = filtered.slice(0, limit);
@@ -105,6 +107,9 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
         </button>
         <button type="button" className="btn outline sm" onClick={() => setEdit('new')}>
           <IconPlus size={15} /> Karte
+        </button>
+        <button type="button" className="btn outline sm" onClick={() => setOccl(true)} title="Kästen über ein Bild ziehen – jede Stelle wird eine Karte">
+          <IconImage size={15} /> Bildverdeckung
         </button>
         <button type="button" className="btn primary sm" onClick={onLearn} disabled={!deck.cards.length}>
           <IconPlay size={12} /> Lernen
@@ -183,6 +188,7 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
       )}
       {ai && <CreateWithAI deckId={deck.id} onClose={() => setAi(false)} />}
       {anki && <AnkiImport onClose={() => setAnki(false)} targetDeckId={deck.id} />}
+      {occl && <OcclusionEditor deck={deck} onClose={() => setOccl(false)} />}
     </div>
   );
 }
