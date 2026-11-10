@@ -12,6 +12,7 @@ import '@fontsource/outfit/700.css';
 import '@fontsource/outfit/800.css';
 import './styles.css';
 import App from './App';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { initStore, isDesktop } from './lib/store';
 import { openExternal } from './lib/desktop';
 import { startJobRunner } from './lib/jobs';
@@ -29,7 +30,9 @@ const render = () =>
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <BrowserRouter>
-        <App />
+        <ErrorBoundary>
+          <App />
+        </ErrorBoundary>
       </BrowserRouter>
     </StrictMode>,
   );
@@ -41,6 +44,7 @@ initStore()
     startJobRunner();
     startAutoSync();
     if (isDesktop) void import('./lib/smoke').then((m) => m.runSmokeTest());
+    if (isDesktop) void import('./lib/update').then((m) => m.startUpdateChecks());
   });
 
 // Desktop app: links that would open a new window go to the normal browser instead.

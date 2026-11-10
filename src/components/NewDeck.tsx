@@ -17,7 +17,9 @@ export function NewDeckModal({ course, onClose, onAi }: { course: Course; onClos
   const [error, setError] = useState('');
   const nameRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  useEffect(() => nameRef.current?.focus(), []);
+  useEffect(() => {
+    nameRef.current?.focus();
+  }, []);
 
   const go = (deckId: string, tab = 'cards') => {
     const st = getState().data;

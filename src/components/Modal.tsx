@@ -61,7 +61,9 @@ export function PromptModal({
 }) {
   const [v, setV] = useState(initial);
   const ref = useRef<HTMLInputElement>(null);
-  useEffect(() => ref.current?.focus(), []);
+  useEffect(() => {
+    ref.current?.focus();
+  }, []);
   const submit = () => {
     if (!v.trim()) return;
     onSubmit(v.trim());

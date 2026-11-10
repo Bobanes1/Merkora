@@ -29,7 +29,9 @@ export function ChatPanel({ deck, onClose }: { deck: Deck; onClose: () => void }
   const endRef = useRef<HTMLDivElement>(null);
   const msgs = deck.chat;
 
-  useEffect(() => endRef.current?.scrollIntoView({ block: 'end' }), [msgs.length, busy]);
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ block: 'end' });
+  }, [msgs.length, busy]);
 
   const send = async (text: string) => {
     const t = text.trim();

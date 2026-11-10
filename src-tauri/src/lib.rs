@@ -245,16 +245,22 @@ fn media_response(path: &str) -> tauri::http::Response<Vec<u8>> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let app = tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+    let mut builder = tauri::Builder::default();
+    // The self-test runs next to an open Merkora without handing over to it.
+    if std::env::var("MERKORA_SMOKE").is_err() {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             hand_over(app, anki_paths(&argv));
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.unminimize();
                 let _ = w.show();
                 let _ = w.set_focus();
             }
-        }))
+        }));
+    }
+    let app = builder
         .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(OpenFiles(Mutex::new(anki_paths(&std::env::args().collect::<Vec<_>>()))))
         .register_asynchronous_uri_scheme_protocol("media", |_ctx, request, responder| {
             let path = request.uri().path().to_string();
@@ -289,8 +295,12 @@ pub fn run() {
                     None => WebviewUrl::App("dashboard".into()),
                 }
             };
-            WebviewWindowBuilder::new(app, "main", url)
-                .title("Merkora")
+            let mut win = WebviewWindowBuilder::new(app, "main", url);
+            // The self-test gets its own browser storage, so it never touches the real app's data.
+            if std::env::var("MERKORA_SMOKE").is_ok() {
+                win = win.data_directory(storage::data_dir().join("webview-test"));
+            }
+            win.title("Merkora")
                 .inner_size(1280.0, 840.0)
                 .min_inner_size(380.0, 560.0)
                 .disable_drag_drop_handler()

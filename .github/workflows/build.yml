@@ -88,12 +88,16 @@ jobs:
           # Optional built-in free AI key. Leave this secret unset for public builds –
           # anyone who downloads an installer could read the key.
           VITE_MERKORA_FREE_KEY: ${{ secrets.MERKORA_FREE_KEY }}
+          # Signs the installers so the app can update itself (in-app updates check latest.json)
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           args: ${{ matrix.args }}
           tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
           releaseName: 'Merkora ${{ github.ref_name }}'
           releaseBody: 'Installer für Windows (.exe/.msi), Linux (.deb/.rpm/.AppImage) und macOS (.dmg).'
           releaseDraft: true
+          includeUpdaterJson: true
       - uses: actions/upload-artifact@v4
         with:
           name: merkora-${{ matrix.platform }}

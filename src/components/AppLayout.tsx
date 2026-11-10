@@ -16,6 +16,8 @@ import {
 import { InstallButton } from './InstallButton';
 import { JobsIndicator } from './Jobs';
 import { Logo } from './Logo';
+import { ErrorBoundary } from './ErrorBoundary';
+import { UpdateNotice } from './UpdateNotice';
 
 function Tree({ onNavigate }: { onNavigate: () => void }) {
   const data = useStore((s) => s.data);
@@ -86,7 +88,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const apiKey = useStore((s) => s.apiKey);
   const provider = useStore((s) => s.data.settings.provider);
   const { pathname } = useLocation();
-  useEffect(() => setOpen(false), [pathname]);
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
   const close = () => setOpen(false);
   const free = useStore((s) => usingFree(s));
   const chatSeparate = useStore((s) => s.data.settings.chatSeparate);
@@ -137,7 +141,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </Link>
       </nav>
       {open && <div className="sidebar-backdrop" onClick={close} />}
-      <main className="app-main">{children}</main>
+      <main className="app-main">
+        <UpdateNotice />
+        <ErrorBoundary key={pathname} inline>
+          {children}
+        </ErrorBoundary>
+      </main>
     </div>
   );
 }

@@ -55,6 +55,11 @@ export async function runSmokeTest() {
     const r = await netFetch('https://openrouter.ai/api/v1/models', {});
     return `${r.status} ${(await r.text()).length} Zeichen`;
   });
+  await step('updateCheck', async () => {
+    const { check } = await import('@tauri-apps/plugin-updater');
+    const u = await check({ timeout: 20000 });
+    return u ? `Update verfügbar: ${u.version}` : 'keine neuere Version';
+  });
   report.finished = Date.now();
   await smokeDone(report);
 }

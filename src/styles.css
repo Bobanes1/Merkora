@@ -4391,3 +4391,82 @@ a.deck-row:hover {
   position: absolute;
   font-weight: 700;
 }
+/* ---------- crash safety net ---------- */
+.crash-box {
+  max-width: 520px;
+  margin: 12vh auto;
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  background: var(--white);
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+}
+.crash-box.inline {
+  margin: 40px auto;
+}
+.crash-box b {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 18px;
+  color: var(--ink);
+}
+.crash-box details {
+  margin: 12px 0 18px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.crash-box code {
+  display: block;
+  margin-top: 6px;
+  word-break: break-word;
+}
+
+/* ---------- update notice ---------- */
+.update-notice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid #d8c4ec;
+  border-radius: var(--r-lg);
+  background: var(--primary-soft);
+  color: var(--ink);
+}
+.update-notice > svg {
+  color: var(--primary);
+  flex: none;
+}
+.update-notice .grow {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.update-notice small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.update-notice .update-error {
+  color: var(--danger);
+}
+.update-notice .bar {
+  display: block;
+  height: 6px;
+  margin: 4px 0;
+  border-radius: var(--r-full);
+  background: #e6d6f5;
+  overflow: hidden;
+}
+.update-notice .bar i {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  transition: width 0.2s;
+}
+@media (max-width: 560px) {
+  .update-notice {
+    flex-wrap: wrap;
+  }
+}

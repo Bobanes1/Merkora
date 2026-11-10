@@ -2,13 +2,20 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Merkora main window (bundled app served from this computer)",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "remote": {
-    "urls": ["http://localhost:*", "http://127.0.0.1:*"]
+    "urls": [
+      "http://localhost:*",
+      "http://127.0.0.1:*"
+    ]
   },
   "permissions": [
     "core:default",
     "window-state:default",
+    "updater:default",
+    "process:allow-restart",
     "allow-load-data",
     "allow-save-data",
     "allow-save-data-now",

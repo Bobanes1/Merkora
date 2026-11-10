@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { kvGet, kvSet, mediaDeleteMany, mediaKeys } from './db';
+import { kvDel, kvGet, kvSet, mediaDeleteMany, mediaKeys } from './db';
 import { desktop, isDesktop } from './desktop';
 import { newSrs, schedule, type Rating, type Srs } from './srs';
 import { dayKey, uid, uniqueSlug } from './util';
@@ -269,8 +269,11 @@ export async function initStore() {
     try {
       const raw = await desktop.loadData();
       const fromFile = raw ? normalize(JSON.parse(raw)) : null;
-      // Use whichever copy was saved last.
-      loaded = fromFile && (!fromIdb || (fromFile.savedAt ?? 0) >= (fromIdb.savedAt ?? 0)) ? fromFile : fromIdb;
+      // Desktop app: the save file is the only source of truth. The browser copy is only used once,
+      // when there is no save file yet (e.g. data from before the save file existed).
+      loaded = fromFile ?? fromIdb;
+      // Remove the old browser copy so it can never be mixed up with the save file again.
+      if (fromFile && fromIdb) void kvDel(DATA_KEY).catch(() => undefined);
     } catch {
       loaded = fromIdb;
     }
@@ -313,7 +316,8 @@ function persistNow(sync = false) {
     const json = JSON.stringify(stamped);
     pending = (sync ? desktop.saveDataNow(json) : desktop.saveData(json)).then(done, failed);
   }
-  kvSet(DATA_KEY, stamped).then(done, () => (desktop ? undefined : failed()));
+  // In the desktop app the save file (with daily backups) is the store; no second copy in the browser storage.
+  if (!desktop) kvSet(DATA_KEY, stamped).then(done, failed);
   safeSet(sessionStorage, DATA_KEY, null);
   return pending;
 }

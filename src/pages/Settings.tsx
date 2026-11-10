@@ -8,6 +8,7 @@ import { desktop, getState, isDesktop, replaceAll, resetAll, setApiKey, setChatK
 import { download } from '../lib/util';
 import { APP_VERSION, FREE_KEY, FREE_LABEL } from '../config';
 import { SyncPanel } from '../components/SyncPanel';
+import { checkForUpdate, installUpdate, useUpdate } from '../lib/update';
 
 const OPENAI_VOICES = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer'];
 
@@ -28,7 +29,9 @@ export default function Settings() {
   useEffect(() => {
     document.title = 'Einstellungen – Merkora';
   }, []);
-  useEffect(() => setKey(apiKey), [apiKey]);
+  useEffect(() => {
+    setKey(apiKey);
+  }, [apiKey]);
 
   const saveKey = () => {
     setApiKey(key);
@@ -294,6 +297,7 @@ export default function Settings() {
           </button>
         </div>
       </section>
+      {isDesktop && <UpdatePanel />}
       <p className="muted small version-line">Merkora Version {APP_VERSION}</p>
       {manage && <ManagePrivacy onClose={() => setManage(false)} />}
       {confirmReset && (
@@ -319,7 +323,9 @@ function ChatModelPanel() {
   const [models, setModels] = useState<string[]>([]);
   const [busy, setBusy] = useState('');
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
-  useEffect(() => setKey(chatKey), [chatKey]);
+  useEffect(() => {
+    setKey(chatKey);
+  }, [chatKey]);
   const p = settings.chatProvider;
   const info = PROVIDERS[p];
   const sameProvider = p === settings.provider;
@@ -468,6 +474,34 @@ function ChatModelPanel() {
           {status && <div className={status.ok ? 'form-ok' : 'form-error'}>{status.text}</div>}
         </>
       )}
+    </section>
+  );
+}
+/** Version and updates of the desktop app. */
+function UpdatePanel() {
+  const u = useUpdate();
+  const busy = u.status === 'checking' || u.status === 'downloading' || u.status === 'installing';
+  return (
+    <section className="panel">
+      <h2>Updates</h2>
+      <p className="muted">
+        Merkora sucht beim Start und alle paar Stunden nach einer neuen Version und zeigt dann oben einen Hinweis. Installiert wird erst,
+        wenn du es bestätigst.
+      </p>
+      <div className="row-gap">
+        <button type="button" className="btn outline" onClick={() => void checkForUpdate(true)} disabled={busy}>
+          {u.status === 'checking' ? 'Wird gesucht …' : 'Nach Updates suchen'}
+        </button>
+        {u.status === 'available' && (
+          <button type="button" className="btn primary" onClick={() => void installUpdate()}>
+            Version {u.version} installieren
+          </button>
+        )}
+      </div>
+      {u.status === 'none' && <div className="form-ok">Du hast die neueste Version ({APP_VERSION}).</div>}
+      {u.status === 'available' && <div className="form-ok">Version {u.version} ist verfügbar.</div>}
+      {(u.status === 'downloading' || u.status === 'installing') && <div className="form-ok">Update läuft – Merkora startet gleich neu.</div>}
+      {u.status === 'error' && <div className="form-error">{u.error}</div>}
     </section>
   );
 }
