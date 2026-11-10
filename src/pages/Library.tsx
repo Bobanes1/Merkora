@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { CreateWithAI } from '../components/CreateWithAI';
 import { NewDeckModal } from '../components/NewDeck';
-import { IconCards, IconEdit, IconFolder, IconPlus, IconSparkle, IconTrash } from '../components/Icons';
+import { SessionBuilder } from '../components/SessionBuilder';
+import { StudySession, type SessionItem } from '../components/StudySession';
+import { IconCards, IconEdit, IconFolder, IconPlus, IconShuffle, IconSparkle, IconTrash } from '../components/Icons';
 import { ConfirmModal, PromptModal } from '../components/Modal';
 import {
   addCourse,
@@ -41,6 +43,8 @@ export default function Library() {
   const navigate = useNavigate();
   const [dialog, setDialog] = useState<Dialog>(null);
   const [create, setCreate] = useState<{ courseId?: string } | null>(null);
+  const [builder, setBuilder] = useState(false);
+  const [session, setSession] = useState<{ title: string; items: SessionItem[] } | null>(null);
 
   const workspace = ws ? data.workspaces.find((w) => w.slug === ws) : undefined;
   const crs = workspace && course ? data.courses.find((c) => c.workspaceId === workspace.id && c.slug === course) : undefined;
@@ -58,6 +62,13 @@ export default function Library() {
         <Link className="btn primary" to="/library">
           Zur Bibliothek
         </Link>
+      </div>
+    );
+
+  if (session)
+    return (
+      <div className="page">
+        <StudySession title={session.title} items={session.items} onExit={() => setSession(null)} />
       </div>
     );
 
@@ -120,6 +131,9 @@ export default function Library() {
       <header className="page-head">
         <h1>{crs?.name ?? workspace?.name ?? 'Bibliothek'}</h1>
         <div className="row-gap">
+          <button type="button" className="btn outline" onClick={() => setBuilder(true)} disabled={!data.decks.length}>
+            <IconShuffle size={16} /> Lernrunde
+          </button>
           <button type="button" className="btn outline" onClick={() => setCreate({ courseId: crs?.id })}>
             <IconSparkle size={16} /> Mit KI erstellen
           </button>
@@ -242,6 +256,15 @@ export default function Library() {
         <ConfirmModal title="Deck löschen?" text={`„${dialog.name}“ mit allen Karten wird gelöscht.`} onClose={() => setDialog(null)} onConfirm={() => deleteDeck(dialog.id)} />
       )}
       {create && <CreateWithAI courseId={create.courseId} onClose={() => setCreate(null)} />}
+      {builder && (
+        <SessionBuilder
+          onClose={() => setBuilder(false)}
+          onStart={(title, items) => {
+            setBuilder(false);
+            setSession({ title, items });
+          }}
+        />
+      )}
     </div>
   );
 }

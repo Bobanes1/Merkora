@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { addExam, updateExam, useData, type Exam } from '../lib/store';
+import { addExam, updateExam, type Exam } from '../lib/store';
 import { dayKey } from '../lib/util';
+import { DeckPicker } from './DeckPicker';
 import { Modal } from './Modal';
 
 /** Create or edit an exam and choose the decks it covers. */
 export function ExamDialog({ exam, presetDeckId, presetDate, onClose }: { exam?: Exam; presetDeckId?: string; presetDate?: string; onClose: () => void }) {
-  const data = useData();
   const [title, setTitle] = useState(exam?.title ?? '');
   const [date, setDate] = useState(exam?.date ?? presetDate ?? dayKey(Date.now() + 14 * 86_400_000));
   const [time, setTime] = useState(exam?.time ?? '');
@@ -16,7 +16,6 @@ export function ExamDialog({ exam, presetDeckId, presetDate, onClose }: { exam?:
     ref.current?.focus();
   }, []);
 
-  const toggle = (ids: string[], on: boolean) => setDeckIds((cur) => (on ? [...new Set([...cur, ...ids])] : cur.filter((x) => !ids.includes(x))));
   const ok = title.trim() && /^\d{4}-\d{2}-\d{2}$/.test(date);
   const save = () => {
     if (!ok) return;
@@ -68,39 +67,7 @@ export function ExamDialog({ exam, presetDeckId, presetDate, onClose }: { exam?:
         </div>
       </div>
       <span className="field-label">Welche Decks kommen dran?</span>
-      <div className="exam-decks">
-        {data.courses.map((c) => {
-          const decks = data.decks.filter((d) => d.courseId === c.id);
-          if (!decks.length) return null;
-          const ids = decks.map((d) => d.id);
-          const all = ids.every((id) => deckIds.includes(id));
-          const some = !all && ids.some((id) => deckIds.includes(id));
-          return (
-            <div key={c.id} className="exam-course">
-              <label className="check-row">
-                <input
-                  type="checkbox"
-                  checked={all}
-                  ref={(el) => {
-                    if (el) el.indeterminate = some;
-                  }}
-                  onChange={(e) => toggle(ids, e.target.checked)}
-                />
-                <b>{c.name}</b>
-              </label>
-              {decks.map((d) => (
-                <label key={d.id} className="check-row sub">
-                  <input type="checkbox" checked={deckIds.includes(d.id)} onChange={(e) => toggle([d.id], e.target.checked)} />
-                  <span>
-                    {d.name} <small className="muted">· {d.cards.length} Karten</small>
-                  </span>
-                </label>
-              ))}
-            </div>
-          );
-        })}
-        {!data.decks.length && <p className="muted small">Noch keine Decks vorhanden.</p>}
-      </div>
+      <DeckPicker value={deckIds} onChange={setDeckIds} />
       <label className="field-label" htmlFor="exam-note">
         Notiz (optional)
       </label>

@@ -354,7 +354,7 @@ export async function parseApkg(zipBytes: Uint8Array, SQL: SqlJsStatic, opts: Pa
             }
           : undefined;
       if (progress) withProgress++;
-      const tagList = String(tags ?? '').split(/s+/).filter(Boolean);
+      const tagList = String(tags ?? '').split(/\s+/).filter(Boolean);
       byDeck.get(deck)!.push({
         front,
         back,

@@ -5001,3 +5001,39 @@ a.deck-row:hover {
   gap: 8px;
   margin-bottom: 10px;
 }
+
+/* ---------- tags ---------- */
+.tag-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: -4px 0 12px;
+  color: var(--muted);
+}
+.tag {
+  padding: 3px 10px;
+  border-radius: var(--r-full);
+  border: 1px solid var(--line);
+  background: var(--white);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+.tag.on {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  color: var(--primary);
+  font-weight: 600;
+}
+.row-tags {
+  color: var(--primary) !important;
+  font-size: 11px;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.seg.wrap {
+  flex-wrap: wrap;
+}

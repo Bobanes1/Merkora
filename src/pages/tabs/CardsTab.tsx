@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { AnkiImport } from '../../components/AnkiImport';
 import { OcclusionEditor } from '../../components/OcclusionEditor';
 import { ExportDialog } from '../../components/ExportDialog';
+import { allTags, hasTag, parseTags } from '../../lib/tags';
 import { CardContent, lookOf } from '../../components/CardContent';
 import { CreateWithAI } from '../../components/CreateWithAI';
-import { IconEdit, IconPlay, IconPlus, IconSearch, IconSparkle, IconTrash, IconDownload, IconImage, IconUpload } from '../../components/Icons';
+import { IconEdit, IconPlay, IconPlus, IconSearch, IconSparkle, IconTrash, IconDownload, IconImage, IconTag, IconUpload } from '../../components/Icons';
 import { isActive, JobBanner, JobError, useJob } from '../../components/Jobs';
 import { ConfirmModal, Modal } from '../../components/Modal';
 import { RichField } from '../../components/RichField';
@@ -20,11 +21,13 @@ function CardEditor({ deck, card, onClose, onAnki }: { deck: Deck; card?: Card; 
   const [back, setBack] = useState(card ? toHtml(card.back) : '');
   const [empty, setEmpty] = useState({ front: !card, back: !card });
   const [round, setRound] = useState(0);
+  const [tagText, setTagText] = useState((card?.tags ?? []).join(' '));
   const ok = !empty.front && !empty.back;
   const save = (again: boolean) => {
     if (!ok) return;
-    if (card) updateCard(deck.id, card.id, { front, back, html: true });
-    else addCards(deck.id, [{ front, back, html: true }]);
+    const tags = parseTags(tagText);
+    if (card) updateCard(deck.id, card.id, { front, back, html: true, tags: tags.length ? tags : undefined });
+    else addCards(deck.id, [{ front, back, html: true, tags }]);
     if (again) {
       setFront('');
       setBack('');
@@ -81,6 +84,22 @@ function CardEditor({ deck, card, onClose, onAnki }: { deck: Deck; card?: Card; 
           }}
         />
       </div>
+      <label className="field-label" htmlFor="card-tags">
+        Tags (optional)
+      </label>
+      <input
+        id="card-tags"
+        className="input"
+        list="deck-tags"
+        placeholder="z. B. Kapitel1 wichtig"
+        value={tagText}
+        onChange={(e) => setTagText(e.target.value)}
+      />
+      <datalist id="deck-tags">
+        {allTags(deck.cards).map((t) => (
+          <option key={t} value={t} />
+        ))}
+      </datalist>
     </Modal>
   );
 }
@@ -95,7 +114,13 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
   const [occl, setOccl] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [limit, setLimit] = useState(100);
-  const filtered = term ? deck.cards.filter((c) => (cardFrontText(c) + ' ' + cardBackText(c)).toLowerCase().includes(term)) : deck.cards;
+  const [tag, setTag] = useState('');
+  const tags = allTags(deck.cards);
+  const filtered = deck.cards.filter(
+    (c) =>
+      (!tag || hasTag(c, tag)) &&
+      (!term || (cardFrontText(c) + ' ' + cardBackText(c) + ' ' + (c.tags ?? []).join(' ')).toLowerCase().includes(term)),
+  );
   const cards = filtered.slice(0, limit);
   const job = useJob(deck.id, 'cards');
 
@@ -126,6 +151,19 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
         <IconSearch size={16} />
         <input placeholder="Suche" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Karten durchsuchen" />
       </div>
+      {tags.length > 0 && (
+        <div className="tag-filter" aria-label="Nach Tag filtern">
+          <IconTag size={14} />
+          <button type="button" className={`tag ${!tag ? 'on' : ''}`} onClick={() => setTag('')}>
+            Alle
+          </button>
+          {tags.slice(0, 30).map((t) => (
+            <button key={t} type="button" className={`tag ${tag === t ? 'on' : ''}`} onClick={() => setTag(tag === t ? '' : t)}>
+              {t}
+            </button>
+          ))}
+        </div>
+      )}
       {deck.cards.length === 0 ? (
         <div className="empty">
           <b>Dieses Deck ist noch leer</b>
@@ -157,6 +195,7 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
                     {lvl.label}
                   </span>
                   <small>{c.srs.last ? formatDue(c.srs.due) : 'neu'}</small>
+                  {c.tags && c.tags.length > 0 && <small className="row-tags">{c.tags.slice(0, 3).map((t) => `#${t}`).join(' ')}</small>}
                 </div>
                 <div className="flash-actions">
                   <button type="button" className="icon-btn" aria-label="Bearbeiten" onClick={() => setEdit(c)}>
