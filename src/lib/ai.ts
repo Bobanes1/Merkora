@@ -3,7 +3,7 @@ import { sideText } from './content';
 import { CARD_GRAPHIC_RULE } from './graphics';
 import { getState, type ChatMsg, type Provider } from './store';
 import { SECOND_MODEL } from '../config';
-import { autoCardCount, CARD_MATERIAL_LIMIT } from './cardCount';
+import { autoCardInstruction, CARD_MATERIAL_LIMIT } from './cardCount';
 
 export const PROVIDERS: Record<
   Provider,
@@ -293,7 +293,7 @@ export type PartInfo = { i: number; n: number; avoid?: string[] };
 
 export function cardsPrompt(text: string, count: number, focus = '', graphics = false, part?: PartInfo): Prompt {
   const partNote = part && part.n > 1
-    ? `\n\nDies ist Teil ${part.i} von ${part.n} des Lernmaterials. Erstelle Karten nur zu diesem Teil.${
+    ? `\n\nDies ist Teil ${part.i} von ${part.n} des Lernmaterials. Erstelle Karten nur zu diesem Teil${count > 0 ? '' : ' und entscheide die Anzahl nur nach seinem Inhalt'}.${
         part.avoid?.length
           ? ` Zu diesen Fragen gibt es schon Karten – nicht wiederholen, auch nicht anders formuliert:\n- ${part.avoid.join('\n- ')}`
           : ''
@@ -302,14 +302,15 @@ export function cardsPrompt(text: string, count: number, focus = '', graphics = 
   return {
     system: `Du bist ein erfahrener Lerncoach und erstellst hochwertige Karteikarten. ${LANG_RULE}
 Regeln: Eine Idee pro Karte. Vorderseite = präzise Frage oder Begriff. Rückseite = kurze, vollständige Antwort (max. 2–3 Sätze).
+Wähle prüfungsorientiert aus: Karten zu dem, was in einer Prüfung zu diesem Stoff gefragt werden kann – nicht zu Organisatorischem, Agenda oder Literaturlisten.
 ${graphics ? CARD_GRAPHIC_RULE + '\n' : ''}Format: {"cards":[{"front":"...","back":"..."${graphics ? ',"svg":"<svg …>…</svg> (optional)"' : ''}}]}${JSON_RULE}`,
     user: `${
       count > 0
         ? `Erstelle genau ${count} Karteikarten zu diesem Material.`
-        : `Erstelle so viele Karteikarten, wie nötig sind, um alle wichtigen, prüfungsrelevanten Inhalte dieses Materials abzudecken – jede wichtige Idee genau einmal, keine Füllkarten, keine Dopplungen (Richtwert: etwa ${autoCardCount(text.length)}).`
+        : autoCardInstruction()
     }${focus ? ` Schwerpunkt: ${focus}.` : ''}${partNote}\n\n${clip(text, CARD_MATERIAL_LIMIT)}`,
-    // count 0 = automatic: room for about 1.5× the guide value
-    maxTokens: Math.min(32000, 400 + Math.ceil((count > 0 ? count : autoCardCount(text.length) * 1.5) * (graphics ? 900 : 220))),
+    // automatic: generous room so the limit never decides the number (only written tokens are billed)
+    maxTokens: count > 0 ? Math.min(32000, 400 + count * (graphics ? 900 : 220)) : 16000,
     json: true,
   };
 }

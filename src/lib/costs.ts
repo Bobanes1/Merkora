@@ -3,9 +3,10 @@
  * Tokens are guessed from characters (German text ≈ 3.5 characters per token), output from the task.
  * Prices are US-$ per 1 million tokens (input / output).
  */
-import { autoCardCount, CARD_MATERIAL_LIMIT } from './cardCount';
+import { cardRange, CARD_MATERIAL_LIMIT } from './cardCount';
 
-export type Estimate = { input: number; output: number };
+/** `outputHigh`: when the AI decides the number itself, the output can only be given as a span. */
+export type Estimate = { input: number; output: number; outputHigh?: number };
 export type Price = { in: number; out: number; source: 'table' | 'live' | 'custom' };
 
 /** Characters → tokens (German ≈ 3.5 characters per token). */
@@ -15,10 +16,14 @@ export const tokensOf = (chars: number) => Math.ceil(Math.max(0, chars) / 3.5);
 const MATERIAL_LIMIT = 36000; // materialFrom: 24k source + 12k cards
 
 export const estimate = {
-  cards: (chars: number, count: number, graphics = false): Estimate => ({
-    input: 350 + tokensOf(Math.min(chars, CARD_MATERIAL_LIMIT)),
-    output: (count > 0 ? count : autoCardCount(chars)) * (graphics ? 700 : 110),
-  }),
+  /** count 0 = the AI decides: output as a span (few to many cards). */
+  cards: (chars: number, count: number, graphics = false): Estimate => {
+    const per = graphics ? 700 : 110;
+    const input = 450 + tokensOf(Math.min(chars, CARD_MATERIAL_LIMIT));
+    if (count > 0) return { input, output: count * per };
+    const r = cardRange(chars);
+    return { input, output: r.low * per, outputHigh: r.high * per };
+  },
   /** Several parts one after another; later parts also get the questions of the cards made before. */
   cardsParts: (lengths: number[], counts: number[], graphics = false): Estimate => {
     let made = 0;
@@ -26,8 +31,9 @@ export const estimate = {
       (sum, len, i) => {
         const e = estimate.cards(len, counts[i] ?? 0, graphics);
         const avoid = i > 0 ? Math.min(1700, made * 15) : 0; // ≈ 6000 characters of earlier questions at most
-        made += counts[i] || autoCardCount(len);
-        return { input: sum.input + e.input + avoid, output: sum.output + e.output };
+        made += counts[i] || Math.round((cardRange(len).low + cardRange(len).high) / 2);
+        const high = sum.outputHigh !== undefined || e.outputHigh !== undefined ? (sum.outputHigh ?? sum.output) + (e.outputHigh ?? e.output) : undefined;
+        return { input: sum.input + e.input + avoid, output: sum.output + e.output, ...(high !== undefined ? { outputHigh: high } : {}) };
       },
       { input: 0, output: 0 },
     );
@@ -87,3 +93,13 @@ export function formatCost(usd: number): string {
   return `${usd.toFixed(2).replace('.', ',')} $`;
 }
 export const formatTokens = (n: number) => Math.round(n).toLocaleString('de-DE');
+
+/** "0,10–0,25 $", or one amount when both ends look the same. */
+export function formatCostRange(low: number, high?: number): string {
+  if (high === undefined) return formatCost(low);
+  const a = formatCost(low);
+  const b = formatCost(high);
+  if (a === b) return a;
+  if (low < 0.01) return `bis ${b}`;
+  return `${a.replace(' $', '')}–${b}`;
+}

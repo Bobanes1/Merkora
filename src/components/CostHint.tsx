@@ -1,7 +1,7 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { Link } from 'react-router-dom';
 import { aiConfig, aiReady } from '../lib/ai';
-import { costOf, formatCost, formatTokens, priceFor, PRICES_DATE, type Estimate } from '../lib/costs';
+import { costOf, formatCostRange, formatTokens, priceFor, PRICES_DATE, type Estimate } from '../lib/costs';
 import { ensureOpenRouterPrices, openRouterPrices, subscribePrices } from '../lib/livePrices';
 import { useStore } from '../lib/store';
 
@@ -24,9 +24,14 @@ export function CostHint({ est, label, className = '' }: { est: Estimate; label?
     custom: { in: st.priceIn, out: st.priceOut },
     live: cfg.provider === 'openrouter' ? live : undefined,
   });
-  const total = est.input + est.output;
+  // when the AI decides the number of cards itself, the output is a span
+  const high = est.outputHigh !== undefined && est.outputHigh > est.output ? { input: est.input, output: est.outputHigh } : null;
+  const total = high ? `${formatTokens(est.input + est.output)}–${formatTokens(est.input + high.output)}` : formatTokens(est.input + est.output);
+  const out = high ? `${formatTokens(est.output)}–${formatTokens(high.output)}` : formatTokens(est.output);
   const tip =
-    `${formatTokens(est.input)} Tokens Eingabe · ${formatTokens(est.output)} Tokens Ausgabe – grobe Schätzung (±30 %).` +
+    `${formatTokens(est.input)} Tokens Eingabe · ${out} Tokens Ausgabe – grobe Schätzung${
+      high ? ', die Spanne kommt daher, dass die KI selbst entscheidet, wie viele Karten nötig sind' : ' (±30 %)'
+    }.` +
     (price
       ? ` Preis: ${price.in.toString().replace('.', ',')} $ / ${price.out.toString().replace('.', ',')} $ pro 1 Mio. Tokens (${
           price.source === 'custom' ? 'eigener Preis' : price.source === 'live' ? 'aktuell von OpenRouter' : `Preisliste, Stand ${PRICES_DATE}`
@@ -35,10 +40,10 @@ export function CostHint({ est, label, className = '' }: { est: Estimate; label?
 
   return (
     <p className={`cost-hint ${className}`} title={tip}>
-      {label && <b>{label}: </b>}≈ {formatTokens(total)} Tokens ·{' '}
+      {label && <b>{label}: </b>}≈ {total} Tokens ·{' '}
       {price ? (
         <>
-          ca. {formatCost(costOf(est, price))} <span className="muted">({cfg.model})</span>
+          ca. {formatCostRange(costOf(est, price), high ? costOf(high, price) : undefined)} <span className="muted">({cfg.model})</span>
         </>
       ) : (
         <>

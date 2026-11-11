@@ -1,4 +1,3 @@
-import { autoCardCount } from '../lib/cardCount';
 import { avoidList, shareCount, splitMaterial } from '../lib/chunks';
 import { cardFrontText } from '../lib/content';
 import { CostHint } from './CostHint';
@@ -53,7 +52,8 @@ export function CreateWithAI({
   const [name, setName] = useState('');
   // 0 = automatic (as many cards as the material needs)
   const [count, setCount] = useState(0);
-  const counts = shareCount(count, parts);
+  // fixed number: at most 50 for one part, 300 for several
+  const counts = shareCount(count > 0 ? Math.min(count, parts.length > 1 ? 300 : 50) : 0, parts);
   const [focus, setFocus] = useState('');
   const [graphics, setGraphics] = useState(false);
   const [courseId, setCourseId] = useState(presetCourse ?? data.courses[0]?.id ?? '');
@@ -350,15 +350,22 @@ export function CreateWithAI({
           </div>
           {count === 0 ? (
             <small className="muted count-hint">
-              So viele wie nötig –{' '}
-              {text.trim() ? `etwa ${parts.reduce((n, p) => n + autoCardCount(p.text.length), 0)}, je nach Inhalt mehr oder weniger` : 'je nach Umfang des Materials'}.
+              Die KI entscheidet selbst, wie viele Karten der Stoff braucht – nur Prüfungsrelevantes, keine Füllkarten.
             </small>
           ) : (
             <>
               <label className="field-label" htmlFor="ai-count">
-                {count} Karten
+                {count} Karten{parts.length > 1 ? ` insgesamt (auf ${parts.length} Teile verteilt)` : ''}
               </label>
-              <input id="ai-count" type="range" min={5} max={50} step={5} value={count} onChange={(e) => setCount(+e.target.value)} />
+              <input
+                id="ai-count"
+                type="range"
+                min={5}
+                max={parts.length > 1 ? 300 : 50}
+                step={5}
+                value={Math.min(count, parts.length > 1 ? 300 : 50)}
+                onChange={(e) => setCount(+e.target.value)}
+              />
             </>
           )}
         </div>

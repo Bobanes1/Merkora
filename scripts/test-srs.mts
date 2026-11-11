@@ -295,11 +295,14 @@ console.log('Markierte Karten');
   ok(toAnkiTags(['x'], true).join(' ') === 'x marked' && toAnkiTags(undefined, false).length === 0, 'Export: Stern → Anki-Tag „marked“');
 }
 
-console.log('Kartenanzahl automatisch');
+console.log('Kartenanzahl: die KI entscheidet');
 {
-  const { autoCardCount } = await import('../src/lib/cardCount');
-  ok(autoCardCount(3000) === 5 && autoCardCount(30000) === 50, 'Richtwert: ca. 1 Karte pro 600 Zeichen (3k → 5, 30k → 50)');
-  ok(autoCardCount(10_000_000) <= 150 && autoCardCount(0) === 5, 'begrenzt auf 5 bis 150');
+  const { autoCardInstruction, cardRange } = await import('../src/lib/cardCount');
+  const t = autoCardInstruction();
+  ok(t.includes('Entscheide selbst') && !/\d/.test(t), 'Anweisung lässt die KI entscheiden und nennt keine Zahl');
+  ok(/Organisatorisches/.test(t) && /nichts Prüfungsrelevantes aus/.test(t), 'Anweisung: nur Prüfungsrelevantes, aber nichts davon auslassen');
+  const s = cardRange(4000), l = cardRange(40000);
+  ok(s.low < s.high && l.low < l.high && l.high > s.high, 'Spanne für die Kostenanzeige wächst mit dem Material');
 }
 
 console.log('Kostenschätzung');
@@ -308,7 +311,8 @@ console.log('Kostenschätzung');
   ok(tokensOf(3500) === 1000, '3.500 Zeichen ≈ 1.000 Tokens');
   const a = estimate.cards(10000, 10), b = estimate.cards(10000, 30), c = estimate.cards(30000, 30);
   ok(b.output > a.output && c.input > b.input, 'mehr Karten → mehr Ausgabe, mehr Material → mehr Eingabe');
-  ok(estimate.cards(30000, 0).output === 50 * 110, 'Automatisch nutzt den Richtwert');
+  const auto = estimate.cards(30000, 0), fixed = estimate.cards(30000, 20);
+  ok(auto.outputHigh! > auto.output && fixed.outputHigh === undefined, 'KI entscheidet → Kosten als Spanne, feste Anzahl → ein Wert');
   const haiku = priceFor('claude-haiku-5-5')!;
   ok(Math.abs(costOf({ input: 1_000_000, output: 0 }, haiku) - 0.1) < 1e-9, 'claude-haiku-5-5: 1 Mio. Eingabe = 0,10 $');
   ok(priceFor('openai/gpt-4o-mini')?.in === 0.15 && priceFor('nvidia/x:free')?.in === 0, 'OpenRouter-Namen und kostenlose Modelle');
@@ -339,7 +343,9 @@ console.log('Langes Material in Teilen');
   const av = avoidList(Array.from({ length: 500 }, (_, i) => 'Frage Nummer ' + i + ' zum Thema'), 2000);
   ok(av.length < 500 && av[av.length - 1] === 'Frage Nummer 499 zum Thema', 'Liste bisheriger Fragen bleibt kurz (neueste zuletzt)');
   const one = estimate.cards(40000, 0), two = estimate.cardsParts([40000, 40000], [0, 0]);
-  ok(two.input > 2 * one.input - 1 && two.output === 2 * one.output, 'Kosten aller Teile werden zusammengezählt');
+  ok(two.input > 2 * one.input - 1 && two.output === 2 * one.output && two.outputHigh === 2 * one.outputHigh!, 'Kosten aller Teile werden zusammengezählt');
+  const { formatCostRange } = await import('../src/lib/costs');
+  ok(formatCostRange(0.1, 0.25) === '0,10–0,25 $' && formatCostRange(0.002, 0.004) === '< 0,01 $' && formatCostRange(0.004, 0.03) === 'bis 0,03 $', 'Kostenspanne lesbar');
 }
 
 console.log('Kurze Decknamen');
