@@ -127,6 +127,7 @@ export const IconBell = mk(<path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4zM10 21h4" />
 export const IconHeart = mk(
   <path d="M12 21s-7.5-4.6-9.6-9.2C.9 8 3.3 4 7 4c2.2 0 3.8 1.2 5 3 1.2-1.8 2.8-3 5-3 3.7 0 6.1 4 4.6 7.8C19.5 16.4 12 21 12 21z" fill="currentColor" stroke="none" />,
 );
+export const IconStarLine = mk(<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z" />);
 export const IconStar =mk(<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z" fill="currentColor" stroke="none" />);
 export const IconLock = mk(
   <>

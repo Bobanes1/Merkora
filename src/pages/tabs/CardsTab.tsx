@@ -4,9 +4,10 @@ import { OcclusionEditor } from '../../components/OcclusionEditor';
 import { ExportDialog } from '../../components/ExportDialog';
 import { allTags, hasTag, parseTags } from '../../lib/tags';
 import { answerOnly } from '../../lib/backSide';
+import { MarkButton } from '../../components/MarkButton';
 import { CardContent, lookOf } from '../../components/CardContent';
 import { CreateWithAI } from '../../components/CreateWithAI';
-import { IconEdit, IconPlay, IconPlus, IconSearch, IconSparkle, IconTrash, IconDownload, IconImage, IconTag, IconUpload } from '../../components/Icons';
+import { IconEdit, IconPlay, IconPlus, IconSearch, IconSparkle, IconTrash, IconDownload, IconImage, IconTag, IconUpload, IconStar } from '../../components/Icons';
 import { isActive, JobBanner, JobError, useJob } from '../../components/Jobs';
 import { ConfirmModal, Modal } from '../../components/Modal';
 import { RichField } from '../../components/RichField';
@@ -116,10 +117,13 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
   const [exporting, setExporting] = useState(false);
   const [limit, setLimit] = useState(100);
   const [tag, setTag] = useState('');
+  const [onlyMarked, setOnlyMarked] = useState(false);
+  const markedCount = deck.cards.filter((c) => c.marked).length;
   const tags = allTags(deck.cards);
   const filtered = deck.cards.filter(
     (c) =>
       (!tag || hasTag(c, tag)) &&
+      (!onlyMarked || c.marked) &&
       (!term || (cardFrontText(c) + ' ' + cardBackText(c) + ' ' + (c.tags ?? []).join(' ')).toLowerCase().includes(term)),
   );
   const cards = filtered.slice(0, limit);
@@ -152,12 +156,17 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
         <IconSearch size={16} />
         <input placeholder="Suche" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Karten durchsuchen" />
       </div>
-      {tags.length > 0 && (
+      {(tags.length > 0 || markedCount > 0) && (
         <div className="tag-filter" aria-label="Nach Tag filtern">
           <IconTag size={14} />
-          <button type="button" className={`tag ${!tag ? 'on' : ''}`} onClick={() => setTag('')}>
+          <button type="button" className={`tag ${!tag && !onlyMarked ? 'on' : ''}`} onClick={() => (setTag(''), setOnlyMarked(false))}>
             Alle
           </button>
+          {markedCount > 0 && (
+            <button type="button" className={`tag mark-filter ${onlyMarked ? 'on' : ''}`} aria-pressed={onlyMarked} onClick={() => setOnlyMarked(!onlyMarked)}>
+              <IconStar size={12} /> Markiert ({markedCount})
+            </button>
+          )}
           {tags.slice(0, 30).map((t) => (
             <button key={t} type="button" className={`tag ${tag === t ? 'on' : ''}`} onClick={() => setTag(tag === t ? '' : t)}>
               {t}
@@ -206,6 +215,7 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
                   {c.srs.last && <small>{formatDue(c.srs.due)}</small>}
                 </div>
                 <div className="flash-actions">
+                  <MarkButton deckId={deck.id} card={c} />
                   <button type="button" className="icon-btn" aria-label="Bearbeiten" onClick={() => setEdit(c)}>
                     <IconEdit size={16} />
                   </button>

@@ -6560,3 +6560,12 @@ a.deck-row:hover {
 .nokey-hint span { color: var(--text); }
 .nokey-hint .small-link { white-space: nowrap; font-weight: 700; }
 .nokey-hint .icon-btn { flex: none; width: 28px; height: 28px; }
+
+/* ★ marked cards */
+.mark-btn { color: var(--muted); }
+.mark-btn.on { color: #e0a63a; }
+.mark-btn:hover { color: #e0a63a; }
+.flashcard { position: relative; }
+.flashcard .fc-mark { position: absolute; top: 8px; right: 8px; z-index: 1; }
+.tag.mark-filter { display: inline-flex; align-items: center; gap: 4px; }
+.tag.mark-filter svg { color: #e0a63a; }

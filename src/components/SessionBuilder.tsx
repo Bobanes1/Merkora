@@ -22,8 +22,10 @@ export function SessionBuilder({ onClose, onStart }: { onClose: () => void; onSt
   const [which, setWhich] = useState<Which>('due');
   const [limit, setLimit] = useState(50);
   const [shuffle, setShuffle] = useState(true);
+  const [onlyMarked, setOnlyMarked] = useState(false);
 
   const decks = data.decks.filter((d) => deckIds.includes(d.id));
+  const markedCount = decks.reduce((n, d) => n + d.cards.filter((c) => c.marked).length, 0);
   const tagList = useMemo(() => allTags(decks.flatMap((d) => d.cards)), [decks]);
   const now = Date.now();
   // cards rated "Nochmal"/"Schwer" in the last 30 days
@@ -34,6 +36,7 @@ export function SessionBuilder({ onClose, onStart }: { onClose: () => void; onSt
   const items = decks.flatMap((d) =>
     d.cards
       .filter((c) => !tags.length || tags.some((t) => hasTag(c, t)))
+      .filter((c) => !onlyMarked || c.marked)
       .filter((c) =>
         which === 'due'
           ? !!c.srs.last && c.srs.due <= now
@@ -50,7 +53,7 @@ export function SessionBuilder({ onClose, onStart }: { onClose: () => void; onSt
     let list = which === 'hard' ? [...items].sort((a, b) => a.ease - b.ease) : [...items];
     if (shuffle) list = list.sort(() => Math.random() - 0.5);
     const label = WHICH.find((w) => w.id === which)!.label;
-    const title = `${label} Karten${tags.length ? ` · #${tags.join(' #')}` : ''}`;
+    const title = `${label} Karten${onlyMarked ? ' · ★ markiert' : ''}${tags.length ? ` · #${tags.join(' #')}` : ''}`;
     onStart(title, list.slice(0, limit || list.length).map(({ deckId, cardId }) => ({ deckId, cardId })));
   };
   const count = Math.min(items.length, limit || items.length);
@@ -88,6 +91,14 @@ export function SessionBuilder({ onClose, onStart }: { onClose: () => void; onSt
       </div>
       <span className="field-label">Aus diesen Decks</span>
       <DeckPicker value={deckIds} onChange={setDeckIds} />
+      {markedCount > 0 && (
+        <label className="check-row">
+          <input type="checkbox" checked={onlyMarked} onChange={(e) => setOnlyMarked(e.target.checked)} />
+          <span>
+            <b>Nur markierte Karten</b> ★ ({markedCount} in den gewählten Decks)
+          </span>
+        </label>
+      )}
       {tagList.length > 0 && (
         <>
           <span className="field-label">Nur mit diesen Tags (optional)</span>

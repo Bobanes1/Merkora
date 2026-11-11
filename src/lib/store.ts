@@ -15,6 +15,8 @@ export type Card = {
   front: string;
   back: string;
   html?: boolean;
+  /** Marked with ★ (Anki: tag "marked"). */
+  marked?: boolean;
   /** Imported Anki cards: id of the note type look (CSS in `Deck.styles`) and the wrapping class (`card card1`). */
   styleId?: string;
   cardClass?: string;
@@ -636,7 +638,7 @@ export function updateDeck(id: string, patch: Partial<Deck> | ((d: Deck) => Part
     decks: d.decks.map((x) => (x.id === id ? { ...x, ...(typeof patch === 'function' ? patch(x) : patch), updatedAt: Date.now() } : x)),
   }));
 }
-export type NewCard = { front: string; back: string; html?: boolean; styleId?: string; cardClass?: string; tags?: string[]; srs?: Srs };
+export type NewCard = { front: string; back: string; html?: boolean; styleId?: string; cardClass?: string; tags?: string[]; marked?: boolean; srs?: Srs };
 export function addCards(deckId: string, pairs: NewCard[]) {
   const now = Date.now();
   const cards: Card[] = pairs.map((p) => ({
@@ -647,10 +649,15 @@ export function addCards(deckId: string, pairs: NewCard[]) {
     ...(p.styleId ? { styleId: p.styleId } : {}),
     ...(p.cardClass ? { cardClass: p.cardClass } : {}),
     ...(p.tags?.length ? { tags: p.tags } : {}),
+    ...(p.marked ? { marked: true } : {}),
     createdAt: now,
     srs: p.srs ?? newSrs(now),
   }));
   updateDeck(deckId, (x) => ({ cards: [...x.cards, ...cards] }));
+}
+/** Mark or unmark a card (★). */
+export function toggleMark(deckId: string, cardId: string) {
+  updateDeck(deckId, (x) => ({ cards: x.cards.map((c) => (c.id === cardId ? { ...c, marked: c.marked ? undefined : true, updatedAt: Date.now() } : c)) }));
 }
 export function updateCard(deckId: string, cardId: string, patch: Partial<Card>) {
   updateDeck(deckId, (x) => ({ cards: x.cards.map((c) => (c.id === cardId ? { ...c, ...patch, updatedAt: Date.now() } : c)) }));

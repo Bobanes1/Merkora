@@ -14,7 +14,7 @@ export type SharePack = {
   deck: {
     name: string;
     source: string;
-    cards: { front: string; back: string; html?: boolean; tags?: string[]; styleId?: string; cardClass?: string }[];
+    cards: { front: string; back: string; html?: boolean; tags?: string[]; styleId?: string; cardClass?: string; marked?: boolean }[];
     styles?: Record<string, string>;
   };
   exam?: SharedExam;
@@ -42,6 +42,7 @@ export function buildShare(deck: Deck, from: string, o: { exam: boolean; result:
         ...(c.tags?.length ? { tags: c.tags } : {}),
         ...(c.styleId ? { styleId: c.styleId } : {}),
         ...(c.cardClass ? { cardClass: c.cardClass } : {}),
+        ...(c.marked ? { marked: true } : {}),
       })),
       ...(deck.styles ? { styles: deck.styles } : {}),
     },

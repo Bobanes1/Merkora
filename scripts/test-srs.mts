@@ -286,6 +286,15 @@ console.log('Anki-Rückseite ohne wiederholte Vorderseite');
   ok(answerOnly(front, front) === front, 'nichts übrig → ganze Rückseite zeigen');
 }
 
+console.log('Markierte Karten');
+{
+  const { fromAnkiTags, toAnkiTags } = await import('../src/lib/marks');
+  const a = fromAnkiTags(['KoWi::S01', 'marked']);
+  ok(a.marked && a.tags?.length === 1 && a.tags[0] === 'KoWi::S01', 'Anki-Tag „marked“ → Stern, Tag verschwindet');
+  ok(!fromAnkiTags(['x']).marked && fromAnkiTags(['Marked']).tags === undefined, 'ohne „marked“ nicht markiert; Groß/klein egal');
+  ok(toAnkiTags(['x'], true).join(' ') === 'x marked' && toAnkiTags(undefined, false).length === 0, 'Export: Stern → Anki-Tag „marked“');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

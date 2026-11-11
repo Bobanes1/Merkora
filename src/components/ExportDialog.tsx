@@ -5,6 +5,7 @@ import { pushToast } from '../lib/jobs';
 import type { Deck } from '../lib/store';
 import { download } from '../lib/util';
 import { Modal } from './Modal';
+import { toAnkiTags } from '../lib/marks';
 import { ShareDialog } from './ShareDialog';
 
 const csvCell = (s: string) => `"${s.replace(/"/g, '""')}"`;
@@ -17,7 +18,7 @@ export function ExportDialog({ deck, onClose }: { deck: Deck; onClose: () => voi
 
   const csv = () => {
     const text = (c: Deck['cards'][number], side: string) => (c.html ? htmlToText(side) : side);
-    const rows = [['Vorderseite', 'Rückseite', 'Tags'], ...deck.cards.map((c) => [text(c, c.front), text(c, c.back), (c.tags ?? []).join(' ')])];
+    const rows = [['Vorderseite', 'Rückseite', 'Tags'], ...deck.cards.map((c) => [text(c, c.front), text(c, c.back), toAnkiTags(c.tags, c.marked).join(' ')])];
     download(`${deck.name}.csv`, '﻿' + rows.map((r) => r.map(csvCell).join(';')).join('\r\n'), 'text/csv');
     onClose();
   };
@@ -31,7 +32,7 @@ export function ExportDialog({ deck, onClose }: { deck: Deck; onClose: () => voi
         cards: deck.cards.map((c) => ({
           front: c.html ? c.front : textToHtml(c.front),
           back: c.html ? c.back : textToHtml(c.back),
-          tags: c.tags,
+          tags: toAnkiTags(c.tags, c.marked),
           styleId: c.styleId,
         })),
         styles: deck.styles ?? {},

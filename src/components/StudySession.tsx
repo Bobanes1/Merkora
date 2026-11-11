@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { answerOnly } from '../lib/backSide';
+import { MarkButton } from './MarkButton';
 import { capForExam, nextExamAt } from '../lib/exams';
 import { RATINGS, formatDelay, schedule, type Rating } from '../lib/srs';
 import { addXp, logReview, reviewCard, useStore } from '../lib/store';
@@ -95,6 +96,7 @@ export function StudySession({ title, items, onExit }: { title: string; items: S
       </span>
       <small className="muted">{deck.name}</small>
       <div className={`flashcard ${flipped ? 'flipped' : ''}`} onClick={() => setFlipped(true)}>
+        <MarkButton deckId={deck.id} card={card} className="fc-mark" />
         <small>Frage</small>
         <CardContent text={card.front} html={card.html} look={look} className="fc-front" />
         {flipped && (

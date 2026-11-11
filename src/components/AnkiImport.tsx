@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { fromAnkiTags } from '../lib/marks';
 import { useNavigate } from 'react-router-dom';
 import type { AnkiResult } from '../lib/anki';
 import { addCards, addCourse, addDeck, addWorkspace, deckUrl, getState, updateDeck, useData } from '../lib/store';
@@ -27,7 +28,7 @@ export function storeImport(
     html: true,
     styleId: c.styleId,
     cardClass: c.cardClass,
-    tags: c.tags,
+    ...fromAnkiTags(c.tags),
     ...(opts.keepProgress && c.progress ? { srs: ankiToSrs(c.progress, res.crt, now) } : {}),
   });
   const target = opts.targetDeckId ? getState().data.decks.find((d) => d.id === opts.targetDeckId) : undefined;

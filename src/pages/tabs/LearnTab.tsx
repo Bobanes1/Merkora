@@ -8,10 +8,11 @@ import { countAnswerTime } from '../../lib/pomodoro';
 import { explainCard, gradeAnswer, hasKey } from '../../lib/ai';
 import { cardBackText, cardFrontText } from '../../lib/content';
 import { RATINGS, formatDelay, schedule, type Rating, type Srs } from '../../lib/srs';
-import { addXp, boostNewCards, dueCards, logReview, newCardsLeft, reviewCard, useStore, type Deck } from '../../lib/store';
+import { addXp, toggleMark, boostNewCards, dueCards, logReview, newCardsLeft, reviewCard, useStore, type Deck } from '../../lib/store';
 import { capForExam, countdownText, nextExamAt, nextExamForDeck } from '../../lib/exams';
 import { pipGreeting, pipReaction, pipSummary } from '../../lib/pipLines';
 import { answerOnly } from '../../lib/backSide';
+import { MarkButton } from '../../components/MarkButton';
 import { dayKey } from '../../lib/util';
 
 type Grade = { score: number; verdict: string; feedback: string };
@@ -144,10 +145,11 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
         e.preventDefault();
         setFlipped(true);
       } else if (flipped && ['1', '2', '3', '4'].includes(e.key)) rate(Number(e.key) as Rating);
+      else if (card && (e.key === 'm' || e.key === 'M') && !e.ctrlKey && !e.metaKey && !e.altKey) toggleMark(deck.id, card.id);
     };
     window.addEventListener('keydown', k);
     return () => window.removeEventListener('keydown', k);
-  }, [card, flipped, rate]);
+  }, [card, flipped, rate, deck.id]);
 
   const check = async () => {
     if (!card) return;
@@ -276,6 +278,7 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
 
       <Mascot className="learn-mascot" mood={mood} pulse={done + queue.length} size={64} say={moodSay} />
       <div key={`${card.id}-${flipped ? 'b' : 'f'}`} className={`flashcard ${flipped ? 'flipped flip-in' : 'card-in'}`} onClick={() => !typeMode && setFlipped(true)}>
+        <MarkButton deckId={deck.id} card={card} className="fc-mark" />
         <small>Frage</small>
         <CardContent text={card.front} html={card.html} look={lookOf(deck, card)} className="fc-front" />
         {flipped && (
