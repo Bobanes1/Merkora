@@ -5255,56 +5255,6 @@ a.deck-row:hover {
 .hero-btn:hover {
   background: #eefbfa;
 }
-.ask-box {
-  position: relative;
-  margin: -14px 18px 20px;
-  padding: 14px 16px 10px;
-  border: 1px solid var(--line);
-  border-radius: 20px;
-  background: var(--white);
-  box-shadow: var(--shadow-lg);
-}
-.ask-box textarea {
-  width: 100%;
-  border: none;
-  outline: none;
-  resize: none;
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  font-size: 15px;
-}
-.ask-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.ask-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: var(--r-full);
-  background: var(--primary-soft);
-  color: var(--primary);
-  font-size: 13px;
-  font-weight: 600;
-}
-.send-btn {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  border: none;
-  border-radius: 50%;
-  background: var(--primary);
-  color: #fff;
-  cursor: pointer;
-}
-.send-btn:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
 .home-tabs {
   display: flex;
   gap: 4px;

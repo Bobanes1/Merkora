@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AnkiImport } from '../components/AnkiImport';
 import { CreateWithAI } from '../components/CreateWithAI';
 import { ExamDialog } from '../components/ExamDialog';
-import { IconCalendar, IconCards, IconChevron, IconFlame, IconPlay, IconPlus, IconSend, IconSparkle, IconStar, IconUpload } from '../components/Icons';
+import { IconCalendar, IconCards, IconChevron, IconFlame, IconPlay, IconPlus, IconSparkle, IconStar, IconUpload } from '../components/Icons';
 import { Mascot } from '../components/Mascot';
 import { NoKeyNotice } from '../components/NoKey';
 import { Pomodoro } from '../components/Pomodoro';
@@ -12,7 +12,6 @@ import { pathProgress, xpStreak, xpToday } from '../lib/path';
 import { masteryPercent, streak } from '../lib/stats';
 import { deckUrl, dueCards, useStore, type Deck } from '../lib/store';
 import { DAY, dayKey, startOfDay } from '../lib/util';
-import { MATERIAL_ACCEPT, MATERIAL_LABEL } from '../lib/files';
 import { shortName } from '../lib/deckNames';
 import { WeekReview } from '../components/WeekReview';
 import { GameBar } from './tabs/PathTab';
@@ -83,8 +82,6 @@ export default function Dashboard() {
   const [create, setCreate] = useState<{ notes?: string; file?: File } | null>(null);
   const [anki, setAnki] = useState(false);
   const [exam, setExam] = useState(false);
-  const [prompt, setPrompt] = useState('');
-  const fileRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     document.title = 'Start – Merkora';
   }, []);
@@ -106,11 +103,6 @@ export default function Dashboard() {
     .sort((a, b) => Math.max(0, ...Object.values(b.deck.path ?? {}).map((r) => r.at)) - Math.max(0, ...Object.values(a.deck.path ?? {}).map((r) => r.at)))
     .find((x) => x.p.done < x.p.total);
 
-  const submit = () => {
-    if (!prompt.trim()) return;
-    setCreate({ notes: prompt.trim() });
-    setPrompt('');
-  };
 
   const tabs: { id: Tab; label: string; icon: ReactNode }[] = [
     { id: 'tasks', label: 'Aufgaben', icon: <IconCalendar size={16} /> },
@@ -141,50 +133,6 @@ export default function Dashboard() {
           )}
         </section>
 
-        <form
-          className="ask-box"
-          onSubmit={(e) => {
-            e.preventDefault();
-            submit();
-          }}
-        >
-          <textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                submit();
-              }
-            }}
-            rows={2}
-            placeholder="Was möchtest du heute lernen? Füge Notizen ein oder beschreibe ein Thema …"
-            aria-label="Lernstoff eingeben"
-          />
-          <div className="ask-row">
-            <button type="button" className="icon-btn" aria-label="Datei anhängen" title={`Datei anhängen: ${MATERIAL_LABEL}`} onClick={() => fileRef.current?.click()}>
-              <IconPlus size={18} />
-            </button>
-            <input
-              ref={fileRef}
-              type="file"
-              hidden
-              accept={MATERIAL_ACCEPT}
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                e.target.value = '';
-                if (f) setCreate({ file: f, notes: prompt.trim() || undefined });
-              }}
-            />
-            <span className="ask-chip">
-              <IconSparkle size={14} /> Karteikarten erstellen
-            </span>
-            <span className="grow" />
-            <button type="submit" className="send-btn" aria-label="Weiter" disabled={!prompt.trim()}>
-              <IconSend size={18} />
-            </button>
-          </div>
-        </form>
 
         {!apiKey && data.settings.provider !== 'custom' && <NoKeyNotice />}
 
