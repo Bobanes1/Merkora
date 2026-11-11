@@ -13,7 +13,8 @@
         "test:srs": "tsx scripts/test-srs.mts",
         "tauri": "tauri",
         "desktop": "tauri build",
-        "desktop:dev": "tauri dev"
+        "desktop:dev": "tauri dev",
+        "test:office": "tsx scripts/test-office.mts"
     },
     "devDependencies": {
         "@fontsource/manrope": "^5.1.0",

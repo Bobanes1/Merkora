@@ -16,7 +16,7 @@ import {
   type PathNode,
 } from '../../lib/path';
 import { comfort, Confetti, Mascot, praise } from '../../components/Mascot';
-import { FloorDecor, NodeDecor, PathLink, SandFloor, themeFor, Waves } from '../../components/PathDecor';
+import { FloorDecor, NodeDecor, PathLink, SandFloor, SwimmingFish, themeFor, Waves } from '../../components/PathDecor';
 import { addXp, logReview, reviewCard, savePathResult, setDailyGoal, useData, type Deck } from '../../lib/store';
 
 const HEARTS = 3;
@@ -190,6 +190,7 @@ export default function PathTab({ deck }: { deck: Deck }) {
                 );
               })}
             </div>
+            <SwimmingFish seed={u.index} />
             <SandFloor />
             <FloorDecor />
           </section>

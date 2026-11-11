@@ -6337,3 +6337,92 @@ a.deck-row:hover {
 .no-anim .floor-decor .sway {
   animation: none !important;
 }
+
+/* fish swimming through the scene: across, turn, back */
+.swimmers {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.swimmer {
+  position: absolute;
+  left: 0;
+  animation: swim-across linear infinite;
+}
+.swimmer-body {
+  display: block;
+  animation: swim-turn linear infinite;
+}
+.swimmer-bob {
+  display: block;
+}
+.swimmer-bob svg {
+  display: block;
+  animation: swim-bob 2.6s ease-in-out infinite;
+}
+@keyframes swim-across {
+  0% {
+    left: -70px;
+  }
+  48% {
+    left: calc(100% + 10px);
+  }
+  50% {
+    left: calc(100% + 10px);
+  }
+  98% {
+    left: -70px;
+  }
+  100% {
+    left: -70px;
+  }
+}
+/* the fish looks left by default: swimming right it is mirrored */
+@keyframes swim-turn {
+  0%,
+  48.9% {
+    transform: scaleX(-1);
+  }
+  49%,
+  99.9% {
+    transform: scaleX(1);
+  }
+  100% {
+    transform: scaleX(-1);
+  }
+}
+@keyframes swim-bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  25% {
+    transform: translateY(-8px) rotate(-4deg);
+  }
+  75% {
+    transform: translateY(8px) rotate(4deg);
+  }
+}
+:root[data-theme='dark'] .swimmers {
+  opacity: 0.8;
+}
+.no-anim .swimmer,
+.no-anim .swimmer-body,
+.no-anim .swimmer-bob svg {
+  animation: none !important;
+}
+.no-anim .swimmer {
+  left: 6%;
+}
+@media (prefers-reduced-motion: reduce) {
+  .swimmer,
+  .swimmer-body,
+  .swimmer-bob svg {
+    animation: none !important;
+  }
+  .swimmer {
+    left: 6%;
+  }
+}

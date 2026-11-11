@@ -508,7 +508,7 @@ function CourseView({ course, workspace, setDialog }: { course: Course; workspac
           {!decks.length && (
             <div className="empty">
               <b>Noch keine Decks</b>
-              <p className="muted">Lege ein Deck an – leer, mit KI aus einem PDF oder aus einem Anki-Stapel.</p>
+              <p className="muted">Lege ein Deck an – leer, mit KI aus PDF, Word oder PowerPoint oder aus einem Anki-Stapel.</p>
               <button type="button" className="btn primary" onClick={() => setDialog({ kind: 'deck', course })}>
                 <IconPlus size={16} /> Neues Deck
               </button>

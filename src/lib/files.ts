@@ -1,6 +1,25 @@
-/** Reads text from a PDF, text or Markdown file in the browser (nothing is uploaded). */
+/** File types the AI card creation can read. */
+export const MATERIAL_ACCEPT =
+  '.pdf,.docx,.pptx,.odt,.odp,.txt,.md,.markdown,.csv,.html,.htm,text/*,application/pdf,' +
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document,' +
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+export const MATERIAL_LABEL = 'PDF, Word, PowerPoint, Text oder Markdown';
+
+/** Reads text from a PDF, Word, PowerPoint, OpenDocument, text or Markdown file on this device (nothing is uploaded). */
 export async function readFileText(file: File): Promise<string> {
   const name = file.name.toLowerCase();
+  if (/\.(docx|pptx|odt|odp)$/.test(name)) {
+    const [{ unzipSync }, { officeText }] = await Promise.all([import('fflate'), import('./officeText')]);
+    let files: Record<string, Uint8Array>;
+    try {
+      files = unzipSync(new Uint8Array(await file.arrayBuffer()));
+    } catch {
+      throw new Error('Die Datei konnte nicht geöffnet werden (beschädigt oder mit Passwort geschützt?).');
+    }
+    return officeText(name, files);
+  }
+  if (/\.(doc|ppt)$/.test(name))
+    throw new Error('Alte Word-/PowerPoint-Dateien (.doc/.ppt) werden nicht unterstützt. Speichere sie bitte als .docx bzw. .pptx (Datei › Speichern unter).');
   if (name.endsWith('.pdf') || file.type === 'application/pdf') {
     const pdfjs = await import('pdfjs-dist');
     const workerUrl = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
@@ -32,5 +51,5 @@ export async function readFileText(file: File): Promise<string> {
       ? new DOMParser().parseFromString(text, 'text/html').body.innerText
       : text;
   }
-  throw new Error('Dieses Dateiformat wird nicht unterstützt. Nutze PDF, TXT oder Markdown.');
+  throw new Error('Dieses Dateiformat wird nicht unterstützt. Nutze PDF, Word (.docx), PowerPoint (.pptx), TXT oder Markdown.');
 }

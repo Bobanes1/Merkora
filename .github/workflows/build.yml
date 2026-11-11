@@ -33,6 +33,7 @@ jobs:
       - run: npm ci
       - run: npm run test:srs
       - run: npm run test:anki
+      - run: npm run test:office
       - name: Rust tests (Anki import)
         run: mkdir -p dist && echo '<!doctype html>' > dist/index.html && cargo test --manifest-path src-tauri/Cargo.toml --lib
 

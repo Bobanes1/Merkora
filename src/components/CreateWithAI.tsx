@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { generateCards, hasKey } from '../lib/ai';
-import { readFileText } from '../lib/files';
+import { MATERIAL_ACCEPT, MATERIAL_LABEL, readFileText } from '../lib/files';
 import { canSurviveClose, startJob } from '../lib/jobs';
 import { cleanSvg, withGraphics } from '../lib/graphics';
 import { addCards, addCourse, addDeck, addWorkspace, deckUrl, getState, updateDeck, useData } from '../lib/store';
@@ -224,9 +224,9 @@ export function CreateWithAI({
         onKeyDown={(e) => e.key === 'Enter' && fileRef.current?.click()}
       >
         <IconUpload size={26} />
-        <b>{files.length ? 'Weitere Datei hinzufügen' : 'PDF, Text- oder Markdown-Datei hierher ziehen'}</b>
+        <b>{files.length ? 'Weitere Datei hinzufügen' : `Datei hierher ziehen (${MATERIAL_LABEL})`}</b>
         <span>oder klicken, um eine Datei auszuwählen. Die Datei wird nur in deinem Browser gelesen.</span>
-        <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.markdown,.csv,.html,.htm,text/*,application/pdf" hidden onChange={(e) => {
+        <input ref={fileRef} type="file" accept={MATERIAL_ACCEPT} hidden onChange={(e) => {
             void onFile(e.target.files?.[0]);
             // allows choosing the same file again later
             e.target.value = '';

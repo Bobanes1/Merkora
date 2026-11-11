@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { CreateWithAI } from '../../components/CreateWithAI';
 import { IconSparkle, IconUpload } from '../../components/Icons';
-import { readFileText } from '../../lib/files';
+import { MATERIAL_ACCEPT, readFileText } from '../../lib/files';
 import { updateDeck, type Deck } from '../../lib/store';
 
 export default function SourceTab({ deck }: { deck: Deck }) {
@@ -50,12 +50,12 @@ export default function SourceTab({ deck }: { deck: Deck }) {
         <button type="button" className="btn primary sm" onClick={() => setAi(true)} disabled={text.trim().length < 40}>
           <IconSparkle size={15} /> Karten daraus erstellen
         </button>
-        <input ref={fileRef} type="file" hidden accept=".pdf,.txt,.md,.markdown,.csv,.html,.htm,text/*,application/pdf" onChange={(e) => onFile(e.target.files?.[0])} />
+        <input ref={fileRef} type="file" hidden accept={MATERIAL_ACCEPT} onChange={(e) => onFile(e.target.files?.[0])} />
       </div>
       <textarea
         className="input source-text"
         rows={18}
-        placeholder="Füge hier Notizen, Skript-Auszüge oder Text aus einem PDF ein …"
+        placeholder="Füge hier Notizen, Skript-Auszüge oder Text aus PDF, Word oder PowerPoint ein …"
         value={text}
         onChange={(e) => {
           setText(e.target.value);

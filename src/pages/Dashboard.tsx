@@ -12,6 +12,7 @@ import { pathProgress, xpStreak, xpToday } from '../lib/path';
 import { masteryPercent, streak } from '../lib/stats';
 import { deckUrl, dueCards, useStore, type Deck } from '../lib/store';
 import { DAY, dayKey, startOfDay } from '../lib/util';
+import { MATERIAL_ACCEPT, MATERIAL_LABEL } from '../lib/files';
 import { GameBar } from './tabs/PathTab';
 
 const CARD_GOAL = 50;
@@ -158,14 +159,14 @@ export default function Dashboard() {
             aria-label="Lernstoff eingeben"
           />
           <div className="ask-row">
-            <button type="button" className="icon-btn" aria-label="PDF oder Datei anhängen" title="PDF oder Datei anhängen" onClick={() => fileRef.current?.click()}>
+            <button type="button" className="icon-btn" aria-label="Datei anhängen" title={`Datei anhängen: ${MATERIAL_LABEL}`} onClick={() => fileRef.current?.click()}>
               <IconPlus size={18} />
             </button>
             <input
               ref={fileRef}
               type="file"
               hidden
-              accept=".pdf,.txt,.md,.markdown,.csv,.html,.htm,text/*,application/pdf"
+              accept={MATERIAL_ACCEPT}
               onChange={(e) => {
                 const f = e.target.files?.[0];
                 e.target.value = '';
@@ -292,7 +293,7 @@ export default function Dashboard() {
           <div className="home-panel quick-grid">
             <button type="button" className="quick-card" onClick={() => setCreate({})}>
               <IconSparkle size={22} />
-              <b>Mit KI aus PDF oder Notizen</b>
+              <b>Mit KI aus PDF, Word oder PowerPoint</b>
               <small>Karten, Zusammenfassung und Quiz</small>
             </button>
             <button type="button" className="quick-card" onClick={() => setAnki(true)}>

@@ -5,10 +5,10 @@ export type PathTheme = { name: string; top: string; bottom: string; accent: str
 
 /** Each section of the path gets its own scene. */
 export const PATH_THEMES: PathTheme[] = [
-  { name: 'Lagune', top: '#dff7f6', bottom: '#bfeeea', accent: '#09817e', deco: ['fish', 'starfish', 'seaweed', 'shell', 'bubbles', 'coral'] },
-  { name: 'Korallenriff', top: '#ffeef0', bottom: '#ffd9dd', accent: '#d9566a', deco: ['coral', 'fish2', 'shell', 'seaweed', 'crab', 'starfish'] },
-  { name: 'Sonnenbucht', top: '#fff6dc', bottom: '#ffe9b0', accent: '#c98a12', deco: ['starfish', 'shell', 'fish', 'crab', 'seaweed', 'bubbles'] },
-  { name: 'Tiefsee', top: '#dfe9ff', bottom: '#c3d4fb', accent: '#3d63c9', deco: ['jelly', 'fish2', 'bubbles', 'seaweed', 'fish', 'coral'] },
+  { name: 'Lagune', top: '#dff7f6', bottom: '#bfeeea', accent: '#09817e', deco: ['starfish', 'seaweed', 'shell', 'bubbles', 'coral', 'jelly'] },
+  { name: 'Korallenriff', top: '#ffeef0', bottom: '#ffd9dd', accent: '#d9566a', deco: ['coral', 'shell', 'seaweed', 'crab', 'starfish', 'bubbles'] },
+  { name: 'Sonnenbucht', top: '#fff6dc', bottom: '#ffe9b0', accent: '#c98a12', deco: ['starfish', 'shell', 'crab', 'seaweed', 'bubbles', 'coral'] },
+  { name: 'Tiefsee', top: '#dfe9ff', bottom: '#c3d4fb', accent: '#3d63c9', deco: ['jelly', 'bubbles', 'seaweed', 'shell', 'jelly', 'coral'] },
 ];
 export const themeFor = (unitIndex: number) => PATH_THEMES[unitIndex % PATH_THEMES.length];
 
@@ -182,6 +182,36 @@ export function FloorDecor() {
       <span className="fd fd-weed2">
         <Seaweed />
       </span>
+    </span>
+  );
+}
+
+/** Fish that swim through the whole scene, turn at the edge and swim back. */
+const SWIMMERS = [
+  { c1: '#ff9f43', c2: '#ffd166', top: '18%', dur: 26, delay: 0, size: 1 },
+  { c1: '#4fc3f7', c2: '#b3e5fc', top: '52%', dur: 34, delay: -12, size: 0.8 },
+  { c1: '#f06292', c2: '#f8bbd0', top: '76%', dur: 30, delay: -21, size: 0.7 },
+];
+export function SwimmingFish({ seed = 0 }: { seed?: number }) {
+  return (
+    <span className="swimmers" aria-hidden="true">
+      {SWIMMERS.map((f, i) => (
+        <span
+          key={i}
+          className="swimmer"
+          style={{
+            top: f.top,
+            animationDuration: `${f.dur + (seed % 3) * 3}s`,
+            animationDelay: `${f.delay - seed * 5}s`,
+          }}
+        >
+          <span className="swimmer-body" style={{ animationDuration: `${f.dur + (seed % 3) * 3}s`, animationDelay: `${f.delay - seed * 5}s` }}>
+            <span className="swimmer-bob" style={{ transform: `scale(${f.size})` }}>
+              <Fish c1={f.c1} c2={f.c2} />
+            </span>
+          </span>
+        </span>
+      ))}
     </span>
   );
 }

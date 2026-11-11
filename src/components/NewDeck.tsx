@@ -101,7 +101,7 @@ export function NewDeckModal({
   const can = start === 'ai' || (start === 'empty' ? !!name.trim() : !!file);
   const options: { id: Start; icon: JSX.Element; title: string; text: string }[] = [
     { id: 'empty', icon: <IconCards size={18} />, title: 'Leer starten', text: 'Karten selbst schreiben.' },
-    { id: 'ai', icon: <IconSparkle size={18} />, title: 'Mit KI erstellen', text: 'Aus PDF, Text oder Notizen.' },
+    { id: 'ai', icon: <IconSparkle size={18} />, title: 'Mit KI erstellen', text: 'Aus PDF, Word, PowerPoint oder Notizen.' },
     { id: 'anki', icon: <IconUpload size={18} />, title: 'Aus Anki-Stapel', text: '.apkg mit Bildern und Aussehen.' },
   ];
 
