@@ -3,6 +3,7 @@ import { ankiToSrs, formatDelay, newSrs, schedule, type Rating, type Srs } from 
 import { capForExam, dailyPlan, examAt, toIcs } from '../src/lib/exams';
 import { reminderDue } from '../src/lib/reminderRule';
 import { newLeft, pickDue, planNewForCourse } from '../src/lib/newCards';
+import { gradeFor, mcPoints, parseExam, tasksFor } from '../src/lib/mockExamCore';
 import { shortNames } from '../src/lib/deckNames';
 import { initialPomo, pause, remaining, start, tick, workedSoFar } from '../src/lib/pomodoroRule';
 
@@ -132,6 +133,25 @@ console.log('Neue Karten pro Kurs');
   ok(boosted.get('d2') === 10 && boosted.get('d1') === 20, '„10 neue Karten“ im Deck 2 → Deck 2 bekommt 10 zusätzlich, Deck 1 behält 20');
   const small = planNewForCourse([deck('d1', 5), deck('d2', 44)], now, 20);
   ok(small.get('d1') === 5 && small.get('d2') === 15, 'kleines Deck zuerst fertig, Rest geht ans nächste');
+}
+
+console.log('Probeprüfung: Noten');
+{
+  ok(gradeFor(1, 'ch').grade === '6' && gradeFor(0.6, 'ch').grade === '4' && gradeFor(0.6, 'ch').passed, 'Schweiz: 100 % → 6, 60 % → 4 (genügend)');
+  ok(gradeFor(0.85, 'ch').grade === '5.25' && !gradeFor(0.55, 'ch').passed, 'Schweiz: Viertelnoten, 55 % ungenügend');
+  ok(gradeFor(0.5, 'de').grade === '4,0' && gradeFor(0.49, 'de').grade === '5,0' && gradeFor(0.97, 'de').grade === '1,0', 'Deutschland: 50 % → 4,0, darunter 5,0');
+  ok(gradeFor(0.9, 'at').grade.startsWith('1') && gradeFor(0.4, 'at').grade.startsWith('5'), 'Österreich: 1 bis 5');
+  const ex = parseExam({
+    questions: [
+      { type: 'mc', question: 'a', options: ['1', '2', '3', '4'], answer: 7, points: 2 },
+      { type: 'weird', question: 'b', points: 0 },
+      { type: 'open', question: 'c', points: 99 },
+      { type: 'mc', question: 'kaputt' },
+    ],
+  } as never);
+  ok(ex.questions.length === 3 && ex.questions[0].answer === 3 && ex.questions[1].type === 'short' && ex.questions[2].points === 20, 'Prüfung einlesen: fehlerhafte Aufgaben repariert oder aussortiert');
+  ok(mcPoints(ex.questions[0], 3) === 2 && mcPoints(ex.questions[0], 1) === 0, 'Multiple Choice: alles oder nichts');
+  ok(tasksFor(60) === 13 && tasksFor(10) === 5, 'Aufgabenzahl passt zur Dauer');
 }
 
 console.log('Kurze Decknamen');

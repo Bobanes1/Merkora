@@ -24,6 +24,48 @@ export type Card = {
   srs: Srs;
 };
 export type QuizQuestion = { question: string; options: string[]; answer: number; explanation: string };
+export type MockQuestion = {
+  id: string;
+  /** mc = multiple choice, short = short answer, open = longer written answer */
+  type: 'mc' | 'short' | 'open';
+  question: string;
+  options?: string[];
+  answer?: number;
+  points: number;
+  solution: string;
+  criteria?: string;
+};
+export type MockResult = {
+  perQuestion: Record<string, { points: number; feedback: string }>;
+  total: number;
+  max: number;
+  percent: number;
+  grade: string;
+  passed: boolean;
+  summary: string;
+  strengths: string[];
+  improve: string[];
+};
+/** A mock exam ("Probeprüfung") written by the AI for the learner's level. */
+export type MockExam = {
+  id: string;
+  createdAt: number;
+  status: 'generating' | 'ready' | 'running' | 'submitted' | 'grading' | 'graded' | 'error';
+  error?: string;
+  level: string;
+  detail: string;
+  minutes: number;
+  scope: 'deck' | 'course';
+  scale: 'ch' | 'de' | 'at' | 'pct';
+  title: string;
+  instructions: string;
+  questions: MockQuestion[];
+  answers: Record<string, string | number>;
+  startedAt?: number;
+  submittedAt?: number;
+  result?: MockResult;
+};
+export type MockHistory = { at: number; title: string; level: string; percent: number; grade: string; passed: boolean; scale: string };
 export type PodcastLine = { speaker: 'A' | 'B'; text: string };
 export type ChatMsg = { role: 'user' | 'assistant'; content: string };
 export type PathResult = { stars: number; best: number; at: number };
@@ -50,6 +92,9 @@ export type Deck = {
   folderId?: string;
   /** Extra new cards allowed today ("Heute mehr neue Karten"). */
   newBoost?: { day: string; n: number };
+  /** Current mock exam and earlier results. */
+  mockExam?: MockExam;
+  mockHistory?: MockHistory[];
 };
 /** A folder inside a course that groups decks. */
 export type Folder = { id: string; name: string };
@@ -104,6 +149,10 @@ export type Settings = {
   theme: 'system' | 'light' | 'dark';
   /** New cards per course and day, shared by its decks (the rest waits for the next days). */
   newPerDay: number;
+  /** Mock exams: education level, subject/semester and grading scale (asked once, then prefilled). */
+  eduLevel?: string;
+  eduDetail?: string;
+  gradeScale?: 'ch' | 'de' | 'at' | 'pct';
   /** Daily reminder at a time of day (HH:MM). */
   reminderOn: boolean;
   reminderTime: string;
