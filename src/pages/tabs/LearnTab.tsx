@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { IconShuffle, IconSparkle } from '../../components/Icons';
+import { IconPlus, IconShuffle, IconSparkle } from '../../components/Icons';
 import { CardContent, lookOf } from '../../components/CardContent';
 import { Confetti, Mascot, praise, type Mood } from '../../components/Mascot';
 import { Markdown } from '../../components/Markdown';
@@ -8,12 +8,14 @@ import { countAnswerTime } from '../../lib/pomodoro';
 import { explainCard, gradeAnswer, hasKey } from '../../lib/ai';
 import { cardBackText, cardFrontText } from '../../lib/content';
 import { RATINGS, formatDelay, schedule, type Rating, type Srs } from '../../lib/srs';
-import { addXp, logReview, reviewCard, useStore, type Deck } from '../../lib/store';
+import { addXp, boostNewCards, dueCards, logReview, newCardsLeft, reviewCard, useStore, type Deck } from '../../lib/store';
 import { capForExam, countdownText, nextExamAt, nextExamForDeck } from '../../lib/exams';
 
 type Grade = { score: number; verdict: string; feedback: string };
 
 export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => void }) {
+  const newPerDay = useStore((s) => s.data.settings.newPerDay);
+  const [startAfterBoost, setStartAfterBoost] = useState(false);
   const exams = useStore((s) => s.data.exams);
   const exam = nextExamForDeck({ exams }, deck.id);
   /** Time until the next review for a rating – never after the exam of this deck. */
@@ -43,14 +45,25 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
 
   const dueIds = useMemo(
     () =>
-      deck.cards
-        .filter((c) => c.srs.due <= Date.now())
+      dueCards(deck)
         .sort((a, b) => a.srs.due - b.srs.due)
         .map((c) => c.id),
-    // only when the deck's card set changes, not after each review
+    // only when the deck's card set (or today's new-card limit) changes, not after each review
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [deck.id, deck.cards.length],
+    [deck.id, deck.cards.length, deck.newBoost?.n, deck.newBoost?.day, newPerDay],
   );
+
+  // after "+10 neue Karten" the round starts as soon as the new cards are due
+  useEffect(() => {
+    if (!startAfterBoost) return;
+    setStartAfterBoost(false);
+    start('due');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dueIds]);
+  const fresh = deck.cards.filter((c) => c.srs.last === undefined);
+  const newDueIds = new Set(fresh.slice(0, newCardsLeft(deck)).map((c) => c.id));
+  const newInDue = dueIds.filter((id) => newDueIds.has(id)).length;
+  const waiting = fresh.length - newInDue;
 
   const start = (m: 'due' | 'all') => {
     const ids = m === 'due' ? dueIds : [...deck.cards.map((c) => c.id)].sort(() => Math.random() - 0.5);
@@ -154,12 +167,42 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
         <p className="muted">
           {dueIds.length && mode === null
             ? 'Starte deine Wiederholung – im richtigen Moment wiederholt bleibt es am längsten hängen.'
-            : 'Alles wiederholt. Du kannst trotzdem frei üben – das verschiebt deinen Plan kaum.'}
+            : mode === null && waiting > 0
+              ? `Wiederholungen erledigt. ${waiting} neue Karten warten – das Tageskontingent neuer Karten geht im Kurs der Reihe nach an die Decks. Mit „10 neue Karten“ fängst du hier trotzdem an.`
+              : 'Alles wiederholt. Du kannst trotzdem frei üben – das verschiebt deinen Plan kaum.'}
         </p>
+        {mode === null && dueIds.length > 0 && (
+          <p className="due-split">
+            <span>
+              <b>{dueIds.length - newInDue}</b> Wiederholungen
+            </span>
+            <span>
+              <b>{newInDue}</b> neue Karten
+            </span>
+            {waiting > 0 && (
+              <span className="muted">
+                {waiting} neue warten auf die nächsten Tage ({newPerDay ?? 20} pro Tag im Kurs)
+              </span>
+            )}
+          </p>
+        )}
         <div className="row-gap center">
           {dueIds.length > 0 && mode === null && (
             <button type="button" className="btn primary" onClick={() => start('due')}>
               Fällige Karten lernen
+            </button>
+          )}
+          {waiting > 0 && (
+            <button
+              type="button"
+              className="btn outline"
+              title="Heute zusätzlich 10 neue Karten aus diesem Deck lernen"
+              onClick={() => {
+                boostNewCards(deck.id, 10);
+                setStartAfterBoost(true);
+              }}
+            >
+              <IconPlus size={16} /> 10 neue Karten
             </button>
           )}
           <button type="button" className="btn outline" onClick={() => start('all')}>

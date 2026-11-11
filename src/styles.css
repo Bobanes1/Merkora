@@ -6426,3 +6426,59 @@ a.deck-row:hover {
     left: 6%;
   }
 }
+
+/* ---------- new cards per day ---------- */
+.due-split {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 16px;
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+.due-split b {
+  color: var(--primary);
+}
+.new-per-day {
+  align-items: center;
+  gap: 12px;
+  max-width: 420px;
+}
+.new-per-day .input {
+  width: 90px;
+  flex: none;
+}
+
+/* ---------- sidebar: collapsible courses ---------- */
+.tree-course-row {
+  display: flex;
+  align-items: center;
+}
+.tree-course-row .tree-link.course {
+  flex: 1;
+  min-width: 0;
+}
+.tree-toggle {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 28px;
+  margin-left: -6px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.tree-toggle:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.tree-decks {
+  margin-left: 10px;
+}
+.pill-count.soft {
+  background: var(--primary-soft);
+  color: var(--primary);
+}

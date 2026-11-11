@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { kvDel, kvGet, kvSet, mediaDeleteMany, mediaKeys } from './db';
 import { desktop, isDesktop } from './desktop';
 import { capForExam, nextExamAt } from './exams';
+import { DEFAULT_NEW_PER_DAY, pickDue, planNewForCourse } from './newCards';
 import { newSrs, schedule, type Rating, type Srs } from './srs';
 import { dayKey, uid, uniqueSlug } from './util';
 
@@ -47,6 +48,8 @@ export type Deck = {
   styles?: Record<string, string>;
   /** Folder inside the course (see `Course.folders`); none = directly in the course. */
   folderId?: string;
+  /** Extra new cards allowed today ("Heute mehr neue Karten"). */
+  newBoost?: { day: string; n: number };
 };
 /** A folder inside a course that groups decks. */
 export type Folder = { id: string; name: string };
@@ -99,6 +102,8 @@ export type Settings = {
   animations: boolean;
   /** Colour scheme. */
   theme: 'system' | 'light' | 'dark';
+  /** New cards per course and day, shared by its decks (the rest waits for the next days). */
+  newPerDay: number;
   /** Daily reminder at a time of day (HH:MM). */
   reminderOn: boolean;
   reminderTime: string;
@@ -165,6 +170,7 @@ const defaultSettings = (): Settings => ({
   claudeBatch: true,
   animations: true,
   theme: 'system',
+  newPerDay: DEFAULT_NEW_PER_DAY,
   reminderOn: true,
   reminderTime: '18:00',
   trayOnClose: false,
@@ -593,7 +599,16 @@ export function reviewCard(deckId: string, cardId: string, rating: Rating) {
         ? {
             ...x,
             cards: x.cards.map((c) =>
-              c.id === cardId ? { ...c, srs: capForExam(schedule(c.srs, rating, now), nextExamAt(d, deckId, now), now) } : c,
+              c.id === cardId
+                ? {
+                    ...c,
+                    srs: {
+                      ...capForExam(schedule(c.srs, rating, now), nextExamAt(d, deckId, now), now),
+                      // first time studied: counts against today's limit of new cards
+                      introduced: c.srs.introduced ?? (c.srs.last === undefined ? now : undefined),
+                    },
+                  }
+                : c,
             ),
           }
         : x,
@@ -700,4 +715,28 @@ export function deckUrl(d: Data, deck: Deck, tab?: string) {
   const w = c ? d.workspaces.find((x) => x.id === c.workspaceId) : undefined;
   return `/library/${w?.slug}/${c?.slug}/${deck.slug}${tab ? `?tab=${tab}` : ''}`;
 }
-export const dueCards = (deck: Deck, now = Date.now()) => deck.cards.filter((c) => c.srs.due <= now);
+/** Due cards: learned cards whose time has come plus today's share of new cards (see settings "Neue Karten pro Tag"). */
+export const dueCards = (deck: Deck, now = Date.now()) => pickDue(deck.cards, now, newCardsLeft(deck, now));
+/** New cards this deck may still introduce today – the daily limit is shared by all decks of a course. */
+const planCache = new WeakMap<Data, Map<string, Map<string, number>>>();
+export function newCardsLeft(deck: Deck, now = Date.now()) {
+  let byCourse = planCache.get(data);
+  if (!byCourse) planCache.set(data, (byCourse = new Map()));
+  const key = deck.courseId + '|' + dayKey(now);
+  let plan = byCourse.get(key);
+  if (!plan) {
+    const today = dayKey(now);
+    const decks = data.decks
+      .filter((d) => d.courseId === deck.courseId)
+      .map((d) => ({ id: d.id, cards: d.cards, boost: d.newBoost?.day === today ? d.newBoost.n : 0 }));
+    plan = planNewForCourse(decks, now, data.settings.newPerDay ?? DEFAULT_NEW_PER_DAY);
+    byCourse.set(key, plan);
+  }
+  // a deck that is not (yet) in the saved data, e.g. while rendering an import, gets nothing extra
+  return plan.get(deck.id) ?? 0;
+}
+/** "Heute mehr neue Karten": raises today's limit for this deck. */
+export function boostNewCards(deckId: string, n: number) {
+  const day = dayKey(Date.now());
+  updateDeck(deckId, (x) => ({ newBoost: { day, n: (x.newBoost?.day === day ? x.newBoost.n : 0) + n } }));
+}

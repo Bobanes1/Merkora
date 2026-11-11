@@ -3,6 +3,7 @@ import { Link, NavLink, useLocation } from 'react-router-dom';
 import { aiReady, PROVIDERS } from '../lib/ai';
 import { deckUrl, dueCards, isDesktop, useStore, type Deck } from '../lib/store';
 import { CreateWithAI } from './CreateWithAI';
+import { shortNames } from '../lib/deckNames';
 import { NewDeckModal } from './NewDeck';
 import {
   IconCheck,
@@ -29,18 +30,11 @@ import { FocusBar, Pomodoro, setFocus } from './Pomodoro';
 function Tree({ onNavigate }: { onNavigate: () => void }) {
   const data = useStore((s) => s.data);
   const { pathname } = useLocation();
+  // courses start collapsed (only the one you are in is open); workspaces and folders start open
+  const [open, setOpen] = useState<Record<string, boolean>>({});
   const [closed, setClosed] = useState<Record<string, boolean>>({});
+  const toggleOpen = (id: string) => setOpen((c) => ({ ...c, [id]: !c[id] }));
   const toggle = (id: string) => setClosed((c) => ({ ...c, [id]: !c[id] }));
-  const deckLink = (d: Deck) => {
-    const url = deckUrl(data, d);
-    const due = dueCards(d).length;
-    return (
-      <Link key={d.id} to={url} onClick={onNavigate} className={`tree-link deck ${pathname === url ? 'active' : ''}`}>
-        <span className="tree-name">{d.name}</span>
-        {due > 0 && <span className="pill-count">{due}</span>}
-      </Link>
-    );
-  };
   return (
     <div className="tree">
       {data.workspaces.map((w) => (
@@ -55,31 +49,56 @@ function Tree({ onNavigate }: { onNavigate: () => void }) {
               .filter((c) => c.workspaceId === w.id)
               .map((c) => {
                 const decks = data.decks.filter((d) => d.courseId === c.id);
+                const names = shortNames(decks);
                 const folders = c.folders ?? [];
                 const courseUrl = `/library/${w.slug}/${c.slug}`;
-                const inCourse = pathname.startsWith(courseUrl);
+                const inCourse = pathname === courseUrl || pathname.startsWith(courseUrl + '/');
+                const expanded = open[c.id] ?? inCourse;
+                const dueTotal = decks.reduce((n, d) => n + dueCards(d).length, 0);
+                const deckLink = (d: Deck) => {
+                  const url = deckUrl(data, d);
+                  const due = dueCards(d).length;
+                  return (
+                    <Link key={d.id} to={url} onClick={onNavigate} className={`tree-link deck ${pathname === url ? 'active' : ''}`} title={d.name}>
+                      <span className="tree-name">{names.get(d.id)}</span>
+                      {due > 0 && <span className="pill-count">{due}</span>}
+                    </Link>
+                  );
+                };
                 return (
                   <div key={c.id} className="tree-course">
-                    <NavLink to={courseUrl} end onClick={onNavigate} className={({ isActive }) => `tree-link course ${isActive ? 'active' : ''}`}>
-                      <IconFolder size={15} />
-                      <span className="tree-name">{c.name}</span>
-                    </NavLink>
-                    {(inCourse || !closed[c.id]) && (
-                      <>
+                    <div className="tree-course-row">
+                      <button
+                        type="button"
+                        className="tree-toggle"
+                        aria-label={expanded ? `${c.name} zuklappen` : `${c.name} aufklappen`}
+                        aria-expanded={expanded}
+                        onClick={() => setOpen((o) => ({ ...o, [c.id]: !expanded }))}
+                      >
+                        {expanded ? <IconChevronDown size={13} /> : <IconChevron size={13} />}
+                      </button>
+                      <NavLink to={courseUrl} end onClick={onNavigate} className={({ isActive }) => `tree-link course ${isActive ? 'active' : ''}`} title={c.name}>
+                        <IconFolder size={15} />
+                        <span className="tree-name">{c.name}</span>
+                        {!expanded && dueTotal > 0 && <span className="pill-count soft">{dueTotal}</span>}
+                      </NavLink>
+                    </div>
+                    {expanded && (
+                      <div className="tree-decks">
                         {folders.map((fo) => {
                           const inside = decks.filter((d) => d.folderId === fo.id);
                           return (
                             <div key={fo.id} className="tree-folder">
-                              <button type="button" className="tree-link folder" onClick={() => toggle(fo.id)}>
-                                {closed[fo.id] ? <IconChevron size={12} /> : <IconChevronDown size={12} />}
+                              <button type="button" className="tree-link folder" onClick={() => toggleOpen(fo.id + ':closed')}>
+                                {open[fo.id + ':closed'] ? <IconChevron size={12} /> : <IconChevronDown size={12} />}
                                 <span className="tree-name">{fo.name}</span>
                               </button>
-                              {!closed[fo.id] && inside.map(deckLink)}
+                              {!open[fo.id + ':closed'] && inside.map(deckLink)}
                             </div>
                           );
                         })}
                         {decks.filter((d) => !d.folderId || !folders.some((fo) => fo.id === d.folderId)).map(deckLink)}
-                      </>
+                      </div>
                     )}
                   </div>
                 );

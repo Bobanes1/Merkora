@@ -8,9 +8,9 @@ export function LogoMark({ size = 32 }: { size?: number }) {
       <rect x="4" y="13" width="24" height="18" rx="4" fill="#9cdcd8" transform="rotate(-8 16 22)" />
       <rect x="8" y="14" width="24" height="18" rx="4" fill="#09817e" />
       <path d="M13 20.5h10M13 25h7" stroke="#fff" strokeWidth="2" strokeLinecap="round" opacity="0.85" />
-      <path d="M24 14V9" stroke="#65a30d" strokeWidth="2" strokeLinecap="round" />
-      <path d="M24 10c0-3.6 2.6-6 6.5-6 0 3.6-2.6 6-6.5 6z" fill="#a3e635" />
-      <path d="M24 11.5c0-2.8-2-4.6-5-4.6 0 2.8 2 4.6 5 4.6z" fill="#65a30d" />
+      <path d="M24 14V9" stroke="#12a19a" strokeWidth="2" strokeLinecap="round" />
+      <path d="M24 10c0-3.6 2.6-6 6.5-6 0 3.6-2.6 6-6.5 6z" fill="#6fe0d2" />
+      <path d="M24 11.5c0-2.8-2-4.6-5-4.6 0 2.8 2 4.6 5 4.6z" fill="#12a19a" />
     </svg>
   );
 }

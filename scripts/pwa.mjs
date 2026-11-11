@@ -64,9 +64,9 @@ const inEllipse = (x, y, cx, cy, rx, ry, rot) => {
 function icon(x, y) {
   const k = 0.82, o = 18 * (1 - k);
   const X = (x - o) / k, Y = (y - o) / k;
-  if (inEllipse(X, Y, 27.2, 7, 4, 1.8, -0.7)) return hex('#a3e635');
-  if (inEllipse(X, Y, 19.6, 9.2, 3, 1.4, 0.7)) return hex('#65a30d');
-  if (X >= 21 && X <= 23 && Y >= 9 && Y <= 14.5) return hex('#65a30d');
+  if (inEllipse(X, Y, 27.2, 7, 4, 1.8, -0.7)) return hex('#6fe0d2');
+  if (inEllipse(X, Y, 19.6, 9.2, 3, 1.4, 0.7)) return hex('#12a19a');
+  if (X >= 21 && X <= 23 && Y >= 9 && Y <= 14.5) return hex('#12a19a');
   if (inRound(X, Y, 10, 19.5, 12, 2, 1) || inRound(X, Y, 10, 24, 9, 2, 1)) return hex('#ffffff');
   if (inRound(X, Y, 6, 14, 24, 17, 4)) return hex('#09817e');
   return hex('#dff3f2');

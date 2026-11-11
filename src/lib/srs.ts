@@ -12,6 +12,8 @@ export type Srs = {
   step?: number;
   /** Interval to return to after relearning a forgotten card. */
   lapseIvl?: number;
+  /** When the card was studied for the first time (counts against the daily limit of new cards). */
+  introduced?: number;
 };
 
 export type Rating = 1 | 2 | 3 | 4;

@@ -232,3 +232,39 @@ export function BackupsPanel() {
     </div>
   );
 }
+
+/** How many new cards per deck and day. */
+export function LearningPanel() {
+  const perDay = useStore((x) => x.data.settings.newPerDay ?? 20);
+  return (
+    <section className="panel">
+      <h2>Lernen</h2>
+      <label className="field-label" htmlFor="new-per-day">
+        Neue Karten pro Tag und Kurs
+      </label>
+      <div className="input-row new-per-day">
+        <input
+          id="new-per-day"
+          type="number"
+          min={0}
+          max={500}
+          className="input"
+          value={perDay}
+          onChange={(e) => setSettings({ newPerDay: Math.min(500, Math.max(0, Math.round(Number(e.target.value) || 0))) })}
+        />
+        <div className="row-gap">
+          {[10, 20, 30, 50].map((n) => (
+            <button key={n} type="button" className={`tag ${perDay === n ? 'on' : ''}`} onClick={() => setSettings({ newPerDay: n })}>
+              {n}
+            </button>
+          ))}
+        </div>
+      </div>
+      <p className="muted small">
+        Neue Karten werden auf die Tage verteilt, statt alle auf einmal fällig zu werden. Alle Decks eines Kurses teilen sich diese Zahl
+        (der Reihe nach), so wie Unterdecks in Anki. Wiederholungen bereits gelernter Karten kommen immer dazu. Willst du an einem Tag mehr, gibt es beim Lernen den Knopf „10 neue Karten“. Für Decks mit Prüfungstermin plant der
+        Kalender zusätzlich, was bis zur Prüfung nötig ist.
+      </p>
+    </section>
+  );
+}

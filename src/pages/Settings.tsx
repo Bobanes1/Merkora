@@ -8,7 +8,7 @@ import { desktop, getState, isDesktop, replaceAll, resetAll, setApiKey, setChatK
 import { download } from '../lib/util';
 import { APP_VERSION } from '../config';
 import { SyncPanel } from '../components/SyncPanel';
-import { BackupsPanel, RemindersPanel } from '../components/SettingsExtras';
+import { BackupsPanel, LearningPanel, RemindersPanel } from '../components/SettingsExtras';
 import { checkForUpdate, installUpdate, useUpdate } from '../lib/update';
 
 
@@ -212,6 +212,8 @@ export default function Settings() {
       </section>
 
       <ChatModelPanel />
+
+      <LearningPanel />
 
       <RemindersPanel />
 

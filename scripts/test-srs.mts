@@ -2,6 +2,8 @@
 import { ankiToSrs, formatDelay, newSrs, schedule, type Rating, type Srs } from '../src/lib/srs';
 import { capForExam, dailyPlan, examAt, toIcs } from '../src/lib/exams';
 import { reminderDue } from '../src/lib/reminderRule';
+import { newLeft, pickDue, planNewForCourse } from '../src/lib/newCards';
+import { shortNames } from '../src/lib/deckNames';
 import { initialPomo, pause, remaining, start, tick, workedSoFar } from '../src/lib/pomodoroRule';
 
 const MIN = 60_000;
@@ -100,6 +102,46 @@ console.log('Pomodoro');
   ok(r.ended === 'work' && r.studied === 25 && r.pomo.phase === 'break' && r.pomo.rounds === 1, 'Lernphase vorbei → 25 Min. gezählt, Pause startet');
   r = tick(r.pomo, 120 * M, 25, 5);
   ok(r.ended === 'break' && r.pomo.phase === 'work' && !r.pomo.running && r.studied === 0, 'Pause vorbei → neue Lernphase wartet auf Start');
+}
+
+console.log('Neue Karten pro Tag');
+{
+  const now = new Date(2026, 10, 11, 15).getTime();
+  const fresh = Array.from({ length: 300 }, () => ({ srs: newSrs(now - DAY) }));
+  const learnedDue = Array.from({ length: 30 }, () => ({ srs: { ease: 2.5, interval: 3, reps: 2, lapses: 0, due: now - 1000, last: now - 3 * DAY } as Srs }));
+  const learnedLater = Array.from({ length: 40 }, () => ({ srs: { ease: 2.5, interval: 9, reps: 3, lapses: 0, due: now + 5 * DAY, last: now - 4 * DAY } as Srs }));
+  const cards = [...learnedDue, ...fresh, ...learnedLater];
+  const left = newLeft(cards, now, 20);
+  const due = pickDue(cards, now, left);
+  ok(left === 20 && due.length === 50, `300 neue + 30 fällige Karten → heute ${due.length} (30 Wiederholungen + 20 neue)`);
+  const startedToday = cards.map((c, i) => (i >= 30 && i < 42 ? { srs: { ...c.srs, last: now - 1000, due: now + 600_000, introduced: now - 1000 } } : c));
+  ok(newLeft(startedToday, now, 20) === 8, '12 neue heute schon angefangen → noch 8 neue');
+  ok(newLeft(startedToday, now, 20, 10) === 18, '„10 weitere neue Karten“ → noch 18');
+  ok(newLeft(startedToday, now + DAY, 20) === 20, 'am nächsten Tag wieder 20 neue');
+}
+
+console.log('Neue Karten pro Kurs');
+{
+  const now = new Date(2026, 10, 11, 15).getTime();
+  const deck = (id: string, n: number, boost = 0) => ({ id, boost, cards: Array.from({ length: n }, () => ({ srs: newSrs(now - DAY) })) });
+  const decks = [deck('d1', 33), deck('d2', 44), deck('d3', 14), deck('d4', 8)];
+  const plan = planNewForCourse(decks, now, 20);
+  const sum = [...plan.values()].reduce((a, b) => a + b, 0);
+  ok(sum === 20 && plan.get('d1') === 20 && plan.get('d2') === 0, '11 Decks im Kurs teilen sich 20 neue (der Reihe nach)');
+  const boosted = planNewForCourse([deck('d1', 33), deck('d2', 44, 10)], now, 20);
+  ok(boosted.get('d2') === 10 && boosted.get('d1') === 20, '„10 neue Karten“ im Deck 2 → Deck 2 bekommt 10 zusätzlich, Deck 1 behält 20');
+  const small = planNewForCourse([deck('d1', 5), deck('d2', 44)], now, 20);
+  ok(small.get('d1') === 5 && small.get('d2') === 15, 'kleines Deck zuerst fertig, Rest geht ans nächste');
+}
+
+console.log('Kurze Decknamen');
+{
+  const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));
+  const m = shortNames(decks);
+  ok(m.get('d0') === '01 Grundbegriffe' && m.get('d2') === '03 Ethik', 'gemeinsamer Anki-Vorsatz wird weggelassen');
+  const mixed = shortNames([{ id: 'a', name: 'Biologie' }, { id: 'b', name: 'Bio-Chemie' }]);
+  ok(mixed.get('a') === 'Biologie' && mixed.get('b') === 'Bio-Chemie', 'kein Abschneiden mitten im Wort');
+  ok(shortNames([{ id: 'x', name: 'A › B' }]).get('x') === 'A › B', 'einzelnes Deck bleibt unverändert');
 }
 
 console.log(failures ? `\n${failures} Test(s) fehlgeschlagen` : '\nAlle SRS-Tests bestanden');

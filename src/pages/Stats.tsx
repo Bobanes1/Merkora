@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { levelCounts, masteryPercent, streak } from '../lib/stats';
-import { deckUrl, useData } from '../lib/store';
+import { deckUrl, dueCards, useData } from '../lib/store';
 import { DAY, dayKey, startOfDay } from '../lib/util';
 
 /** Small hover tooltip shared by the charts. */
@@ -73,7 +73,7 @@ export default function Stats() {
       return {
         deck: d,
         mastery: masteryPercent(d.cards),
-        due: d.cards.filter((c) => c.srs.due <= now).length,
+        due: dueCards(d, now).length,
         reviews: rv.length,
         correct: rv.length ? Math.round((rv.filter((r) => r.rating >= 3).length / rv.length) * 100) : null,
       };

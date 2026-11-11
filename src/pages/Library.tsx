@@ -43,6 +43,7 @@ import {
   type Workspace,
 } from '../lib/store';
 import { uniqueSlug } from '../lib/util';
+import { shortNames } from '../lib/deckNames';
 import CardsTab from './tabs/CardsTab';
 
 type Dialog =
@@ -381,6 +382,7 @@ function CourseView({ course, workspace, setDialog }: { course: Course; workspac
   const due = decks.reduce((a, d) => a + dueCards(d).length, 0);
   const exam = upcomingExams(data).find((e) => e.deckIds.some((id) => decks.some((d) => d.id === id)));
   const folders = course.folders ?? [];
+  const names = shortNames(decks);
   const loose = decks.filter((d) => !d.folderId || !folders.some((f) => f.id === d.folderId));
 
   const deckRow = (d: Deck) => {
@@ -389,7 +391,7 @@ function CourseView({ course, workspace, setDialog }: { course: Course; workspac
       <div key={d.id} className={`cdeck ${deck?.id === d.id ? 'on' : ''}`}>
         <button type="button" className="cdeck-main" onClick={() => setSelected(d.id)}>
           <IconCards size={16} />
-          <span className="cdeck-name">{d.name}</span>
+          <span className="cdeck-name" title={d.name}>{names.get(d.id)}</span>
           {n > 0 && <span className="pill-count">{n}</span>}
           <small className="cdeck-pct">{masteryPercent(d.cards)}%</small>
         </button>
@@ -524,7 +526,7 @@ function CourseView({ course, workspace, setDialog }: { course: Course; workspac
                   <small className="muted">
                     {folders.find((f) => f.id === deck.folderId)?.name ?? workspace.name} › {course.name}
                   </small>
-                  <h2>{deck.name}</h2>
+                  <h2 title={deck.name}>{names.get(deck.id) ?? deck.name}</h2>
                 </div>
                 <span className="grow" />
                 <Link to={deckUrl(data, deck, 'cards')} className="btn ghost sm">

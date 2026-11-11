@@ -13,6 +13,7 @@ import { masteryPercent, streak } from '../lib/stats';
 import { deckUrl, dueCards, useStore, type Deck } from '../lib/store';
 import { DAY, dayKey, startOfDay } from '../lib/util';
 import { MATERIAL_ACCEPT, MATERIAL_LABEL } from '../lib/files';
+import { shortName } from '../lib/deckNames';
 import { GameBar } from './tabs/PathTab';
 
 const CARD_GOAL = 50;
@@ -48,6 +49,7 @@ function Ring({ value, goal, color, children }: { value: number; goal: number; c
 function DeckRow({ deck }: { deck: Deck }) {
   const data = useStore((s) => s.data);
   const c = data.courses.find((x) => x.id === deck.courseId);
+  const name = shortName(deck, data.decks.filter((x) => x.courseId === deck.courseId));
   const pct = masteryPercent(deck.cards);
   const n = dueCards(deck).length;
   return (
@@ -56,7 +58,7 @@ function DeckRow({ deck }: { deck: Deck }) {
         <IconCards />
       </span>
       <span className="deck-info">
-        <b>{deck.name}</b>
+        <b title={deck.name}>{name}</b>
         <small>
           {c?.name} · {deck.cards.length} Karten
         </small>
