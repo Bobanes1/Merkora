@@ -24,7 +24,7 @@ const OWL = svgUrl(
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><path d="M19 9 C21 4 26 2 29 2.5 C27 5 26 8 26 11z" fill="#2489bf"/><circle cx="20" cy="22" r="15" fill="#45b4e3"/><ellipse cx="20" cy="28" rx="8.5" ry="7" fill="#e3f6fd"/><ellipse cx="20" cy="26" rx="5" ry="3" fill="#9fdcf4"/><path d="M17 26.2q3 2.6 6 0" stroke="#0b2540" stroke-width="1.2" fill="none" stroke-linecap="round"/><circle cx="14" cy="19" r="4.6" fill="#fff"/><circle cx="26" cy="19" r="4.6" fill="#fff"/><circle cx="14.4" cy="19.4" r="2.5" fill="#0b2540"/><circle cx="25.6" cy="19.4" r="2.5" fill="#0b2540"/><circle cx="15.3" cy="18.4" r=".9" fill="#fff"/><circle cx="26.5" cy="18.4" r=".9" fill="#fff"/><circle cx="10" cy="24.5" r="1.8" fill="#f6a5c0" opacity=".7"/><circle cx="30" cy="24.5" r="1.8" fill="#f6a5c0" opacity=".7"/></svg>',
 );
 const RING = svgUrl(
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" fill="none" stroke="#ddf0e4" stroke-width="4"/><circle cx="18" cy="18" r="15" fill="none" stroke="#0f8552" stroke-width="4" stroke-dasharray="68 94" stroke-linecap="round" transform="rotate(-90 18 18)"/></svg>',
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" fill="none" stroke="#d8f0ef" stroke-width="4"/><circle cx="18" cy="18" r="15" fill="none" stroke="#09817e" stroke-width="4" stroke-dasharray="68 94" stroke-linecap="round" transform="rotate(-90 18 18)"/></svg>',
 );
 const iconUrl = (name: string) =>
   'data:image/svg+xml,' +
@@ -144,7 +144,7 @@ function PhoneMock() {
           <b>72%</b>
         </div>
         <small className="mk-center">Beherrschung</small>
-        {['#0f8552', '#62bc8b', '#f2b84b', '#d9d9d9'].map((c, i) => (
+        {['#09817e', '#32bdb9', '#f2b84b', '#d9d9d9'].map((c, i) => (
           <div className="mk-level" key={c}>
             <i style={{ background: c }} />
             <span className="mk-bar" style={{ width: `${[70, 46, 30, 18][i]}%` }} />
@@ -192,7 +192,7 @@ export function HeroCarousel() {
           <div className="hero-slide" role="group" aria-hidden={i !== 0}>
             <div className="hero-stage">
               <WindowMock />
-              <Tile className="t-duel" color="linear-gradient(160deg,#4fd07a,#22a356)" icon="check" alt="Quiz" />
+              <Tile className="t-duel" color="linear-gradient(160deg,#13ccc8,#199d99)" icon="check" alt="Quiz" />
               <Tile className="t-pod" color="linear-gradient(160deg,#4aa8ff,#1f7be8)" icon="headphones" alt="Podcast" />
               <Tile className="t-card" color="linear-gradient(160deg,#ffd54f,#f5b300)" icon="cards" alt="Karteikarten" />
             </div>
@@ -201,13 +201,13 @@ export function HeroCarousel() {
             <div className="hero-stage">
               <PhoneMock />
               <Tile className="t-pod" color="linear-gradient(160deg,#ffb36b,#f07d1a)" icon="flame" alt="Lernserie" />
-              <Tile className="t-card" color="linear-gradient(160deg,#1ca66a,#0f8552)" icon="star" alt="Lernpfad" />
+              <Tile className="t-card" color="linear-gradient(160deg,#1ba19d,#09817e)" icon="star" alt="Lernpfad" />
             </div>
           </div>
           <div className="hero-slide" role="group" aria-hidden={i !== 2}>
             <div className="hero-stage">
               <DocMock />
-              <Tile className="t-tutor" color="linear-gradient(160deg,#1ca66a,#0f8552)" icon="chat" alt="Tutor" />
+              <Tile className="t-tutor" color="linear-gradient(160deg,#1ba19d,#09817e)" icon="chat" alt="Tutor" />
               <Tile className="t-edit" color="linear-gradient(160deg,#ff8a80,#ef5350)" icon="note" alt="Notizen" />
               <Tile className="t-spark" color="linear-gradient(160deg,#ffd54f,#f5b300)" icon="sparkle" alt="KI" />
             </div>

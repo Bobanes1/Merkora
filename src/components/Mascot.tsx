@@ -113,7 +113,7 @@ function Dolphin({ mood }: { mood: Mood }) {
 function Fox({ mood }: { mood: Mood }) {
   return (
     <svg viewBox="0 0 120 120" width="100%" height="100%">
-      <ellipse className="m-shadow" cx="60" cy="113" rx="28" ry="4" fill="rgba(0, 44, 23,.14)" />
+      <ellipse className="m-shadow" cx="60" cy="113" rx="28" ry="4" fill="rgba(0, 42, 41,.14)" />
       <g className="m-body">
         <g className="m-tail">
           <path d="M76 98 C104 100 116 76 104 56 C98 72 88 80 72 86z" fill="#f07d1a" />
@@ -135,11 +135,11 @@ function Fox({ mood }: { mood: Mood }) {
           <ellipse cx="60" cy="52" rx="27" ry="22" fill="#f07d1a" />
           <path d="M34 54 Q60 88 86 54 Q74 64 60 62 Q46 64 34 54z" fill="#fff4e8" />
           {happyEyes(mood) ? (
-            <path d="M44 52q5-6 10 0M66 52q5-6 10 0" stroke="#002c17" strokeWidth="3.2" fill="none" strokeLinecap="round" />
+            <path d="M44 52q5-6 10 0M66 52q5-6 10 0" stroke="#002a29" strokeWidth="3.2" fill="none" strokeLinecap="round" />
           ) : (
             <g className="m-pupils">
-              <ellipse cx="49" cy="50" rx="3.8" ry="4.4" fill="#002c17" />
-              <ellipse cx="71" cy="50" rx="3.8" ry="4.4" fill="#002c17" />
+              <ellipse cx="49" cy="50" rx="3.8" ry="4.4" fill="#002a29" />
+              <ellipse cx="71" cy="50" rx="3.8" ry="4.4" fill="#002a29" />
               <circle cx="50.3" cy="48.6" r="1.2" fill="#fff" />
               <circle cx="72.3" cy="48.6" r="1.2" fill="#fff" />
             </g>
@@ -150,11 +150,11 @@ function Fox({ mood }: { mood: Mood }) {
               <rect x="66" y="44" width="10" height="12" rx="5" />
             </g>
           )}
-          <ellipse cx="60" cy="62" rx="4" ry="3" fill="#002c17" />
+          <ellipse cx="60" cy="62" rx="4" ry="3" fill="#002a29" />
           {mood !== 'sad' ? (
-            <path d="M55 67q5 4 10 0" stroke="#002c17" strokeWidth="2" fill="none" strokeLinecap="round" />
+            <path d="M55 67q5 4 10 0" stroke="#002a29" strokeWidth="2" fill="none" strokeLinecap="round" />
           ) : (
-            <path d="M55 69q5-4 10 0" stroke="#002c17" strokeWidth="2" fill="none" strokeLinecap="round" />
+            <path d="M55 69q5-4 10 0" stroke="#002a29" strokeWidth="2" fill="none" strokeLinecap="round" />
           )}
           {happyEyes(mood) && (
             <>
@@ -175,7 +175,7 @@ function Fox({ mood }: { mood: Mood }) {
 }
 
 // ---------- confetti ----------
-const COLORS = ['#0f8552', '#62bc8b', '#f2b84b', '#3cba6f', '#4aa8ff', '#f07d1a', '#e5484d'];
+const COLORS = ['#09817e', '#32bdb9', '#f2b84b', '#02b6b2', '#4aa8ff', '#f07d1a', '#e5484d'];
 
 /** A burst of confetti that removes itself. */
 export function Confetti({ count = 70 }: { count?: number }) {

@@ -32,7 +32,7 @@ export const GRAPHIC_STYLES = [
 ] as const;
 
 const SVG_RULES = `Regeln für das SVG: Nur ein einziges <svg>-Element mit xmlns und viewBox="0 0 800 500", keine Skripte, keine externen Bilder oder Schriften, keine <foreignObject>.
-Nutze font-family="Arial, sans-serif", gut lesbare Schriftgrößen (mindestens 18), freundliche Farben (Lila #0f8552, Hellviolett #ddf0e4, Gelb #f2b84b, Grün #3cba6f, Blau #4aa8ff, Text #002c17) auf weißem Hintergrund.
+Nutze font-family="Arial, sans-serif", gut lesbare Schriftgrößen (mindestens 18), freundliche Farben (Lila #09817e, Hellviolett #d8f0ef, Gelb #f2b84b, Grün #02b6b2, Blau #4aa8ff, Text #002a29) auf weißem Hintergrund.
 Beschriftungen kurz halten, nichts darf sich überlappen oder aus dem Bild ragen.`;
 
 /** Asks the AI for one SVG graphic. */
@@ -47,7 +47,7 @@ export async function generateGraphic(topic: string, style: string): Promise<str
   return svg;
 }
 
-export const CARD_GRAPHIC_RULE = `Wo eine Grafik das Verständnis wirklich verbessert (etwa bei jeder dritten Karte), ergänze das Feld "svg" mit einer kleinen SVG-Grafik für die Rückseite (viewBox="0 0 400 260", xmlns, keine Skripte, Schrift Arial ab Größe 14, Farben #0f8552, #f2b84b, #3cba6f, #002c17 auf Weiß, kurze Beschriftungen). Sonst lass "svg" weg.`;
+export const CARD_GRAPHIC_RULE = `Wo eine Grafik das Verständnis wirklich verbessert (etwa bei jeder dritten Karte), ergänze das Feld "svg" mit einer kleinen SVG-Grafik für die Rückseite (viewBox="0 0 400 260", xmlns, keine Skripte, Schrift Arial ab Größe 14, Farben #09817e, #f2b84b, #02b6b2, #002a29 auf Weiß, kurze Beschriftungen). Sonst lass "svg" weg.`;
 
 /** Turns AI cards that may carry an SVG into stored, picture-carrying cards. */
 export async function withGraphics(cards: { front: string; back: string; svg?: string }[]): Promise<NewCard[]> {

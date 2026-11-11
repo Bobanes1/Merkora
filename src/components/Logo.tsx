@@ -5,8 +5,8 @@ import { APP_NAME } from '../lib/brand';
 export function LogoMark({ size = 32 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 36 36" aria-hidden="true">
-      <rect x="4" y="13" width="24" height="18" rx="4" fill="#abdbbe" transform="rotate(-8 16 22)" />
-      <rect x="8" y="14" width="24" height="18" rx="4" fill="#0f8552" />
+      <rect x="4" y="13" width="24" height="18" rx="4" fill="#9cdcd8" transform="rotate(-8 16 22)" />
+      <rect x="8" y="14" width="24" height="18" rx="4" fill="#09817e" />
       <path d="M13 20.5h10M13 25h7" stroke="#fff" strokeWidth="2" strokeLinecap="round" opacity="0.85" />
       <path d="M24 14V9" stroke="#65a30d" strokeWidth="2" strokeLinecap="round" />
       <path d="M24 10c0-3.6 2.6-6 6.5-6 0 3.6-2.6 6-6.5 6z" fill="#a3e635" />

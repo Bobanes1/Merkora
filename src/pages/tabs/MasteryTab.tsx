@@ -13,13 +13,13 @@ function Ring({ pct }: { pct: number }) {
   return (
     <div className="ring">
       <svg viewBox="0 0 120 120" width="132" height="132" aria-hidden="true">
-        <circle cx="60" cy="60" r={r} fill="none" stroke="#ddf0e4" strokeWidth="12" />
+        <circle cx="60" cy="60" r={r} fill="none" stroke="#d8f0ef" strokeWidth="12" />
         <circle
           cx="60"
           cy="60"
           r={r}
           fill="none"
-          stroke="#0f8552"
+          stroke="#09817e"
           strokeWidth="12"
           strokeLinecap="round"
           strokeDasharray={`${(pct / 100) * c} ${c}`}

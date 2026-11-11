@@ -68,8 +68,8 @@ function icon(x, y) {
   if (inEllipse(X, Y, 19.6, 9.2, 3, 1.4, 0.7)) return hex('#65a30d');
   if (X >= 21 && X <= 23 && Y >= 9 && Y <= 14.5) return hex('#65a30d');
   if (inRound(X, Y, 10, 19.5, 12, 2, 1) || inRound(X, Y, 10, 24, 9, 2, 1)) return hex('#ffffff');
-  if (inRound(X, Y, 6, 14, 24, 17, 4)) return hex('#0f8552');
-  return hex('#e3f3e9');
+  if (inRound(X, Y, 6, 14, 24, 17, 4)) return hex('#09817e');
+  return hex('#dff3f2');
 }
 for (const s of [192, 512]) writeFileSync(join(dist, `icon-${s}.png`), png(s, icon));
 writeFileSync(join(dist, 'apple-touch-icon.png'), png(180, icon));
