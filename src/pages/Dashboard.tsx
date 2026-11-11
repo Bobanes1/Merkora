@@ -167,9 +167,14 @@ export default function Dashboard() {
               <section className="panel">
                 <div className="panel-head">
                   <h2>Anstehende Prüfungen</h2>
-                  <Link to="/calendar" className="small-link">
-                    Kalender
-                  </Link>
+                  <span className="row-gap">
+                    <button type="button" className="btn ghost sm" onClick={() => setExam(true)}>
+                      <IconPlus size={14} /> Prüfung eintragen
+                    </button>
+                    <Link to="/calendar" className="small-link">
+                      Kalender
+                    </Link>
+                  </span>
                 </div>
                 {exams.slice(0, 4).map((e) => {
                   const r = readiness(data, e);
@@ -186,6 +191,16 @@ export default function Dashboard() {
                   );
                 })}
               </section>
+            )}
+            {!exams.length && dueDecks.length > 0 && (
+              <button type="button" className="exam-cta" onClick={() => setExam(true)}>
+                <IconCalendar size={18} />
+                <span className="grow">
+                  <b>Prüfung eintragen</b>
+                  <small>Merkora plant deine Wiederholungen bis zum Termin</small>
+                </span>
+                <IconPlus size={16} />
+              </button>
             )}
             {dueDecks.length > 0 && (
               <section className="panel">
@@ -258,11 +273,6 @@ export default function Dashboard() {
               <IconPlus size={22} />
               <b>Leeres Deck</b>
               <small>Karten selbst schreiben</small>
-            </button>
-            <button type="button" className="quick-card" onClick={() => setExam(true)}>
-              <IconCalendar size={22} />
-              <b>Prüfung eintragen</b>
-              <small>Merkora plant bis zum Termin</small>
             </button>
           </div>
         )}

@@ -6547,3 +6547,9 @@ a.deck-row:hover {
 .msg { overflow-wrap: anywhere; }
 /* Exam texts: no font may swap characters (e.g. "(c)" → "©") */
 .mock-question, .mock-answer, .mock-solution, .mock-given, .mock-feedback, .mock-writing .option, .mock-mc li, .mock-cover p { font-variant-ligatures: none; font-feature-settings: 'liga' 0, 'clig' 0, 'dlig' 0, 'calt' 0; }
+
+/* start page: add an exam (in "Aufgaben") */
+.exam-cta { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 16px; text-align: left; border: 1px dashed var(--line-strong); border-radius: var(--r-lg); background: var(--white); color: var(--primary); }
+.exam-cta:hover { background: var(--tint); }
+.exam-cta b { display: block; color: var(--ink); }
+.exam-cta small { color: var(--muted); }
