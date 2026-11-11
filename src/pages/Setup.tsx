@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthLayout } from '../components/AuthLayout';
-import { IconEye, IconEyeOff, IconKey, IconSparkle } from '../components/Icons';
+import { IconEye, IconEyeOff, IconSparkle } from '../components/Icons';
 import { PROVIDERS, testConnection } from '../lib/ai';
 import { getState, setApiKey, setPrivacy, setSettings, useStore, type Provider } from '../lib/store';
 
@@ -72,11 +72,6 @@ export default function Setup() {
           <span className="lg-only">Erst einmal ohne KI-Funktionen benutzen</span>
           <span className="sm-only">Ohne KI-Funktionen benutzen</span>
         </button>
-        <button type="button" className={`social-btn ${provider === 'openrouter' ? 'picked' : ''}`} onClick={() => pick('openrouter')}>
-          <IconKey size={22} />
-          <span className="lg-only">Mit OpenRouter-Key fortfahren</span>
-          <span className="sm-only">Weiter mit OpenRouter</span>
-        </button>
         <div className="divider" role="separator">
           <span className="lg-only">Oder eigenen Key eintragen</span>
           <span className="sm-only">oder</span>
@@ -132,18 +127,6 @@ export default function Setup() {
             {busy ? 'Verbindung wird geprüft …' : 'Loslegen'}
           </button>
         </form>
-        <p className="auth-alt">
-          Erst einmal ohne KI-Funktionen benutzen?{' '}
-          <button
-            type="button"
-            onClick={() => {
-              setSettings({ setupDone: true });
-              navigate('/dashboard');
-            }}
-          >
-            Weiter
-          </button>
-        </p>
       </section>
     </AuthLayout>
   );
