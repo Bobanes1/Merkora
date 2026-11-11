@@ -62,6 +62,10 @@ export type MockExam = {
   questions: MockQuestion[];
   answers: Record<string, string | number>;
   startedAt?: number;
+  /** Pause: since when it is paused, and how long all earlier pauses took (the clock stops meanwhile). */
+  pausedAt?: number;
+  pausedMs?: number;
+  pauses?: number;
   submittedAt?: number;
   result?: MockResult;
 };

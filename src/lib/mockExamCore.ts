@@ -77,3 +77,9 @@ export function parseExam(raw: RawExam): Pick<MockExam, 'title' | 'instructions'
   return { title: String(raw.title || 'Probeprüfung').trim(), instructions: String(raw.instructions || '').trim(), questions };
 }
 
+
+/** Time left in ms; the clock stands still while the exam is paused. */
+export function timeLeft(ex: Pick<MockExam, 'minutes' | 'startedAt' | 'pausedAt' | 'pausedMs'>, now: number) {
+  const until = ex.pausedAt ?? now;
+  return ex.minutes * 60_000 - (until - (ex.startedAt ?? now) - (ex.pausedMs ?? 0));
+}

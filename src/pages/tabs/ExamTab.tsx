@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { IconCheck, IconClose, IconRefresh, IconSparkle, IconTarget } from '../../components/Icons';
+import { IconCheck, IconClose, IconPause, IconPlay, IconRefresh, IconSparkle, IconTarget } from '../../components/Icons';
 import { Confetti, Mascot } from '../../components/Mascot';
 import { ConfirmModal } from '../../components/Modal';
 import { NoKeyNotice } from '../../components/NoKey';
@@ -10,9 +10,12 @@ import {
   GRADE_SCALES,
   gradeMockExam,
   levelLabel,
+  pauseMockExam,
+  resumeMockExam,
   setMockAnswer,
   startMockExam,
   tasksFor,
+  timeLeft,
   type GradeScale,
 } from '../../lib/mockExam';
 import { useStore, type Deck, type MockExam } from '../../lib/store';
@@ -221,7 +224,6 @@ function Cover({ deck, ex, onNew }: { deck: Deck; ex: MockExam; onNew: () => voi
 }
 
 function Writing({ deck, ex }: { deck: Deck; ex: MockExam }) {
-  const end = (ex.startedAt ?? Date.now()) + ex.minutes * 60_000;
   const [now, setNow] = useState(Date.now());
   const [confirm, setConfirm] = useState(false);
   const [draft, setDraft] = useState<Record<string, string>>({});
@@ -229,7 +231,8 @@ function Writing({ deck, ex }: { deck: Deck; ex: MockExam }) {
   // latest typed text (a ref, so saving on leave never uses an old value)
   const drafts = useRef<Record<string, string>>({});
   const submitted = useRef(false);
-  const left = end - now;
+  const left = timeLeft(ex, now);
+  const paused = !!ex.pausedAt;
 
   const flushDrafts = () => {
     for (const [id, t] of Object.entries(timers.current)) {
@@ -250,7 +253,7 @@ function Writing({ deck, ex }: { deck: Deck; ex: MockExam }) {
     return () => clearInterval(t);
   }, []);
   useEffect(() => {
-    if (left <= 0) submit();
+    if (left <= 0 && !paused) submit();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [left <= 0]);
   // keep typed text when the tab is left
@@ -279,12 +282,38 @@ function Writing({ deck, ex }: { deck: Deck; ex: MockExam }) {
         <span className="muted">
           {answered} / {ex.questions.length} beantwortet · {pts(max)} Punkte
         </span>
+        {!paused && (
+          <button
+            type="button"
+            className="btn outline sm"
+            onClick={() => {
+              flushDrafts();
+              pauseMockExam(deck.id);
+            }}
+          >
+            <IconPause size={14} /> Pause
+          </button>
+        )}
         <button type="button" className="btn primary sm" onClick={() => setConfirm(true)}>
           Abgeben
         </button>
       </div>
-      <h2 className="mock-title">{ex.title}</h2>
-      {ex.questions.map((q, i) => (
+      {paused && (
+        <div className="panel mock-paused" role="status">
+          <Mascot who="pip" mood="wave" size={84} side="top" />
+          <b>Prüfung pausiert</b>
+          <p className="muted">
+            Die Uhr steht still – es bleiben {fmtClock(left)}. Die Aufgaben sind so lange ausgeblendet, damit es fair bleibt wie in einer
+            echten Prüfung.
+          </p>
+          <p className="mock-pause-clock">Pause seit {fmtClock(now - ex.pausedAt!)}</p>
+          <button type="button" className="btn primary" onClick={() => resumeMockExam(deck.id)}>
+            <IconPlay size={14} /> Weiterschreiben
+          </button>
+        </div>
+      )}
+      {!paused && <h2 className="mock-title">{ex.title}</h2>}
+      {!paused && ex.questions.map((q, i) => (
         <section key={q.id} className="panel mock-q">
           <header>
             <b>Aufgabe {i + 1}</b>
@@ -321,7 +350,7 @@ function Writing({ deck, ex }: { deck: Deck; ex: MockExam }) {
           )}
         </section>
       ))}
-      <div className="row-gap end">
+      <div className="row-gap end" style={paused ? { display: 'none' } : undefined}>
         <button type="button" className="btn primary" onClick={() => setConfirm(true)}>
           Prüfung abgeben
         </button>
@@ -361,6 +390,12 @@ function Result({ deck, ex, onNew }: { deck: Deck; ex: MockExam; onNew: () => vo
             {pts(r.total)} von {pts(r.max)} Punkten
           </b>{' '}
           ({r.percent} %) · {r.passed ? 'bestanden' : 'nicht bestanden'}
+          {(ex.pauses ?? 0) > 0 && (
+            <span className="muted">
+              {' '}
+              · {ex.pauses} {ex.pauses === 1 ? 'Pause' : 'Pausen'} ({Math.round((ex.pausedMs ?? 0) / 60_000)} Min.)
+            </span>
+          )}
         </p>
         {r.summary && <p className="muted">{r.summary}</p>}
         <div className="mock-lists">

@@ -76,7 +76,18 @@ export async function createMockExam(
   }
 }
 
-export const startMockExam = (deckId: string) => patchExam(deckId, { status: 'running', startedAt: Date.now(), answers: {}, result: undefined });
+export const startMockExam = (deckId: string) =>
+  patchExam(deckId, { status: 'running', startedAt: Date.now(), pausedAt: undefined, pausedMs: 0, pauses: 0, answers: {}, result: undefined });
+export const pauseMockExam = (deckId: string) =>
+  updateDeck(deckId, (d) =>
+    d.mockExam && !d.mockExam.pausedAt ? { mockExam: { ...d.mockExam, pausedAt: Date.now(), pauses: (d.mockExam.pauses ?? 0) + 1 } } : {},
+  );
+export const resumeMockExam = (deckId: string) =>
+  updateDeck(deckId, (d) =>
+    d.mockExam?.pausedAt
+      ? { mockExam: { ...d.mockExam, pausedMs: (d.mockExam.pausedMs ?? 0) + (Date.now() - d.mockExam.pausedAt), pausedAt: undefined } }
+      : {},
+  );
 export const setMockAnswer = (deckId: string, qid: string, value: string | number) =>
   updateDeck(deckId, (d) => (d.mockExam ? { mockExam: { ...d.mockExam, answers: { ...d.mockExam.answers, [qid]: value } } } : {}));
 export const discardMockExam = (deckId: string) => updateDeck(deckId, { mockExam: undefined });

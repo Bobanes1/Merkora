@@ -3,7 +3,7 @@ import { ankiToSrs, formatDelay, newSrs, schedule, type Rating, type Srs } from 
 import { capForExam, dailyPlan, examAt, toIcs } from '../src/lib/exams';
 import { reminderDue } from '../src/lib/reminderRule';
 import { newLeft, pickDue, planNewForCourse } from '../src/lib/newCards';
-import { gradeFor, mcPoints, parseExam, tasksFor } from '../src/lib/mockExamCore';
+import { gradeFor, mcPoints, parseExam, tasksFor, timeLeft } from '../src/lib/mockExamCore';
 import { shortNames } from '../src/lib/deckNames';
 import { initialPomo, pause, remaining, start, tick, workedSoFar } from '../src/lib/pomodoroRule';
 
@@ -151,6 +151,10 @@ console.log('Probeprüfung: Noten');
   } as never);
   ok(ex.questions.length === 3 && ex.questions[0].answer === 3 && ex.questions[1].type === 'short' && ex.questions[2].points === 20, 'Prüfung einlesen: fehlerhafte Aufgaben repariert oder aussortiert');
   ok(mcPoints(ex.questions[0], 3) === 2 && mcPoints(ex.questions[0], 1) === 0, 'Multiple Choice: alles oder nichts');
+  const t0 = 1_000_000;
+  ok(timeLeft({ minutes: 30, startedAt: t0 }, t0 + 10 * 60_000) === 20 * 60_000, 'Zeit läuft: nach 10 Min. bleiben 20');
+  ok(timeLeft({ minutes: 30, startedAt: t0, pausedAt: t0 + 10 * 60_000 }, t0 + 25 * 60_000) === 20 * 60_000, 'Pause: Uhr steht still');
+  ok(timeLeft({ minutes: 30, startedAt: t0, pausedMs: 15 * 60_000 }, t0 + 30 * 60_000) === 15 * 60_000, 'nach der Pause läuft die Zeit weiter, ohne die Pausenzeit');
   ok(tasksFor(60) === 13 && tasksFor(10) === 5, 'Aufgabenzahl passt zur Dauer');
 }
 
