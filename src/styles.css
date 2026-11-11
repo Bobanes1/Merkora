@@ -6572,3 +6572,7 @@ a.deck-row:hover {
 
 /* kind of new card: text & pictures / image occlusion */
 .seg.card-kind { margin: 0 0 14px; }
+
+/* "Neue Karte": same window size for text cards and image occlusion (no jump when switching) */
+.modal.new-card-modal { width: 640px; height: min(760px, calc(100vh - 32px)); }
+.modal.new-card-modal .modal-body { flex: 1; min-height: 0; }

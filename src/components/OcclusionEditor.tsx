@@ -96,7 +96,8 @@ export function OcclusionEditor({ deck, onClose, onText }: { deck: Deck; onClose
 
   return (
     <Modal
-      wide
+      wide={!onText}
+      className={onText ? 'new-card-modal' : ''}
       title={onText ? 'Neue Karte' : 'Bildverdeckung erstellen'}
       onClose={onClose}
       footer={

@@ -53,6 +53,7 @@ function CardEditor({
   return (
     <Modal
       title={card ? 'Karte bearbeiten' : 'Neue Karte'}
+      className={!card && onOcclusion ? 'new-card-modal' : ''}
       onClose={onClose}
       footer={
         <>

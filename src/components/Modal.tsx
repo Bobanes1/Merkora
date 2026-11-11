@@ -8,12 +8,15 @@ export function Modal({
   children,
   wide,
   footer,
+  className = '',
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   wide?: boolean;
   footer?: ReactNode;
+  /** extra class for the window, e.g. a fixed size */
+  className?: string;
 }) {
   const backdrop = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -28,7 +31,7 @@ export function Modal({
   }, [onClose]);
   return createPortal(
     <div ref={backdrop} className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={`modal ${wide ? 'wide' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
+      <div className={`modal ${wide ? 'wide' : ''} ${className}`} role="dialog" aria-modal="true" aria-label={title}>
         <div className="modal-head">
           <h3>{title}</h3>
           <button type="button" className="icon-btn" onClick={onClose} aria-label="Schließen">
