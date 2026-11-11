@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { levelCounts, masteryPercent, streak } from '../lib/stats';
 import { deckUrl, dueCards, useData } from '../lib/store';
 import { DAY, dayKey, startOfDay } from '../lib/util';
+import { WeekReview } from '../components/WeekReview';
 
 /** Small hover tooltip shared by the charts. */
 function useTip() {
@@ -113,6 +114,8 @@ export default function Stats() {
           <span>von {cards.length} Karten</span>
         </div>
       </div>
+
+      <WeekReview always />
 
       <section className="panel">
         <div className="panel-head">

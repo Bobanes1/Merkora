@@ -1,15 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
-import { IconCheck, IconClose, IconPause, IconPlay, IconRefresh, IconSparkle, IconTarget } from '../../components/Icons';
+import { useSearchParams } from 'react-router-dom';
+import { IconCheck, IconClose, IconHeart, IconPause, IconPlay, IconPlus, IconRefresh, IconSparkle, IconTarget } from '../../components/Icons';
 import { Confetti, Mascot } from '../../components/Mascot';
 import { ConfirmModal } from '../../components/Modal';
 import { NoKeyNotice } from '../../components/NoKey';
+import { ShareDialog } from '../../components/ShareDialog';
+import { compareResult } from '../../lib/share';
 import {
   createMockExam,
   discardMockExam,
   EDU_LEVELS,
   GRADE_SCALES,
   gradeMockExam,
+  learnFromMistakes,
   levelLabel,
+  mistakeCards,
   pauseMockExam,
   resumeMockExam,
   setMockAnswer,
@@ -190,6 +195,12 @@ function Cover({ deck, ex, onNew }: { deck: Deck; ex: MockExam; onNew: () => voi
         {ex.detail ? ` · ${ex.detail}` : ''}
       </small>
       <h2>{ex.title}</h2>
+      {ex.friend && (
+        <p className="mock-friend">
+          Von <b>{ex.friend.name}</b> geteilt
+          {ex.friend.percent !== undefined ? ` – ${ex.friend.name} hat schon geschrieben. Das Ergebnis siehst du nach deiner Abgabe.` : '.'}
+        </p>
+      )}
       <dl className="mock-facts">
         <div>
           <dt>Zeit</dt>
@@ -375,6 +386,13 @@ function Writing({ deck, ex }: { deck: Deck; ex: MockExam }) {
 function Result({ deck, ex, onNew }: { deck: Deck; ex: MockExam; onNew: () => void }) {
   const r = ex.result!;
   const [again, setAgain] = useState(false);
+  const [, setParams] = useSearchParams();
+  const [learned, setLearned] = useState<{ added: number; moved: number } | null>(null);
+  const [sharing, setSharing] = useState(false);
+  const f = ex.friend;
+  const vs = f?.percent !== undefined ? compareResult(r.percent, f.percent) : null;
+  const mistakes = mistakeCards(ex).length;
+  const toLearn = () => setParams({ tab: 'learn' });
   return (
     <div className="mock-result">
       <div className="panel mock-score">
@@ -397,6 +415,28 @@ function Result({ deck, ex, onNew }: { deck: Deck; ex: MockExam; onNew: () => vo
             </span>
           )}
         </p>
+        {f && vs && (
+          <div className={`mock-vs ${vs}`}>
+            <div>
+              <small>Du</small>
+              <b>{ex.scale === 'pct' ? `${r.percent} %` : r.grade}</b>
+              <small>{r.percent} %</small>
+            </div>
+            <span>{vs === 'better' ? '>' : vs === 'worse' ? '<' : '='}</span>
+            <div>
+              <small>{f.name}</small>
+              <b>{f.scale === 'pct' || f.scale !== ex.scale ? `${f.percent} %` : f.grade}</b>
+              <small>{f.percent} %</small>
+            </div>
+            <p>
+              {vs === 'better'
+                ? `Du hast ${f.name} geschlagen! 🎉`
+                : vs === 'worse'
+                  ? `${f.name} liegt noch vorn – schau dir die Fehler an und versuch es nochmal.`
+                  : 'Unentschieden – ihr seid gleich gut!'}
+            </p>
+          </div>
+        )}
         {r.summary && <p className="muted">{r.summary}</p>}
         <div className="mock-lists">
           {r.strengths.length > 0 && (
@@ -424,11 +464,44 @@ function Result({ deck, ex, onNew }: { deck: Deck; ex: MockExam; onNew: () => vo
           <button type="button" className="btn outline" onClick={() => setAgain(true)}>
             <IconRefresh size={16} /> Gleiche Prüfung nochmal
           </button>
+          <button type="button" className="btn outline" onClick={() => setSharing(true)}>
+            <IconHeart size={16} /> Mit Freunden teilen
+          </button>
           <button type="button" className="btn primary" onClick={onNew}>
             <IconSparkle size={16} /> Neue Probeprüfung
           </button>
         </div>
       </div>
+      {sharing && <ShareDialog deck={deck} onClose={() => setSharing(false)} />}
+
+      {mistakes > 0 && (
+        <div className="panel mock-mistakes">
+          <div>
+            <b>Aus den Fehlern lernen</b>
+            {ex.mistakesLearned ? (
+              <p className="muted">
+                {learned
+                  ? `${learned.added} neue Karten aus deinen Fehlern${learned.moved ? ` und ${learned.moved} passende Karten` : ''} sind jetzt fällig – mit dem Schlagwort „Probeprüfung“.`
+                  : 'Die Karten aus deinen Fehlern sind im Deck (Schlagwort „Probeprüfung“).'}
+              </p>
+            ) : (
+              <p className="muted">
+                Aus {mistakes === 1 ? 'der Aufgabe' : `den ${mistakes} Aufgaben`} mit Punktabzug werden Karten mit der Musterlösung – sofort fällig, ohne
+                das Tageslimit für neue Karten. Passende Karten, die du schon hast, kommen heute ebenfalls dran.
+              </p>
+            )}
+          </div>
+          {ex.mistakesLearned ? (
+            <button type="button" className="btn primary" onClick={toLearn}>
+              Jetzt lernen
+            </button>
+          ) : (
+            <button type="button" className="btn primary" onClick={() => setLearned(learnFromMistakes(deck.id))}>
+              <IconPlus size={16} /> {mistakes === 1 ? '1 Karte' : `${mistakes} Karten`} erstellen
+            </button>
+          )}
+        </div>
+      )}
 
       <h2>Korrektur</h2>
       {ex.questions.map((q, i) => {

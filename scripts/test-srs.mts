@@ -3,7 +3,7 @@ import { ankiToSrs, formatDelay, newSrs, schedule, type Rating, type Srs } from 
 import { capForExam, dailyPlan, examAt, toIcs } from '../src/lib/exams';
 import { reminderDue } from '../src/lib/reminderRule';
 import { newLeft, pickDue, planNewForCourse } from '../src/lib/newCards';
-import { gradeFor, mcPoints, parseExam, tasksFor, timeLeft } from '../src/lib/mockExamCore';
+import { gradeFor, mcPoints, mistakeCards, parseExam, relatedCardIds, tasksFor, timeLeft } from '../src/lib/mockExamCore';
 import { shortNames } from '../src/lib/deckNames';
 import { initialPomo, pause, remaining, start, tick, workedSoFar } from '../src/lib/pomodoroRule';
 
@@ -135,6 +135,37 @@ console.log('Neue Karten pro Kurs');
   ok(small.get('d1') === 5 && small.get('d2') === 15, 'kleines Deck zuerst fertig, Rest geht ans nächste');
 }
 
+console.log('FSRS');
+{
+  const { setSchedulerOptions, schedule: sch } = await import('../src/lib/srs');
+  const { fsrsInterval, retrievability, initState } = await import('../src/lib/fsrs');
+  ok(Math.abs(fsrsInterval(10, 0.9) - 10) < 0.01 && Math.abs(retrievability(10, 10) - 0.9) < 0.001, 'Stabilität S = Tage bis 90 % Behalten');
+  ok(initState(1).s < initState(3).s && initState(3).s < initState(4).s && initState(1).d > initState(4).d, 'Startwerte: Einfach stabiler und leichter als Nochmal');
+  setSchedulerOptions({ fsrs: true, retention: 0.9 });
+  const t = new Date(2026, 10, 11, 9).getTime();
+  // new card: learning steps stay in minutes
+  let c = sch(newSrs(t), 3, t);
+  ok(c.step === 1 && c.due - t === 10 * 60_000 && !!c.mem, 'neue Karte: Lernschritte bleiben (10 Min.), Gedächtniswert wird angelegt');
+  c = sch(c, 3, t + 10 * 60_000);
+  c = sch(c, 3, t + 70 * 60_000);
+  ok(c.step === undefined && c.interval >= 1, 'nach den Lernschritten: Abstand in Tagen aus FSRS (' + c.interval + ' T.)');
+  const at = c.due;
+  const hard = sch(c, 2, at), good = sch(c, 3, at), easy = sch(c, 4, at);
+  ok(hard.interval < good.interval && good.interval < easy.interval, `Reihenfolge Schwer < Gut < Einfach (${hard.interval} / ${good.interval} / ${easy.interval} T.)`);
+  ok(good.interval > c.interval, 'Gut verlängert den Abstand');
+  const lapse = sch(good, 1, good.due);
+  ok(lapse.step === 0 && (lapse.mem!.s < good.mem!.s) && lapse.lapseIvl! >= 1, 'vergessen: Neulernen in Minuten, Stabilität sinkt');
+  // a classic card is taken over
+  const old = { ease: 2.5, interval: 20, reps: 5, lapses: 0, due: t, last: t - 20 * DAY };
+  const took = sch(old, 3, t);
+  ok(took.interval > 20 && took.interval < 120, 'klassisch gelernte Karte wird übernommen (' + took.interval + ' T.)');
+  setSchedulerOptions({ retention: 0.8 });
+  const lower = sch(old, 3, t);
+  ok(lower.interval > took.interval, 'niedrigere Behaltensquote → längere Abstände');
+  setSchedulerOptions({ fsrs: false, retention: 0.9 });
+  ok(!sch(old, 3, t).mem, 'ausgeschaltet: klassische Planung wie bisher');
+}
+
 console.log('Probeprüfung: Noten');
 {
   ok(gradeFor(1, 'ch').grade === '6' && gradeFor(0.6, 'ch').grade === '4' && gradeFor(0.6, 'ch').passed, 'Schweiz: 100 % → 6, 60 % → 4 (genügend)');
@@ -155,7 +186,78 @@ console.log('Probeprüfung: Noten');
   ok(timeLeft({ minutes: 30, startedAt: t0 }, t0 + 10 * 60_000) === 20 * 60_000, 'Zeit läuft: nach 10 Min. bleiben 20');
   ok(timeLeft({ minutes: 30, startedAt: t0, pausedAt: t0 + 10 * 60_000 }, t0 + 25 * 60_000) === 20 * 60_000, 'Pause: Uhr steht still');
   ok(timeLeft({ minutes: 30, startedAt: t0, pausedMs: 15 * 60_000 }, t0 + 30 * 60_000) === 15 * 60_000, 'nach der Pause läuft die Zeit weiter, ohne die Pausenzeit');
+  const graded = {
+    questions: [
+      { id: 'a', type: 'mc' as const, question: 'Was ist Agenda-Setting?', options: ['Themen setzen', 'Meinung'], answer: 0, points: 1, solution: '' },
+      { id: 'b', type: 'open' as const, question: 'Erläutere Krisenkommunikation', points: 8, solution: 'Schnell, transparent, konsistent' },
+      { id: 'c', type: 'short' as const, question: 'Definiere PR', points: 3, solution: 'Management von Kommunikation' },
+    ],
+    result: { perQuestion: { a: { points: 0, feedback: '' }, b: { points: 4, feedback: '' }, c: { points: 3, feedback: '' } } } as never,
+  };
+  const mc = mistakeCards(graded);
+  ok(mc.length === 2 && mc[0].back.startsWith('Themen setzen') && mc[1].back.includes('transparent'), 'Fehlerkarten: nur Aufgaben mit Punktabzug, MC mit richtiger Antwort');
+  const rel = relatedCardIds([{ question: 'Erläutere Krisenkommunikation transparent', solution: 'Krisenkommunikation transparent schnell' }], [
+    { id: 'x', front: 'Was gilt in der Krisenkommunikation?', back: 'transparent informieren' },
+    { id: 'y', front: 'Was ist Framing?', back: 'Deutungsrahmen' },
+  ]);
+  ok(rel.length === 1 && rel[0] === 'x', 'passende Karten zum Fehler werden gefunden');
   ok(tasksFor(60) === 13 && tasksFor(10) === 5, 'Aufgabenzahl passt zur Dauer');
+}
+
+console.log('Pip');
+{
+  const { pipReaction, pipGreeting, pipSummary } = await import('../src/lib/pipLines');
+  const base = { rating: 3 as const, streak: 1, misses: 0, lapses: 0, done: 3, remaining: 20, total: 30 };
+  ok(/erwischt|vergessen/.test(pipReaction({ ...base, lapses: 3 }) ?? ''), 'Karte nach 3× Vergessen endlich gewusst');
+  ok(/5|Fünf/.test(pipReaction({ ...base, streak: 5 }) ?? ''), '5 richtig in Folge');
+  ok(/durchatmen/.test(pipReaction({ ...base, rating: 1, streak: 0, misses: 3 }) ?? ''), '3 Fehler in Folge → aufmunternd');
+  ok(/3|drei/.test(pipReaction({ ...base, remaining: 3 }) ?? ''), 'nur noch 3 Karten');
+  ok(/Halbzeit|Hälfte/.test(pipReaction({ ...base, done: 15 }) ?? ''), 'Halbzeit');
+  ok(pipReaction(base) === undefined, 'sonst still (kein Dauergequassel)');
+  ok(/Nachteule/.test(pipGreeting(23, 40)) && /Früher Vogel/.test(pipGreeting(6, 10)), 'Begrüßung nach Tageszeit');
+  ok(/Tagesrekord/.test(pipSummary({ done: 30, firstTry: 20, today: 120, bestDay: 100 })), 'neuer Tagesrekord');
+  ok(/von 10/.test(pipSummary({ done: 10, firstTry: 6, today: 10, bestDay: 50 })), 'Zusammenfassung: auf Anhieb gewusst');
+}
+
+console.log('Wochenrückblick');
+{
+  const { weekReview, withSnapshot, reviewWeekKey } = await import('../src/lib/weekly');
+  const now = new Date(2026, 10, 15, 18).getTime(); // a Sunday
+  const card = (lvl: number) => ({ id: String(Math.random()), front: '', back: '', createdAt: 0, srs: { ease: 2.5, interval: lvl, reps: 3, lapses: 0, due: now + DAY, last: now - DAY } });
+  const decks = [{ id: 'd1', name: 'Ethik', cards: [card(30), card(30), card(1)] }] as never;
+  const reviews = [
+    ...Array.from({ length: 12 }, (_, i) => ({ deckId: 'd1', cardId: 'c', at: now - (i % 3) * DAY, rating: (i % 4 ? 3 : 1) as Rating })),
+    ...Array.from({ length: 5 }, () => ({ deckId: 'd1', cardId: 'c', at: now - 9 * DAY, rating: 3 as Rating })),
+  ];
+  const snaps = withSnapshot({ '2026-10-01': { d1: 1 } }, '2026-11-09', { d1: 20 }, now);
+  ok(!snaps['2026-10-01'] && snaps['2026-11-09'].d1 === 20, 'Tagesstände: alte werden aufgeräumt');
+  const w = weekReview({ decks, reviews, game: { xpByDay: {}, dailyGoal: 50, minutesByDay: { '2026-11-14': 25 }, masterySnaps: snaps } }, now);
+  ok(w.reviews === 12 && w.prevReviews === 5 && w.activeDays === 3 && w.minutes === 25, 'Woche: Karten, Vorwoche, Lerntage, Minuten');
+  ok(w.correct === 75, 'Woche: 75 % gewusst');
+  ok(w.decks.length === 1 && w.decks[0].from === 20 && w.decks[0].to > 20, 'Woche: Fortschritt pro Deck');
+  ok(reviewWeekKey(now) === '2026-11-15' && reviewWeekKey(now + DAY) === '2026-11-15' && reviewWeekKey(now + 2 * DAY) === null, 'erscheint Sonntag und Montag');
+}
+
+console.log('Teilen');
+{
+  const { buildShare, parseShare, compareResult } = await import('../src/lib/share');
+  const deck = {
+    id: 'd', courseId: 'c', name: 'Ethik', slug: 'ethik', createdAt: 0, source: 'Text', chat: [],
+    cards: [{ id: 'k', front: 'F', back: 'A', createdAt: 0, srs: { ease: 2.5, interval: 30, reps: 9, lapses: 1, due: 0, last: 1 } }],
+    mockExam: { id: 'm', createdAt: 0, status: 'graded', level: 'bachelor', detail: '', minutes: 30, scope: 'deck', scale: 'ch', title: 'P', instructions: '', answers: { q: 1 },
+      questions: [{ id: 'q', type: 'mc', question: '?', options: ['a', 'b'], answer: 1, points: 1, solution: '' }],
+      result: { grade: '5.5', percent: 90, passed: true } },
+  } as never;
+  const pack = buildShare(deck, 'Anna', { exam: true, result: true });
+  const text = JSON.stringify(pack);
+  ok(!text.includes('"srs"') && !text.includes('"answers"'), 'Datei enthält keinen Lernfortschritt und keine eigenen Antworten');
+  const back = parseShare(text);
+  ok(back.from === 'Anna' && back.deck.cards.length === 1 && back.exam?.questions.length === 1 && back.result?.percent === 90, 'Datei wird wieder eingelesen');
+  ok(!buildShare(deck, 'Anna', { exam: true, result: false }).result, 'Note nur, wenn gewünscht');
+  let bad = '';
+  try { parseShare('{"hello":1}'); } catch (e) { bad = (e as Error).message; }
+  ok(/keine Merkora-Datei/.test(bad), 'fremde Datei wird abgelehnt');
+  ok(compareResult(80, 70) === 'better' && compareResult(60, 70) === 'worse' && compareResult(70, 70) === 'same', 'Vergleich mit Freunden');
 }
 
 console.log('Kurze Decknamen');

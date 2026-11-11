@@ -25,6 +25,7 @@ import { JobsIndicator } from './Jobs';
 import { Logo } from './Logo';
 import { ErrorBoundary } from './ErrorBoundary';
 import { UpdateNotice } from './UpdateNotice';
+import { MasterySnapshots } from './WeekReview';
 import { FocusBar, Pomodoro, setFocus } from './Pomodoro';
 
 function Tree({ onNavigate }: { onNavigate: () => void }) {
@@ -205,6 +206,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       <main className="app-main">
         <FocusBar />
         <UpdateNotice />
+        <MasterySnapshots />
         <ErrorBoundary key={pathname} inline>
           {children}
         </ErrorBoundary>

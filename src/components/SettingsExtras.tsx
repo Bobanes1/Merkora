@@ -236,6 +236,8 @@ export function BackupsPanel() {
 /** How many new cards per deck and day. */
 export function LearningPanel() {
   const perDay = useStore((x) => x.data.settings.newPerDay ?? 20);
+  const fsrs = useStore((x) => !!x.data.settings.fsrs);
+  const retention = useStore((x) => x.data.settings.retention ?? 0.9);
   return (
     <section className="panel">
       <h2>Lernen</h2>
@@ -265,6 +267,33 @@ export function LearningPanel() {
         (der Reihe nach), so wie Unterdecks in Anki. Wiederholungen bereits gelernter Karten kommen immer dazu. Willst du an einem Tag mehr, gibt es beim Lernen den Knopf „10 neue Karten“. Für Decks mit Prüfungstermin plant der
         Kalender zusätzlich, was bis zur Prüfung nötig ist.
       </p>
+      <h3 className="settings-sub">Planung der Wiederholungen</h3>
+      <div className="row-gap" role="radiogroup" aria-label="Planung">
+        <button type="button" role="radio" aria-checked={!fsrs} className={`tag ${!fsrs ? 'on' : ''}`} onClick={() => setSettings({ fsrs: false })}>
+          Klassisch
+        </button>
+        <button type="button" role="radio" aria-checked={fsrs} className={`tag ${fsrs ? 'on' : ''}`} onClick={() => setSettings({ fsrs: true })}>
+          FSRS (empfohlen)
+        </button>
+      </div>
+      <p className="muted small">
+        {fsrs
+          ? 'FSRS ist der moderne Algorithmus aus Anki: Er schätzt für jede Karte, wie gut du sie im Gedächtnis hast, und plant so, dass du bei gleichem Behalten meist 20–30 % weniger wiederholen musst. Bereits gelernte Karten werden übernommen.'
+          : 'Feste Faktoren wie im alten Anki: Gut verlängert den Abstand ungefähr um das 2,5-Fache.'}
+      </p>
+      {fsrs && (
+        <>
+          <label className="field-label" htmlFor="retention">
+            Gewünschte Behaltensquote
+          </label>
+          <select id="retention" className="input" value={retention} onChange={(e) => setSettings({ retention: Number(e.target.value) })}>
+            <option value={0.8}>80 % – am wenigsten Wiederholungen</option>
+            <option value={0.85}>85 %</option>
+            <option value={0.9}>90 % – Standard</option>
+            <option value={0.95}>95 % – kurz vor Prüfungen, viele Wiederholungen</option>
+          </select>
+        </>
+      )}
     </section>
   );
 }

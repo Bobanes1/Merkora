@@ -14,6 +14,7 @@ import { deckUrl, dueCards, useStore, type Deck } from '../lib/store';
 import { DAY, dayKey, startOfDay } from '../lib/util';
 import { MATERIAL_ACCEPT, MATERIAL_LABEL } from '../lib/files';
 import { shortName } from '../lib/deckNames';
+import { WeekReview } from '../components/WeekReview';
 import { GameBar } from './tabs/PathTab';
 
 const CARD_GOAL = 50;
@@ -186,6 +187,8 @@ export default function Dashboard() {
         </form>
 
         {!apiKey && data.settings.provider !== 'custom' && <NoKeyNotice />}
+
+        <WeekReview />
 
         <div className="home-tabs" role="tablist">
           {tabs.map((t) => (

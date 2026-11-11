@@ -10,6 +10,8 @@ import { cardBackText, cardFrontText } from '../../lib/content';
 import { RATINGS, formatDelay, schedule, type Rating, type Srs } from '../../lib/srs';
 import { addXp, boostNewCards, dueCards, logReview, newCardsLeft, reviewCard, useStore, type Deck } from '../../lib/store';
 import { capForExam, countdownText, nextExamAt, nextExamForDeck } from '../../lib/exams';
+import { pipGreeting, pipReaction, pipSummary } from '../../lib/pipLines';
+import { dayKey } from '../../lib/util';
 
 type Grade = { score: number; verdict: string; feedback: string };
 
@@ -34,14 +36,18 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [lastRating, setLastRating] = useState<Rating | null>(null);
-  const mood: Mood = busy ? 'think' : grade ? (grade.score >= 3 ? 'happy' : 'sad') : lastRating === null ? 'wave' : lastRating >= 3 ? 'happy' : lastRating === 1 ? 'sad' : 'idle';
-  const moodSay = busy
-    ? 'Ich denke nach …'
-    : lastRating === 4
-      ? praise(done)
-      : lastRating === 1
-        ? 'Die kommt gleich nochmal – du packst das!'
-        : undefined;
+  // Pip's reactions: streaks, cards that finally sit, half time, last cards …
+  const [run, setRun] = useState({ streak: 0, misses: 0, firstTry: 0, seen: new Set<string>() });
+  const [say, setSay] = useState<{ text?: string; big: boolean }>({ big: false });
+  const reviews = useStore((s) => s.data.reviews);
+  const mood: Mood = busy
+    ? 'think'
+    : grade
+      ? grade.score >= 3 ? 'happy' : 'sad'
+      : say.big
+        ? 'cheer'
+        : lastRating === null ? 'wave' : lastRating >= 3 ? 'happy' : lastRating === 1 ? 'sad' : 'idle';
+  const moodSay = busy ? 'Ich denke nach …' : say.text;
 
   const dueIds = useMemo(
     () =>
@@ -70,6 +76,9 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
     setQueue(ids);
     setMode(m);
     setDone(0);
+    setRun({ streak: 0, misses: 0, firstTry: 0, seen: new Set() });
+    setLastRating(null);
+    setSay({ text: pipGreeting(new Date().getHours(), ids.length), big: false });
     reset();
   };
 
@@ -102,9 +111,28 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
       const comesBack = r === 1 || (scheduled && schedule(card.srs, r).due - Date.now() <= 60 * 60 * 1000);
       setQueue((q) => (comesBack ? [...q.slice(1), q[0]] : q.slice(1)));
       if (!comesBack) setDone((n) => n + 1);
+      const streak = r >= 3 ? run.streak + 1 : 0;
+      const misses = r === 1 ? run.misses + 1 : 0;
+      const first = !run.seen.has(card.id);
+      setRun({ streak, misses, firstTry: run.firstTry + (first && r >= 3 ? 1 : 0), seen: new Set(run.seen).add(card.id) });
+      const doneNow = done + (comesBack ? 0 : 1);
+      const reaction = pipReaction({
+        rating: r,
+        streak,
+        misses,
+        lapses: card.srs.lapses,
+        done: doneNow,
+        remaining: queue.length - (comesBack ? 0 : 1),
+        total: done + queue.length,
+      });
+      setSay(
+        reaction
+          ? { text: reaction, big: r >= 3 }
+          : { text: r === 4 ? praise(doneNow) : r === 1 ? 'Die kommt gleich nochmal – du packst das!' : undefined, big: false },
+      );
       reset();
     },
-    [card, deck.id, mode],
+    [card, deck.id, mode, run, done, queue.length],
   );
 
   useEffect(() => {
@@ -146,6 +174,15 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
     }
   };
 
+  /** End of the round: share known at first try, and a new daily record. */
+  const summary = () => {
+    const perDay = new Map<string, number>();
+    for (const rv of reviews) perDay.set(dayKey(rv.at), (perDay.get(dayKey(rv.at)) ?? 0) + 1);
+    const today = perDay.get(dayKey(Date.now())) ?? 0;
+    perDay.delete(dayKey(Date.now()));
+    return pipSummary({ done, firstTry: run.firstTry, today, bestDay: Math.max(0, ...perDay.values()) });
+  };
+
   if (!deck.cards.length)
     return (
       <div className="empty">
@@ -159,7 +196,7 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
       <div className="empty learn-start">
         {mode !== null && done > 0 && <Confetti count={50} />}
         {mode !== null ? (
-          <Mascot who="pip" mood="cheer" size={96} side="top" say={done > 0 ? 'Runde geschafft – stark!' : 'Alles erledigt!'} />
+          <Mascot who="pip" mood="cheer" size={96} side="top" say={done > 0 ? summary() : 'Alles erledigt!'} />
         ) : (
           <Mascot who="pip" mood="wave" size={84} side="top" />
         )}

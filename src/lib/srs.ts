@@ -1,4 +1,5 @@
 import { DAY } from './util';
+import { fsrsInterval, initState, nextState, stateFromClassic, type MemoryState } from './fsrs';
 
 export type Srs = {
   ease: number;
@@ -14,6 +15,8 @@ export type Srs = {
   lapseIvl?: number;
   /** When the card was studied for the first time (counts against the daily limit of new cards). */
   introduced?: number;
+  /** FSRS memory state (only kept while FSRS planning is switched on). */
+  mem?: MemoryState;
 };
 
 export type Rating = 1 | 2 | 3 | 4;
@@ -50,7 +53,44 @@ const roundIvl = (d: number) => (d < 1 ? Math.round(d * 24) / 24 : Math.round(d)
  * - Forgotten cards are relearned after 10 Min. and 1 Std.
  * - Review cards: Schwer on young cards (< 3 days) → 12 Std., otherwise ×1.2; Gut ×ease; Einfach ×ease×1.3.
  */
+export type SchedulerOptions = { fsrs: boolean; retention: number };
+let options: SchedulerOptions = { fsrs: false, retention: 0.9 };
+/** Classic planning or FSRS (set from the settings). */
+export const setSchedulerOptions = (o: Partial<SchedulerOptions>) => {
+  options = { ...options, ...o };
+};
+
+const fsrsDays = (s: number) => Math.max(1, Math.min(36500, Math.round(fsrsInterval(s, options.retention))));
+
+/**
+ * Next state of a card after an answer. Learning steps (minutes) are the same for both planners;
+ * with FSRS, the days until the next review come from the card's memory stability.
+ */
 export function schedule(s: Srs, rating: Rating, now = Date.now()): Srs {
+  const next = scheduleClassic(s, rating, now);
+  if (!options.fsrs) return next;
+  const prev = s.mem ?? (s.last !== undefined && s.interval > 0 ? stateFromClassic(s.interval, s.ease) : undefined);
+  const days = s.last !== undefined ? Math.max(0, (now - s.last) / DAY) : 0;
+  const memFor = (g: Rating) => (prev ? nextState(prev, days, g) : initState(g));
+  const mem = memFor(rating);
+  if (next.step !== undefined) {
+    // still (re)learning: minute steps as usual; a forgotten card later returns after its new stability
+    return { ...next, mem, ...(next.lapseIvl !== undefined ? { lapseIvl: fsrsDays(mem.s) } : {}) };
+  }
+  let interval = fsrsDays(mem.s);
+  // a brand-new card comes back soon after its first day of learning, however well the steps went
+  if (isLearning(s) && s.lapseIvl === undefined) interval = Math.min(interval, rating === 4 ? 4 : 2);
+  if (!isLearning(s) && rating >= 2) {
+    // keep the buttons in order: Schwer < Gut < Einfach
+    const hard = fsrsDays(memFor(2).s);
+    const good = Math.max(hard + 1, fsrsDays(memFor(3).s));
+    const easy = Math.max(good + 1, fsrsDays(memFor(4).s));
+    interval = rating === 2 ? hard : rating === 3 ? good : easy;
+  }
+  return { ...next, mem, interval, due: now + interval * DAY };
+}
+
+function scheduleClassic(s: Srs, rating: Rating, now: number): Srs {
   let { ease, reps, lapses } = s;
 
   if (isLearning(s)) {

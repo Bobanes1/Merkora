@@ -5,6 +5,7 @@ import { pushToast } from '../lib/jobs';
 import type { Deck } from '../lib/store';
 import { download } from '../lib/util';
 import { Modal } from './Modal';
+import { ShareDialog } from './ShareDialog';
 
 const csvCell = (s: string) => `"${s.replace(/"/g, '""')}"`;
 
@@ -12,6 +13,7 @@ const csvCell = (s: string) => `"${s.replace(/"/g, '""')}"`;
 export function ExportDialog({ deck, onClose }: { deck: Deck; onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [share, setShare] = useState(false);
 
   const csv = () => {
     const text = (c: Deck['cards'][number], side: string) => (c.html ? htmlToText(side) : side);
@@ -43,9 +45,14 @@ export function ExportDialog({ deck, onClose }: { deck: Deck; onClose: () => voi
     }
   };
 
+  if (share) return <ShareDialog deck={deck} onClose={onClose} />;
   return (
     <Modal title={`„${deck.name}“ exportieren`} onClose={onClose}>
       <div className="export-options">
+        <button type="button" className="start-option" onClick={() => setShare(true)} disabled={busy}>
+          <b>Mit Freunden teilen (.merkora)</b>
+          <small>Karten und Probeprüfung – Freunde öffnen die Datei in Merkora und können ihre Note mit deiner vergleichen.</small>
+        </button>
         {inTauri && (
           <button type="button" className="start-option" onClick={() => void apkg()} disabled={busy}>
             <b>{busy ? 'Wird erstellt …' : 'Anki-Paket (.apkg)'}</b>

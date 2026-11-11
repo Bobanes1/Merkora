@@ -4,9 +4,9 @@
  * Multiple choice is scored right here (no AI cost). Grades follow the chosen grading scale.
  */
 import { completeJson, LANG_RULE, materialFrom } from './ai';
-import { getState, setSettings, updateDeck, type Deck, type MockExam, type MockQuestion, type MockResult } from './store';
+import { addCards, getState, setSettings, updateDeck, type Deck, type MockExam, type MockQuestion, type MockResult } from './store';
 import { uid } from './util';
-import { levelLabel, gradeFor, mcPoints, parseExam, tasksFor, type GradeScale, type RawExam } from './mockExamCore';
+import { levelLabel, gradeFor, mcPoints, mistakeCards, parseExam, relatedCardIds, tasksFor, type GradeScale, type RawExam } from './mockExamCore';
 export * from './mockExamCore';
 
 const LEVEL_STYLE: Record<string, string> = {
@@ -155,4 +155,32 @@ Format: {"questions":[{"id":"...","points":3,"feedback":"..."}],"summary":"...",
   } catch (e) {
     patchExam(deckId, { status: 'submitted', error: (e as Error).message || 'Unbekannter Fehler' });
   }
+}
+
+/**
+ * Learn from the mistakes: every task with lost points becomes a card that is due right away
+ * (outside the daily limit of new cards), and existing cards on the same topics are moved to today.
+ */
+export function learnFromMistakes(deckId: string): { added: number; moved: number } {
+  const deck = getState().data.decks.find((d) => d.id === deckId);
+  const ex = deck?.mockExam;
+  if (!deck || !ex?.result || ex.mistakesLearned) return { added: 0, moved: 0 };
+  const now = Date.now();
+  const fresh = mistakeCards(ex);
+  const missed = ex.questions.filter((q) => (ex.result!.perQuestion[q.id]?.points ?? 0) < q.points);
+  const related = new Set(relatedCardIds(missed, deck.cards));
+  addCards(
+    deckId,
+    fresh.map((c) => ({
+      ...c,
+      tags: ['Probeprüfung'],
+      // like a forgotten card: due now, relearned in short steps, not counted as a new card
+      srs: { ease: 2.3, interval: 0, reps: 0, lapses: 0, due: now, last: now, step: 0, introduced: now },
+    })),
+  );
+  updateDeck(deckId, (d) => ({
+    cards: d.cards.map((c) => (related.has(c.id) && c.srs.last !== undefined && c.srs.due > now ? { ...c, srs: { ...c.srs, due: now } } : c)),
+    mockExam: d.mockExam ? { ...d.mockExam, mistakesLearned: true } : d.mockExam,
+  }));
+  return { added: fresh.length, moved: [...related].filter((id) => deck.cards.find((c) => c.id === id && c.srs.last !== undefined && c.srs.due > now)).length };
 }

@@ -3,10 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { addCourse, addDeck, addWorkspace, deckUrl, getState, moveDeck, useData, type Course } from '../lib/store';
 import { AnkiDropzone, ProgressQuestion, storeImport } from './AnkiImport';
 import type { AnkiResult } from '../lib/anki';
-import { IconCards, IconSparkle, IconUpload } from './Icons';
+import { IconCards, IconHeart, IconSparkle, IconUpload } from './Icons';
+import { importShare } from './ShareDialog';
+import { parseShare, SHARE_EXT } from '../lib/share';
 import { Modal } from './Modal';
 
-type Start = 'empty' | 'ai' | 'anki';
+type Start = 'empty' | 'ai' | 'anki' | 'share';
 
 /** New deck: start empty, let the AI create cards, or take the cards from an Anki package. */
 export function NewDeckModal({
@@ -68,6 +70,17 @@ export function NewDeckModal({
       return;
     }
     if (!file) return;
+    if (start === 'share') {
+      try {
+        const pack = parseShare(await file.text());
+        const d = importShare(pack, ensureCourse().id, name);
+        placeIn([d.id]);
+        go(d.id, pack.exam ? 'exam' : 'cards');
+      } catch (e) {
+        setError((e as Error).message);
+      }
+      return;
+    }
     setBusy('Wird vorbereitet …');
     try {
       const { readApkg } = await import('../lib/anki');
@@ -103,6 +116,7 @@ export function NewDeckModal({
     { id: 'empty', icon: <IconCards size={18} />, title: 'Leer starten', text: 'Karten selbst schreiben.' },
     { id: 'ai', icon: <IconSparkle size={18} />, title: 'Mit KI erstellen', text: 'Aus PDF, Word, PowerPoint oder Notizen.' },
     { id: 'anki', icon: <IconUpload size={18} />, title: 'Aus Anki-Stapel', text: '.apkg mit Bildern und Aussehen.' },
+    { id: 'share', icon: <IconHeart size={18} />, title: 'Von Freunden', text: `Geteilte ${SHARE_EXT}-Datei, oft mit Probeprüfung.` },
   ];
 
   return (
@@ -115,7 +129,7 @@ export function NewDeckModal({
             Abbrechen
           </button>
           <button type="button" className="btn primary" onClick={submit} disabled={!can || !!busy}>
-            {busy || (start === 'anki' ? 'Importieren' : start === 'ai' ? 'Weiter' : 'Erstellen')}
+            {busy || (start === 'anki' || start === 'share' ? 'Importieren' : start === 'ai' ? 'Weiter' : 'Erstellen')}
           </button>
         </>
       }
@@ -178,7 +192,7 @@ export function NewDeckModal({
       {start !== 'ai' && (
         <>
           <label className="field-label" htmlFor="deck-name">
-            Name des Decks{start === 'anki' ? ' (optional – sonst der Name aus Anki)' : ''}
+            Name des Decks{start === 'anki' ? ' (optional – sonst der Name aus Anki)' : start === 'share' ? ' (optional – sonst der Name aus der Datei)' : ''}
           </label>
           <input
             id="deck-name"
@@ -189,6 +203,15 @@ export function NewDeckModal({
             onKeyDown={(e) => e.key === 'Enter' && can && void submit()}
           />
         </>
+      )}
+      {start === 'share' && (
+        <div className="share-pick">
+          <label className="field-label" htmlFor="share-file">
+            Datei von Freunden
+          </label>
+          <input id="share-file" type="file" accept={`${SHARE_EXT},.json`} onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+          <p className="muted small">Das Deck kommt in „{course?.name ?? 'Erster Kurs'}“. Ist eine Probeprüfung dabei, kannst du sie gleich schreiben und mit deinen Freunden vergleichen.</p>
+        </div>
       )}
       {start === 'anki' && (
         <>

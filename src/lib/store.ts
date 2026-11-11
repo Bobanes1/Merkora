@@ -2,8 +2,9 @@ import { useSyncExternalStore } from 'react';
 import { kvDel, kvGet, kvSet, mediaDeleteMany, mediaKeys } from './db';
 import { desktop, isDesktop } from './desktop';
 import { capForExam, nextExamAt } from './exams';
+import { masterySnapshot, withSnapshot } from './weekly';
 import { DEFAULT_NEW_PER_DAY, pickDue, planNewForCourse } from './newCards';
-import { newSrs, schedule, type Rating, type Srs } from './srs';
+import { newSrs, schedule, setSchedulerOptions, type Rating, type Srs } from './srs';
 import { dayKey, uid, uniqueSlug } from './util';
 
 export type Provider = 'openai' | 'anthropic' | 'gemini' | 'openrouter' | 'custom';
@@ -68,6 +69,10 @@ export type MockExam = {
   pauses?: number;
   submittedAt?: number;
   result?: MockResult;
+  /** Cards from the mistakes were already created. */
+  mistakesLearned?: boolean;
+  /** Shared by a friend: their name and (if sent) their result to compare with. */
+  friend?: { name: string; grade?: string; percent?: number; passed?: boolean; scale?: string };
 };
 export type MockHistory = { at: number; title: string; level: string; percent: number; grade: string; passed: boolean; scale: string };
 export type PodcastLine = { speaker: 'A' | 'B'; text: string };
@@ -138,7 +143,16 @@ export type Job = {
   attempts?: number;
 };
 
-export type Game = { xpByDay: Record<string, number>; dailyGoal: number; /** Study minutes per day (YYYY-MM-DD). */ minutesByDay?: Record<string, number> };
+export type Game = {
+  xpByDay: Record<string, number>;
+  dailyGoal: number;
+  /** Study minutes per day (YYYY-MM-DD). */
+  minutesByDay?: Record<string, number>;
+  /** Mastery per deck, one snapshot per day (for the weekly review). */
+  masterySnaps?: Record<string, Record<string, number>>;
+  /** Week (its Sunday) whose review was closed. */
+  weekSeen?: string;
+};
 
 export type Settings = {
   provider: Provider;
@@ -153,10 +167,15 @@ export type Settings = {
   theme: 'system' | 'light' | 'dark';
   /** New cards per course and day, shared by its decks (the rest waits for the next days). */
   newPerDay: number;
+  /** Planning: FSRS (like Anki 23+) instead of the classic intervals, with the desired chance to still know a card. */
+  fsrs?: boolean;
+  retention?: number;
   /** Mock exams: education level, subject/semester and grading scale (asked once, then prefilled). */
   eduLevel?: string;
   eduDetail?: string;
   gradeScale?: 'ch' | 'de' | 'at' | 'pct';
+  /** Name shown to friends when sharing a deck. */
+  shareName?: string;
   /** Daily reminder at a time of day (HH:MM). */
   reminderOn: boolean;
   reminderTime: string;
@@ -224,6 +243,8 @@ const defaultSettings = (): Settings => ({
   animations: true,
   theme: 'system',
   newPerDay: DEFAULT_NEW_PER_DAY,
+  fsrs: true,
+  retention: 0.9,
   reminderOn: true,
   reminderTime: '18:00',
   trayOnClose: false,
@@ -460,6 +481,7 @@ function persist() {
 }
 
 function emit() {
+  setSchedulerOptions({ fsrs: !!data.settings.fsrs, retention: data.settings.retention ?? 0.9 });
   snapshot = { data, apiKey, chatKey, privacy, storageWarning, savedAt };
   persist();
   listeners.forEach((l) => l());
@@ -793,3 +815,11 @@ export function boostNewCards(deckId: string, n: number) {
   const day = dayKey(Date.now());
   updateDeck(deckId, (x) => ({ newBoost: { day, n: (x.newBoost?.day === day ? x.newBoost.n : 0) + n } }));
 }
+
+/** Once a day: remember the mastery per deck (the weekly review compares with it). */
+export function recordMasterySnapshot(now = Date.now()) {
+  const day = dayKey(now);
+  if (data.game.masterySnaps?.[day]) return;
+  update((d) => ({ ...d, game: { ...d.game, masterySnaps: withSnapshot(d.game.masterySnaps, day, masterySnapshot(d), now) } }));
+}
+export const closeWeekReview = (week: string) => update((d) => ({ ...d, game: { ...d.game, weekSeen: week } }));

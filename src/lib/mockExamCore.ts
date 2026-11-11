@@ -83,3 +83,50 @@ export function timeLeft(ex: Pick<MockExam, 'minutes' | 'startedAt' | 'pausedAt'
   const until = ex.pausedAt ?? now;
   return ex.minutes * 60_000 - (until - (ex.startedAt ?? now) - (ex.pausedMs ?? 0));
 }
+
+/** Flashcards for the tasks where points were lost: question on the front, model solution on the back. */
+export function mistakeCards(ex: Pick<MockExam, 'questions' | 'result'>): { front: string; back: string }[] {
+  if (!ex.result) return [];
+  return ex.questions
+    .filter((q) => (ex.result!.perQuestion[q.id]?.points ?? 0) < q.points)
+    .map((q) => {
+      if (q.type === 'mc') {
+        const right = q.options?.[q.answer ?? 0] ?? '';
+        return { front: q.question, back: right + (q.solution ? `\n\n${q.solution}` : '') };
+      }
+      return { front: q.question, back: q.solution || q.criteria || '' };
+    })
+    .filter((c) => c.front.trim() && c.back.trim());
+}
+
+const STOP = new Set(
+  'aber alle also andere auch dass dein deine denen dessen diese dieser dieses durch eine einem einen einer eines gegen haben hatte immer jeder jedoch kann keine können machen mehr nach nicht noch oder ohne sein seine sich sind sowie über unter warum welche welcher werden wenn wird wurde zwischen erkläre erläutere beschreibe nenne beispiel beispiels anhand aufgabe which where about their there these those would could should'.split(
+    ' ',
+  ),
+);
+const words = (t: string) =>
+  new Set(
+    t
+      .toLowerCase()
+      .replace(/<[^>]+>/g, ' ')
+      .split(/[^\p{L}\p{N}]+/u)
+      .filter((w) => w.length >= 5 && !STOP.has(w)),
+  );
+
+/** Existing cards that share at least two key words with a missed task (to repeat them today). */
+export function relatedCardIds(questions: { question: string; solution: string }[], cards: { id: string; front: string; back: string }[], limit = 25) {
+  const scored = cards
+    .map((c) => {
+      const cw = words(`${c.front} ${c.back}`);
+      let best = 0;
+      for (const q of questions) {
+        let n = 0;
+        for (const w of words(`${q.question} ${q.solution}`)) if (cw.has(w)) n++;
+        best = Math.max(best, n);
+      }
+      return { id: c.id, best };
+    })
+    .filter((x) => x.best >= 2)
+    .sort((a, b) => b.best - a.best);
+  return scored.slice(0, limit).map((x) => x.id);
+}
