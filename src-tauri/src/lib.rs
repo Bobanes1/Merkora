@@ -9,6 +9,7 @@ use base64::Engine;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use tauri::ipc::{InvokeBody, Request, Response};
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
@@ -177,6 +178,88 @@ async fn export_apkg(deck: export::ExportDeck) -> Result<String, String> {
     .map_err(|e| e.to_string())?
 }
 
+// ---------- closing, tray ----------
+/// Closing is done here, not in the page: the page gets a moment to save, then the app ends
+/// (or hides in the tray) – even if the page does not answer.
+#[derive(Default)]
+struct CloseState {
+    /// keep running in the tray when the window is closed
+    tray: AtomicBool,
+    /// a close is in progress
+    closing: AtomicBool,
+    /// "Beenden" from the tray menu: always quit
+    quit: AtomicBool,
+}
+
+fn show_main(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.show();
+        let _ = w.unminimize();
+        let _ = w.set_focus();
+    }
+}
+
+fn begin_close(app: &AppHandle) {
+    let state = app.state::<CloseState>();
+    if state.closing.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let _ = app.emit("app-closing", ());
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(3));
+        if app.state::<CloseState>().closing.load(Ordering::SeqCst) {
+            finish(&app);
+        }
+    });
+}
+
+fn finish(app: &AppHandle) {
+    let state = app.state::<CloseState>();
+    state.closing.store(false, Ordering::SeqCst);
+    if state.tray.load(Ordering::SeqCst) && !state.quit.load(Ordering::SeqCst) {
+        if let Some(w) = app.get_webview_window("main") {
+            let _ = w.hide();
+        }
+    } else {
+        storage::flush_types();
+        app.exit(0);
+    }
+}
+
+/// Called by the page when it has saved.
+#[tauri::command]
+fn finish_close(app: AppHandle) {
+    finish(&app);
+}
+
+#[tauri::command]
+fn set_tray_mode(state: tauri::State<'_, CloseState>, on: bool) {
+    state.tray.store(on, Ordering::SeqCst);
+}
+
+// ---------- backups ----------
+#[tauri::command]
+fn get_backup_dir() -> Option<String> {
+    storage::extra_backup_dir().map(|p| p.to_string_lossy().into_owned())
+}
+#[tauri::command]
+fn set_backup_dir(dir: Option<String>) -> Result<(), String> {
+    storage::set_extra_backup_dir(dir)
+}
+#[tauri::command]
+fn list_backups() -> Vec<storage::BackupInfo> {
+    storage::list_backups()
+}
+#[tauri::command]
+fn read_backup(path: String) -> Result<String, String> {
+    storage::read_backup(&path)
+}
+#[tauri::command]
+fn backup_now() -> Result<String, String> {
+    storage::backup_now()
+}
+
 // ---------- .apkg files opened with the app ----------
 struct OpenFiles(Mutex<Vec<String>>);
 
@@ -278,12 +361,15 @@ fn smoke_info() -> Option<SmokeInfo> {
     std::env::var("MERKORA_SMOKE").ok().map(|_| SmokeInfo { apkg: std::env::var("MERKORA_SMOKE_APKG").ok() })
 }
 #[tauri::command]
-fn smoke_done(app: AppHandle, report: serde_json::Value) {
+fn smoke_done(app: AppHandle, report: serde_json::Value, exit: Option<bool>) {
     if let Ok(file) = std::env::var("MERKORA_SMOKE") {
         let _ = std::fs::write(file, serde_json::to_string_pretty(&report).unwrap_or_default());
     }
     storage::flush_types();
-    app.exit(0);
+    // exit = false: the self-test then closes the window like a user (tests the normal closing path)
+    if exit != Some(false) {
+        app.exit(0);
+    }
 }
 
 // ---------- media protocol: media://localhost/<id> (Windows: http://media.localhost/<id>) ----------
@@ -320,6 +406,18 @@ pub fn run() {
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--minimized"])))
+        .manage(CloseState::default())
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main" {
+                    api.prevent_close();
+                    begin_close(window.app_handle());
+                }
+            }
+        })
         .manage(OpenFiles(Mutex::new(anki_paths(&std::env::args().collect::<Vec<_>>()))))
         .register_asynchronous_uri_scheme_protocol("media", |_ctx, request, responder| {
             let path = request.uri().path().to_string();
@@ -345,6 +443,13 @@ pub fn run() {
             smoke_done,
             save_download,
             export_apkg,
+            finish_close,
+            set_tray_mode,
+            get_backup_dir,
+            set_backup_dir,
+            list_backups,
+            read_backup,
+            backup_now,
         ])
         .setup(|app| {
             let handle = app.handle().clone();
@@ -361,12 +466,43 @@ pub fn run() {
             if std::env::var("MERKORA_SMOKE").is_ok() {
                 win = win.data_directory(storage::data_dir().join("webview-test"));
             }
+            // Started with the system (autostart): wait in the tray.
+            let minimized = std::env::args().any(|a| a == "--minimized");
+            if minimized {
+                app.state::<CloseState>().tray.store(true, Ordering::SeqCst);
+            }
             win.title("Merkora")
+                .visible(!minimized)
                 .inner_size(1280.0, 840.0)
                 .min_inner_size(380.0, 560.0)
                 .disable_drag_drop_handler()
                 .zoom_hotkeys_enabled(true)
                 .build()?;
+
+            // Tray icon: click opens the window, menu "Merkora öffnen" / "Beenden".
+            use tauri::menu::{Menu, MenuItem};
+            use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+            let open_item = MenuItem::with_id(app, "open", "Merkora öffnen", true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", "Beenden", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&open_item, &quit_item])?;
+            let mut tray = TrayIconBuilder::with_id("main").tooltip("Merkora").menu(&menu).show_menu_on_left_click(false);
+            if let Some(icon) = app.default_window_icon() {
+                tray = tray.icon(icon.clone());
+            }
+            tray.on_menu_event(|app, e| match e.id.as_ref() {
+                "open" => show_main(app),
+                "quit" => {
+                    app.state::<CloseState>().quit.store(true, Ordering::SeqCst);
+                    begin_close(app);
+                }
+                _ => {}
+            })
+            .on_tray_icon_event(|tray, e| {
+                if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = e {
+                    show_main(tray.app_handle());
+                }
+            })
+            .build(app)?;
             Ok(())
         })
         .build(tauri::generate_context!())

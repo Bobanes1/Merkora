@@ -44,13 +44,15 @@ function makeBridge(): DesktopBridge {
       void take();
     },
     onClose: (cb) => {
-      void import('@tauri-apps/api/window').then(({ getCurrentWindow }) =>
-        getCurrentWindow().onCloseRequested(async () => {
+      // The app asks the page to save before it closes (or hides in the tray); after 2 s it closes anyway.
+      void import('@tauri-apps/api/event').then(({ listen }) =>
+        listen('app-closing', async () => {
           try {
-            await cb();
+            await Promise.race([cb(), new Promise((r) => setTimeout(r, 2000))]);
           } catch {
             /* close anyway */
           }
+          await invoke('finish_close').catch(() => undefined);
         }),
       );
     },
@@ -153,7 +155,7 @@ export async function smokeInfo() {
     return null;
   }
 }
-export const smokeDone = (report: unknown) => invoke('smoke_done', { report });
+export const smokeDone = (report: unknown, exit = true) => invoke('smoke_done', { report, exit });
 
 // ---------- files for the user (Downloads folder) ----------
 /** Saves a file into Downloads and shows it in the file manager. Returns the full path. */
@@ -169,3 +171,65 @@ export type ExportDeckPayload = {
 };
 /** Writes the deck as Anki package (.apkg) into Downloads. Returns the full path. */
 export const exportApkg = (deck: ExportDeckPayload) => invoke<string>('export_apkg', { deck });
+
+// ---------- tray, autostart, notifications, full screen ----------
+export const setTrayMode = (on: boolean) => (inTauri ? invoke('set_tray_mode', { on }).catch(() => undefined) : Promise.resolve());
+
+export async function autostartEnabled(): Promise<boolean> {
+  if (!inTauri) return false;
+  try {
+    return await (await import('@tauri-apps/plugin-autostart')).isEnabled();
+  } catch {
+    return false;
+  }
+}
+export async function setAutostart(on: boolean) {
+  const a = await import('@tauri-apps/plugin-autostart');
+  if (on) await a.enable();
+  else await a.disable();
+}
+
+/** System notification (desktop: Windows/macOS/Linux notification; browser: Notification API). */
+export async function notify(title: string, body: string): Promise<boolean> {
+  try {
+    if (inTauri) {
+      const n = await import('@tauri-apps/plugin-notification');
+      let ok = await n.isPermissionGranted();
+      if (!ok) ok = (await n.requestPermission()) === 'granted';
+      if (ok) n.sendNotification({ title, body });
+      return ok;
+    }
+    if (typeof Notification === 'undefined') return false;
+    if (Notification.permission === 'default') await Notification.requestPermission();
+    if (Notification.permission !== 'granted') return false;
+    new Notification(title, { body, icon: '/favicon.svg' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function setFullscreen(on: boolean) {
+  try {
+    if (inTauri) {
+      const { getCurrentWindow } = await import('@tauri-apps/api/window');
+      await getCurrentWindow().setFullscreen(on);
+    } else if (on) await document.documentElement.requestFullscreen?.();
+    else if (document.fullscreenElement) await document.exitFullscreen();
+  } catch {
+    /* full screen not available */
+  }
+}
+
+// ---------- backups ----------
+export type BackupInfo = { path: string; name: string; modified: number; size: number; place: string };
+export const getBackupDir = () => invoke<string | null>('get_backup_dir');
+export const setBackupDir = (dir: string | null) => invoke('set_backup_dir', { dir });
+export const listBackups = () => invoke<BackupInfo[]>('list_backups');
+export const readBackup = (path: string) => invoke<string>('read_backup', { path });
+export const backupNow = () => invoke<string>('backup_now');
+export async function pickFolder(): Promise<string | null> {
+  const { open } = await import('@tauri-apps/plugin-dialog');
+  const r = await open({ directory: true, multiple: false, title: 'Ordner für Sicherungen wählen' });
+  return typeof r === 'string' ? r : null;
+}

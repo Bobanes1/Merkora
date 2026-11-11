@@ -15,6 +15,7 @@ import Stats from './pages/Stats';
 import Setup from './pages/Setup';
 import { useStore } from './lib/store';
 import { useApplyTheme } from './lib/theme';
+import { setTrayMode } from './lib/desktop';
 
 /** First visit: ask for the AI key (skippable) before showing the overview – instead of a login. */
 function DashboardGate() {
@@ -37,6 +38,10 @@ function useMotionSetting() {
 export default function App() {
   useMotionSetting();
   useApplyTheme();
+  const trayOnClose = useStore((s) => s.data.settings.trayOnClose);
+  useEffect(() => {
+    void setTrayMode(!!trayOnClose);
+  }, [trayOnClose]);
   return (
     <>
       <Routes>

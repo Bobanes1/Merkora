@@ -70,6 +70,25 @@ export async function runSmokeTest() {
     const u = await check({ timeout: 20000 });
     return u ? `Update verfügbar: ${u.version}` : 'keine neuere Version';
   });
+  await step('backups', async () => {
+    const d = await import('./desktop');
+    const dir = (await invoke<string>('data_folder')) + '/eigene-sicherungen';
+    await d.setBackupDir(dir);
+    const name = await d.backupNow();
+    const list = await d.listBackups();
+    const own = list.find((b) => b.place === 'eigener Ordner' && b.name === name);
+    const text = own ? await d.readBackup(own.path) : '';
+    let blocked = false;
+    try {
+      await d.readBackup(await invoke<string>('data_folder') + '/merkora-lernstand.json');
+    } catch {
+      blocked = true;
+    }
+    return { name, count: list.length, ownFolder: !!own, readable: text.length > 100, outsideBlocked: blocked };
+  });
   report.finished = Date.now();
-  await smokeDone(report);
+  // write the report, then close the window like a user does (must end the app by itself)
+  await smokeDone(report, false);
+  const { getCurrentWindow } = await import('@tauri-apps/api/window');
+  await getCurrentWindow().close();
 }

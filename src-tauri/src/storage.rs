@@ -52,15 +52,20 @@ pub fn save(text: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// One backup per day, the last 14 days are kept.
+/// One backup per day, the last 14 days are kept – in the data folder and, if chosen, in the user's own folder.
 fn backup_daily(text: &str) {
-    let dir = backup_dir();
     let day = chrono::Local::now().format("%Y-%m-%d").to_string();
-    if fs::create_dir_all(&dir).is_err() {
-        return;
+    for dir in backup_dirs() {
+        if fs::create_dir_all(&dir).is_err() {
+            continue;
+        }
+        let _ = fs::write(dir.join(format!("lernstand-{day}.json")), text);
+        rotate(&dir);
     }
-    let _ = fs::write(dir.join(format!("lernstand-{day}.json")), text);
-    if let Ok(entries) = fs::read_dir(&dir) {
+}
+
+fn rotate(dir: &Path) {
+    if let Ok(entries) = fs::read_dir(dir) {
         let mut names: Vec<String> = entries
             .flatten()
             .map(|e| e.file_name().to_string_lossy().into_owned())
@@ -73,6 +78,98 @@ fn backup_daily(text: &str) {
             }
         }
     }
+}
+
+// ---------- own backup folder & restore ----------
+fn prefs_file() -> PathBuf {
+    data_dir().join("einstellungen.json")
+}
+fn prefs() -> serde_json::Value {
+    fs::read(prefs_file()).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_else(|| serde_json::json!({}))
+}
+/// The extra backup folder the user chose (e.g. in OneDrive), if any.
+pub fn extra_backup_dir() -> Option<PathBuf> {
+    prefs()["backupDir"].as_str().filter(|s| !s.is_empty()).map(PathBuf::from)
+}
+pub fn set_extra_backup_dir(dir: Option<String>) -> Result<(), String> {
+    if let Some(d) = &dir {
+        let path = PathBuf::from(d);
+        fs::create_dir_all(&path).map_err(|e| format!("Der Ordner kann nicht benutzt werden: {e}"))?;
+        let probe = path.join(".merkora-test");
+        fs::write(&probe, b"ok").map_err(|e| format!("In diesen Ordner kann nicht geschrieben werden: {e}"))?;
+        let _ = fs::remove_file(probe);
+    }
+    let mut p = prefs();
+    p["backupDir"] = dir.map(serde_json::Value::String).unwrap_or(serde_json::Value::Null);
+    write_atomic(&prefs_file(), serde_json::to_vec_pretty(&p).unwrap_or_default().as_slice()).map_err(|e| e.to_string())
+}
+fn backup_dirs() -> Vec<PathBuf> {
+    let mut v = vec![backup_dir()];
+    if let Some(d) = extra_backup_dir() {
+        v.push(d.join("Merkora-Sicherungen"));
+    }
+    v
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupInfo {
+    pub path: String,
+    pub name: String,
+    pub modified: i64,
+    pub size: u64,
+    /// "lokal" or "eigener Ordner"
+    pub place: String,
+}
+
+pub fn list_backups() -> Vec<BackupInfo> {
+    let mut out = vec![];
+    for (i, dir) in backup_dirs().into_iter().enumerate() {
+        let Ok(entries) = fs::read_dir(&dir) else { continue };
+        for e in entries.flatten() {
+            let name = e.file_name().to_string_lossy().into_owned();
+            if !(name.starts_with("lernstand-") && name.ends_with(".json")) {
+                continue;
+            }
+            let Ok(meta) = e.metadata() else { continue };
+            let modified = meta
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_millis() as i64)
+                .unwrap_or(0);
+            out.push(BackupInfo {
+                path: e.path().to_string_lossy().into_owned(),
+                name,
+                modified,
+                size: meta.len(),
+                place: if i == 0 { "lokal".into() } else { "eigener Ordner".into() },
+            });
+        }
+    }
+    out.sort_by(|a, b| b.modified.cmp(&a.modified));
+    out
+}
+
+/// Reads a backup – only files inside the backup folders are allowed.
+pub fn read_backup(path: &str) -> Result<String, String> {
+    let p = fs::canonicalize(path).map_err(|e| e.to_string())?;
+    let allowed = backup_dirs().into_iter().filter_map(|d| fs::canonicalize(d).ok()).any(|d| p.starts_with(&d));
+    if !allowed {
+        return Err("Diese Datei ist keine Merkora-Sicherung.".into());
+    }
+    fs::read_to_string(p).map_err(|e| e.to_string())
+}
+
+/// Saves the current save file as an extra backup right now (kept, not rotated). Returns its name.
+pub fn backup_now() -> Result<String, String> {
+    let text = load().ok_or("Es gibt noch keinen gespeicherten Lernstand.")?;
+    let name = format!("lernstand-{}-manuell.json", chrono::Local::now().format("%Y-%m-%d-%H%M%S"));
+    for dir in backup_dirs() {
+        fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        fs::write(dir.join(&name), &text).map_err(|e| e.to_string())?;
+    }
+    Ok(name)
 }
 
 // ---------- media ----------

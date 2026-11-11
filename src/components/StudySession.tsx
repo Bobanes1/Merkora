@@ -4,6 +4,8 @@ import { RATINGS, formatDelay, schedule, type Rating } from '../lib/srs';
 import { addXp, logReview, reviewCard, useStore } from '../lib/store';
 import { CardContent, lookOf } from './CardContent';
 import { IconClose } from './Icons';
+import { FocusButton } from './Pomodoro';
+import { countAnswerTime } from '../lib/pomodoro';
 
 export type SessionItem = { deckId: string; cardId: string };
 
@@ -27,6 +29,7 @@ export function StudySession({ title, items, onExit }: { title: string; items: S
       if (due) reviewCard(deck.id, card.id, r);
       else logReview(deck.id, card.id, r);
       addXp(r === 1 ? 2 : r === 2 ? 5 : r === 3 ? 8 : 10);
+      countAnswerTime();
       const back = r === 1;
       setQueue((q) => (back ? [...q.slice(1), q[0]] : q.slice(1)));
       if (!back) setDone((n) => n + 1);
@@ -57,6 +60,7 @@ export function StudySession({ title, items, onExit }: { title: string; items: S
         {done} / {done + queue.length}
       </span>
       <span className="grow" />
+      <FocusButton />
       <button type="button" className="icon-btn" aria-label="Runde beenden" onClick={onExit}>
         <IconClose size={18} />
       </button>

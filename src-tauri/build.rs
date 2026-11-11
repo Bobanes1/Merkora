@@ -20,6 +20,13 @@ const COMMANDS: &[&str] = &[
     "smoke_done",
     "save_download",
     "export_apkg",
+    "finish_close",
+    "set_tray_mode",
+    "get_backup_dir",
+    "set_backup_dir",
+    "list_backups",
+    "read_backup",
+    "backup_now",
 ];
 
 fn main() {

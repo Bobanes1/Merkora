@@ -19,6 +19,7 @@ function useTip() {
   return { show, hide: () => setTip(null), node };
 }
 
+const fmtMinutes = (m: number) => (m < 60 ? `${Math.round(m)} Min.` : `${Math.floor(m / 60)} Std. ${Math.round(m % 60)} Min.`);
 const fmtDay = (t: number) => new Date(t).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' });
 
 export default function Stats() {
@@ -58,6 +59,13 @@ export default function Stats() {
   const maxF = Math.max(1, ...forecast.map((f) => f.n));
   const total30 = forecast.reduce((a, f) => a + f.n, 0);
 
+  // ---- study time (Pomodoro + learning), last 7 days
+  const week = Array.from({ length: 7 }, (_, i) => {
+    const d = today - (6 - i) * DAY;
+    return { day: d, min: data.game.minutesByDay?.[dayKey(d)] ?? 0 };
+  });
+  const maxW = Math.max(1, ...week.map((w) => w.min));
+
   // ---- per deck
   const rows = data.decks
     .map((d) => {
@@ -95,6 +103,11 @@ export default function Stats() {
           <span>„Gut“ oder „Einfach“ (30 Tage)</span>
         </div>
         <div className="stat-tile">
+          <small>Lernzeit</small>
+          <b>{fmtMinutes(week.reduce((a, w) => a + w.min, 0))}</b>
+          <span>in den letzten 7 Tagen</span>
+        </div>
+        <div className="stat-tile">
           <small>Gemeistert</small>
           <b>{counts.mastered}</b>
           <span>von {cards.length} Karten</span>
@@ -128,6 +141,30 @@ export default function Stats() {
             <span key={l} className={`hm l${l}`} />
           ))}
           <small>mehr</small>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-head">
+          <h2>Lernzeit pro Tag</h2>
+          <small className="muted">mit Pomodoro-Timer und beim Lernen gemessen</small>
+        </div>
+        <div className="forecast week" role="img" aria-label="Lernminuten der letzten 7 Tage">
+          {week.map((w) => (
+            <div
+              key={w.day}
+              className="fc-col"
+              onMouseEnter={(e) => tip.show(e, <><b>{fmtMinutes(w.min)}</b><br />{fmtDay(w.day)}</>)}
+              onMouseLeave={tip.hide}
+            >
+              <i style={{ height: `${(w.min / maxW) * 100}%` }} className={w.min ? '' : 'zero'} />
+            </div>
+          ))}
+        </div>
+        <div className="fc-axis">
+          {week.map((w) => (
+            <small key={w.day}>{new Date(w.day).toLocaleDateString('de-DE', { weekday: 'short' })}</small>
+          ))}
         </div>
       </section>
 

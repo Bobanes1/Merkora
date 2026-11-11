@@ -34,6 +34,20 @@
     "allow-smoke-info",
     "allow-smoke-done",
     "allow-save-download",
-    "allow-export-apkg"
+    "allow-export-apkg",
+    "notification:default",
+    "autostart:default",
+    "dialog:allow-open",
+    "core:window:allow-close",
+    "core:window:allow-destroy",
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-is-fullscreen",
+    "allow-finish-close",
+    "allow-set-tray-mode",
+    "allow-get-backup-dir",
+    "allow-set-backup-dir",
+    "allow-list-backups",
+    "allow-read-backup",
+    "allow-backup-now"
   ]
 }

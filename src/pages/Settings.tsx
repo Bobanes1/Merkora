@@ -8,6 +8,7 @@ import { desktop, getState, isDesktop, replaceAll, resetAll, setApiKey, setChatK
 import { download } from '../lib/util';
 import { APP_VERSION, FREE_KEY, FREE_LABEL } from '../config';
 import { SyncPanel } from '../components/SyncPanel';
+import { BackupsPanel, RemindersPanel } from '../components/SettingsExtras';
 import { checkForUpdate, installUpdate, useUpdate } from '../lib/update';
 
 const OPENAI_VOICES = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer'];
@@ -232,6 +233,8 @@ export default function Settings() {
 
       <ChatModelPanel />
 
+      <RemindersPanel />
+
       <section className="panel">
         <h2>Podcast-Stimmen</h2>
         <p className="muted">Mit OpenAI werden natürliche Stimmen genutzt, sonst die Sprachausgabe deines Browsers.</p>
@@ -317,6 +320,11 @@ export default function Settings() {
           </button>
         </div>
       </section>
+      {isDesktop && (
+        <section className="panel">
+          <BackupsPanel />
+        </section>
+      )}
       {isDesktop && <UpdatePanel />}
       <p className="muted small version-line">Merkora Version {APP_VERSION}</p>
       {manage && <ManagePrivacy onClose={() => setManage(false)} />}

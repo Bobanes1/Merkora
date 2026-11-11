@@ -3,6 +3,7 @@ import { daysUntil, upcomingExams } from './exams';
 import { pushToast } from './jobs';
 import { getState } from './store';
 import { dayKey } from './util';
+import { notify } from './desktop';
 
 export function checkExamReminders(now = Date.now()) {
   for (const e of upcomingExams(getState().data, now)) {
@@ -18,12 +19,7 @@ export function checkExamReminders(now = Date.now()) {
     const when = n === 0 ? 'heute' : n === 1 ? 'morgen' : 'in einer Woche';
     const text = `Prüfung „${e.title}“ ist ${when}${e.time ? ` um ${e.time} Uhr` : ''}.`;
     pushToast({ text, ok: true, to: '/calendar', toLabel: 'Zum Kalender', sticky: true });
-    try {
-      if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.visibilityState === 'hidden')
-        new Notification('Merkora', { body: text, icon: '/favicon.svg' });
-    } catch {
-      /* ignore */
-    }
+    if (document.visibilityState === 'hidden' || !document.hasFocus()) void notify('Merkora – Prüfung', text);
   }
 }
 

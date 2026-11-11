@@ -20,6 +20,7 @@ import { JobsIndicator } from './Jobs';
 import { Logo } from './Logo';
 import { ErrorBoundary } from './ErrorBoundary';
 import { UpdateNotice } from './UpdateNotice';
+import { FocusBar, Pomodoro, setFocus } from './Pomodoro';
 
 function Tree({ onNavigate }: { onNavigate: () => void }) {
   const data = useStore((s) => s.data);
@@ -92,6 +93,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
   useEffect(() => {
     setOpen(false);
+    setFocus(false);
   }, [pathname]);
   const close = () => setOpen(false);
   const free = useStore((s) => usingFree(s));
@@ -135,6 +137,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </div>
         <div className="nav-section">Meine Kurse</div>
         <Tree onNavigate={close} />
+        <Pomodoro />
         <JobsIndicator />
         {!isDesktop && <InstallButton />}
         <SaveState />
@@ -150,6 +153,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       </nav>
       {open && <div className="sidebar-backdrop" onClick={close} />}
       <main className="app-main">
+        <FocusBar />
         <UpdateNotice />
         <ErrorBoundary key={pathname} inline>
           {children}

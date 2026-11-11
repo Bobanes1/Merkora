@@ -82,7 +82,7 @@ export type Job = {
   attempts?: number;
 };
 
-export type Game = { xpByDay: Record<string, number>; dailyGoal: number };
+export type Game = { xpByDay: Record<string, number>; dailyGoal: number; /** Study minutes per day (YYYY-MM-DD). */ minutesByDay?: Record<string, number> };
 
 export type Settings = {
   provider: Provider;
@@ -99,6 +99,14 @@ export type Settings = {
   animations: boolean;
   /** Colour scheme. */
   theme: 'system' | 'light' | 'dark';
+  /** Daily reminder at a time of day (HH:MM). */
+  reminderOn: boolean;
+  reminderTime: string;
+  /** Desktop: keep running in the tray when the window is closed. */
+  trayOnClose: boolean;
+  /** Pomodoro phases in minutes. */
+  pomodoroWork: number;
+  pomodoroBreak: number;
   /** Use a different AI model for the chat (tutor, explanations, grading) than for generating content. */
   chatSeparate: boolean;
   chatProvider: Provider;
@@ -160,6 +168,11 @@ const defaultSettings = (): Settings => ({
   useFreeKey: true,
   animations: true,
   theme: 'system',
+  reminderOn: true,
+  reminderTime: '18:00',
+  trayOnClose: false,
+  pomodoroWork: 25,
+  pomodoroBreak: 5,
   chatSeparate: false,
   chatProvider: 'openrouter',
   chatModel: '',
@@ -574,6 +587,11 @@ export function addXp(n: number) {
   if (n <= 0) return;
   const k = dayKey(Date.now());
   update((d) => ({ ...d, game: { ...d.game, xpByDay: { ...d.game.xpByDay, [k]: (d.game.xpByDay[k] ?? 0) + n } } }));
+}
+export function addStudyMinutes(n: number) {
+  if (n <= 0) return;
+  const k = dayKey(Date.now());
+  update((d) => ({ ...d, game: { ...d.game, minutesByDay: { ...(d.game.minutesByDay ?? {}), [k]: Math.round(((d.game.minutesByDay?.[k] ?? 0) + n) * 10) / 10 } } }));
 }
 export function setDailyGoal(n: number) {
   update((d) => ({ ...d, game: { ...d.game, dailyGoal: n } }));

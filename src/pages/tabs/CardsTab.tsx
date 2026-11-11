@@ -194,7 +194,7 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
                   <span className="level-badge" style={{ ['--c' as string]: lvl.color }}>
                     {lvl.label}
                   </span>
-                  <small>{c.srs.last ? formatDue(c.srs.due) : 'neu'}</small>
+                  {c.srs.last && <small>{formatDue(c.srs.due)}</small>}
                   {c.tags && c.tags.length > 0 && <small className="row-tags">{c.tags.slice(0, 3).map((t) => `#${t}`).join(' ')}</small>}
                 </div>
                 <div className="flash-actions">

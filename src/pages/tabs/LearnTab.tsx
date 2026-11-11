@@ -3,6 +3,8 @@ import { IconShuffle, IconSparkle } from '../../components/Icons';
 import { CardContent, lookOf } from '../../components/CardContent';
 import { Confetti, Mascot, praise, type Mood } from '../../components/Mascot';
 import { Markdown } from '../../components/Markdown';
+import { FocusButton } from '../../components/Pomodoro';
+import { countAnswerTime } from '../../lib/pomodoro';
 import { explainCard, gradeAnswer, hasKey } from '../../lib/ai';
 import { cardBackText, cardFrontText } from '../../lib/content';
 import { RATINGS, formatDelay, schedule, type Rating, type Srs } from '../../lib/srs';
@@ -81,6 +83,7 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
       if (scheduled) reviewCard(deck.id, card.id, r);
       else logReview(deck.id, card.id, r);
       addXp(r === 1 ? 2 : r === 2 ? 5 : r === 3 ? 8 : 10);
+      countAnswerTime();
       setLastRating(r);
       // Cards that are still in a short learning step (minutes) come back later in this round.
       const comesBack = r === 1 || (scheduled && schedule(card.srs, r).due - Date.now() <= 60 * 60 * 1000);
@@ -187,6 +190,7 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
           <i style={{ width: `${(done / Math.max(1, total)) * 100}%` }} />
         </span>
         <span className="muted small">{mode === 'due' ? 'Fällige Karten' : 'Freies Üben'}</span>
+        <FocusButton />
       </div>
 
       <Mascot className="learn-mascot" mood={mood} pulse={done + queue.length} size={64} say={moodSay} />

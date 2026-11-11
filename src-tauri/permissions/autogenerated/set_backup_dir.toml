@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-backup-dir"
+description = "Enables the set_backup_dir command without any pre-configured scope."
+commands.allow = ["set_backup_dir"]
+
+[[permission]]
+identifier = "deny-set-backup-dir"
+description = "Denies the set_backup_dir command without any pre-configured scope."
+commands.deny = ["set_backup_dir"]

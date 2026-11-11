@@ -377,6 +377,8 @@ export function mergeData(local: Data, remote: Data): Data {
   });
   const xp = { ...(remote.game?.xpByDay ?? {}) };
   for (const [d, n] of Object.entries(local.game.xpByDay)) xp[d] = Math.max(n, xp[d] ?? 0);
+  const minutes = { ...(remote.game?.minutesByDay ?? {}) };
+  for (const [d, n] of Object.entries(local.game.minutesByDay ?? {})) minutes[d] = Math.max(n, minutes[d] ?? 0);
   return {
     ...local,
     workspaces: unionById(local.workspaces, remote.workspaces ?? [], isDel),
@@ -384,7 +386,7 @@ export function mergeData(local: Data, remote: Data): Data {
     decks: unionById(local.decks, remote.decks ?? [], isDel, (x, y) => mergeDeck(x, y, isDel)),
     reviews: reviews.sort((x, y) => x.at - y.at),
     exams: unionById(local.exams ?? [], remote.exams ?? [], isDel, (x, y) => ((y.updatedAt ?? y.createdAt) > (x.updatedAt ?? x.createdAt) ? y : x)),
-    game: { ...local.game, xpByDay: xp },
+    game: { ...local.game, xpByDay: xp, minutesByDay: minutes },
     deleted,
   };
 }

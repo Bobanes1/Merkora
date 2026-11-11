@@ -1,6 +1,8 @@
 // Checks the spaced-repetition intervals. Run: npm run test:srs
 import { ankiToSrs, formatDelay, newSrs, schedule, type Rating, type Srs } from '../src/lib/srs';
 import { capForExam, dailyPlan, examAt, toIcs } from '../src/lib/exams';
+import { reminderDue } from '../src/lib/reminderRule';
+import { initialPomo, pause, remaining, start, tick, workedSoFar } from '../src/lib/pomodoroRule';
 
 const MIN = 60_000;
 const DAY = 86_400_000;
@@ -73,6 +75,31 @@ console.log('Anki-Lernstand');
   ok(r.interval === 30 && r.ease === 2.3 && r.due === (crt + 120 * 86400) * 1000 && r.step === undefined, 'Wiederholungskarte: Intervall, Leichtigkeit und Fälligkeit übernommen (in 20 Tagen)');
   const l = ankiToSrs({ kind: 3, due: 0, ivl: 12, factor: 2000, reps: 9, lapses: 2 }, crt, now);
   ok(l.step === 0 && l.lapseIvl === 12 && l.due === now, 'Karte im Neu-Lernen startet beim ersten Schritt');
+}
+
+console.log('Tägliche Erinnerung');
+{
+  const at = (h: number, m = 0) => new Date(2026, 10, 11, h, m);
+  ok(!reminderDue(at(17, 59), '18:00', null, 5), 'vor 18:00 keine Erinnerung');
+  ok(reminderDue(at(18, 0), '18:00', null, 5), 'um 18:00 Erinnerung');
+  ok(!reminderDue(at(20, 0), '18:00', '2026-11-11', 5), 'heute schon erinnert → keine zweite');
+  ok(reminderDue(at(9, 0), '07:30', '2026-11-10', 5), 'neuer Tag → wieder erinnern');
+  ok(!reminderDue(at(19, 0), '18:00', null, 0), 'nichts fällig → keine Erinnerung');
+}
+
+console.log('Pomodoro');
+{
+  const M = 60_000;
+  let p = start(initialPomo(25), 0);
+  ok(remaining(p, 10 * M) === 15 * M, '25-Min.-Phase: nach 10 Min. noch 15 Min.');
+  p = pause(p, 10 * M);
+  ok(remaining(p, 99 * M) === 15 * M, 'pausiert: Zeit bleibt stehen');
+  p = start(p, 100 * M);
+  ok(Math.round(workedSoFar(p, 105 * M, 25)) === 15, 'bisher 15 Min. gelernt');
+  let r = tick(p, 115 * M, 25, 5);
+  ok(r.ended === 'work' && r.studied === 25 && r.pomo.phase === 'break' && r.pomo.rounds === 1, 'Lernphase vorbei → 25 Min. gezählt, Pause startet');
+  r = tick(r.pomo, 120 * M, 25, 5);
+  ok(r.ended === 'break' && r.pomo.phase === 'work' && !r.pomo.running && r.studied === 0, 'Pause vorbei → neue Lernphase wartet auf Start');
 }
 
 console.log(failures ? `\n${failures} Test(s) fehlgeschlagen` : '\nAlle SRS-Tests bestanden');
