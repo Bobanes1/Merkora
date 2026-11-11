@@ -244,7 +244,7 @@ function safeSet(store: Storage, k: string, v: string | null): boolean {
 }
 
 const defaultSettings = (): Settings => ({
-  provider: 'openai',
+  provider: 'openrouter',
   model: '',
   baseUrl: '',
   setupDone: false,
