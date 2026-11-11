@@ -382,7 +382,7 @@ export function mergeData(local: Data, remote: Data): Data {
   return {
     ...local,
     workspaces: unionById(local.workspaces, remote.workspaces ?? [], isDel),
-    courses: unionById(local.courses, remote.courses ?? [], isDel),
+    courses: unionById(local.courses, remote.courses ?? [], isDel, (x, y) => ({ ...x, folders: unionById(x.folders ?? [], y.folders ?? [], isDel) })),
     decks: unionById(local.decks, remote.decks ?? [], isDel, (x, y) => mergeDeck(x, y, isDel)),
     reviews: reviews.sort((x, y) => x.at - y.at),
     exams: unionById(local.exams ?? [], remote.exams ?? [], isDel, (x, y) => ((y.updatedAt ?? y.createdAt) > (x.updatedAt ?? x.createdAt) ? y : x)),

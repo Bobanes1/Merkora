@@ -1,24 +1,44 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { generateCards, hasKey } from '../lib/ai';
 import { readFileText } from '../lib/files';
 import { canSurviveClose, startJob } from '../lib/jobs';
 import { cleanSvg, withGraphics } from '../lib/graphics';
 import { addCards, addCourse, addDeck, addWorkspace, deckUrl, getState, updateDeck, useData } from '../lib/store';
-import { IconSparkle, IconTrash, IconUpload } from './Icons';
+import { IconClose, IconDoc, IconSparkle, IconTrash, IconUpload } from './Icons';
 import { Modal } from './Modal';
 import { NoKeyNotice } from './NoKey';
 
 type Draft = { front: string; back: string; svg?: string; keep: boolean };
 
 /** Upload a PDF / paste notes → AI makes flashcards → review → save into a new or existing deck. */
-export function CreateWithAI({ onClose, deckId, courseId: presetCourse }: { onClose: () => void; deckId?: string; courseId?: string }) {
+export function CreateWithAI({
+  onClose,
+  deckId,
+  courseId: presetCourse,
+  onBack,
+  initialNotes,
+  initialFile,
+}: {
+  onClose: () => void;
+  deckId?: string;
+  courseId?: string;
+  /** Shows a "Zurück" button (e.g. back to the "Neues Deck" choice). */
+  onBack?: () => void;
+  /** Text and/or file handed over from the start page. */
+  initialNotes?: string;
+  initialFile?: File;
+}) {
   const data = useData();
   const navigate = useNavigate();
   const fileRef = useRef<HTMLInputElement>(null);
   const existing = deckId ? data.decks.find((d) => d.id === deckId) : undefined;
-  const [text, setText] = useState(existing?.source ?? '');
-  const [fileName, setFileName] = useState('');
+  const [notes, setNotes] = useState(initialNotes ?? '');
+  const [files, setFiles] = useState<{ id: number; name: string; text: string }[]>([]);
+  const [useSource, setUseSource] = useState(false);
+  const oldSource = existing?.source.trim() ?? '';
+  // everything the AI should use: attached files, own notes and (if ticked) the deck's earlier material
+  const text = [...files.map((x) => x.text), notes.trim(), useSource ? oldSource : ''].filter(Boolean).join('\n\n');
   const [name, setName] = useState('');
   const [count, setCount] = useState(15);
   const [focus, setFocus] = useState('');
@@ -34,8 +54,7 @@ export function CreateWithAI({ onClose, deckId, courseId: presetCourse }: { onCl
     setBusy('Datei wird gelesen …');
     try {
       const t = await readFileText(f);
-      setText((prev) => (prev.trim() ? prev + '\n\n' : '') + t);
-      setFileName(f.name);
+      setFiles((cur) => [...cur.filter((x) => x.name !== f.name), { id: Date.now(), name: f.name, text: t }]);
       if (!name) setName(f.name.replace(/\.[^.]+$/, ''));
     } catch (e) {
       setError((e as Error).message);
@@ -43,6 +62,11 @@ export function CreateWithAI({ onClose, deckId, courseId: presetCourse }: { onCl
       setBusy('');
     }
   };
+
+  useEffect(() => {
+    if (initialFile) void onFile(initialFile);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /** Hands the work to the background: the window closes right away, cards appear in the deck when ready. */
   const run = () => {
@@ -55,8 +79,8 @@ export function CreateWithAI({ onClose, deckId, courseId: presetCourse }: { onCl
         cid = addCourse(ws.id, 'Erster Kurs').id;
       }
       target = addDeck(cid, name.trim() || 'Neues Deck', { source: text });
-    } else if (!existing?.source.trim()) {
-      updateDeck(target.id, { source: text });
+    } else if (!useSource) {
+      updateDeck(target.id, { source: [oldSource, text].filter(Boolean).join('\n\n') });
     }
     const fresh = getState().data.decks.find((d) => d.id === target!.id)!;
     startJob('cards', fresh, { count, focus, graphics, ...(fresh.source === text ? {} : { text }) });
@@ -88,8 +112,8 @@ export function CreateWithAI({ onClose, deckId, courseId: presetCourse }: { onCl
         cid = addCourse(ws.id, 'Erster Kurs').id;
       }
       target = addDeck(cid, name.trim() || 'Neues Deck', { source: text });
-    } else if (!existing?.source.trim()) {
-      updateDeck(target.id, { source: text });
+    } else if (!useSource) {
+      updateDeck(target.id, { source: [oldSource, text].filter(Boolean).join('\n\n') });
     }
     addCards(target.id, await withGraphics(keep));
     const fresh = getState().data.decks.find((d) => d.id === target!.id)!;
@@ -165,9 +189,15 @@ export function CreateWithAI({ onClose, deckId, courseId: presetCourse }: { onCl
       onClose={onClose}
       footer={
         <>
-          <button type="button" className="btn ghost" onClick={onClose}>
-            Abbrechen
-          </button>
+          {onBack ? (
+            <button type="button" className="btn ghost" onClick={onBack}>
+              ← Zurück
+            </button>
+          ) : (
+            <button type="button" className="btn ghost" onClick={onClose}>
+              Abbrechen
+            </button>
+          )}
           <button type="button" className="btn outline" onClick={runAndReview} disabled={!!busy || text.trim().length < 40}>
             {busy ? busy : 'Erst prüfen, dann speichern'}
           </button>
@@ -194,20 +224,45 @@ export function CreateWithAI({ onClose, deckId, courseId: presetCourse }: { onCl
         onKeyDown={(e) => e.key === 'Enter' && fileRef.current?.click()}
       >
         <IconUpload size={26} />
-        <b>{fileName ? `„${fileName}“ geladen – weitere Datei hinzufügen` : 'PDF, Text- oder Markdown-Datei hierher ziehen'}</b>
+        <b>{files.length ? 'Weitere Datei hinzufügen' : 'PDF, Text- oder Markdown-Datei hierher ziehen'}</b>
         <span>oder klicken, um eine Datei auszuwählen. Die Datei wird nur in deinem Browser gelesen.</span>
-        <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.markdown,.csv,.html,.htm,text/*,application/pdf" hidden onChange={(e) => onFile(e.target.files?.[0])} />
+        <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.markdown,.csv,.html,.htm,text/*,application/pdf" hidden onChange={(e) => {
+            void onFile(e.target.files?.[0]);
+            // allows choosing the same file again later
+            e.target.value = '';
+          }}
+        />
       </div>
+      {files.length > 0 && (
+        <div className="attachments">
+          {files.map((x) => (
+            <span key={x.id} className="attachment">
+              <IconDoc size={14} />
+              <b>{x.name}</b>
+              <small>{Math.round(x.text.length / 1000) || '<1'}k Zeichen</small>
+              <button type="button" className="icon-btn" aria-label={`${x.name} entfernen`} onClick={() => setFiles((cur) => cur.filter((y) => y.id !== x.id))}>
+                <IconClose size={12} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      {oldSource && (
+        <label className="check-row">
+          <input type="checkbox" checked={useSource} onChange={(e) => setUseSource(e.target.checked)} />
+          <span>Bisheriges Lernmaterial dieses Decks mitverwenden ({Math.round(oldSource.length / 1000) || '<1'}k Zeichen)</span>
+        </label>
+      )}
       <label className="field-label" htmlFor="ai-text">
-        Oder füge deine Notizen ein
+        {files.length ? 'Eigene Notizen (optional)' : 'Oder füge deine Notizen ein'}
       </label>
       <textarea
         id="ai-text"
         className="input"
         rows={7}
         placeholder="Füge hier deinen Lernstoff ein – Vorlesungsnotizen, ein Kapitel, eine Webseite …"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
       />
       <div className="form-grid">
         {!existing && (
@@ -252,6 +307,9 @@ export function CreateWithAI({ onClose, deckId, courseId: presetCourse }: { onCl
         </span>
       </label>
       {text.trim().length > 0 && text.trim().length < 40 && <p className="muted small">Bitte etwas mehr Text eingeben.</p>}
+      {text.trim().length > 60000 && (
+        <p className="muted small">Sehr viel Material ({Math.round(text.length / 1000)}k Zeichen) – die KI nutzt die ersten 60k Zeichen.</p>
+      )}
       {error && (
         <div className="form-error" role="alert">
           {error}

@@ -1,7 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { aiReady, PROVIDERS, usingFree } from '../lib/ai';
-import { deckUrl, dueCards, isDesktop, useStore } from '../lib/store';
+import { deckUrl, dueCards, isDesktop, useStore, type Deck } from '../lib/store';
+import { CreateWithAI } from './CreateWithAI';
+import { NewDeckModal } from './NewDeck';
 import {
   IconCheck,
   IconChevron,
@@ -14,6 +16,8 @@ import {
   IconSettings,
   IconCalendar,
   IconChart,
+  IconFolder,
+  IconPlus,
 } from './Icons';
 import { InstallButton } from './InstallButton';
 import { JobsIndicator } from './Jobs';
@@ -27,41 +31,59 @@ function Tree({ onNavigate }: { onNavigate: () => void }) {
   const { pathname } = useLocation();
   const [closed, setClosed] = useState<Record<string, boolean>>({});
   const toggle = (id: string) => setClosed((c) => ({ ...c, [id]: !c[id] }));
+  const deckLink = (d: Deck) => {
+    const url = deckUrl(data, d);
+    const due = dueCards(d).length;
+    return (
+      <Link key={d.id} to={url} onClick={onNavigate} className={`tree-link deck ${pathname === url ? 'active' : ''}`}>
+        <span className="tree-name">{d.name}</span>
+        {due > 0 && <span className="pill-count">{due}</span>}
+      </Link>
+    );
+  };
   return (
     <div className="tree">
       {data.workspaces.map((w) => (
         <div key={w.id} className="tree-ws">
           <button type="button" className="tree-head" onClick={() => toggle(w.id)}>
-            {closed[w.id] ? <IconChevron size={14} /> : <IconChevronDown size={14} />}
+            <IconLibrary size={16} />
             <span>{w.name}</span>
+            {closed[w.id] ? <IconChevron size={13} /> : <IconChevronDown size={13} />}
           </button>
           {!closed[w.id] &&
             data.courses
               .filter((c) => c.workspaceId === w.id)
-              .map((c) => (
-                <div key={c.id} className="tree-course">
-                  <NavLink
-                    to={`/library/${w.slug}/${c.slug}`}
-                    end
-                    onClick={onNavigate}
-                    className={({ isActive }) => `tree-link course ${isActive ? 'active' : ''}`}
-                  >
-                    {c.name}
-                  </NavLink>
-                  {data.decks
-                    .filter((d) => d.courseId === c.id)
-                    .map((d) => {
-                      const url = deckUrl(data, d);
-                      const due = dueCards(d).length;
-                      return (
-                        <Link key={d.id} to={url} onClick={onNavigate} className={`tree-link deck ${pathname === url ? 'active' : ''}`}>
-                          <span className="tree-name">{d.name}</span>
-                          {due > 0 && <span className="pill-count">{due}</span>}
-                        </Link>
-                      );
-                    })}
-                </div>
-              ))}
+              .map((c) => {
+                const decks = data.decks.filter((d) => d.courseId === c.id);
+                const folders = c.folders ?? [];
+                const courseUrl = `/library/${w.slug}/${c.slug}`;
+                const inCourse = pathname.startsWith(courseUrl);
+                return (
+                  <div key={c.id} className="tree-course">
+                    <NavLink to={courseUrl} end onClick={onNavigate} className={({ isActive }) => `tree-link course ${isActive ? 'active' : ''}`}>
+                      <IconFolder size={15} />
+                      <span className="tree-name">{c.name}</span>
+                    </NavLink>
+                    {(inCourse || !closed[c.id]) && (
+                      <>
+                        {folders.map((fo) => {
+                          const inside = decks.filter((d) => d.folderId === fo.id);
+                          return (
+                            <div key={fo.id} className="tree-folder">
+                              <button type="button" className="tree-link folder" onClick={() => toggle(fo.id)}>
+                                {closed[fo.id] ? <IconChevron size={12} /> : <IconChevronDown size={12} />}
+                                <span className="tree-name">{fo.name}</span>
+                              </button>
+                              {!closed[fo.id] && inside.map(deckLink)}
+                            </div>
+                          );
+                        })}
+                        {decks.filter((d) => !d.folderId || !folders.some((fo) => fo.id === d.folderId)).map(deckLink)}
+                      </>
+                    )}
+                  </div>
+                );
+              })}
         </div>
       ))}
     </div>
@@ -88,6 +110,8 @@ function SaveState() {
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
+  const [newDeck, setNewDeck] = useState(false);
+  const [aiCourse, setAiCourse] = useState<string | null>(null);
   const apiKey = useStore((s) => s.apiKey);
   const provider = useStore((s) => s.data.settings.provider);
   const { pathname } = useLocation();
@@ -118,9 +142,15 @@ export function AppLayout({ children }: { children: ReactNode }) {
             <IconClose />
           </button>
         </div>
+        <button type="button" className="new-deck-btn" onClick={() => setNewDeck(true)}>
+          <span className="plus">
+            <IconPlus size={16} />
+          </span>
+          Neues Deck
+        </button>
         <div className="nav-main">
           <NavLink to="/dashboard" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-            <IconHome /> Übersicht
+            <IconHome /> Start
           </NavLink>
           <NavLink to="/library" end className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             <IconLibrary /> Bibliothek
@@ -137,7 +167,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </div>
         <div className="nav-section">Meine Kurse</div>
         <Tree onNavigate={close} />
-        <Pomodoro />
+        {pathname !== '/dashboard' && <Pomodoro />}
         <JobsIndicator />
         {!isDesktop && <InstallButton />}
         <SaveState />
@@ -152,6 +182,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </Link>
       </nav>
       {open && <div className="sidebar-backdrop" onClick={close} />}
+      {newDeck && <NewDeckModal onClose={() => setNewDeck(false)} onAi={(courseId) => setAiCourse(courseId)} />}
+      {aiCourse && <CreateWithAI courseId={aiCourse} onClose={() => setAiCourse(null)} onBack={() => (setAiCourse(null), setNewDeck(true))} />}
       <main className="app-main">
         <FocusBar />
         <UpdateNotice />

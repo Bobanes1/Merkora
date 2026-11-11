@@ -45,8 +45,12 @@ export type Deck = {
   path?: Record<string, PathResult>;
   /** CSS of imported Anki note types (colours, fonts, layout), by note type id. */
   styles?: Record<string, string>;
+  /** Folder inside the course (see `Course.folders`); none = directly in the course. */
+  folderId?: string;
 };
-export type Course = { id: string; workspaceId: string; name: string; slug: string };
+/** A folder inside a course that groups decks. */
+export type Folder = { id: string; name: string };
+export type Course = { id: string; workspaceId: string; name: string; slug: string; folders?: Folder[] };
 export type Workspace = { id: string; name: string; slug: string };
 export type Review = { deckId: string; cardId: string; at: number; rating: Rating };
 /** An exam date linked to the decks it covers. */
@@ -226,6 +230,14 @@ function sampleData(): Data {
   };
 }
 
+/** Models that turned out unusable are replaced by their successor. */
+const RETIRED_MODELS: Record<string, string> = { 'nvidia/nemotron-3-ultra-550b-a55b:free': 'nvidia/nemotron-3.5-super-vl:free' };
+const migrateSettings = (s: Settings): Settings => ({
+  ...s,
+  model: RETIRED_MODELS[s.model] ?? s.model,
+  chatModel: RETIRED_MODELS[s.chatModel] ?? s.chatModel,
+});
+
 /** Brings older saved data up to date. */
 function normalize(raw: unknown): Data | null {
   const d = raw as Partial<Data> & { version?: number };
@@ -248,7 +260,7 @@ function normalize(raw: unknown): Data | null {
     courses: d.courses ?? [],
     decks: decks.map((x) => ({ ...x, chat: x.chat ?? [], source: x.source ?? '', cards: x.cards ?? [] })),
     reviews,
-    settings: { ...base.settings, ...(d.settings ?? {}) },
+    settings: migrateSettings({ ...base.settings, ...(d.settings ?? {}) }),
     game: { ...base.game, ...(d.game ?? {}) },
     jobs: d.jobs ?? [],
     exams: d.exams ?? [],
@@ -490,6 +502,37 @@ export function deleteWorkspace(id: string) {
     decks: d.decks.filter((x) => !courseIds.includes(x.courseId)),
     deleted: tomb(d, [id, ...courseIds, ...deckIds]),
   }));
+}
+// ---------- folders inside courses ----------
+export function addFolder(courseId: string, name: string): Folder {
+  const f: Folder = { id: uid(), name };
+  update((d) => ({ ...d, courses: d.courses.map((c) => (c.id === courseId ? { ...c, folders: [...(c.folders ?? []), f] } : c)) }));
+  return f;
+}
+export function renameFolder(courseId: string, folderId: string, name: string) {
+  update((d) => ({
+    ...d,
+    courses: d.courses.map((c) => (c.id === courseId ? { ...c, folders: (c.folders ?? []).map((f) => (f.id === folderId ? { ...f, name } : f)) } : c)),
+  }));
+}
+/** Removes the folder; its decks stay in the course. */
+export function deleteFolder(courseId: string, folderId: string) {
+  update((d) => ({
+    ...d,
+    courses: d.courses.map((c) => (c.id === courseId ? { ...c, folders: (c.folders ?? []).filter((f) => f.id !== folderId) } : c)),
+    decks: d.decks.map((x) => (x.folderId === folderId ? { ...x, folderId: undefined, updatedAt: Date.now() } : x)),
+  }));
+}
+/** Moves a deck into a folder (or to the course itself) – optionally into another course. */
+export function moveDeck(deckId: string, folderId: string | undefined, courseId?: string) {
+  update((d) => {
+    const deck = d.decks.find((x) => x.id === deckId);
+    if (!deck) return d;
+    const target = courseId ?? deck.courseId;
+    const taken = d.decks.filter((x) => x.courseId === target && x.id !== deckId).map((x) => x.slug);
+    const slug = target === deck.courseId ? deck.slug : uniqueSlug(deck.name, taken);
+    return { ...d, decks: d.decks.map((x) => (x.id === deckId ? { ...x, courseId: target, folderId, slug, updatedAt: Date.now() } : x)) };
+  });
 }
 export function deleteCourse(id: string) {
   const deckIds = data.decks.filter((x) => x.courseId === id).map((x) => x.id);

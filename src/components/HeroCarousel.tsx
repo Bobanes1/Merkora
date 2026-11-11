@@ -21,7 +21,7 @@ const ICON_PATHS: Record<string, string> = {
 
 const svgUrl = (svg: string) => 'data:image/svg+xml,' + encodeURIComponent(svg);
 const OWL = svgUrl(
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><circle cx="20" cy="22" r="15" fill="#0f8552"/><circle cx="14" cy="19" r="5.5" fill="#fff"/><circle cx="26" cy="19" r="5.5" fill="#fff"/><circle cx="14.5" cy="19.5" r="2.4" fill="#002c17"/><circle cx="25.5" cy="19.5" r="2.4" fill="#002c17"/><path d="M18 25h4l-2 3z" fill="#f2b84b"/><path d="M8 10l5 4M32 10l-5 4" stroke="#0f8552" stroke-width="3" stroke-linecap="round"/></svg>',
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><path d="M19 9 C21 4 26 2 29 2.5 C27 5 26 8 26 11z" fill="#2489bf"/><circle cx="20" cy="22" r="15" fill="#45b4e3"/><ellipse cx="20" cy="28" rx="8.5" ry="7" fill="#e3f6fd"/><ellipse cx="20" cy="26" rx="5" ry="3" fill="#9fdcf4"/><path d="M17 26.2q3 2.6 6 0" stroke="#0b2540" stroke-width="1.2" fill="none" stroke-linecap="round"/><circle cx="14" cy="19" r="4.6" fill="#fff"/><circle cx="26" cy="19" r="4.6" fill="#fff"/><circle cx="14.4" cy="19.4" r="2.5" fill="#0b2540"/><circle cx="25.6" cy="19.4" r="2.5" fill="#0b2540"/><circle cx="15.3" cy="18.4" r=".9" fill="#fff"/><circle cx="26.5" cy="18.4" r=".9" fill="#fff"/><circle cx="10" cy="24.5" r="1.8" fill="#f6a5c0" opacity=".7"/><circle cx="30" cy="24.5" r="1.8" fill="#f6a5c0" opacity=".7"/></svg>',
 );
 const RING = svgUrl(
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" fill="none" stroke="#ddf0e4" stroke-width="4"/><circle cx="18" cy="18" r="15" fill="none" stroke="#0f8552" stroke-width="4" stroke-dasharray="68 94" stroke-linecap="round" transform="rotate(-90 18 18)"/></svg>',

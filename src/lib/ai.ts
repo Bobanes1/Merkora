@@ -1,4 +1,4 @@
-import { FREE_KEY, FREE_MODEL } from '../config';
+import { FREE_FALLBACK_MODEL, FREE_KEY, FREE_MODEL } from '../config';
 import { netFetch } from './desktop';
 import { sideText } from './content';
 import { CARD_GRAPHIC_RULE } from './graphics';
@@ -56,7 +56,7 @@ export const PROVIDERS: Record<
     label: 'OpenRouter (viele Modelle)',
     short: 'OpenRouter',
     defaultModel: 'openai/gpt-4o-mini',
-    models: ['nvidia/nemotron-3-ultra-550b-a55b:free', 'openai/gpt-4o-mini', 'anthropic/claude-sonnet-5-5', 'google/gemini-2.5-flash', 'meta-llama/llama-3.3-70b-instruct'],
+    models: ['nvidia/nemotron-3.5-super-vl:free', 'openai/gpt-4o-mini', 'anthropic/claude-sonnet-5-5', 'google/gemini-2.5-flash', 'meta-llama/llama-3.3-70b-instruct'],
     keyUrl: 'https://openrouter.ai/keys',
     keyHint: 'beginnt mit sk-or-',
     baseUrl: 'https://openrouter.ai/api/v1',
@@ -148,9 +148,47 @@ async function fail(res: Response, purpose: Purpose = 'gen'): Promise<never> {
 }
 
 /** Sends a conversation to the configured provider and returns the reply text. */
+/**
+ * Sends a conversation and returns the reply text. Empty replies (free models sometimes return only their
+ * hidden "thinking") are retried twice before a clear error is shown.
+ */
 export async function complete(messages: ChatMsg[], opts: Opts = {}): Promise<string> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    // the free model gets a second free model on the last try
+    const fallback = attempt === 2 && aiConfig(opts.purpose ?? 'gen').free ? FREE_FALLBACK_MODEL : undefined;
+    const text = cleanReply(await completeOnce(messages, opts, fallback));
+    if (text && !looksBroken(text, messages, opts.system)) return text;
+    if (opts.signal?.aborted) break;
+    await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
+  }
+  throw new AiError(
+    usingFree(getState(), opts.purpose ?? 'gen')
+      ? 'Die kostenlose KI hat keine Antwort geliefert (sie ist gerade überlastet). Versuch es gleich nochmal – oder trage einen eigenen Key ein.'
+      : 'Die KI hat keine Antwort geliefert. Bitte versuch es nochmal.',
+  );
+}
+
+/** Share of letters in Latin script (German, English, French …). */
+const latinShare = (t: string) => {
+  const letters = t.match(/\p{L}/gu)?.length ?? 0;
+  return letters ? (t.match(/\p{Script=Latin}/gu)?.length ?? 0) / letters : 1;
+};
+/**
+ * Detects word salad (seen with overloaded free models: random words in many alphabets).
+ * Only when the material itself is in Latin script, so e.g. Japanese cards are not affected.
+ */
+function looksBroken(reply: string, messages: ChatMsg[], system?: string) {
+  const input = [system ?? '', ...messages.map((m) => m.content)].join(' ');
+  return latinShare(input) > 0.97 && latinShare(reply) < 0.95;
+}
+
+/** Removes visible "thinking" some models put into the answer. */
+const cleanReply = (s: string) => s.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+
+async function completeOnce(messages: ChatMsg[], opts: Opts = {}, modelOverride?: string): Promise<string> {
   const purpose = opts.purpose ?? 'gen';
-  const cfg = aiConfig(purpose);
+  const base = aiConfig(purpose);
+  const cfg = modelOverride ? { ...base, model: modelOverride } : base;
   if (!cfg.key && cfg.provider !== 'custom') throw new AiError('Kein API-Key hinterlegt. Trage ihn in den Einstellungen ein.');
   const maxTokens = opts.maxTokens ?? 4000;
   try {
@@ -196,7 +234,15 @@ export async function complete(messages: ChatMsg[], opts: Opts = {}): Promise<st
       body: JSON.stringify({
         model: cfg.model,
         messages: [...(opts.system ? [{ role: 'system', content: opts.system }] : []), ...messages],
-        ...(cfg.provider === 'openai' ? { max_completion_tokens: maxTokens } : { max_tokens: maxTokens }),
+        ...(cfg.provider === 'openai'
+          ? { max_completion_tokens: maxTokens }
+          : // OpenRouter: thinking models need room for their thinking and must not return it instead of the answer
+            cfg.provider === 'openrouter'
+            ? cfg.free
+              ? // the free model answers reliably only without thinking (tested: otherwise often empty replies)
+                { max_tokens: maxTokens, reasoning: { effort: 'none' } }
+              : { max_tokens: maxTokens + 3000, reasoning: { exclude: true } }
+            : { max_tokens: maxTokens }),
         ...(opts.json && cfg.provider === 'openai' ? { response_format: { type: 'json_object' } } : {}),
       }),
     });

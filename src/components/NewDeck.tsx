@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { addDeck, deckUrl, getState, type Course } from '../lib/store';
+import { addCourse, addDeck, addWorkspace, deckUrl, getState, moveDeck, useData, type Course } from '../lib/store';
 import { AnkiDropzone, ProgressQuestion, storeImport } from './AnkiImport';
 import type { AnkiResult } from '../lib/anki';
 import { IconCards, IconSparkle, IconUpload } from './Icons';
@@ -9,8 +9,32 @@ import { Modal } from './Modal';
 type Start = 'empty' | 'ai' | 'anki';
 
 /** New deck: start empty, let the AI create cards, or take the cards from an Anki package. */
-export function NewDeckModal({ course, onClose, onAi }: { course: Course; onClose: () => void; onAi: () => void }) {
+export function NewDeckModal({
+  course: presetCourse,
+  folderId: presetFolder,
+  onClose,
+  onAi,
+}: {
+  /** Without a course (e.g. from the sidebar) the user picks one in the dialog. */
+  course?: Course;
+  folderId?: string;
+  onClose: () => void;
+  onAi: (courseId: string) => void;
+}) {
   const navigate = useNavigate();
+  const data = useData();
+  const [courseId, setCourseId] = useState(presetCourse?.id ?? data.courses[0]?.id ?? '');
+  const [folderId, setFolderId] = useState(presetFolder ?? '');
+  const course = data.courses.find((c) => c.id === courseId);
+  /** The chosen course – created if there is none yet. */
+  const ensureCourse = () => {
+    if (course) return course;
+    const ws = getState().data.workspaces[0] ?? addWorkspace('Erster Workspace');
+    return addCourse(ws.id, 'Erster Kurs');
+  };
+  const placeIn = (deckIds: string[]) => {
+    if (folderId) deckIds.forEach((id) => moveDeck(id, folderId));
+  };
   const [name, setName] = useState('');
   const [start, setStart] = useState<Start>('empty');
   const [file, setFile] = useState<File | null>(null);
@@ -34,12 +58,13 @@ export function NewDeckModal({ course, onClose, onAi }: { course: Course; onClos
     setError('');
     if (start === 'ai') {
       onClose();
-      onAi();
+      onAi(ensureCourse().id);
       return;
     }
     if (start === 'empty') {
       if (!name.trim()) return;
-      go(addDeck(course.id, name.trim()).id);
+      const d = addDeck(ensureCourse().id, name.trim(), folderId ? { folderId } : {});
+      go(d.id);
       return;
     }
     if (!file) return;
@@ -48,7 +73,11 @@ export function NewDeckModal({ course, onClose, onAi }: { course: Course; onClos
       const { readApkg } = await import('../lib/anki');
       const res = await readApkg(file, setBusy);
       if (res.withProgress > 0) setAsk(res);
-      else go(storeImport(res, { fileName: file.name, courseId: course.id, deckName: name })[0].id);
+      else {
+        const created = storeImport(res, { fileName: file.name, courseId: ensureCourse().id, deckName: name });
+        placeIn(created.map((c) => c.id));
+        go(created[0].id);
+      }
     } catch (e) {
       setError(`Import fehlgeschlagen: ${(e as Error).message ?? e}`);
     } finally {
@@ -61,7 +90,11 @@ export function NewDeckModal({ course, onClose, onAi }: { course: Course; onClos
       <ProgressQuestion
         res={ask}
         onClose={onClose}
-        onAnswer={(keep) => go(storeImport(ask, { fileName: file.name, courseId: course.id, deckName: name, keepProgress: keep })[0].id)}
+        onAnswer={(keep) => {
+          const created = storeImport(ask, { fileName: file.name, courseId: ensureCourse().id, deckName: name, keepProgress: keep });
+          placeIn(created.map((c) => c.id));
+          go(created[0].id);
+        }}
       />
     );
 
@@ -103,6 +136,45 @@ export function NewDeckModal({ course, onClose, onAi }: { course: Course; onClos
           </button>
         ))}
       </div>
+      {data.courses.length > 0 && (
+        <div className="form-grid">
+          <div>
+            <label className="field-label" htmlFor="deck-course">
+              Kurs
+            </label>
+            <select
+              id="deck-course"
+              className="input"
+              value={courseId}
+              onChange={(e) => {
+                setCourseId(e.target.value);
+                setFolderId('');
+              }}
+            >
+              {data.courses.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {data.workspaces.find((w) => w.id === c.workspaceId)?.name} › {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          {start !== 'ai' && (course?.folders?.length ?? 0) > 0 && (
+            <div>
+              <label className="field-label" htmlFor="deck-folder">
+                Ordner
+              </label>
+              <select id="deck-folder" className="input" value={folderId} onChange={(e) => setFolderId(e.target.value)}>
+                <option value="">– kein Ordner –</option>
+                {course!.folders!.map((fo) => (
+                  <option key={fo.id} value={fo.id}>
+                    {fo.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+      )}
       {start !== 'ai' && (
         <>
           <label className="field-label" htmlFor="deck-name">
@@ -121,7 +193,7 @@ export function NewDeckModal({ course, onClose, onAi }: { course: Course; onClos
       {start === 'anki' && (
         <>
           <AnkiDropzone file={file} onFile={setFile} inputRef={fileRef} />
-          <p className="muted small">Enthält der Stapel mehrere Anki-Decks, wird jedes ein eigenes Deck in „{course.name}“.</p>
+          <p className="muted small">Enthält der Stapel mehrere Anki-Decks, wird jedes ein eigenes Deck in „{course?.name ?? 'Erster Kurs'}“.</p>
         </>
       )}
       {error && (
