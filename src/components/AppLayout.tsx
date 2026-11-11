@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
-import { aiReady, PROVIDERS, usingFree } from '../lib/ai';
+import { aiReady, PROVIDERS } from '../lib/ai';
 import { deckUrl, dueCards, isDesktop, useStore, type Deck } from '../lib/store';
 import { CreateWithAI } from './CreateWithAI';
 import { NewDeckModal } from './NewDeck';
@@ -120,11 +120,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
     setFocus(false);
   }, [pathname]);
   const close = () => setOpen(false);
-  const free = useStore((s) => usingFree(s));
   const chatSeparate = useStore((s) => s.data.settings.chatSeparate);
   const chatProvider = useStore((s) => s.data.settings.chatProvider);
   const ready = useStore((s) => aiReady(s));
-  const connected = !!apiKey || provider === 'custom' || free;
+  const connected = !!apiKey || provider === 'custom';
 
   return (
     <div className="app-shell">
@@ -174,9 +173,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
         <Link to="/settings" className={`ai-status ${connected ? 'ok' : ''}`}>
           <IconKey size={16} />
           <span>
-            <b>{connected && ready ? (free ? 'Kostenlose KI aktiv' : 'KI verbunden') : 'Kein API-Key'}</b>
+            <b>{connected && ready ? 'KI verbunden' : 'Kein API-Key'}</b>
             <small>{connected && ready
-                ? (free ? 'Nemotron · eigener Key möglich' : PROVIDERS[provider].short) + (chatSeparate ? ` · Chat: ${PROVIDERS[chatProvider].short}` : '')
+                ? PROVIDERS[provider].short + (chatSeparate ? ` · Chat: ${PROVIDERS[chatProvider].short}` : '')
                 : 'Jetzt hinterlegen'}</small>
           </span>
         </Link>

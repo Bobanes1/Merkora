@@ -6,7 +6,7 @@ import { ConfirmModal } from '../components/Modal';
 import { PROVIDERS, listModels, testConnection } from '../lib/ai';
 import { desktop, getState, isDesktop, replaceAll, resetAll, setApiKey, setChatKey, setPrivacy, setSettings, useStore, type Data, type Provider } from '../lib/store';
 import { download } from '../lib/util';
-import { APP_VERSION, FREE_KEY, FREE_LABEL } from '../config';
+import { APP_VERSION } from '../config';
 import { SyncPanel } from '../components/SyncPanel';
 import { BackupsPanel, RemindersPanel } from '../components/SettingsExtras';
 import { checkForUpdate, installUpdate, useUpdate } from '../lib/update';
@@ -95,25 +95,6 @@ export default function Settings() {
             Wo bekomme ich einen Key?
           </Link>
         </p>
-        {FREE_KEY && (
-        <div className={`free-box ${!apiKey && settings.useFreeKey ? 'on' : ''}`}>
-          <label className="check-row">
-            <input type="checkbox" checked={settings.useFreeKey} onChange={(e) => setSettings({ useFreeKey: e.target.checked })} />
-            <span>
-              <b>Kostenlose KI als Standard:</b> Ohne eigenen Key nutzt die App {FREE_LABEL} über OpenRouter.{' '}
-              {!apiKey && settings.useFreeKey
-                ? 'Gerade aktiv.'
-                : apiKey
-                  ? 'Gerade nicht aktiv, weil dein eigener Key Vorrang hat.'
-                  : 'Ausgeschaltet.'}
-            </span>
-          </label>
-          <p className="muted small">
-            Kostenlose Modelle haben ein Tageslimit und sind manchmal ausgelastet. Natürliche Podcast-Stimmen und Hintergrund-Aufträge, die
-            auch nach dem Schließen weiterlaufen, gibt es nur mit eigenem OpenAI- oder Claude-Key.
-          </p>
-        </div>
-        )}
         <div className="form-grid">
           <div>
             <label className="field-label" htmlFor="s-provider">
@@ -491,7 +472,7 @@ function ChatModelPanel() {
           )}
           {!key.trim() && !(sameProvider && mainKey) && p !== 'custom' && (
             <p className="muted small">
-              Ohne Key nutzt der Chat {settings.useFreeKey && FREE_KEY ? 'die kostenlose KI' : 'nichts – bitte einen Key eintragen'}.
+              Ohne Key funktioniert der Chat nicht – bitte einen Key eintragen.
             </p>
           )}
           <div className="row-gap">

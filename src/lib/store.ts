@@ -97,8 +97,6 @@ export type Settings = {
   setupDone: boolean;
   /** Anthropic: use the Message Batches API so work continues after the window is closed. */
   claudeBatch: boolean;
-  /** Use the built-in free model when no own key is entered. */
-  useFreeKey: boolean;
   /** Characters and animations. */
   animations: boolean;
   /** Colour scheme. */
@@ -169,7 +167,6 @@ const defaultSettings = (): Settings => ({
   ttsVoiceB: 'onyx',
   setupDone: false,
   claudeBatch: true,
-  useFreeKey: true,
   animations: true,
   theme: 'system',
   reminderOn: true,

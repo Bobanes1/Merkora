@@ -182,7 +182,7 @@ export default function Dashboard() {
           </div>
         </form>
 
-        {!apiKey && data.settings.provider !== 'custom' && !data.settings.useFreeKey && <NoKeyNotice />}
+        {!apiKey && data.settings.provider !== 'custom' && <NoKeyNotice />}
 
         <div className="home-tabs" role="tablist">
           {tabs.map((t) => (

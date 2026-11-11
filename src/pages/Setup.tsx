@@ -1,4 +1,3 @@
-import { FREE_KEY } from '../config';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthLayout } from '../components/AuthLayout';
@@ -36,7 +35,7 @@ export default function Setup() {
     e.preventDefault();
     setError('');
     if (!key.trim() && provider !== 'custom') {
-      setError('Bitte füge deinen API-Key ein – oder starte kostenlos.');
+      setError('Bitte füge deinen API-Key ein. Ohne Key kannst du Merkora auch erst einmal ohne KI ausprobieren.');
       return;
     }
     save();
@@ -65,13 +64,13 @@ export default function Setup() {
           type="button"
           className="social-btn free"
           onClick={() => {
-            setSettings({ setupDone: true, useFreeKey: true });
+            setSettings({ setupDone: true });
             navigate('/dashboard');
           }}
         >
           <IconSparkle size={22} />
-          <span className="lg-only">{FREE_KEY ? 'Kostenlos starten (Nemotron)' : 'Erst einmal ohne KI starten'}</span>
-          <span className="sm-only">{FREE_KEY ? 'Kostenlos starten' : 'Ohne KI starten'}</span>
+          <span className="lg-only">Erst einmal ohne KI umschauen</span>
+          <span className="sm-only">Ohne KI starten</span>
         </button>
         <button type="button" className={`social-btn ${provider === 'openai' ? 'picked' : ''}`} onClick={() => pick('openai')}>
           <IconOpenAI size={24} />

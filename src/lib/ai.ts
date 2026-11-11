@@ -1,4 +1,3 @@
-import { FREE_FALLBACK_MODEL, FREE_KEY, FREE_MODEL } from '../config';
 import { netFetch } from './desktop';
 import { sideText } from './content';
 import { CARD_GRAPHIC_RULE } from './graphics';
@@ -108,30 +107,19 @@ function rawConfig(purpose: Purpose, s: Snap = getState()) {
   return { provider: p, info, key: s.apiKey, model: st.model.trim() || info.defaultModel, baseUrl: (st.baseUrl.trim() || info.baseUrl).replace(/\/+$/, '') };
 }
 
-/** True when the free built-in model is used (no own key entered) for this purpose. */
-export function usingFree(s: Snap = getState(), purpose: Purpose = 'gen') {
-  const c = rawConfig(purpose, s);
-  return !c.key && c.provider !== 'custom' && s.data.settings.useFreeKey && !!FREE_KEY;
-}
-
 export function aiConfig(purpose: Purpose = 'gen') {
-  const s = getState();
-  if (usingFree(s, purpose)) {
-    const info = PROVIDERS.openrouter;
-    return { provider: 'openrouter' as Provider, info, key: FREE_KEY, model: FREE_MODEL, baseUrl: info.baseUrl, free: true };
-  }
-  return { ...rawConfig(purpose, s), free: false };
+  return rawConfig(purpose, getState());
 }
 
-/** Whether AI features can be used right now (own key, local server or the free model). */
+/** Whether AI features can be used right now: an own API key (or a local server) is required. */
 export const aiReady = (s: Snap = getState(), purpose: Purpose = 'gen') => {
   const c = rawConfig(purpose, s);
-  return !!c.key || c.provider === 'custom' || usingFree(s, purpose);
+  return !!c.key || c.provider === 'custom';
 };
 export const hasKey = (purpose: Purpose = 'gen') => aiReady(getState(), purpose);
 type Opts = { system?: string; maxTokens?: number; json?: boolean; signal?: AbortSignal; purpose?: Purpose };
 
-async function fail(res: Response, purpose: Purpose = 'gen'): Promise<never> {
+async function fail(res: Response): Promise<never> {
   let msg = `${res.status} ${res.statusText}`;
   try {
     const j = await res.json();
@@ -141,31 +129,22 @@ async function fail(res: Response, purpose: Purpose = 'gen'): Promise<never> {
   }
   if (res.status === 401 || res.status === 403) msg = `Der API-Key wurde abgelehnt (${msg}).`;
   if (res.status === 429)
-    msg = usingFree(getState(), purpose)
-      ? `Das kostenlose Modell ist gerade ausgelastet oder das Tageslimit ist erreicht. Versuch es in ein paar Minuten nochmal – oder trage in den Einstellungen einen eigenen Key ein. (${msg})`
-      : `Zu viele Anfragen oder kein Guthaben (${msg}).`;
+    msg = `Zu viele Anfragen oder kein Guthaben beim Anbieter (${msg}).`;
   throw new AiError(msg);
 }
 
-/** Sends a conversation to the configured provider and returns the reply text. */
 /**
- * Sends a conversation and returns the reply text. Empty replies (free models sometimes return only their
- * hidden "thinking") are retried twice before a clear error is shown.
+ * Sends a conversation and returns the reply text. Empty or garbled replies (some models return only their
+ * hidden "thinking" or word salad when overloaded) are retried twice before a clear error is shown.
  */
 export async function complete(messages: ChatMsg[], opts: Opts = {}): Promise<string> {
   for (let attempt = 0; attempt < 3; attempt++) {
-    // the free model gets a second free model on the last try
-    const fallback = attempt === 2 && aiConfig(opts.purpose ?? 'gen').free ? FREE_FALLBACK_MODEL : undefined;
-    const text = cleanReply(await completeOnce(messages, opts, fallback));
+    const text = cleanReply(await completeOnce(messages, opts));
     if (text && !looksBroken(text, messages, opts.system)) return text;
     if (opts.signal?.aborted) break;
     await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
   }
-  throw new AiError(
-    usingFree(getState(), opts.purpose ?? 'gen')
-      ? 'Die kostenlose KI hat keine Antwort geliefert (sie ist gerade überlastet). Versuch es gleich nochmal – oder trage einen eigenen Key ein.'
-      : 'Die KI hat keine Antwort geliefert. Bitte versuch es nochmal.',
-  );
+  throw new AiError('Die KI hat keine brauchbare Antwort geliefert. Bitte versuch es nochmal – oder wähle in den Einstellungen ein anderes Modell.');
 }
 
 /** Share of letters in Latin script (German, English, French …). */
@@ -185,10 +164,9 @@ function looksBroken(reply: string, messages: ChatMsg[], system?: string) {
 /** Removes visible "thinking" some models put into the answer. */
 const cleanReply = (s: string) => s.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 
-async function completeOnce(messages: ChatMsg[], opts: Opts = {}, modelOverride?: string): Promise<string> {
+async function completeOnce(messages: ChatMsg[], opts: Opts = {}): Promise<string> {
   const purpose = opts.purpose ?? 'gen';
-  const base = aiConfig(purpose);
-  const cfg = modelOverride ? { ...base, model: modelOverride } : base;
+  const cfg = aiConfig(purpose);
   if (!cfg.key && cfg.provider !== 'custom') throw new AiError('Kein API-Key hinterlegt. Trage ihn in den Einstellungen ein.');
   const maxTokens = opts.maxTokens ?? 4000;
   try {
@@ -204,7 +182,7 @@ async function completeOnce(messages: ChatMsg[], opts: Opts = {}, modelOverride?
         },
         body: JSON.stringify({ model: cfg.model, max_tokens: maxTokens, system: opts.system, messages }),
       });
-      if (!res.ok) await fail(res, purpose);
+      if (!res.ok) await fail(res);
       const j = await res.json();
       return (j.content || []).map((b: { text?: string }) => b.text || '').join('');
     }
@@ -219,7 +197,7 @@ async function completeOnce(messages: ChatMsg[], opts: Opts = {}, modelOverride?
           generationConfig: { maxOutputTokens: maxTokens, ...(opts.json ? { responseMimeType: 'application/json' } : {}) },
         }),
       });
-      if (!res.ok) await fail(res, purpose);
+      if (!res.ok) await fail(res);
       const j = await res.json();
       return (j.candidates?.[0]?.content?.parts || []).map((p: { text?: string }) => p.text || '').join('');
     }
@@ -238,15 +216,15 @@ async function completeOnce(messages: ChatMsg[], opts: Opts = {}, modelOverride?
           ? { max_completion_tokens: maxTokens }
           : // OpenRouter: thinking models need room for their thinking and must not return it instead of the answer
             cfg.provider === 'openrouter'
-            ? cfg.free
-              ? // the free model answers reliably only without thinking (tested: otherwise often empty replies)
+            ? cfg.model.endsWith(':free')
+              ? // free OpenRouter models answer reliably only without thinking (tested: otherwise often empty replies)
                 { max_tokens: maxTokens, reasoning: { effort: 'none' } }
               : { max_tokens: maxTokens + 3000, reasoning: { exclude: true } }
             : { max_tokens: maxTokens }),
         ...(opts.json && cfg.provider === 'openai' ? { response_format: { type: 'json_object' } } : {}),
       }),
     });
-    if (!res.ok) await fail(res, purpose);
+    if (!res.ok) await fail(res);
     const j = await res.json();
     return j.choices?.[0]?.message?.content ?? '';
   } catch (e) {
@@ -393,7 +371,6 @@ export type RemoteMode = 'openai-bg' | 'anthropic-batch';
 /** Which providers can keep working after this window is closed. */
 export function remoteModeFor(): RemoteMode | null {
   const { data } = getState();
-  if (usingFree()) return null;
   if (data.settings.provider === 'openai') return 'openai-bg';
   if (data.settings.provider === 'anthropic' && data.settings.claudeBatch) return 'anthropic-batch';
   return null;
