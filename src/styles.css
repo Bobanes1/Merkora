@@ -2973,8 +2973,10 @@ a.deck-row:hover {
   gap: 10px;
   padding: 12px 12px 12px 16px;
   border-radius: var(--r-lg);
-  background: var(--ink);
+  /* fixed dark colours: --ink is light in dark mode, which made white text unreadable */
+  background: #0e4744;
   color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.14);
   box-shadow: var(--shadow-pop);
   font-size: 13px;
   line-height: 1.45;
@@ -2992,7 +2994,11 @@ a.deck-row:hover {
   text-decoration: underline;
 }
 .toast .icon-btn {
-  color: rgba(255, 255, 255, 0.75);
+  color: rgba(255, 255, 255, 0.85);
+}
+.toast .icon-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
 }
 @keyframes toast-in {
   from {
