@@ -67,7 +67,7 @@ export type Exam = {
   updatedAt?: number;
 };
 
-export type JobKind = 'summary' | 'quiz' | 'podcast' | 'cards';
+export type JobKind = 'summary' | 'quiz' | 'cards';
 export type JobStatus = 'queued' | 'running' | 'done' | 'error';
 export type Job = {
   id: string;
@@ -92,8 +92,6 @@ export type Settings = {
   provider: Provider;
   model: string;
   baseUrl: string;
-  ttsVoiceA: string;
-  ttsVoiceB: string;
   setupDone: boolean;
   /** Anthropic: use the Message Batches API so work continues after the window is closed. */
   claudeBatch: boolean;
@@ -163,8 +161,6 @@ const defaultSettings = (): Settings => ({
   provider: 'openai',
   model: '',
   baseUrl: '',
-  ttsVoiceA: 'nova',
-  ttsVoiceB: 'onyx',
   setupDone: false,
   claudeBatch: true,
   animations: true,
@@ -259,7 +255,8 @@ function normalize(raw: unknown): Data | null {
     reviews,
     settings: migrateSettings({ ...base.settings, ...(d.settings ?? {}) }),
     game: { ...base.game, ...(d.game ?? {}) },
-    jobs: d.jobs ?? [],
+    // the podcast feature is paused – its unfinished jobs are dropped
+    jobs: (d.jobs ?? []).filter((j) => (j.kind as string) !== 'podcast'),
     exams: d.exams ?? [],
     deleted: d.deleted ?? {},
     savedAt: d.savedAt,

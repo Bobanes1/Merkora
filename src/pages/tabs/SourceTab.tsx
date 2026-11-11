@@ -41,7 +41,7 @@ export default function SourceTab({ deck }: { deck: Deck }) {
       <div className="toolbar">
         <div>
           <b className="toolbar-title">Lernmaterial</b>
-          <p className="muted small">Grundlage für Zusammenfassung, Quiz, Podcast und Tutor. {saved ? 'Gespeichert.' : 'Wird gespeichert …'}</p>
+          <p className="muted small">Grundlage für Zusammenfassung, Quiz und Tutor. {saved ? 'Gespeichert.' : 'Wird gespeichert …'}</p>
         </div>
         <span className="grow" />
         <button type="button" className="btn outline sm" onClick={() => fileRef.current?.click()} disabled={busy}>

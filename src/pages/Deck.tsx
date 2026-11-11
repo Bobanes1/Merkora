@@ -3,13 +3,12 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ChatPanel } from '../components/ChatPanel';
 import { ExamDialog } from '../components/ExamDialog';
 import { countdownText, nextExamForDeck } from '../lib/exams';
-import { IconCalendar, IconCards, IconChart, IconChat, IconDoc, IconHeadphones, IconNote, IconPath, IconPlay, IconQuiz } from '../components/Icons';
+import { IconCalendar, IconCards, IconChart, IconChat, IconDoc, IconNote, IconPath, IconPlay, IconQuiz } from '../components/Icons';
 import PathTab from './tabs/PathTab';
 import { dueCards, findPath, useData } from '../lib/store';
 import CardsTab from './tabs/CardsTab';
 import LearnTab from './tabs/LearnTab';
 import MasteryTab from './tabs/MasteryTab';
-import PodcastTab from './tabs/PodcastTab';
 import QuizTab from './tabs/QuizTab';
 import SourceTab from './tabs/SourceTab';
 import SummaryTab from './tabs/SummaryTab';
@@ -21,7 +20,6 @@ const TABS = [
   { id: 'mastery', label: 'Lernfortschritt', icon: IconChart },
   { id: 'summary', label: 'Zusammenfassung', icon: IconDoc },
   { id: 'quiz', label: 'Quiz', icon: IconQuiz },
-  { id: 'podcast', label: 'Podcast', icon: IconHeadphones },
   { id: 'source', label: 'Lernmaterial', icon: IconNote },
 ] as const;
 type TabId = (typeof TABS)[number]['id'];
@@ -106,7 +104,6 @@ export default function DeckPage() {
           {tab === 'mastery' && <MasteryTab deck={deck} reviews={data.reviews.filter((r) => r.deckId === deck.id)} onLearn={() => setTab('learn')} />}
           {tab === 'summary' && <SummaryTab deck={deck} />}
           {tab === 'quiz' && <QuizTab deck={deck} />}
-          {tab === 'podcast' && <PodcastTab deck={deck} />}
           {tab === 'source' && <SourceTab deck={deck} />}
         </div>
       </div>

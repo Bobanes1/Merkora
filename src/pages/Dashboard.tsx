@@ -293,7 +293,7 @@ export default function Dashboard() {
             <button type="button" className="quick-card" onClick={() => setCreate({})}>
               <IconSparkle size={22} />
               <b>Mit KI aus PDF oder Notizen</b>
-              <small>Karten, Zusammenfassung, Quiz und Podcast</small>
+              <small>Karten, Zusammenfassung und Quiz</small>
             </button>
             <button type="button" className="quick-card" onClick={() => setAnki(true)}>
               <IconUpload size={22} />

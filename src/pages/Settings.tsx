@@ -11,7 +11,6 @@ import { SyncPanel } from '../components/SyncPanel';
 import { BackupsPanel, RemindersPanel } from '../components/SettingsExtras';
 import { checkForUpdate, installUpdate, useUpdate } from '../lib/update';
 
-const OPENAI_VOICES = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer'];
 
 export default function Settings() {
   const settings = useStore((s) => s.data.settings);
@@ -90,7 +89,7 @@ export default function Settings() {
       <section className="panel">
         <h2>KI für Inhalte</h2>
         <p className="muted">
-          Dieses Modell erstellt Karteikarten, Zusammenfassungen, Quiz, Podcasts, Grafiken und den Lernpfad. Für den Chat kannst du weiter unten ein anderes Modell wählen. Anfragen gehen direkt von deinem Gerät an den Anbieter.{' '}
+          Dieses Modell erstellt Karteikarten, Zusammenfassungen, Quiz, Grafiken und den Lernpfad. Für den Chat kannst du weiter unten ein anderes Modell wählen. Anfragen gehen direkt von deinem Gerät an den Anbieter.{' '}
           <Link to="/forgot-password" className="small-link">
             Wo bekomme ich einen Key?
           </Link>
@@ -182,7 +181,7 @@ export default function Settings() {
           <label className="check-row">
             <input type="checkbox" checked={settings.claudeBatch} onChange={(e) => setSettings({ claudeBatch: e.target.checked })} />
             <span>
-              Größere Aufgaben (Zusammenfassung, Quiz, Podcast, Karten) als Claude-Hintergrundauftrag senden – läuft weiter, auch wenn du das
+              Größere Aufgaben (Zusammenfassung, Quiz, Karten) als Claude-Hintergrundauftrag senden – läuft weiter, auch wenn du das
               Fenster schließt, dauert aber meist ein paar Minuten und kostet nur die Hälfte.
             </span>
           </label>
@@ -215,33 +214,6 @@ export default function Settings() {
       <ChatModelPanel />
 
       <RemindersPanel />
-
-      <section className="panel">
-        <h2>Podcast-Stimmen</h2>
-        <p className="muted">Mit OpenAI werden natürliche Stimmen genutzt, sonst die Sprachausgabe deines Browsers.</p>
-        <div className="form-grid">
-          <div>
-            <label className="field-label" htmlFor="v-a">
-              Stimme Lena
-            </label>
-            <select id="v-a" className="input" value={settings.ttsVoiceA} onChange={(e) => setSettings({ ttsVoiceA: e.target.value })}>
-              {OPENAI_VOICES.map((v) => (
-                <option key={v}>{v}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="field-label" htmlFor="v-b">
-              Stimme Tom
-            </label>
-            <select id="v-b" className="input" value={settings.ttsVoiceB} onChange={(e) => setSettings({ ttsVoiceB: e.target.value })}>
-              {OPENAI_VOICES.map((v) => (
-                <option key={v}>{v}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </section>
 
       <SyncPanel />
 

@@ -84,7 +84,7 @@ export const PROVIDERS: Record<
 export class AiError extends Error {}
 
 /**
- * What a request is for: "gen" = creating content (cards, summaries, quiz, podcast, graphics),
+ * What a request is for: "gen" = creating content (cards, summaries, quiz, graphics),
  * "chat" = talking with the learner (tutor chat, explanations, grading typed answers).
  * The chat can use its own provider/model (Einstellungen › KI für den Chat).
  */
@@ -339,23 +339,6 @@ export function parseQuiz(text: string) {
   }));
 }
 
-export function podcastPrompt(material: string, minutes: number): Prompt {
-  return {
-    system: `Du schreibst das Skript für einen lockeren, lehrreichen Lern-Podcast mit zwei Stimmen: A (Lena, erklärt) und B (Tom, fragt nach, fasst zusammen). ${LANG_RULE}
-Natürlich gesprochen, keine Regieanweisungen, keine Aufzählungszeichen.
-Format: {"lines":[{"speaker":"A","text":"..."},{"speaker":"B","text":"..."}]}${JSON_RULE}`,
-    user: `Schreibe ein Skript von etwa ${minutes} Minuten (ca. ${minutes * 140} Wörter) über dieses Material:\n\n${material}`,
-    maxTokens: Math.min(16000, 800 + minutes * 500),
-    json: true,
-  };
-}
-export function parsePodcast(text: string) {
-  const res = parseJson<{ lines: { speaker: 'A' | 'B'; text: string }[] }>(text);
-  const lines = (res.lines || []).filter((l) => l && l.text);
-  if (!lines.length) throw new AiError('Die KI hat kein Skript geliefert.');
-  return lines.map((l) => ({ speaker: (l.speaker === 'B' ? 'B' : 'A') as 'A' | 'B', text: String(l.text) }));
-}
-
 /** Runs a prompt right here in the tab. */
 export function runPrompt(p: Prompt, signal?: AbortSignal) {
   return complete([{ role: 'user', content: p.user }], { system: p.system, maxTokens: p.maxTokens, json: p.json, signal });
@@ -491,20 +474,6 @@ export async function tutorReply(deckName: string, material: string, history: Ch
     maxTokens: 2000,
     purpose: 'chat',
   });
-}
-
-/** Text to speech: OpenAI voices when OpenAI is configured, otherwise null (browser voice is used). */
-export async function openAiSpeech(text: string, voice: string, signal?: AbortSignal): Promise<Blob | null> {
-  const cfg = aiConfig();
-  if (cfg.provider !== 'openai' || !cfg.key) return null;
-  const res = await netFetch(`${cfg.baseUrl}/audio/speech`, {
-    method: 'POST',
-    signal,
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${cfg.key}` },
-    body: JSON.stringify({ model: 'gpt-4o-mini-tts', voice, input: text, response_format: 'mp3' }),
-  });
-  if (!res.ok) await fail(res);
-  return res.blob();
 }
 
 export async function listModels(purpose: Purpose = 'gen'): Promise<string[]> {

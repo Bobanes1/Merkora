@@ -2,7 +2,7 @@
 import { LogoMark } from './Logo';
 
 const SLIDES = [
-  'Mach aus deinen Notizen Karteikarten, Zusammenfassungen, Quizze, Podcasts und noch mehr.',
+  'Mach aus deinen Notizen Karteikarten, Zusammenfassungen, Quizze und noch mehr.',
   'Lerne jede Karte genau dann, wenn du sie sonst vergessen würdest – auf jedem Gerät.',
   'Frag deinen KI-Tutor alles zu deinem Stoff – mit deinem eigenen API-Schlüssel.',
 ];
@@ -76,7 +76,7 @@ function WindowMock() {
             <div className="mk-tabs">
               <span className="on">Karteikarten</span>
               <span>Quiz</span>
-              <span>Podcast</span>
+              <span>Lernpfad</span>
             </div>
             <div className="mk-row">
               <b>86 Karteikarten</b>
@@ -193,7 +193,7 @@ export function HeroCarousel() {
             <div className="hero-stage">
               <WindowMock />
               <Tile className="t-duel" color="linear-gradient(160deg,#13ccc8,#199d99)" icon="check" alt="Quiz" />
-              <Tile className="t-pod" color="linear-gradient(160deg,#4aa8ff,#1f7be8)" icon="headphones" alt="Podcast" />
+              <Tile className="t-pod" color="linear-gradient(160deg,#4aa8ff,#1f7be8)" icon="chat" alt="Tutor" />
               <Tile className="t-card" color="linear-gradient(160deg,#ffd54f,#f5b300)" icon="cards" alt="Karteikarten" />
             </div>
           </div>

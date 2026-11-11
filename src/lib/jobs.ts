@@ -1,5 +1,5 @@
 /**
- * Background AI jobs (summary, quiz, podcast script, flashcards).
+ * Background AI jobs (summary, quiz, flashcards).
  * - OpenAI: sent as a "background" response – the provider keeps working even if this window is closed.
  * - Claude: sent as a message batch (when enabled) – same, usually done within a few minutes.
  * - Other providers: run inside this tab while you keep using the site; if the tab is closed
@@ -11,10 +11,8 @@ import {
   cardsPrompt,
   materialFrom,
   parseCards,
-  parsePodcast,
   parseQuiz,
   parseSummary,
-  podcastPrompt,
   pollRemote,
   quizPrompt,
   remoteModeFor,
@@ -31,10 +29,9 @@ import { addCards, addJob, getState, patchJob, subscribe, updateDeck, type Deck,
 export const JOB_LABEL: Record<JobKind, string> = {
   summary: 'Zusammenfassung',
   quiz: 'Quiz',
-  podcast: 'Podcast-Skript',
   cards: 'Karteikarten',
 };
-export const JOB_TAB: Record<JobKind, string> = { summary: 'summary', quiz: 'quiz', podcast: 'podcast', cards: 'cards' };
+export const JOB_TAB: Record<JobKind, string> = { summary: 'summary', quiz: 'quiz', cards: 'cards' };
 
 // ---------- toasts ----------
 export type Toast = { id: string; text: string; jobId?: string; ok: boolean; /** Link target (e.g. the calendar). */ to?: string; toLabel?: string; /** Stays until closed. */ sticky?: boolean };
@@ -73,8 +70,6 @@ function promptFor(job: Job, deck: Deck): Prompt {
       return summaryPrompt(materialFrom(deck.source, deck.cards));
     case 'quiz':
       return quizPrompt(materialFrom(deck.source, deck.cards), p.count ?? 8);
-    case 'podcast':
-      return podcastPrompt(materialFrom(deck.source, deck.cards, 16000), p.minutes ?? 4);
     case 'cards':
       return cardsPrompt(p.text || deck.source, p.count ?? 15, p.focus ?? '', !!p.graphics);
   }
@@ -87,9 +82,6 @@ async function applyResult(job: Job, text: string) {
       break;
     case 'quiz':
       updateDeck(job.deckId, { quiz: parseQuiz(text) });
-      break;
-    case 'podcast':
-      updateDeck(job.deckId, { podcast: parsePodcast(text) });
       break;
     case 'cards':
       addCards(job.deckId, await withGraphics(parseCards(text)));
