@@ -139,10 +139,15 @@ async function applyResult(job: Job, text: string) {
     case 'quiz':
       updateDeck(job.deckId, { quiz: parseQuiz(text) });
       break;
-    case 'cards':
-      addCards(job.deckId, await withGraphics(parseCards(text)));
-      break;
+    case 'cards': {
+      // a part of long material may contain nothing exam-relevant (e.g. only the literature list)
+      const part = (job.params as CardParams).part;
+      const cards = await withGraphics(parseCards(text, !!part && part.n > 1));
+      addCards(job.deckId, cards);
+      return cards.length;
+    }
   }
+  return undefined;
 }
 
 // ---------- runner ----------
@@ -161,14 +166,15 @@ async function finish(job: Job, text: string) {
     return;
   }
   try {
-    await applyResult(job, text);
+    const made = await applyResult(job, text);
     patchJob(job.id, { status: 'done', finishedAt: Date.now(), error: undefined });
     const part = (job.params as CardParams).part;
+    const nothing = made === 0 && part ? ` Teil ${part.i} enthielt nichts Prüfungsrelevantes (z. B. nur Literatur) – dafür keine Karten.` : '';
     if (nextPart(job, deck)) {
-      pushToast({ text: `Teil ${part!.i} von ${part!.n} für „${deck.name}“ ist fertig – Teil ${part!.i + 1} läuft.`, jobId: job.id, ok: true });
+      pushToast({ text: `Teil ${part!.i} von ${part!.n} für „${deck.name}“ ist fertig – Teil ${part!.i + 1} läuft.${nothing}`, jobId: job.id, ok: true });
       return;
     }
-    const msg = `${JOB_LABEL[job.kind]} für „${deck.name}“ ${part && part.n > 1 ? `(alle ${part.n} Teile) ` : ''}${job.kind === 'cards' ? 'sind' : 'ist'} fertig.`;
+    const msg = `${JOB_LABEL[job.kind]} für „${deck.name}“ ${part && part.n > 1 ? `(alle ${part.n} Teile) ` : ''}${job.kind === 'cards' ? 'sind' : 'ist'} fertig.${nothing}`;
     pushToast({ text: msg, jobId: job.id, ok: true });
     notifyBrowser('Fertig!', msg);
   } catch (e) {

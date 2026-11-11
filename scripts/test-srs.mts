@@ -338,6 +338,11 @@ console.log('Langes Material in Teilen');
   const sizes = three.map((x) => x.text.length);
   ok(three.length === Math.ceil((3 * para(120).length) / 40000) && Math.max(...sizes) - Math.min(...sizes) < 6000, 'möglichst wenige, gleich große Teile (' + three.length + ': ' + sizes.map((n) => Math.round(n / 1000) + 'k').join(' / ') + ')');
   ok(three[0].label.startsWith('S1') && three[three.length - 1].label.includes('S3'), 'Dokumente bleiben in Reihenfolge');
+  // like the real case: nine full parts and then only the literature list of the last slide
+  const lit = 'LITERATUR UND QUELLEN\n' + '§ Autor, A. (2020). Titel. Verlag. https://doi.org/10.1/x\n'.repeat(20);
+  const withRest = splitMaterial([{ name: 'VL.pptx', text: para(240) + '\n\n' + lit }], 40000);
+  ok(!withRest.some((x) => x.text.length < 5000) && withRest[withRest.length - 1].text.includes('LITERATUR'), 'kleiner Rest am Ende (z. B. Literaturliste) wird kein eigener Teil');
+  ok(withRest.every((x) => x.text.length <= 60000), 'auch mit angehängtem Rest höchstens 60k Zeichen pro Teil');
   const c = shareCount(30, [{ text: 'x'.repeat(1000) }, { text: 'x'.repeat(2000) }]);
   ok(c[0] === 10 && c[1] === 20 && shareCount(0, [{ text: 'a' }, { text: 'b' }]).every((n) => n === 0), 'feste Anzahl wird anteilig verteilt, Automatisch bleibt automatisch');
   const av = avoidList(Array.from({ length: 500 }, (_, i) => 'Frage Nummer ' + i + ' zum Thema'), 2000);

@@ -4,6 +4,8 @@
  * Pure – tested in scripts/test-srs.mts.
  */
 export const PART_SIZE = 40000;
+/** A small rest may make the last part this long (the AI reads up to 60k characters per request). */
+const TAIL_MAX = 60000;
 
 export type Part = { label: string; text: string };
 
@@ -57,6 +59,14 @@ export function splitMaterial(docs: { name: string; text: string }[], max = PART
     len += b.text.length + 2;
   }
   if (cur.length) groups.push(cur);
+  // a small rest at the end (e.g. only the literature list of the last slide) joins the part before –
+  // the AI can read up to TAIL_MAX characters at once
+  const size = (g: { text: string }[]) => g.reduce((n, b) => n + b.text.length + 2, 0);
+  if (groups.length > 1) {
+    const last = groups[groups.length - 1];
+    const prev = groups[groups.length - 2];
+    if (size(last) < target * 0.25 && size(prev) + size(last) <= TAIL_MAX) groups.splice(groups.length - 2, 2, [...prev, ...last]);
+  }
   // label: the documents of a part; a document spread over several parts is marked as start/continuation
   const partsOf = new Map<string, number[]>();
   groups.forEach((g, i) => new Set(g.map((b) => b.doc)).forEach((d) => partsOf.set(d, [...(partsOf.get(d) ?? []), i])));

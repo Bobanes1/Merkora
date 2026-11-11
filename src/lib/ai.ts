@@ -314,10 +314,15 @@ ${graphics ? CARD_GRAPHIC_RULE + '\n' : ''}Format: {"cards":[{"front":"...","bac
     json: true,
   };
 }
-export function parseCards(text: string) {
+/**
+ * `allowEmpty`: one part of long material may hold nothing exam-relevant (e.g. only a literature list) –
+ * then no cards is a valid answer, not an error.
+ */
+export function parseCards(text: string, allowEmpty = false) {
   const res = parseJson<{ cards: { front: string; back: string; svg?: string }[] }>(text);
   const cards = (res.cards || []).filter((c) => c && c.front && c.back);
-  if (!cards.length) throw new AiError('Die KI hat keine Karten geliefert. Versuche es mit mehr Text.');
+  if (!cards.length && !allowEmpty)
+    throw new AiError('Die KI hat in diesem Material nichts Prüfungsrelevantes gefunden (z. B. nur Literaturliste oder Organisatorisches) und keine Karten erstellt.');
   return cards.map((c) => ({ front: String(c.front).trim(), back: String(c.back).trim(), ...(c.svg ? { svg: String(c.svg) } : {}) }));
 }
 
@@ -363,7 +368,8 @@ export function runPrompt(p: Prompt, signal?: AbortSignal) {
 }
 
 export async function generateCards(text: string, count: number, focus = '', graphics = false, part?: PartInfo) {
-  return parseCards(await runPrompt(cardsPrompt(text, count, focus, graphics, part)));
+  // with several parts, a part without exam-relevant content may give no cards
+  return parseCards(await runPrompt(cardsPrompt(text, count, focus, graphics, part)), !!part && part.n > 1);
 }
 
 // ---------- work that keeps running on the provider's servers ----------

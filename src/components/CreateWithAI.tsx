@@ -121,7 +121,8 @@ export function CreateWithAI({
         made.push(...(await generateCards(p.text, counts[i], focus, graphics, parts.length > 1 ? { i: i + 1, n: parts.length, avoid } : undefined)));
       }
       // review only once all parts are done
-      setDrafts(made.map((c) => ({ ...c, keep: true })));
+      if (made.length) setDrafts(made.map((c) => ({ ...c, keep: true })));
+      else setError('Die KI hat in diesem Material nichts Prüfungsrelevantes gefunden und keine Karten erstellt.');
     } catch (e) {
       // a later part failed: keep what is there so far for review
       if (made.length) setDrafts(made.map((c) => ({ ...c, keep: true })));
