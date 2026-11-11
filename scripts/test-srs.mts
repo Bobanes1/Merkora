@@ -318,6 +318,30 @@ console.log('Kostenschätzung');
   ok(formatCost(0.004) === '< 0,01 $' && formatCost(0.042) === '0,04 $' && formatCost(0) === 'kostenlos', 'Betrag wird lesbar formatiert');
 }
 
+console.log('Langes Material in Teilen');
+{
+  const { splitMaterial, shareCount, avoidList } = await import('../src/lib/chunks');
+  const { estimate } = await import('../src/lib/costs');
+  const para = (n: number) => Array.from({ length: n }, (_, i) => 'Absatz ' + i + ': ' + 'Wissen ist Macht. '.repeat(20)).join('\n\n');
+  const small = splitMaterial([{ name: 'a.pdf', text: 'kurz' }, { name: 'b.pdf', text: 'auch kurz' }]);
+  ok(small.length === 1 && small[0].label === 'a.pdf, b.pdf', 'kleine Dateien teilen sich einen Teil');
+  const big = splitMaterial([{ name: 'Skript.pdf', text: para(300) }], 40000);
+  ok(big.length >= 3 && big.every((x) => x.text.length <= 40000), 'großes Skript → mehrere Teile, keiner zu lang (' + big.length + ')');
+  ok(big.every((x) => /^Absatz \d+:/.test(x.text)), 'geschnitten wird an Absatzgrenzen');
+  ok(big.map((x) => x.text).join('').replace(/\s+/g, '') === para(300).replace(/\s+/g, ''), 'kein Text geht verloren');
+  ok(big[0].label === 'Skript.pdf (Anfang)' && big[big.length - 1].label === 'Skript.pdf (Schluss)', 'Teile sind beschriftet');
+  const three = splitMaterial([{ name: 'S1', text: para(120) }, { name: 'S2', text: para(120) }, { name: 'S3', text: para(120) }], 40000);
+  const sizes = three.map((x) => x.text.length);
+  ok(three.length === Math.ceil((3 * para(120).length) / 40000) && Math.max(...sizes) - Math.min(...sizes) < 6000, 'möglichst wenige, gleich große Teile (' + three.length + ': ' + sizes.map((n) => Math.round(n / 1000) + 'k').join(' / ') + ')');
+  ok(three[0].label.startsWith('S1') && three[three.length - 1].label.includes('S3'), 'Dokumente bleiben in Reihenfolge');
+  const c = shareCount(30, [{ text: 'x'.repeat(1000) }, { text: 'x'.repeat(2000) }]);
+  ok(c[0] === 10 && c[1] === 20 && shareCount(0, [{ text: 'a' }, { text: 'b' }]).every((n) => n === 0), 'feste Anzahl wird anteilig verteilt, Automatisch bleibt automatisch');
+  const av = avoidList(Array.from({ length: 500 }, (_, i) => 'Frage Nummer ' + i + ' zum Thema'), 2000);
+  ok(av.length < 500 && av[av.length - 1] === 'Frage Nummer 499 zum Thema', 'Liste bisheriger Fragen bleibt kurz (neueste zuletzt)');
+  const one = estimate.cards(40000, 0), two = estimate.cardsParts([40000, 40000], [0, 0]);
+  ok(two.input > 2 * one.input - 1 && two.output === 2 * one.output, 'Kosten aller Teile werden zusammengezählt');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Link } from 'react-router-dom';
-import { askNotifications, canSurviveClose, dismissToast, getToasts, JOB_LABEL, JOB_TAB, subscribeToasts } from '../lib/jobs';
+import { askNotifications, canSurviveClose, dismissToast, getToasts, JOB_LABEL, JOB_TAB, subscribeToasts, retryJob } from '../lib/jobs';
 import { deckUrl, getState, removeJob, useStore, type Job, type JobKind } from '../lib/store';
 import { IconBell, IconCheck, IconClose, IconSparkle } from './Icons';
 import { Mascot } from './Mascot';
@@ -34,6 +34,12 @@ function NotifyButton() {
 }
 
 /** Shows that an AI task is being created in the background and what the user may do meanwhile. */
+/** Long material is processed in parts: which part a card job is working on. */
+const partOf = (job: Job) => {
+  const p = (job.params as { part?: { i: number; n: number } }).part;
+  return p && p.n > 1 ? p : null;
+};
+
 export function JobBanner({ job }: { job: Job }) {
   const elapsed = useElapsed(job.createdAt);
   const remote = job.mode === 'openai-bg' || job.mode === 'anthropic-batch' || (!job.mode && canSurviveClose());
@@ -41,7 +47,15 @@ export function JobBanner({ job }: { job: Job }) {
     <div className="job-banner" role="status">
       <Mascot className="job-mascot" mood="think" size={58} />
       <div className="job-text">
-        <b>{JOB_LABEL[job.kind]} wird im Hintergrund erstellt … <span className="muted">({elapsed})</span></b>
+        <b>
+          {JOB_LABEL[job.kind]} {partOf(job) ? `– Teil ${partOf(job)!.i} von ${partOf(job)!.n} – ` : ''}wird im Hintergrund erstellt …{' '}
+          <span className="muted">({elapsed})</span>
+        </b>
+        {partOf(job) && (
+          <span className="bar job-parts" aria-hidden="true">
+            <i style={{ width: `${((partOf(job)!.i - 1) / partOf(job)!.n) * 100}%` }} />
+          </span>
+        )}
         <p>
           {remote ? (
             <>
@@ -68,7 +82,10 @@ export function JobError({ job }: { job?: Job }) {
   if (!job || job.status !== 'error') return null;
   return (
     <div className="form-error" role="alert">
-      {JOB_LABEL[job.kind]} konnte nicht erstellt werden: {job.error}{' '}
+      {job.title.split(' · ')[0] || JOB_LABEL[job.kind]} konnte nicht erstellt werden: {job.error}{' '}
+      <button type="button" className="link-btn" onClick={() => retryJob(job.id)}>
+        Erneut versuchen
+      </button>{' '}
       <button type="button" className="link-btn" onClick={() => removeJob(job.id)}>
         Ausblenden
       </button>

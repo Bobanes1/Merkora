@@ -24,6 +24,8 @@ import {
   type RemoteMode,
 } from './ai';
 import { withGraphics } from './graphics';
+import { avoidList } from './chunks';
+import { cardFrontText } from './content';
 import { addCards, addJob, getState, patchJob, subscribe, updateDeck, type Deck, type Job, type JobKind } from './store';
 
 export const JOB_LABEL: Record<JobKind, string> = {
@@ -70,9 +72,63 @@ function promptFor(job: Job, deck: Deck): Prompt {
       return summaryPrompt(materialFrom(deck.source, deck.cards));
     case 'quiz':
       return quizPrompt(materialFrom(deck.source, deck.cards), p.count ?? 8);
-    case 'cards':
-      return cardsPrompt(p.text || deck.source, p.count ?? 0, p.focus ?? '', !!p.graphics);
+    case 'cards': {
+      const part = (job.params as CardParams).part;
+      return cardsPrompt(
+        p.text || deck.source,
+        p.count ?? 0,
+        p.focus ?? '',
+        !!p.graphics,
+        part && part.n > 1 ? { i: part.i, n: part.n, avoid: part.i > 1 ? avoidList(deck.cards.map(cardFrontText)) : [] } : undefined,
+      );
+    }
   }
+}
+
+/**
+ * Card jobs for long material run as a chain: each job makes the cards of one part; when it is done,
+ * the next part starts with the remaining texts (`rest`) and the share of a fixed count (`counts`).
+ */
+type CardParams = {
+  text?: string;
+  count?: number;
+  focus?: string;
+  graphics?: boolean;
+  part?: { i: number; n: number };
+  rest?: string[];
+  counts?: number[];
+};
+
+/** Starts card creation for one or several parts (several = one after another, without repeating cards). */
+export function startCardJobs(deck: Deck, parts: string[], o: { counts: number[]; focus: string; graphics: boolean }) {
+  if (!parts.length) return;
+  const n = parts.length;
+  const params: CardParams = {
+    text: parts[0],
+    count: o.counts[0] ?? 0,
+    focus: o.focus,
+    graphics: o.graphics,
+    ...(n > 1 ? { part: { i: 1, n }, rest: parts.slice(1), counts: o.counts.slice(1) } : {}),
+  };
+  return addJob({ kind: 'cards', deckId: deck.id, title: partTitle(deck, params), params });
+}
+const partTitle = (deck: Deck, p: CardParams) =>
+  `${JOB_LABEL.cards}${p.part && p.part.n > 1 ? ` (Teil ${p.part.i}/${p.part.n})` : ''} · ${deck.name}`;
+
+/** After a part is done: start the next one. */
+function nextPart(job: Job, deck: Deck) {
+  const p = job.params as CardParams;
+  if (job.kind !== 'cards' || !p.part || !p.rest?.length) return false;
+  const params: CardParams = {
+    ...p,
+    text: p.rest[0],
+    count: p.counts?.[0] ?? 0,
+    part: { i: p.part.i + 1, n: p.part.n },
+    rest: p.rest.slice(1),
+    counts: p.counts?.slice(1),
+  };
+  addJob({ kind: 'cards', deckId: deck.id, title: partTitle(deck, params), params });
+  return true;
 }
 
 async function applyResult(job: Job, text: string) {
@@ -107,7 +163,12 @@ async function finish(job: Job, text: string) {
   try {
     await applyResult(job, text);
     patchJob(job.id, { status: 'done', finishedAt: Date.now(), error: undefined });
-    const msg = `${JOB_LABEL[job.kind]} für „${deck.name}“ ist fertig.`;
+    const part = (job.params as CardParams).part;
+    if (nextPart(job, deck)) {
+      pushToast({ text: `Teil ${part!.i} von ${part!.n} für „${deck.name}“ ist fertig – Teil ${part!.i + 1} läuft.`, jobId: job.id, ok: true });
+      return;
+    }
+    const msg = `${JOB_LABEL[job.kind]} für „${deck.name}“ ${part && part.n > 1 ? `(alle ${part.n} Teile) ` : ''}${job.kind === 'cards' ? 'sind' : 'ist'} fertig.`;
     pushToast({ text: msg, jobId: job.id, ok: true });
     notifyBrowser('Fertig!', msg);
   } catch (e) {
@@ -119,7 +180,14 @@ function fail(job: Job, e: unknown) {
   const msg = (e as Error).message || 'Unbekannter Fehler';
   patchJob(job.id, { status: 'error', error: msg, finishedAt: Date.now() });
   const deck = deckOf(job);
-  pushToast({ text: `${JOB_LABEL[job.kind]}${deck ? ` für „${deck.name}“` : ''} konnte nicht erstellt werden: ${msg}`, jobId: job.id, ok: false });
+  const part = (job.params as CardParams).part;
+  const which = part && part.n > 1 ? ` (Teil ${part.i} von ${part.n})` : '';
+  pushToast({ text: `${JOB_LABEL[job.kind]}${which}${deck ? ` für „${deck.name}“` : ''} konnte nicht erstellt werden: ${msg}`, jobId: job.id, ok: false });
+}
+
+/** Runs a failed job again (for a chain: from the failed part on). */
+export function retryJob(id: string) {
+  patchJob(id, { status: 'queued', error: undefined, finishedAt: undefined, remoteId: undefined, mode: undefined, attempts: 0 });
 }
 
 async function runInTab(job: Job, deck: Deck) {

@@ -1,11 +1,13 @@
-import { autoCardCount, CARD_MATERIAL_LIMIT } from '../lib/cardCount';
+import { autoCardCount } from '../lib/cardCount';
+import { avoidList, shareCount, splitMaterial } from '../lib/chunks';
+import { cardFrontText } from '../lib/content';
 import { CostHint } from './CostHint';
 import { estimate } from '../lib/costs';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { generateCards, hasKey } from '../lib/ai';
 import { MATERIAL_ACCEPT, MATERIAL_LABEL, readFileText } from '../lib/files';
-import { canSurviveClose, startJob } from '../lib/jobs';
+import { canSurviveClose, startCardJobs } from '../lib/jobs';
 import { cleanSvg, withGraphics } from '../lib/graphics';
 import { addCards, addCourse, addDeck, addWorkspace, deckUrl, getState, updateDeck, useData } from '../lib/store';
 import { IconClose, IconDoc, IconSparkle, IconTrash, IconUpload } from './Icons';
@@ -42,9 +44,16 @@ export function CreateWithAI({
   const oldSource = existing?.source.trim() ?? '';
   // everything the AI should use: attached files, own notes and (if ticked) the deck's earlier material
   const text = [...files.map((x) => x.text), notes.trim(), useSource ? oldSource : ''].filter(Boolean).join('\n\n');
+  // long material is split into parts the AI works through one after another
+  const parts = splitMaterial([
+    ...files.map((x) => ({ name: x.name, text: x.text })),
+    ...(notes.trim() ? [{ name: 'Notizen', text: notes.trim() }] : []),
+    ...(useSource && oldSource ? [{ name: 'Bisheriges Lernmaterial', text: oldSource }] : []),
+  ]);
   const [name, setName] = useState('');
   // 0 = automatic (as many cards as the material needs)
   const [count, setCount] = useState(0);
+  const counts = shareCount(count, parts);
   const [focus, setFocus] = useState('');
   const [graphics, setGraphics] = useState(false);
   const [courseId, setCourseId] = useState(presetCourse ?? data.courses[0]?.id ?? '');
@@ -93,7 +102,8 @@ export function CreateWithAI({
       updateDeck(target.id, { source: [oldSource, text].filter(Boolean).join('\n\n') });
     }
     const fresh = getState().data.decks.find((d) => d.id === target!.id)!;
-    startJob('cards', fresh, { count, focus, graphics, ...(fresh.source === text ? {} : { text }) });
+    // long material: one part after another, each knowing the cards made before
+    startCardJobs(fresh, parts.map((p) => p.text), { counts, focus, graphics });
     onClose();
     navigate(deckUrl(getState().data, fresh, 'cards'));
   };
@@ -102,11 +112,20 @@ export function CreateWithAI({
   const runAndReview = async () => {
     setError('');
     setBusy('Die KI erstellt deine Karteikarten …');
+    const made: { front: string; back: string; svg?: string }[] = [];
     try {
-      const cards = await generateCards(text, count, focus, graphics);
-      setDrafts(cards.map((c) => ({ ...c, keep: true })));
+      const before = existing ? existing.cards.map(cardFrontText) : [];
+      for (const [i, p] of parts.entries()) {
+        if (parts.length > 1) setBusy(`Teil ${i + 1} von ${parts.length}: Die KI erstellt Karten … (${made.length} bisher)`);
+        const avoid = i > 0 ? avoidList([...before, ...made.map((c) => c.front)]) : [];
+        made.push(...(await generateCards(p.text, counts[i], focus, graphics, parts.length > 1 ? { i: i + 1, n: parts.length, avoid } : undefined)));
+      }
+      // review only once all parts are done
+      setDrafts(made.map((c) => ({ ...c, keep: true })));
     } catch (e) {
-      setError((e as Error).message);
+      // a later part failed: keep what is there so far for review
+      if (made.length) setDrafts(made.map((c) => ({ ...c, keep: true })));
+      setError(made.length ? `Ein Teil hat nicht geklappt (${(e as Error).message}). Die ${made.length} Karten aus den vorherigen Teilen kannst du trotzdem prüfen und speichern.` : (e as Error).message);
     } finally {
       setBusy('');
     }
@@ -156,6 +175,11 @@ export function CreateWithAI({
         }
       >
         <p className="muted">Bearbeite oder entferne Karten, bevor du sie speicherst.</p>
+        {error && (
+          <div className="form-warn" role="alert">
+            {error}
+          </div>
+        )}
         <div className="draft-list">
           {drafts.map((d, i) => (
             <div key={i} className={`draft ${d.keep ? '' : 'off'}`}>
@@ -257,11 +281,22 @@ export function CreateWithAI({
           ))}
         </div>
       )}
-      {text.length > CARD_MATERIAL_LIMIT && (
-        <p className="form-warn">
-          Sehr viel Material ({Math.round(text.length / 1000)}k Zeichen): Die KI liest pro Durchgang nur die ersten ca.{' '}
-          {CARD_MATERIAL_LIMIT / 1000}k Zeichen. Verteile große Skripte am besten auf mehrere Decks, z. B. eines pro Kapitel oder Sitzung.
-        </p>
+      {parts.length > 1 && (
+        <div className="parts-info">
+          <b>
+            Viel Material ({Math.round(text.length / 1000)}k Zeichen) – die KI arbeitet es in {parts.length} Schritten durch
+          </b>
+          <p className="muted small">
+            Teil für Teil, damit nichts verloren geht. Jeder Schritt kennt die Karten der vorherigen, so gibt es keine Dopplungen.
+          </p>
+          <ol>
+            {parts.map((p, i) => (
+              <li key={i}>
+                {p.label} <small className="muted">({Math.round(p.text.length / 1000) || '<1'}k Zeichen)</small>
+              </li>
+            ))}
+          </ol>
+        </div>
       )}
       {oldSource && (
         <label className="check-row">
@@ -315,7 +350,8 @@ export function CreateWithAI({
           </div>
           {count === 0 ? (
             <small className="muted count-hint">
-              So viele wie nötig – {text.trim() ? `etwa ${autoCardCount(text.length)}, je nach Inhalt mehr oder weniger` : 'je nach Umfang des Materials'}.
+              So viele wie nötig –{' '}
+              {text.trim() ? `etwa ${parts.reduce((n, p) => n + autoCardCount(p.text.length), 0)}, je nach Inhalt mehr oder weniger` : 'je nach Umfang des Materials'}.
             </small>
           ) : (
             <>
@@ -340,7 +376,12 @@ export function CreateWithAI({
         </span>
       </label>
       {text.trim().length > 0 && text.trim().length < 40 && <p className="muted small">Bitte etwas mehr Text eingeben.</p>}
-      {text.trim().length >= 40 && <CostHint est={estimate.cards(text.length, count, graphics)} />}
+      {text.trim().length >= 40 && (
+        <CostHint
+          label={parts.length > 1 ? `${parts.length} Teile zusammen` : undefined}
+          est={estimate.cardsParts(parts.map((p) => p.text.length), counts, graphics)}
+        />
+      )}
       {error && (
         <div className="form-error" role="alert">
           {error}

@@ -19,6 +19,19 @@ export const estimate = {
     input: 350 + tokensOf(Math.min(chars, CARD_MATERIAL_LIMIT)),
     output: (count > 0 ? count : autoCardCount(chars)) * (graphics ? 700 : 110),
   }),
+  /** Several parts one after another; later parts also get the questions of the cards made before. */
+  cardsParts: (lengths: number[], counts: number[], graphics = false): Estimate => {
+    let made = 0;
+    return lengths.reduce<Estimate>(
+      (sum, len, i) => {
+        const e = estimate.cards(len, counts[i] ?? 0, graphics);
+        const avoid = i > 0 ? Math.min(1700, made * 15) : 0; // ≈ 6000 characters of earlier questions at most
+        made += counts[i] || autoCardCount(len);
+        return { input: sum.input + e.input + avoid, output: sum.output + e.output };
+      },
+      { input: 0, output: 0 },
+    );
+  },
   summary: (materialChars: number): Estimate => ({ input: 150 + tokensOf(Math.min(materialChars, MATERIAL_LIMIT)), output: 1500 }),
   quiz: (materialChars: number, count: number): Estimate => ({ input: 200 + tokensOf(Math.min(materialChars, MATERIAL_LIMIT)), output: count * 150 }),
   examCreate: (materialChars: number, tasks: number): Estimate => ({ input: 600 + tokensOf(Math.min(materialChars, 40000)), output: tasks * 250 }),
