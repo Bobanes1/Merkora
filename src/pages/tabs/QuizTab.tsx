@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react';
+import { CostHint } from '../../components/CostHint';
+import { estimate } from '../../lib/costs';
+import { materialFrom } from '../../lib/ai';
 import { IconCheck, IconClose, IconRefresh, IconSparkle } from '../../components/Icons';
 import { isActive, JobBanner, JobError, useJob } from '../../components/Jobs';
 import { Confetti, Mascot } from '../../components/Mascot';
@@ -52,6 +55,7 @@ export default function QuizTab({ deck }: { deck: Deck }) {
           <button type="button" className="btn primary" onClick={run} disabled={busy || !hasMaterial}>
             <IconSparkle size={16} /> {busy ? 'Fragen werden erstellt …' : 'Quiz erstellen'}
           </button>
+          {hasMaterial && <CostHint est={estimate.quiz(materialFrom(deck.source, deck.cards).length, count)} />}
         </>
       )}
       {!hasMaterial && <p className="muted small">Füge zuerst Lernmaterial oder Karten hinzu.</p>}

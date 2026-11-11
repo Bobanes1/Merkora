@@ -21,19 +21,24 @@ export default function SourceTab({ deck }: { deck: Deck }) {
     return () => clearTimeout(t);
   }, [text, saved, deck.id]);
 
-  const onFile = async (f?: File) => {
-    if (!f) return;
+  /** Appends one or several files (one after another); a broken file does not stop the others. */
+  const onFiles = async (list?: FileList | null) => {
+    const all = Array.from(list ?? []);
+    if (!all.length) return;
     setBusy(true);
     setError('');
-    try {
-      const t = await readFileText(f);
-      setText((prev) => (prev.trim() ? prev + '\n\n' : '') + t);
-      setSaved(false);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
+    const failed: string[] = [];
+    for (const f of all) {
+      try {
+        const t = await readFileText(f);
+        setText((prev) => (prev.trim() ? prev + '\n\n' : '') + t);
+        setSaved(false);
+      } catch (e) {
+        failed.push(`${f.name}: ${(e as Error).message}`);
+      }
     }
+    setBusy(false);
+    if (failed.length) setError(failed.join('\n'));
   };
 
   return (
@@ -45,12 +50,22 @@ export default function SourceTab({ deck }: { deck: Deck }) {
         </div>
         <span className="grow" />
         <button type="button" className="btn outline sm" onClick={() => fileRef.current?.click()} disabled={busy}>
-          <IconUpload size={15} /> {busy ? 'Wird gelesen …' : 'Datei hinzufügen'}
+          <IconUpload size={15} /> {busy ? 'Wird gelesen …' : 'Dateien hinzufügen'}
         </button>
         <button type="button" className="btn primary sm" onClick={() => setAi(true)} disabled={text.trim().length < 40}>
           <IconSparkle size={15} /> Karten daraus erstellen
         </button>
-        <input ref={fileRef} type="file" hidden accept={MATERIAL_ACCEPT} onChange={(e) => onFile(e.target.files?.[0])} />
+        <input
+          ref={fileRef}
+          type="file"
+          multiple
+          hidden
+          accept={MATERIAL_ACCEPT}
+          onChange={(e) => {
+            void onFiles(e.target.files);
+            e.target.value = '';
+          }}
+        />
       </div>
       <textarea
         className="input source-text"

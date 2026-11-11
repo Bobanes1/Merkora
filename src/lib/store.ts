@@ -180,6 +180,11 @@ export type Settings = {
   shareName?: string;
   /** The start page hint about the missing API key was closed (the app works without AI too). */
   noKeyHintClosed?: boolean;
+  /** Show the estimated AI tokens and costs before a task (on by default). */
+  showCosts?: boolean;
+  /** Own price in US-$ per 1M tokens (input/output) – overrides the price list. */
+  priceIn?: number;
+  priceOut?: number;
   /** Daily reminder at a time of day (HH:MM). */
   reminderOn: boolean;
   reminderTime: string;

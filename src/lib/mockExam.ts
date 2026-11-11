@@ -38,6 +38,9 @@ Format: {"title":"...","instructions":"kurze Hinweise wie auf einem Prüfungsbla
 const patchExam = (deckId: string, patch: Partial<MockExam>) =>
   updateDeck(deckId, (d) => (d.mockExam ? { mockExam: { ...d.mockExam, ...patch } } : {}));
 
+/** Length of the exam material (for the cost estimate). */
+export const examMaterialChars = (deck: Deck, scope: 'deck' | 'course') => examMaterial(deck, scope).length;
+
 /** Material for the exam: this deck, or all decks of its course. */
 function examMaterial(deck: Deck, scope: 'deck' | 'course') {
   if (scope === 'deck') return materialFrom(deck.source, deck.cards);

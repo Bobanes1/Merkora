@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { CostHint } from './CostHint';
+import { estimate } from '../lib/costs';
 import { hasKey, materialFrom, tutorReply } from '../lib/ai';
 import { getState, updateDeck, type Deck } from '../lib/store';
 import { IconClose, IconRefresh, IconSend } from './Icons';
@@ -113,6 +115,11 @@ export function ChatPanel({ deck, onClose }: { deck: Deck; onClose: () => void }
           <IconSend size={16} />
         </button>
       </form>
+      <CostHint
+        className="chat-cost"
+        label="Pro Frage"
+        est={estimate.chat(materialFrom(deck.source, deck.cards, 16000).length, msgs.slice(-12).reduce((n, m) => n + m.content.length, 0) + input.length)}
+      />
     </aside>
   );
 }

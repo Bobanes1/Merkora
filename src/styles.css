@@ -6577,3 +6577,27 @@ a.deck-row:hover {
 .modal.new-card-modal { width: 600px; height: min(700px, calc(100vh - 32px)); }
 .modal.new-card-modal .modal-body { flex: 1; min-height: 0; }
 .modal-foot .footer-slot { display: contents; }
+
+/* long single words (e.g. "Kommunikationswissenschaft") break inside cards and headings instead of overflowing */
+.course-card-link b,
+.page-head h1,
+.home .deck-row b,
+.week-decks a {
+  overflow-wrap: anywhere;
+  hyphens: auto;
+}
+.course-card-link b { min-width: 0; }
+.form-warn { margin: 8px 0; padding: 8px 12px; border-radius: var(--r-md); background: var(--warn-soft); color: var(--warn-ink); font-size: 13px; line-height: 1.45; }
+.form-error { white-space: pre-line; }
+.seg.count-kind { margin: 0 0 6px; }
+.count-hint { display: block; line-height: 1.4; }
+
+/* estimated AI tokens and costs */
+.cost-hint { margin: 6px 0 0; font-size: 12px; color: var(--muted); line-height: 1.4; }
+.cost-hint b { color: var(--text); font-weight: 600; }
+.cost-hint a { color: var(--primary); }
+.empty .cost-hint { text-align: center; }
+.mock-costs { display: flex; flex-wrap: wrap; gap: 0 16px; margin-top: 12px; }
+.chat-cost { margin: -6px 14px 10px; }
+.cost-settings { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.cost-price summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--primary); margin: 4px 0; }

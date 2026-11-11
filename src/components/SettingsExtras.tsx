@@ -297,3 +297,46 @@ export function LearningPanel() {
     </section>
   );
 }
+
+/** Show estimated AI tokens/costs before a task – and an own price (e.g. for a local server). */
+export function CostSettings() {
+  const s = useStore((x) => x.data.settings);
+  const on = s.showCosts ?? true;
+  const num = (v: string) => {
+    const n = Number(v.replace(',', '.'));
+    return v.trim() === '' || !Number.isFinite(n) || n < 0 ? undefined : n;
+  };
+  return (
+    <div className="cost-settings">
+      <label className="check-row">
+        <input type="checkbox" checked={on} onChange={(e) => setSettings({ showCosts: e.target.checked })} />
+        <span>
+          <b>Geschätzte Tokens und Kosten anzeigen</b> – vor jeder KI-Aufgabe (Karten, Zusammenfassung, Quiz, Probeprüfung, Tutor)
+        </span>
+      </label>
+      {on && (
+        <details className="cost-price" open={s.priceIn !== undefined || s.priceOut !== undefined}>
+          <summary>Eigener Preis (optional)</summary>
+          <p className="muted small">
+            Für einen eigenen Server, unbekannte Modelle oder wenn sich Preise geändert haben – in US-$ pro 1 Million Tokens. Leer lassen, um
+            die eingebaute Preisliste (bei OpenRouter: aktuelle Preise) zu nutzen.
+          </p>
+          <div className="form-grid">
+            <div>
+              <label className="field-label" htmlFor="price-in">
+                Eingabe ($ / 1 Mio.)
+              </label>
+              <input id="price-in" className="input" inputMode="decimal" defaultValue={s.priceIn ?? ''} placeholder="z. B. 0,15" onBlur={(e) => setSettings({ priceIn: num(e.target.value) })} />
+            </div>
+            <div>
+              <label className="field-label" htmlFor="price-out">
+                Ausgabe ($ / 1 Mio.)
+              </label>
+              <input id="price-out" className="input" inputMode="decimal" defaultValue={s.priceOut ?? ''} placeholder="z. B. 0,60" onBlur={(e) => setSettings({ priceOut: num(e.target.value) })} />
+            </div>
+          </div>
+        </details>
+      )}
+    </div>
+  );
+}

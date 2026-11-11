@@ -3,6 +3,7 @@ import { sideText } from './content';
 import { CARD_GRAPHIC_RULE } from './graphics';
 import { getState, type ChatMsg, type Provider } from './store';
 import { SECOND_MODEL } from '../config';
+import { autoCardCount, CARD_MATERIAL_LIMIT } from './cardCount';
 
 export const PROVIDERS: Record<
   Provider,
@@ -292,8 +293,13 @@ export function cardsPrompt(text: string, count: number, focus = '', graphics = 
     system: `Du bist ein erfahrener Lerncoach und erstellst hochwertige Karteikarten. ${LANG_RULE}
 Regeln: Eine Idee pro Karte. Vorderseite = präzise Frage oder Begriff. Rückseite = kurze, vollständige Antwort (max. 2–3 Sätze).
 ${graphics ? CARD_GRAPHIC_RULE + '\n' : ''}Format: {"cards":[{"front":"...","back":"..."${graphics ? ',"svg":"<svg …>…</svg> (optional)"' : ''}}]}${JSON_RULE}`,
-    user: `Erstelle genau ${count} Karteikarten zu diesem Material.${focus ? ` Schwerpunkt: ${focus}.` : ''}\n\n${clip(text, 60000)}`,
-    maxTokens: Math.min(32000, 400 + count * (graphics ? 900 : 220)),
+    user: `${
+      count > 0
+        ? `Erstelle genau ${count} Karteikarten zu diesem Material.`
+        : `Erstelle so viele Karteikarten, wie nötig sind, um alle wichtigen, prüfungsrelevanten Inhalte dieses Materials abzudecken – jede wichtige Idee genau einmal, keine Füllkarten, keine Dopplungen (Richtwert: etwa ${autoCardCount(text.length)}).`
+    }${focus ? ` Schwerpunkt: ${focus}.` : ''}\n\n${clip(text, CARD_MATERIAL_LIMIT)}`,
+    // count 0 = automatic: room for about 1.5× the guide value
+    maxTokens: Math.min(32000, 400 + Math.ceil((count > 0 ? count : autoCardCount(text.length) * 1.5) * (graphics ? 900 : 220))),
     json: true,
   };
 }

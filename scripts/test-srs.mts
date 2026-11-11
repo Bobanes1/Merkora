@@ -295,6 +295,29 @@ console.log('Markierte Karten');
   ok(toAnkiTags(['x'], true).join(' ') === 'x marked' && toAnkiTags(undefined, false).length === 0, 'Export: Stern → Anki-Tag „marked“');
 }
 
+console.log('Kartenanzahl automatisch');
+{
+  const { autoCardCount } = await import('../src/lib/cardCount');
+  ok(autoCardCount(3000) === 5 && autoCardCount(30000) === 50, 'Richtwert: ca. 1 Karte pro 600 Zeichen (3k → 5, 30k → 50)');
+  ok(autoCardCount(10_000_000) <= 150 && autoCardCount(0) === 5, 'begrenzt auf 5 bis 150');
+}
+
+console.log('Kostenschätzung');
+{
+  const { tokensOf, estimate, priceFor, costOf, formatCost } = await import('../src/lib/costs');
+  ok(tokensOf(3500) === 1000, '3.500 Zeichen ≈ 1.000 Tokens');
+  const a = estimate.cards(10000, 10), b = estimate.cards(10000, 30), c = estimate.cards(30000, 30);
+  ok(b.output > a.output && c.input > b.input, 'mehr Karten → mehr Ausgabe, mehr Material → mehr Eingabe');
+  ok(estimate.cards(30000, 0).output === 50 * 110, 'Automatisch nutzt den Richtwert');
+  const haiku = priceFor('claude-haiku-5-5')!;
+  ok(Math.abs(costOf({ input: 1_000_000, output: 0 }, haiku) - 0.1) < 1e-9, 'claude-haiku-5-5: 1 Mio. Eingabe = 0,10 $');
+  ok(priceFor('openai/gpt-4o-mini')?.in === 0.15 && priceFor('nvidia/x:free')?.in === 0, 'OpenRouter-Namen und kostenlose Modelle');
+  ok(priceFor('llama3.1') === null, 'unbekanntes Modell → Preis unbekannt');
+  ok(priceFor('llama3.1', { custom: { in: 1, out: 2 } })?.source === 'custom', 'eigener Preis überschreibt');
+  ok(priceFor('x/y', { live: { 'x/y': { in: 3, out: 4 } } })?.in === 3, 'aktuelle OpenRouter-Preise werden genutzt');
+  ok(formatCost(0.004) === '< 0,01 $' && formatCost(0.042) === '0,04 $' && formatCost(0) === 'kostenlos', 'Betrag wird lesbar formatiert');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

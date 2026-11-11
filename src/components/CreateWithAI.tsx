@@ -1,3 +1,6 @@
+import { autoCardCount, CARD_MATERIAL_LIMIT } from '../lib/cardCount';
+import { CostHint } from './CostHint';
+import { estimate } from '../lib/costs';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { generateCards, hasKey } from '../lib/ai';
@@ -40,7 +43,8 @@ export function CreateWithAI({
   // everything the AI should use: attached files, own notes and (if ticked) the deck's earlier material
   const text = [...files.map((x) => x.text), notes.trim(), useSource ? oldSource : ''].filter(Boolean).join('\n\n');
   const [name, setName] = useState('');
-  const [count, setCount] = useState(15);
+  // 0 = automatic (as many cards as the material needs)
+  const [count, setCount] = useState(0);
   const [focus, setFocus] = useState('');
   const [graphics, setGraphics] = useState(false);
   const [courseId, setCourseId] = useState(presetCourse ?? data.courses[0]?.id ?? '');
@@ -48,20 +52,26 @@ export function CreateWithAI({
   const [error, setError] = useState('');
   const [drafts, setDrafts] = useState<Draft[] | null>(null);
 
-  const onFile = async (f?: File) => {
-    if (!f) return;
+  /** Reads one or several files one after another; a broken file does not stop the others. */
+  const onFiles = async (list?: FileList | File[] | null) => {
+    const all = Array.from(list ?? []);
+    if (!all.length) return;
     setError('');
-    setBusy('Datei wird gelesen …');
-    try {
-      const t = await readFileText(f);
-      setFiles((cur) => [...cur.filter((x) => x.name !== f.name), { id: Date.now(), name: f.name, text: t }]);
-      if (!name) setName(f.name.replace(/\.[^.]+$/, ''));
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy('');
+    const failed: string[] = [];
+    for (const [i, f] of all.entries()) {
+      setBusy(all.length > 1 ? `Datei ${i + 1} von ${all.length} wird gelesen …` : 'Datei wird gelesen …');
+      try {
+        const t = await readFileText(f);
+        setFiles((cur) => [...cur.filter((x) => x.name !== f.name), { id: Date.now() + i, name: f.name, text: t }]);
+        setName((n) => n || f.name.replace(/\.[^.]+$/, ''));
+      } catch (e) {
+        failed.push(`${f.name}: ${(e as Error).message}`);
+      }
     }
+    setBusy('');
+    if (failed.length) setError(failed.join('\n'));
   };
+  const onFile = (f?: File) => onFiles(f ? [f] : []);
 
   useEffect(() => {
     if (initialFile) void onFile(initialFile);
@@ -217,17 +227,17 @@ export function CreateWithAI({
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => {
           e.preventDefault();
-          onFile(e.dataTransfer.files[0]);
+          void onFiles(e.dataTransfer.files);
         }}
         role="button"
         tabIndex={0}
         onKeyDown={(e) => e.key === 'Enter' && fileRef.current?.click()}
       >
         <IconUpload size={26} />
-        <b>{files.length ? 'Weitere Datei hinzufügen' : `Datei hierher ziehen (${MATERIAL_LABEL})`}</b>
-        <span>oder klicken, um eine Datei auszuwählen. Die Datei wird nur in deinem Browser gelesen.</span>
-        <input ref={fileRef} type="file" accept={MATERIAL_ACCEPT} hidden onChange={(e) => {
-            void onFile(e.target.files?.[0]);
+        <b>{files.length ? 'Weitere Dateien hinzufügen' : `Dateien hierher ziehen (${MATERIAL_LABEL})`}</b>
+        <span>oder klicken, um eine oder mehrere Dateien auszuwählen. Sie werden nur auf deinem Gerät gelesen.</span>
+        <input ref={fileRef} type="file" multiple accept={MATERIAL_ACCEPT} hidden onChange={(e) => {
+            void onFiles(e.target.files);
             // allows choosing the same file again later
             e.target.value = '';
           }}
@@ -246,6 +256,12 @@ export function CreateWithAI({
             </span>
           ))}
         </div>
+      )}
+      {text.length > CARD_MATERIAL_LIMIT && (
+        <p className="form-warn">
+          Sehr viel Material ({Math.round(text.length / 1000)}k Zeichen): Die KI liest pro Durchgang nur die ersten ca.{' '}
+          {CARD_MATERIAL_LIMIT / 1000}k Zeichen. Verteile große Skripte am besten auf mehrere Decks, z. B. eines pro Kapitel oder Sitzung.
+        </p>
       )}
       {oldSource && (
         <label className="check-row">
@@ -288,10 +304,27 @@ export function CreateWithAI({
           </>
         )}
         <div>
-          <label className="field-label" htmlFor="ai-count">
-            Anzahl Karten: {count}
-          </label>
-          <input id="ai-count" type="range" min={5} max={50} step={5} value={count} onChange={(e) => setCount(+e.target.value)} />
+          <span className="field-label">Anzahl Karten</span>
+          <div className="seg count-kind" role="radiogroup" aria-label="Anzahl Karten">
+            <button type="button" role="radio" aria-checked={count === 0} className={count === 0 ? 'on' : ''} onClick={() => setCount(0)}>
+              Automatisch
+            </button>
+            <button type="button" role="radio" aria-checked={count > 0} className={count > 0 ? 'on' : ''} onClick={() => count === 0 && setCount(15)}>
+              Feste Anzahl
+            </button>
+          </div>
+          {count === 0 ? (
+            <small className="muted count-hint">
+              So viele wie nötig – {text.trim() ? `etwa ${autoCardCount(text.length)}, je nach Inhalt mehr oder weniger` : 'je nach Umfang des Materials'}.
+            </small>
+          ) : (
+            <>
+              <label className="field-label" htmlFor="ai-count">
+                {count} Karten
+              </label>
+              <input id="ai-count" type="range" min={5} max={50} step={5} value={count} onChange={(e) => setCount(+e.target.value)} />
+            </>
+          )}
         </div>
         <div>
           <label className="field-label" htmlFor="ai-focus">
@@ -307,9 +340,7 @@ export function CreateWithAI({
         </span>
       </label>
       {text.trim().length > 0 && text.trim().length < 40 && <p className="muted small">Bitte etwas mehr Text eingeben.</p>}
-      {text.trim().length > 60000 && (
-        <p className="muted small">Sehr viel Material ({Math.round(text.length / 1000)}k Zeichen) – die KI nutzt die ersten 60k Zeichen.</p>
-      )}
+      {text.trim().length >= 40 && <CostHint est={estimate.cards(text.length, count, graphics)} />}
       {error && (
         <div className="form-error" role="alert">
           {error}

@@ -71,7 +71,7 @@ function promptFor(job: Job, deck: Deck): Prompt {
     case 'quiz':
       return quizPrompt(materialFrom(deck.source, deck.cards), p.count ?? 8);
     case 'cards':
-      return cardsPrompt(p.text || deck.source, p.count ?? 15, p.focus ?? '', !!p.graphics);
+      return cardsPrompt(p.text || deck.source, p.count ?? 0, p.focus ?? '', !!p.graphics);
   }
 }
 

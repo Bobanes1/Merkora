@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import { CostHint } from '../../components/CostHint';
+import { estimate } from '../../lib/costs';
+import { materialFrom } from '../../lib/ai';
 import { IconDownload, IconEdit, IconRefresh, IconSparkle } from '../../components/Icons';
 import { isActive, JobBanner, JobError, useJob } from '../../components/Jobs';
 import { Markdown } from '../../components/Markdown';
@@ -57,9 +60,12 @@ export default function SummaryTab({ deck }: { deck: Deck }) {
           {!ready ? (
             <NoKeyNotice compact />
           ) : (
-            <button type="button" className="btn primary" onClick={run} disabled={busy || !hasMaterial}>
-              <IconSparkle size={16} /> {busy ? 'Zusammenfassung wird geschrieben …' : 'Zusammenfassung erstellen'}
-            </button>
+            <>
+              <button type="button" className="btn primary" onClick={run} disabled={busy || !hasMaterial}>
+                <IconSparkle size={16} /> {busy ? 'Zusammenfassung wird geschrieben …' : 'Zusammenfassung erstellen'}
+              </button>
+              {hasMaterial && <CostHint est={estimate.summary(materialFrom(deck.source, deck.cards).length)} />}
+            </>
           )}
           {!hasMaterial && <p className="muted small">Füge zuerst Lernmaterial oder Karten hinzu.</p>}
         </div>

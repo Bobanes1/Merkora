@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { CostHint } from '../../components/CostHint';
+import { estimate } from '../../lib/costs';
 import { useSearchParams } from 'react-router-dom';
 import { IconCheck, IconClose, IconHeart, IconPause, IconPlay, IconPlus, IconRefresh, IconSparkle, IconTarget } from '../../components/Icons';
 import { Confetti, Mascot } from '../../components/Mascot';
@@ -21,6 +23,7 @@ import {
   startMockExam,
   tasksFor,
   timeLeft,
+  examMaterialChars,
   type GradeScale,
 } from '../../lib/mockExam';
 import { useStore, type Deck, type MockExam } from '../../lib/store';
@@ -155,6 +158,12 @@ function Setup({ deck, error, onStarted, onCancel }: { deck: Deck; error?: strin
           ))}
         </select>
 
+        {ready && hasMaterial && (
+          <div className="mock-costs">
+            <CostHint label="Erstellen" est={estimate.examCreate(examMaterialChars(deck, scope), tasksFor(minutes))} />
+            <CostHint label="Auswerten" est={estimate.examGrade(Math.round(tasksFor(minutes) * 0.65))} />
+          </div>
+        )}
         {!ready ? (
           <NoKeyNotice compact />
         ) : (
