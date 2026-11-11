@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { sanitize } from '../lib/content';
 import { mediaPutMany } from '../lib/db';
 import { uid } from '../lib/util';
-import { AiGraphic } from './AiGraphic';
 import { hydrateMedia } from './CardContent';
 import { DrawPad } from './DrawPad';
 
@@ -49,7 +48,6 @@ export function RichField({
   onChange,
   autoFocus,
   minHeight = 84,
-  contextText,
 }: {
   id: string;
   label: string;
@@ -58,13 +56,14 @@ export function RichField({
   autoFocus?: boolean;
   minHeight?: number;
   /** Text to suggest as the topic of an AI graphic (e.g. the card's question). */
+  /** Unused since the AI graphic button was removed; kept so callers need no change. */
   contextText?: () => string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [dialog, setDialog] = useState<'draw' | 'ai' | null>(null);
+  const [dialog, setDialog] = useState<'draw' | null>(null);
 
   useEffect(() => {
     const el = ref.current!;
@@ -143,9 +142,6 @@ export function RichField({
           <button type="button" className="tool-btn img" onMouseDown={(e) => e.preventDefault()} onClick={() => setDialog('draw')} disabled={busy}>
             ✎ Zeichnen
           </button>
-          <button type="button" className="tool-btn img ai" onMouseDown={(e) => e.preventDefault()} onClick={() => setDialog('ai')} disabled={busy}>
-            ✨ KI-Grafik
-          </button>
           <input
             ref={fileRef}
             type="file"
@@ -201,16 +197,6 @@ export function RichField({
           onSave={(b) => {
             setDialog(null);
             void insertImages([new File([b], 'zeichnung.png', { type: 'image/png' })]);
-          }}
-        />
-      )}
-      {dialog === 'ai' && (
-        <AiGraphic
-          topic={(contextText?.() || ref.current?.textContent || '').trim().slice(0, 300)}
-          onClose={() => setDialog(null)}
-          onSave={(b) => {
-            setDialog(null);
-            void insertImages([new File([b], 'grafik.svg', { type: 'image/svg+xml' })]);
           }}
         />
       )}
