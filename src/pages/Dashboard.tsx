@@ -426,7 +426,7 @@ function MiniCalendar() {
           const k = dayKey(new Date(month.getFullYear(), month.getMonth(), i + 1).getTime());
           const ex = examDays.get(k);
           return (
-            <Link key={k} to="/calendar" className={`md ${k === today ? 'today' : ''} ${ex ? 'exam' : ''}`} title={ex ?? ''}>
+            <Link key={k} to="/calendar" className={`mcal-day ${k === today ? 'today' : ''} ${ex ? 'exam' : ''}`} title={ex ?? ''}>
               {i + 1}
             </Link>
           );

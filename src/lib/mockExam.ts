@@ -6,7 +6,7 @@
 import { completeJson, LANG_RULE, materialFrom } from './ai';
 import { addCards, getState, setSettings, updateDeck, type Deck, type MockExam, type MockQuestion, type MockResult } from './store';
 import { uid } from './util';
-import { levelLabel, gradeFor, mcPoints, mistakeCards, parseExam, relatedCardIds, tasksFor, type GradeScale, type RawExam } from './mockExamCore';
+import { cleanExamText, levelLabel, gradeFor, mcPoints, mistakeCards, parseExam, relatedCardIds, tasksFor, type GradeScale, type RawExam } from './mockExamCore';
 export * from './mockExamCore';
 
 const LEVEL_STYLE: Record<string, string> = {
@@ -26,6 +26,7 @@ Die Prüfung soll sich wie eine echte schriftliche Prüfung anfühlen: sachliche
 Aufgabentypen gemischt: "mc" (Multiple Choice, genau 4 Optionen, genau eine richtig, "answer" = Index 0–3, 1–2 Punkte), "short" (Kurzantwort, 1–3 Sätze, 2–4 Punkte), "open" (ausführliche Antwort, Anwendung/Transfer/Fallbeispiel, 5–12 Punkte). Etwa 35 % mc, 35 % short, 30 % open.
 Prüfe nur Inhalte aus dem Material. Keine Aufgabe darf die Lösung einer anderen verraten.
 "solution" ist die Musterlösung, "criteria" listet stichwortartig, wofür es wie viele Punkte gibt (bei mc leer).
+Schreibweise: Teilaufgaben als „a)“, „b)“, „c)“ – nur mit schließender Klammer, jede auf einer eigenen Zeile. Nur normaler Text: keine Sonderzeichen wie ©, ® oder ™, kein Markdown.
 Format: {"title":"...","instructions":"kurze Hinweise wie auf einem Prüfungsblatt","questions":[{"type":"mc|short|open","question":"...","options":["..."],"answer":0,"points":2,"solution":"...","criteria":"..."}]}`;
   return {
     system,
@@ -129,7 +130,7 @@ Format: {"questions":[{"id":"...","points":3,"feedback":"..."}],"summary":"...",
     for (const q of written) {
       const g = res.questions?.find((x) => x.id === q.id);
       const pts = Math.round(Math.max(0, Math.min(q.points, Number(g?.points) || 0)) * 2) / 2;
-      per[q.id] = { points: String(ex.answers[q.id] ?? '').trim() ? pts : 0, feedback: g?.feedback?.trim() || 'Keine Rückmeldung erhalten.' };
+      per[q.id] = { points: String(ex.answers[q.id] ?? '').trim() ? pts : 0, feedback: cleanExamText(g?.feedback ?? '') || 'Keine Rückmeldung erhalten.' };
     }
     const total = Object.values(per).reduce((n, r) => n + r.points, 0);
     const max = ex.questions.reduce((n, q) => n + q.points, 0);
@@ -141,9 +142,9 @@ Format: {"questions":[{"id":"...","points":3,"feedback":"..."}],"summary":"...",
       percent: max ? Math.round((total / max) * 100) : 0,
       grade,
       passed,
-      summary: res.summary?.trim() || '',
-      strengths: (res.strengths ?? []).map(String).slice(0, 5),
-      improve: (res.improve ?? []).map(String).slice(0, 5),
+      summary: cleanExamText(res.summary ?? ''),
+      strengths: (res.strengths ?? []).map((x) => cleanExamText(String(x))).filter(Boolean).slice(0, 5),
+      improve: (res.improve ?? []).map((x) => cleanExamText(String(x))).filter(Boolean).slice(0, 5),
     };
     updateDeck(deckId, (d) => ({
       mockExam: d.mockExam ? { ...d.mockExam, status: 'graded', result } : d.mockExam,

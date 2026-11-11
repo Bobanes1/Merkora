@@ -54,6 +54,31 @@ export const mcPoints = (q: MockQuestion, answer: unknown) => (q.type === 'mc' &
 /** How many tasks fit into the time (about 1 point per minute, like real exams). */
 export const tasksFor = (minutes: number) => Math.max(5, Math.min(24, Math.round(minutes / 4.5)));
 
+const LIGATURES: Record<string, string> = { 'ﬀ': 'ff', 'ﬁ': 'fi', 'ﬂ': 'fl', 'ﬃ': 'ffi', 'ﬄ': 'ffl', 'ﬅ': 'st', 'ﬆ': 'st' };
+
+/**
+ * Keeps exam texts plain: sub-task labels are written as "a)", "b)", "c)" (only a closing bracket),
+ * and symbols that some models or fonts make out of "(c)" / "(r)" (© / ®) are turned back into labels.
+ * Brackets in normal text, e.g. "(z. B.)", "(2014)" or a lone "Copyright (c) 2024", stay as they are.
+ */
+export function cleanExamText(input: string): string {
+  let s = String(input ?? '').replace(/[ﬀ-ﬆ]/g, (c) => LIGATURES[c] ?? c);
+  const label = /(^|[\s:;,])\(([a-hA-H])\)(?=\s)/gm;
+  const letters = new Set([...s.matchAll(label)].map((m) => m[2].toLowerCase()));
+  const listLike = letters.size >= 2 || /(^|[\s:;,])[a-h]\)\s/m.test(s);
+  // "(a) …" at the start of a line is always a label; elsewhere only when the text lists several parts
+  s = s.replace(label, (all, pre: string, l: string) => {
+    const lineStart = pre === '' || pre === '\n';
+    return lineStart || listLike ? `${pre}${l.toLowerCase()})` : all;
+  });
+  const symbolList = listLike || /(^|\n)\s*[a-h]\)\s/.test(s);
+  s = s.replace(/(^|[\s:;,])([©®])(?=\s)/gm, (all, pre: string, sym: string) => {
+    const lineStart = pre === '' || pre === '\n';
+    return lineStart || symbolList ? `${pre}${sym === '©' ? 'c' : 'r'})` : all;
+  });
+  return s.trim();
+}
+
 export type RawExam = { title?: string; instructions?: string; questions?: Partial<MockQuestion & { answer: number }>[] };
 export function parseExam(raw: RawExam): Pick<MockExam, 'title' | 'instructions' | 'questions'> {
   const questions: MockQuestion[] = (raw.questions ?? [])
@@ -64,17 +89,17 @@ export function parseExam(raw: RawExam): Pick<MockExam, 'title' | 'instructions'
       return {
         id: uid(),
         type,
-        question: String(q.question).trim(),
+        question: cleanExamText(q.question!),
         ...(type === 'mc'
-          ? { options: q.options!.map(String), answer: Math.max(0, Math.min(q.options!.length - 1, Number(q.answer) || 0)) }
+          ? { options: q.options!.map((o) => cleanExamText(String(o))), answer: Math.max(0, Math.min(q.options!.length - 1, Number(q.answer) || 0)) }
           : {}),
         points,
-        solution: String(q.solution ?? '').trim(),
-        criteria: String(q.criteria ?? '').trim(),
+        solution: cleanExamText(q.solution ?? ''),
+        criteria: cleanExamText(q.criteria ?? ''),
       };
     });
   if (questions.length < 3) throw new Error('Die KI hat keine vollständige Prüfung geliefert. Bitte versuche es noch einmal.');
-  return { title: String(raw.title || 'Probeprüfung').trim(), instructions: String(raw.instructions || '').trim(), questions };
+  return { title: cleanExamText(raw.title || 'Probeprüfung'), instructions: cleanExamText(raw.instructions || ''), questions };
 }
 
 

@@ -5500,7 +5500,7 @@ a.deck-row:hover {
   color: var(--muted);
   padding: 4px 0;
 }
-.md {
+.mcal-day {
   display: grid;
   place-items: center;
   height: 30px;
@@ -5508,15 +5508,15 @@ a.deck-row:hover {
   color: var(--text);
   font-size: 13px;
 }
-.md:hover {
+.mcal-day:hover {
   background: var(--surface-2);
 }
-.md.today {
+.mcal-day.today {
   border: 1.5px solid var(--primary);
   color: var(--primary);
   font-weight: 700;
 }
-.md.exam {
+.mcal-day.exam {
   background: var(--primary);
   color: #fff;
   font-weight: 700;
@@ -6583,3 +6583,9 @@ a.deck-row:hover {
 .mock-vs.better { border-color: #53d0cc; background: var(--ok-soft); }
 .mock-vs.worse { border-color: #f2c47a; background: var(--warn-soft); }
 .share-pick { display: flex; flex-direction: column; gap: 6px; }
+
+/* Chat: messages keep their full height inside the scrolling column (no squeezing → no overlap) */
+.chat-scroll > * { flex-shrink: 0; }
+.msg { overflow-wrap: anywhere; }
+/* Exam texts: no font may swap characters (e.g. "(c)" → "©") */
+.mock-question, .mock-answer, .mock-solution, .mock-given, .mock-feedback, .mock-writing .option, .mock-mc li, .mock-cover p { font-variant-ligatures: none; font-feature-settings: 'liga' 0, 'clig' 0, 'dlig' 0, 'calt' 0; }

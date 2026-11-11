@@ -3,7 +3,7 @@ import { ankiToSrs, formatDelay, newSrs, schedule, type Rating, type Srs } from 
 import { capForExam, dailyPlan, examAt, toIcs } from '../src/lib/exams';
 import { reminderDue } from '../src/lib/reminderRule';
 import { newLeft, pickDue, planNewForCourse } from '../src/lib/newCards';
-import { gradeFor, mcPoints, mistakeCards, parseExam, relatedCardIds, tasksFor, timeLeft } from '../src/lib/mockExamCore';
+import { cleanExamText, gradeFor, mcPoints, mistakeCards, parseExam, relatedCardIds, tasksFor, timeLeft } from '../src/lib/mockExamCore';
 import { shortNames } from '../src/lib/deckNames';
 import { initialPomo, pause, remaining, start, tick, workedSoFar } from '../src/lib/pomodoroRule';
 
@@ -201,6 +201,18 @@ console.log('Probeprüfung: Noten');
     { id: 'y', front: 'Was ist Framing?', back: 'Deutungsrahmen' },
   ]);
   ok(rel.length === 1 && rel[0] === 'x', 'passende Karten zum Fehler werden gefunden');
+  ok(cleanExamText('Lies den Fall.\n(a) Nenne zwei Ziele.\n(b) Erkläre sie.\n(c) Bewerte.') === 'Lies den Fall.\na) Nenne zwei Ziele.\nb) Erkläre sie.\nc) Bewerte.', 'Teilaufgaben (a) (b) (c) → a) b) c)');
+  ok(cleanExamText('a) Nenne X.\nb) Erkläre Y.\n© Bewerte Z.') === 'a) Nenne X.\nb) Erkläre Y.\nc) Bewerte Z.', '© als Teilaufgabe → c)');
+  ok(cleanExamText('© Nenne drei Merkmale.') === 'c) Nenne drei Merkmale.', '© am Zeilenanfang → c)');
+  ok(cleanExamText('Teilaufgaben: (a) Ziel und (b) Weg sowie (c) Mittel') === 'Teilaufgaben: a) Ziel und b) Weg sowie c) Mittel', 'mehrere Kennungen im Fließtext');
+  ok(cleanExamText('Wie in der Studie (z. B. Müller 2014) gezeigt') === 'Wie in der Studie (z. B. Müller 2014) gezeigt', 'normale Klammern bleiben');
+  ok(cleanExamText('Copyright (c) 2024 Verlag') === 'Copyright (c) 2024 Verlag', 'einzelnes „(c)“ im Text bleibt');
+  ok(cleanExamText('Deﬁniere den Begriff') === 'Definiere den Begriff', 'Ligatur ﬁ → fi');
+  const cl = parseExam({ questions: [
+    { type: 'mc', question: '© Was gilt?', options: ['(a) eins', 'zwei'], answer: 0, points: 1 },
+    { type: 'short', question: 'x', points: 2 }, { type: 'short', question: 'y', points: 2 },
+  ] } as never);
+  ok(cl.questions[0].question === 'c) Was gilt?' && cl.questions[0].options![0] === 'a) eins', 'Prüfung einlesen säubert Aufgaben und Optionen');
   ok(tasksFor(60) === 13 && tasksFor(10) === 5, 'Aufgabenzahl passt zur Dauer');
 }
 
