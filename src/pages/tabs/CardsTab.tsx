@@ -3,6 +3,7 @@ import { AnkiImport } from '../../components/AnkiImport';
 import { OcclusionEditor } from '../../components/OcclusionEditor';
 import { ExportDialog } from '../../components/ExportDialog';
 import { allTags, hasTag, parseTags } from '../../lib/tags';
+import { answerOnly } from '../../lib/backSide';
 import { CardContent, lookOf } from '../../components/CardContent';
 import { CreateWithAI } from '../../components/CreateWithAI';
 import { IconEdit, IconPlay, IconPlus, IconSearch, IconSparkle, IconTrash, IconDownload, IconImage, IconTag, IconUpload } from '../../components/Icons';
@@ -188,14 +189,21 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
               <article key={c.id} className="flash-row">
                 <div className="flash-text">
                   <CardContent text={c.front} html={c.html} look={lookOf(deck, c)} className="ft-front" />
-                  <CardContent text={c.back} html={c.html} look={lookOf(deck, c)} className="ft-back" />
+                  <CardContent text={c.html ? answerOnly(c.front, c.back) : c.back} html={c.html} look={lookOf(deck, c)} className="ft-back" />
+                  {c.tags && c.tags.length > 0 && (
+                    <div className="row-tags" title={c.tags.map((t) => `#${t}`).join(' ')}>
+                      {c.tags.slice(0, 4).map((t) => (
+                        <span key={t}>#{t}</span>
+                      ))}
+                      {c.tags.length > 4 && <span>+{c.tags.length - 4}</span>}
+                    </div>
+                  )}
                 </div>
                 <div className="flash-meta">
                   <span className="level-badge" style={{ ['--c' as string]: lvl.color }}>
                     {lvl.label}
                   </span>
                   {c.srs.last && <small>{formatDue(c.srs.due)}</small>}
-                  {c.tags && c.tags.length > 0 && <small className="row-tags">{c.tags.slice(0, 3).map((t) => `#${t}`).join(' ')}</small>}
                 </div>
                 <div className="flash-actions">
                   <button type="button" className="icon-btn" aria-label="Bearbeiten" onClick={() => setEdit(c)}>

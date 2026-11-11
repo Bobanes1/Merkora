@@ -1,5 +1,6 @@
 import DOMPurify from 'dompurify';
 import type { Card } from './store';
+import { answerOnly } from './backSide';
 
 /**
  * Cleans card HTML: keeps formatting (also inline colours, sizes and layout like in Anki), images, audio, tables
@@ -35,5 +36,6 @@ export function htmlToText(html: string): string {
 
 export const sideText = (card: Pick<Card, 'html'>, side: string) => (card.html ? htmlToText(side) : side);
 export const cardFrontText = (c: Card) => sideText(c, c.front);
-export const cardBackText = (c: Card) => sideText(c, c.back);
+/** Answer only (without a repeated front from Anki templates) – shorter material for the AI. */
+export const cardBackText = (c: Card) => sideText(c, c.html ? answerOnly(c.front, c.back) : c.back);
 export const cardHasMedia = (c: Card) => !!c.html && /data-media=/.test(c.front + c.back);

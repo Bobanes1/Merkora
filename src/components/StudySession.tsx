@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { answerOnly } from '../lib/backSide';
 import { capForExam, nextExamAt } from '../lib/exams';
 import { RATINGS, formatDelay, schedule, type Rating } from '../lib/srs';
 import { addXp, logReview, reviewCard, useStore } from '../lib/store';
@@ -100,7 +101,7 @@ export function StudySession({ title, items, onExit }: { title: string; items: S
           <>
             <hr />
             <small>Antwort</small>
-            <CardContent text={card.back} html={card.html} look={look} className="fc-back" />
+            <CardContent text={card.html ? answerOnly(card.front, card.back) : card.back} html={card.html} look={look} className="fc-back" />
           </>
         )}
         {!flipped && <span className="fc-hint">Klicken oder Leertaste zum Umdrehen</span>}

@@ -11,6 +11,7 @@ import { RATINGS, formatDelay, schedule, type Rating, type Srs } from '../../lib
 import { addXp, boostNewCards, dueCards, logReview, newCardsLeft, reviewCard, useStore, type Deck } from '../../lib/store';
 import { capForExam, countdownText, nextExamAt, nextExamForDeck } from '../../lib/exams';
 import { pipGreeting, pipReaction, pipSummary } from '../../lib/pipLines';
+import { answerOnly } from '../../lib/backSide';
 import { dayKey } from '../../lib/util';
 
 type Grade = { score: number; verdict: string; feedback: string };
@@ -281,7 +282,7 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
           <>
             <hr />
             <small>Antwort</small>
-            <CardContent text={card.back} html={card.html} look={lookOf(deck, card)} className="fc-back" />
+            <CardContent text={card.html ? answerOnly(card.front, card.back) : card.back} html={card.html} look={lookOf(deck, card)} className="fc-back" />
           </>
         )}
         {!flipped && !typeMode && <span className="fc-hint">Klicken oder Leertaste zum Umdrehen</span>}

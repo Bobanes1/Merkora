@@ -5026,10 +5026,18 @@ a.deck-row:hover {
   color: var(--primary);
   font-weight: 600;
 }
+/* tags as a slim line under the card text (they used to widen the right column) */
 .row-tags {
-  color: var(--primary) !important;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  margin-top: 6px;
   font-size: 11px;
-  max-width: 140px;
+  line-height: 1.4;
+  color: var(--primary);
+}
+.row-tags span {
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
