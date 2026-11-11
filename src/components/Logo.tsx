@@ -1,16 +1,17 @@
 import { Link } from 'react-router-dom';
 import { APP_NAME } from '../lib/brand';
 
-/** Own logo: a tilted index card with a small sprout growing out of it. */
+/** Own logo: two index cards with a small sprout growing out of the front one. */
 export function LogoMark({ size = 32 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 36 36" aria-hidden="true">
-      <rect x="4" y="13" width="24" height="18" rx="4" fill="#9cdcd8" transform="rotate(-8 16 22)" />
-      <rect x="8" y="14" width="24" height="18" rx="4" fill="#09817e" />
-      <path d="M13 20.5h10M13 25h7" stroke="#fff" strokeWidth="2" strokeLinecap="round" opacity="0.85" />
-      <path d="M24 14V9" stroke="#12a19a" strokeWidth="2" strokeLinecap="round" />
-      <path d="M24 10c0-3.6 2.6-6 6.5-6 0 3.6-2.6 6-6.5 6z" fill="#6fe0d2" />
-      <path d="M24 11.5c0-2.8-2-4.6-5-4.6 0 2.8 2 4.6 5 4.6z" fill="#12a19a" />
+      <rect x="3" y="14" width="24" height="18" rx="4" fill="#8fd4cb" />
+      <rect x="8" y="12" width="25" height="19" rx="4.5" fill="#2a9d8f" />
+      <rect x="13" y="18.5" width="12" height="2.2" rx="1.1" fill="#fff" />
+      <rect x="13" y="23.5" width="9" height="2.2" rx="1.1" fill="#fff" />
+      <rect x="25" y="6.5" width="1.6" height="6" rx="0.8" fill="#5fa83a" />
+      <ellipse cx="28.8" cy="4.5" rx="3.6" ry="1.8" transform="rotate(-34 28.8 4.5)" fill="#8cc63f" />
+      <ellipse cx="23.5" cy="5.9" rx="2.8" ry="1.4" transform="rotate(34 23.5 5.9)" fill="#6cb33f" />
     </svg>
   );
 }
