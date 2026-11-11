@@ -16,6 +16,7 @@ import {
   type PathNode,
 } from '../../lib/path';
 import { comfort, Confetti, Mascot, praise } from '../../components/Mascot';
+import { FloorDecor, NodeDecor, PathLink, SandFloor, themeFor, Waves } from '../../components/PathDecor';
 import { addXp, logReview, reviewCard, savePathResult, setDailyGoal, useData, type Deck } from '../../lib/store';
 
 const HEARTS = 3;
@@ -119,22 +120,52 @@ export default function PathTab({ deck }: { deck: Deck }) {
         </span>
       </div>
       <div className="path">
-        {visibleUnits.map((u) => (
-          <section key={u.index} className="path-unit">
+        {visibleUnits.map((u) => {
+          const theme = themeFor(u.index);
+          const doneHere = u.nodes.filter((n) => states[n.key] === 'done').length;
+          let prevOff: number | null = null;
+          return (
+          <section
+            key={u.index}
+            className="path-unit scene"
+            style={{ ['--scene-top' as string]: theme.top, ['--scene-bottom' as string]: theme.bottom, ['--scene-accent' as string]: theme.accent }}
+          >
+            <Waves color="var(--scene-wave)" />
+            <span className="scene-bubbles" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+              <i />
+              <i />
+            </span>
             <header className="unit-banner">
-              <b>{u.title}</b>
-              <small>
-                {u.nodes.filter((n) => states[n.key] === 'done').length} von {u.nodes.length} geschafft
-              </small>
+              <span className="unit-no">{u.index + 1}</span>
+              <span className="grow">
+                <b>{u.title}</b>
+                <small>
+                  {theme.name} · {doneHere} von {u.nodes.length} geschafft
+                </small>
+                <span className="unit-progress">
+                  <i style={{ width: `${(doneHere / Math.max(1, u.nodes.length)) * 100}%` }} />
+                </span>
+              </span>
             </header>
             <div className="unit-nodes">
-              {u.nodes.map((n) => {
+              {u.nodes.map((n, k) => {
                 const st = states[n.key];
                 const res = deck.path?.[n.key];
                 const off = OFFSETS[i++ % OFFSETS.length];
+                const dx = prevOff === null ? null : prevOff - off;
+                prevOff = off;
+                // decorations go where the path leaves room – and never where Pip is waving
+                const mascotSide = off > 0 ? 'left' : 'right';
+                let decoSide: 'left' | 'right' = off > 0 ? 'left' : off < 0 ? 'right' : k % 2 ? 'left' : 'right';
+                if (st === 'current') decoSide = mascotSide === 'left' ? 'right' : 'left';
                 const Icon = n.kind === 'review' ? IconGift : n.kind === 'final' ? IconTrophy : st === 'done' ? IconCheck : st === 'locked' ? IconLock : IconStar;
                 return (
-                  <div key={n.key} className="path-node-wrap" style={{ transform: `translateX(${off}px)`, animationDelay: `${Math.min(i, 24) * 45}ms` }}>
+                  <div key={n.key} className={`path-node-wrap ${st}`} style={{ transform: `translateX(${off}px)`, animationDelay: `${Math.min(i, 24) * 45}ms`, zIndex: 200 - k }}>
+                    {dx !== null && <PathLink dx={dx} height={st === 'current' ? 88 : 58} done={st === 'done' || st === 'current'} />}
+                    <NodeDecor theme={theme} index={k + u.index * 2} side={decoSide} />
                     {st === 'current' && <span className="node-bubble">{n.kind === 'lesson' ? 'Start' : 'Los!'}</span>}
                     {st === 'current' && <Mascot className={`node-mascot ${off > 0 ? 'left' : 'right'}`} mood="wave" size={64} />}
                     <button
@@ -159,8 +190,11 @@ export default function PathTab({ deck }: { deck: Deck }) {
                 );
               })}
             </div>
+            <SandFloor />
+            <FloorDecor />
           </section>
-        ))}
+          );
+        })}
         {visibleUnits.length < units.length && (
           <button type="button" className="btn outline" onClick={() => setShowUnits(visibleUnits.length + 3)}>
             Weitere Abschnitte anzeigen ({units.length - visibleUnits.length})
