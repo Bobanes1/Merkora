@@ -6553,3 +6553,10 @@ a.deck-row:hover {
 .exam-cta:hover { background: var(--tint); }
 .exam-cta b { display: block; color: var(--ink); }
 .exam-cta small { color: var(--muted); }
+
+/* slim, closable "no API key" hint on the start page */
+.nokey-hint { display: flex; align-items: center; gap: 10px; margin: 14px 0; padding: 8px 8px 8px 14px; border-radius: var(--r-lg); background: var(--warn-soft); border: 1px solid color-mix(in srgb, var(--warn-ink) 25%, transparent); color: var(--warn-ink); font-size: 13px; line-height: 1.4; }
+.nokey-hint b { color: var(--ink); }
+.nokey-hint span { color: var(--text); }
+.nokey-hint .small-link { white-space: nowrap; font-weight: 700; }
+.nokey-hint .icon-btn { flex: none; width: 28px; height: 28px; }

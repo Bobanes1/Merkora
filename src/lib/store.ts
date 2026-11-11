@@ -176,6 +176,8 @@ export type Settings = {
   gradeScale?: 'ch' | 'de' | 'at' | 'pct';
   /** Name shown to friends when sharing a deck. */
   shareName?: string;
+  /** The start page hint about the missing API key was closed (the app works without AI too). */
+  noKeyHintClosed?: boolean;
   /** Daily reminder at a time of day (HH:MM). */
   reminderOn: boolean;
   reminderTime: string;

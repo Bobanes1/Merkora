@@ -5,7 +5,7 @@ import { CreateWithAI } from '../components/CreateWithAI';
 import { ExamDialog } from '../components/ExamDialog';
 import { IconCalendar, IconCards, IconChevron, IconFlame, IconPlay, IconPlus, IconSparkle, IconStar, IconUpload } from '../components/Icons';
 import { Mascot } from '../components/Mascot';
-import { NoKeyNotice } from '../components/NoKey';
+import { NoKeyHint } from '../components/NoKey';
 import { Pomodoro } from '../components/Pomodoro';
 import { countdownText, dailyPlan, examAt, readiness, upcomingExams } from '../lib/exams';
 import { pathProgress, xpStreak, xpToday } from '../lib/path';
@@ -134,7 +134,7 @@ export default function Dashboard() {
         </section>
 
 
-        {!apiKey && data.settings.provider !== 'custom' && <NoKeyNotice />}
+        {!apiKey && data.settings.provider !== 'custom' && !data.settings.noKeyHintClosed && <NoKeyHint />}
 
         <WeekReview />
 
