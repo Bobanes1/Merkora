@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { escapeHtml } from '../lib/content';
 import { addCards, type Deck } from '../lib/store';
 import { IconTrash, IconUpload } from './Icons';
@@ -25,7 +26,10 @@ export function occlusionHtml(mediaId: string, rects: Rect[], active: number, an
 }
 
 /** Image occlusion without AI: choose a picture, draw boxes over the parts to learn – each box becomes a card. */
-export function OcclusionEditor({ deck, onClose, onText }: { deck: Deck; onClose: () => void; /** back to a normal card */ onText?: () => void }) {
+/** Shown inside another window: that window's footer element receives the buttons. */
+export type Embed = { footerEl: HTMLElement | null };
+
+export function OcclusionEditor({ deck, onClose, embed }: { deck: Deck; onClose: () => void; embed?: Embed }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const areaRef = useRef<HTMLDivElement>(null);
   const [img, setImg] = useState<{ id: string; url: string } | null>(null);
@@ -94,33 +98,18 @@ export function OcclusionEditor({ deck, onClose, onText }: { deck: Deck; onClose
     onClose();
   };
 
-  return (
-    <Modal
-      wide={!onText}
-      className={onText ? 'new-card-modal' : ''}
-      title={onText ? 'Neue Karte' : 'Bildverdeckung erstellen'}
-      onClose={onClose}
-      footer={
-        <>
-          <button type="button" className="btn ghost" onClick={onClose}>
-            Abbrechen
-          </button>
-          <button type="button" className="btn primary" onClick={save} disabled={!img || !rects.length}>
-            {rects.length ? `${rects.length} ${rects.length === 1 ? 'Karte' : 'Karten'} erstellen` : 'Karten erstellen'}
-          </button>
-        </>
-      }
-    >
-      {onText && (
-        <div className="seg card-kind" role="tablist" aria-label="Art der Karte">
-          <button type="button" role="tab" aria-selected={false} className={''} onClick={onText}>
-            Text & Bilder
-          </button>
-          <button type="button" role="tab" aria-selected={true} className={'on'} title="Kästen über ein Bild ziehen – jede Stelle wird eine Karte">
-            Bildverdeckung
-          </button>
-        </div>
-      )}
+  const footer = (
+    <>
+      <button type="button" className="btn ghost" onClick={onClose}>
+        Abbrechen
+      </button>
+      <button type="button" className="btn primary" onClick={save} disabled={!img || !rects.length}>
+        {rects.length ? `${rects.length} ${rects.length === 1 ? 'Karte' : 'Karten'} erstellen` : 'Karten erstellen'}
+      </button>
+    </>
+  );
+  const body = (
+    <>
       {!img ? (
         <div
           className="dropzone"
@@ -190,6 +179,13 @@ export function OcclusionEditor({ deck, onClose, onText }: { deck: Deck; onClose
           </button>
         </>
       )}
+    </>
+  );
+  // inside the shared "Neue Karte" window: only the content, the buttons go into its footer
+  if (embed) return <>{body}{embed.footerEl && createPortal(footer, embed.footerEl)}</>;
+  return (
+    <Modal wide title="Bildverdeckung erstellen" onClose={onClose} footer={footer}>
+      {body}
     </Modal>
   );
 }

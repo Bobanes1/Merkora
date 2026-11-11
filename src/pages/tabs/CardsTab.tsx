@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AnkiImport } from '../../components/AnkiImport';
-import { OcclusionEditor } from '../../components/OcclusionEditor';
+import { OcclusionEditor, type Embed } from '../../components/OcclusionEditor';
 import { ExportDialog } from '../../components/ExportDialog';
 import { allTags, hasTag, parseTags } from '../../lib/tags';
 import { answerOnly } from '../../lib/backSide';
@@ -21,14 +22,14 @@ function CardEditor({
   card,
   onClose,
   onAnki,
-  onOcclusion,
+  embed,
 }: {
   deck: Deck;
   card?: Card;
   onClose: () => void;
   onAnki?: () => void;
-  /** New card: switch to image occlusion (boxes over a picture → one card per box). */
-  onOcclusion?: () => void;
+  /** Inside the shared "Neue Karte" window (see NewCardWindow). */
+  embed?: Embed;
 }) {
   // The editor always works in HTML so pictures can be added; plain cards are converted.
   const toHtml = (s: string) => (card?.html ? s : textToHtml(s));
@@ -50,34 +51,20 @@ function CardEditor({
       setRound((r) => r + 1);
     } else onClose();
   };
-  return (
-    <Modal
-      title={card ? 'Karte bearbeiten' : 'Neue Karte'}
-      className={!card && onOcclusion ? 'new-card-modal' : ''}
-      onClose={onClose}
-      footer={
-        <>
-          {!card && (
-            <button type="button" className="btn ghost" onClick={() => save(true)} disabled={!ok}>
-              Speichern & nächste
-            </button>
-          )}
-          <button type="button" className="btn primary" onClick={() => save(false)} disabled={!ok}>
-            Speichern
-          </button>
-        </>
-      }
-    >
-      {!card && onOcclusion && (
-        <div className="seg card-kind" role="tablist" aria-label="Art der Karte">
-          <button type="button" role="tab" aria-selected={true} className={'on'}>
-            Text & Bilder
-          </button>
-          <button type="button" role="tab" aria-selected={false} className={''} onClick={onOcclusion} title="Kästen über ein Bild ziehen – jede Stelle wird eine Karte">
-            Bildverdeckung
-          </button>
-        </div>
+  const footer = (
+    <>
+      {!card && (
+        <button type="button" className="btn ghost" onClick={() => save(true)} disabled={!ok}>
+          Speichern & nächste
+        </button>
       )}
+      <button type="button" className="btn primary" onClick={() => save(false)} disabled={!ok}>
+        Speichern
+      </button>
+    </>
+  );
+  const body = (
+    <>
       {!card && onAnki && (
         <div className="editor-alt">
           <IconUpload size={15} />
@@ -126,6 +113,50 @@ function CardEditor({
           <option key={t} value={t} />
         ))}
       </datalist>
+    </>
+  );
+  if (embed) return <>{body}{embed.footerEl && createPortal(footer, embed.footerEl)}</>;
+  return (
+    <Modal title={card ? 'Karte bearbeiten' : 'Neue Karte'} onClose={onClose} footer={footer}>
+      {body}
+    </Modal>
+  );
+}
+
+/**
+ * "Neue Karte": one window that stays open while switching between a text card and image occlusion –
+ * only the content changes (no closing and reopening, so nothing flickers).
+ */
+function NewCardWindow({ deck, onClose, onAnki }: { deck: Deck; onClose: () => void; onAnki: () => void }) {
+  const [kind, setKind] = useState<'text' | 'occl'>('text');
+  const [footerEl, setFooterEl] = useState<HTMLElement | null>(null);
+  return (
+    <Modal
+      title="Neue Karte"
+      className="new-card-modal"
+      onClose={onClose}
+      footer={<div ref={setFooterEl} className="footer-slot" />}
+    >
+      <div className="seg card-kind" role="tablist" aria-label="Art der Karte">
+        <button type="button" role="tab" aria-selected={kind === 'text'} className={kind === 'text' ? 'on' : ''} onClick={() => setKind('text')}>
+          Text & Bilder
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={kind === 'occl'}
+          className={kind === 'occl' ? 'on' : ''}
+          onClick={() => setKind('occl')}
+          title="Kästen über ein Bild ziehen – jede Stelle wird eine Karte"
+        >
+          Bildverdeckung
+        </button>
+      </div>
+      {kind === 'text' ? (
+        <CardEditor deck={deck} onClose={onClose} onAnki={onAnki} embed={{ footerEl }} />
+      ) : (
+        <OcclusionEditor deck={deck} onClose={onClose} embed={{ footerEl }} />
+      )}
     </Modal>
   );
 }
@@ -137,7 +168,6 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
   const [ai, setAi] = useState(false);
   const term = q.trim().toLowerCase();
   const [anki, setAnki] = useState(false);
-  const [occl, setOccl] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [limit, setLimit] = useState(100);
   const [tag, setTag] = useState('');
@@ -255,36 +285,22 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
           )}
         </div>
       )}
-      {edit && (
-        <CardEditor
+      {edit === 'new' && (
+        <NewCardWindow
           deck={deck}
-          card={edit === 'new' ? undefined : edit}
           onClose={() => setEdit(null)}
           onAnki={() => {
             setEdit(null);
             setAnki(true);
           }}
-          onOcclusion={() => {
-            setEdit(null);
-            setOccl(true);
-          }}
         />
       )}
+      {edit && edit !== 'new' && <CardEditor deck={deck} card={edit} onClose={() => setEdit(null)} />}
       {del && (
         <ConfirmModal title="Karte löschen?" text={cardFrontText(del)} onClose={() => setDel(null)} onConfirm={() => deleteCard(deck.id, del.id)} />
       )}
       {ai && <CreateWithAI deckId={deck.id} onClose={() => setAi(false)} />}
       {anki && <AnkiImport onClose={() => setAnki(false)} targetDeckId={deck.id} />}
-      {occl && (
-        <OcclusionEditor
-          deck={deck}
-          onClose={() => setOccl(false)}
-          onText={() => {
-            setOccl(false);
-            setEdit('new');
-          }}
-        />
-      )}
       {exporting && <ExportDialog deck={deck} onClose={() => setExporting(false)} />}
     </div>
   );
