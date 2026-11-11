@@ -150,7 +150,7 @@ export async function netFetch(url: string, init: RequestInit = {}): Promise<Res
 export async function smokeInfo() {
   if (!inTauri) return null;
   try {
-    return await invoke<{ apkg: string | null } | null>('smoke_info');
+    return await invoke<{ apkg: string | null; updateDownload: boolean } | null>('smoke_info');
   } catch {
     return null;
   }

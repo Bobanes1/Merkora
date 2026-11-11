@@ -68,7 +68,16 @@ export async function runSmokeTest() {
   await step('updateCheck', async () => {
     const { check } = await import('@tauri-apps/plugin-updater');
     const u = await check({ timeout: 20000 });
-    return u ? `Update verfügbar: ${u.version}` : 'keine neuere Version';
+    if (!u) return 'keine neuere Version';
+    // optional: download the update too (verifies the signature, does not install)
+    if (info.updateDownload) {
+      let bytes = 0;
+      await u.download((ev) => {
+        if (ev.event === 'Progress') bytes += ev.data.chunkLength;
+      });
+      return `Update verfügbar: ${u.version}, geladen und Signatur geprüft (${Math.round(bytes / 1024 / 1024)} MB)`;
+    }
+    return `Update verfügbar: ${u.version}`;
   });
   await step('backups', async () => {
     const d = await import('./desktop');

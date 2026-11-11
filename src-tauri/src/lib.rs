@@ -353,12 +353,15 @@ async fn http_fetch(req: FetchReq) -> Result<FetchRes, String> {
 
 // ---------- self-test (used when building) ----------
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct SmokeInfo {
     apkg: Option<String>,
+    /// also download an available update (checks its signature, does not install)
+    update_download: bool,
 }
 #[tauri::command]
 fn smoke_info() -> Option<SmokeInfo> {
-    std::env::var("MERKORA_SMOKE").ok().map(|_| SmokeInfo { apkg: std::env::var("MERKORA_SMOKE_APKG").ok() })
+    std::env::var("MERKORA_SMOKE").ok().map(|_| SmokeInfo { apkg: std::env::var("MERKORA_SMOKE_APKG").ok(), update_download: std::env::var("MERKORA_SMOKE_UPDATE").is_ok() })
 }
 #[tauri::command]
 fn smoke_done(app: AppHandle, report: serde_json::Value, exit: Option<bool>) {
