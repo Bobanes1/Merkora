@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { aiReady, PROVIDERS } from '../lib/ai';
 import { deckUrl, dueCards, isDesktop, useStore, type Deck } from '../lib/store';
+import { SECOND_MODEL } from '../config';
 import { CreateWithAI } from './CreateWithAI';
 import { shortNames } from '../lib/deckNames';
 import { NewDeckModal } from './NewDeck';
@@ -195,7 +196,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           <span>
             <b>{connected && ready ? 'KI verbunden' : 'Kein API-Key'}</b>
             <small>{connected && ready
-                ? PROVIDERS[provider].short + (chatSeparate ? ` · Chat: ${PROVIDERS[chatProvider].short}` : '')
+                ? PROVIDERS[provider].short + (SECOND_MODEL && chatSeparate ? ` · Chat: ${PROVIDERS[chatProvider].short}` : '')
                 : 'Jetzt hinterlegen'}</small>
           </span>
         </Link>

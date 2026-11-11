@@ -2,6 +2,7 @@ import { netFetch } from './desktop';
 import { sideText } from './content';
 import { CARD_GRAPHIC_RULE } from './graphics';
 import { getState, type ChatMsg, type Provider } from './store';
+import { SECOND_MODEL } from '../config';
 
 export const PROVIDERS: Record<
   Provider,
@@ -95,7 +96,7 @@ type Snap = ReturnType<typeof getState>;
 /** Provider, model, address and key used for a purpose (before falling back to the free model). */
 function rawConfig(purpose: Purpose, s: Snap = getState()) {
   const st = s.data.settings;
-  if (purpose === 'chat' && st.chatSeparate) {
+  if (purpose === 'chat' && SECOND_MODEL && st.chatSeparate) {
     const p = st.chatProvider;
     const info = PROVIDERS[p];
     // Same provider as for generating: the main key can be reused.

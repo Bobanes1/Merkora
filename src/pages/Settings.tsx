@@ -6,7 +6,7 @@ import { ConfirmModal } from '../components/Modal';
 import { PROVIDERS, listModels, testConnection } from '../lib/ai';
 import { desktop, getState, isDesktop, replaceAll, resetAll, setApiKey, setChatKey, setPrivacy, setSettings, useStore, type Data, type Provider } from '../lib/store';
 import { download } from '../lib/util';
-import { APP_VERSION } from '../config';
+import { APP_VERSION, SECOND_MODEL } from '../config';
 import { SyncPanel } from '../components/SyncPanel';
 import { BackupsPanel, LearningPanel, RemindersPanel } from '../components/SettingsExtras';
 import { checkForUpdate, installUpdate, useUpdate } from '../lib/update';
@@ -87,9 +87,12 @@ export default function Settings() {
       </header>
 
       <section className="panel">
-        <h2>KI für Inhalte</h2>
+        <h2>{SECOND_MODEL ? 'KI für Inhalte' : 'KI'}</h2>
         <p className="muted">
-          Dieses Modell erstellt Karteikarten, Zusammenfassungen, Quiz, Grafiken und den Lernpfad. Für den Chat kannst du weiter unten ein anderes Modell wählen. Anfragen gehen direkt von deinem Gerät an den Anbieter.{' '}
+          {SECOND_MODEL
+            ? 'Dieses Modell erstellt Karteikarten, Zusammenfassungen, Quiz, Grafiken und den Lernpfad. Für den Chat kannst du weiter unten ein anderes Modell wählen.'
+            : 'Dieses Modell macht alles: Karteikarten, Zusammenfassungen, Quiz, Probeprüfungen, Lernpfad, Tutor-Chat und Erklärungen.'}{' '}
+          Anfragen gehen direkt von deinem Gerät an den Anbieter.{' '}
           <Link to="/forgot-password" className="small-link">
             Wo bekomme ich einen Key?
           </Link>
@@ -211,7 +214,7 @@ export default function Settings() {
         {status && <div className={status.ok ? 'form-ok' : 'form-error'}>{status.text}</div>}
       </section>
 
-      <ChatModelPanel />
+      {SECOND_MODEL && <ChatModelPanel />}
 
       <LearningPanel />
 
