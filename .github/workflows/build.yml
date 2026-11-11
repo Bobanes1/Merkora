@@ -23,9 +23,14 @@ jobs:
           node-version: 22
           cache: npm
       - name: Linux packages for Tauri
+        timeout-minutes: 20
+        # a hanging package mirror must not block the release: 5 min per try, up to 3 tries
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          for i in 1 2 3; do
+            if timeout 300 sudo apt-get update && timeout 300 sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf; then exit 0; fi
+            echo "apt try $i failed, retrying"; sleep 20
+          done
+          exit 1
       - uses: dtolnay/rust-toolchain@stable
       - uses: swatinem/rust-cache@v2
         with:
@@ -72,9 +77,14 @@ jobs:
           cache: npm
       - name: Linux packages for Tauri
         if: startsWith(matrix.platform, 'ubuntu')
+        timeout-minutes: 20
+        # a hanging package mirror must not block the release: 5 min per try, up to 3 tries
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          for i in 1 2 3; do
+            if timeout 300 sudo apt-get update && timeout 300 sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf; then exit 0; fi
+            echo "apt try $i failed, retrying"; sleep 20
+          done
+          exit 1
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ startsWith(matrix.platform, 'macos') && 'aarch64-apple-darwin' || '' }}
