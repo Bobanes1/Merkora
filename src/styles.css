@@ -6569,3 +6569,6 @@ a.deck-row:hover {
 .flashcard .fc-mark { position: absolute; top: 8px; right: 8px; z-index: 1; }
 .tag.mark-filter { display: inline-flex; align-items: center; gap: 4px; }
 .tag.mark-filter svg { color: #e0a63a; }
+
+/* kind of new card: text & pictures / image occlusion */
+.seg.card-kind { margin: 0 0 14px; }

@@ -7,7 +7,7 @@ import { answerOnly } from '../../lib/backSide';
 import { MarkButton } from '../../components/MarkButton';
 import { CardContent, lookOf } from '../../components/CardContent';
 import { CreateWithAI } from '../../components/CreateWithAI';
-import { IconEdit, IconPlay, IconPlus, IconSearch, IconSparkle, IconTrash, IconDownload, IconImage, IconTag, IconUpload, IconStar } from '../../components/Icons';
+import { IconEdit, IconPlay, IconPlus, IconSearch, IconSparkle, IconTrash, IconDownload, IconTag, IconUpload, IconStar } from '../../components/Icons';
 import { isActive, JobBanner, JobError, useJob } from '../../components/Jobs';
 import { ConfirmModal, Modal } from '../../components/Modal';
 import { RichField } from '../../components/RichField';
@@ -16,7 +16,20 @@ import { LEVELS, levelOf } from '../../lib/srs';
 import { addCards, deleteCard, updateCard, type Card, type Deck } from '../../lib/store';
 import { formatDue } from '../../lib/util';
 
-function CardEditor({ deck, card, onClose, onAnki }: { deck: Deck; card?: Card; onClose: () => void; onAnki?: () => void }) {
+function CardEditor({
+  deck,
+  card,
+  onClose,
+  onAnki,
+  onOcclusion,
+}: {
+  deck: Deck;
+  card?: Card;
+  onClose: () => void;
+  onAnki?: () => void;
+  /** New card: switch to image occlusion (boxes over a picture → one card per box). */
+  onOcclusion?: () => void;
+}) {
   // The editor always works in HTML so pictures can be added; plain cards are converted.
   const toHtml = (s: string) => (card?.html ? s : textToHtml(s));
   const [front, setFront] = useState(card ? toHtml(card.front) : '');
@@ -54,6 +67,16 @@ function CardEditor({ deck, card, onClose, onAnki }: { deck: Deck; card?: Card; 
         </>
       }
     >
+      {!card && onOcclusion && (
+        <div className="seg card-kind" role="tablist" aria-label="Art der Karte">
+          <button type="button" role="tab" aria-selected={true} className={'on'}>
+            Text & Bilder
+          </button>
+          <button type="button" role="tab" aria-selected={false} className={''} onClick={onOcclusion} title="Kästen über ein Bild ziehen – jede Stelle wird eine Karte">
+            Bildverdeckung
+          </button>
+        </div>
+      )}
       {!card && onAnki && (
         <div className="editor-alt">
           <IconUpload size={15} />
@@ -139,9 +162,6 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
         </button>
         <button type="button" className="btn outline sm" onClick={() => setEdit('new')}>
           <IconPlus size={15} /> Karte
-        </button>
-        <button type="button" className="btn outline sm" onClick={() => setOccl(true)} title="Kästen über ein Bild ziehen – jede Stelle wird eine Karte">
-          <IconImage size={15} /> Bildverdeckung
         </button>
         <button type="button" className="btn ghost sm" onClick={() => setExporting(true)} disabled={!deck.cards.length}>
           <IconDownload size={15} /> Exportieren
@@ -243,6 +263,10 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
             setEdit(null);
             setAnki(true);
           }}
+          onOcclusion={() => {
+            setEdit(null);
+            setOccl(true);
+          }}
         />
       )}
       {del && (
@@ -250,7 +274,16 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
       )}
       {ai && <CreateWithAI deckId={deck.id} onClose={() => setAi(false)} />}
       {anki && <AnkiImport onClose={() => setAnki(false)} targetDeckId={deck.id} />}
-      {occl && <OcclusionEditor deck={deck} onClose={() => setOccl(false)} />}
+      {occl && (
+        <OcclusionEditor
+          deck={deck}
+          onClose={() => setOccl(false)}
+          onText={() => {
+            setOccl(false);
+            setEdit('new');
+          }}
+        />
+      )}
       {exporting && <ExportDialog deck={deck} onClose={() => setExporting(false)} />}
     </div>
   );

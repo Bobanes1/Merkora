@@ -25,7 +25,7 @@ export function occlusionHtml(mediaId: string, rects: Rect[], active: number, an
 }
 
 /** Image occlusion without AI: choose a picture, draw boxes over the parts to learn – each box becomes a card. */
-export function OcclusionEditor({ deck, onClose }: { deck: Deck; onClose: () => void }) {
+export function OcclusionEditor({ deck, onClose, onText }: { deck: Deck; onClose: () => void; /** back to a normal card */ onText?: () => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const areaRef = useRef<HTMLDivElement>(null);
   const [img, setImg] = useState<{ id: string; url: string } | null>(null);
@@ -97,7 +97,7 @@ export function OcclusionEditor({ deck, onClose }: { deck: Deck; onClose: () => 
   return (
     <Modal
       wide
-      title="Bildverdeckung erstellen"
+      title={onText ? 'Neue Karte' : 'Bildverdeckung erstellen'}
       onClose={onClose}
       footer={
         <>
@@ -110,6 +110,16 @@ export function OcclusionEditor({ deck, onClose }: { deck: Deck; onClose: () => 
         </>
       }
     >
+      {onText && (
+        <div className="seg card-kind" role="tablist" aria-label="Art der Karte">
+          <button type="button" role="tab" aria-selected={false} className={''} onClick={onText}>
+            Text & Bilder
+          </button>
+          <button type="button" role="tab" aria-selected={true} className={'on'} title="Kästen über ein Bild ziehen – jede Stelle wird eine Karte">
+            Bildverdeckung
+          </button>
+        </div>
+      )}
       {!img ? (
         <div
           className="dropzone"

@@ -189,7 +189,7 @@ export function RichField({
           }
         }}
       />
-      <small className="muted rich-hint">Bilder einfügen: „+ Bild“, Strg+V oder hineinziehen – oder selbst zeichnen bzw. die KI eine Grafik erstellen lassen.</small>
+      <small className="muted rich-hint">Bilder einfügen: „+ Bild“, Strg+V oder hineinziehen – oder mit „Zeichnen“ selbst eine Skizze machen.</small>
       {error && <div className="form-error">{error}</div>}
       {dialog === 'draw' && (
         <DrawPad
