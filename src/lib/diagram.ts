@@ -74,7 +74,7 @@ function parseModel(r: Record<string, unknown>, title: string | undefined): Diag
   const links: ModelLink[] = [];
   const has = (from: string, to: string) => links.some((l) => l.from === from && l.to === to);
   const extra = (l: Record<string, unknown>) => {
-    const label = str(l?.label, 40);
+    const label = str(l?.label);
     return { ...(label ? { label } : {}), ...(l?.both === true ? { both: true } : {}), ...(l?.dashed === true ? { dashed: true } : {}) };
   };
   const target = (l: Record<string, unknown>) => EDGE_RE.exec(str(l?.to, 140));
@@ -135,7 +135,7 @@ export function parseDiagram(raw: unknown): Diagram | null {
       return parseModel(r, title);
     case 'venn': {
       const sets = (Array.isArray(r.sets) ? r.sets : [])
-        .map((s) => ({ label: str((s as { label?: unknown })?.label ?? s, 40), items: list((s as { items?: unknown })?.items, 5) }))
+        .map((s) => ({ label: str((s as { label?: unknown })?.label ?? s), items: list((s as { items?: unknown })?.items, 5) }))
         .filter((s) => s.label)
         .slice(0, 2);
       if (sets.length < 2) return null;
@@ -148,7 +148,7 @@ export function parseDiagram(raw: unknown): Diagram | null {
     }
     case 'bars': {
       const bars = (Array.isArray(r.bars) ? r.bars : [])
-        .map((b) => ({ label: str((b as { label?: unknown })?.label, 40), value: Number(String((b as { value?: unknown })?.value ?? '').replace(',', '.')) }))
+        .map((b) => ({ label: str((b as { label?: unknown })?.label), value: Number(String((b as { value?: unknown })?.value ?? '').replace(',', '.')) }))
         .filter((b) => b.label && Number.isFinite(b.value))
         .slice(0, 8);
       if (bars.length < 2) return null;
@@ -223,8 +223,8 @@ const PAD = 16;
 const FS = 15; // label font size
 const charW = (fs: number) => fs * 0.58;
 
-/** Word wrap by estimated width; at most `maxLines`, the rest is shortened with "…". */
-export function wrap(text: string, maxW: number, fs = FS, maxLines = 4): string[] {
+/** Word wrap by estimated width. Never shortens: the box grows instead (labels are at most 60 characters anyway). */
+export function wrap(text: string, maxW: number, fs = FS, _maxLines?: number): string[] {
   const per = Math.max(4, Math.floor(maxW / charW(fs)));
   const lines: string[] = [];
   let cur = '';
@@ -239,11 +239,6 @@ export function wrap(text: string, maxW: number, fs = FS, maxLines = 4): string[
     else (lines.push(cur), (cur = word));
   }
   if (cur) lines.push(cur);
-  if (lines.length > maxLines) {
-    const kept = lines.slice(0, maxLines);
-    kept[maxLines - 1] = kept[maxLines - 1].slice(0, per - 1).trimEnd() + '…';
-    return kept;
-  }
   return lines;
 }
 
@@ -254,11 +249,13 @@ export function wrap(text: string, maxW: number, fs = FS, maxLines = 4): string[
 export type Box = {
   x: number; y: number; w: number; h: number; lines: string[];
   kind: 'node' | 'accent' | 'soft' | 'label' | 'bold' | 'node2' | 'accent2' | 'tag' | 'text' | 'textOn';
-  align?: 'middle' | 'start' | 'end'; fs?: number; tone?: 2;
+  /** colour 1–5 (see Palette.tones); node2/accent2 mean colour 2 */
+  align?: 'middle' | 'start' | 'end'; fs?: number; tone?: number;
 };
-export type Line = { pts: [number, number][]; arrow?: boolean; dashed?: boolean; curve?: boolean; both?: boolean; tone?: 2; muted?: boolean };
-/** Filled areas behind everything (Venn circles, pyramid steps). */
-export type Area = { circle?: [number, number, number]; poly?: [number, number][]; tone: 'node' | 'accent' | 'accent2' | 'soft1' | 'soft2' };
+export type Line = { pts: [number, number][]; arrow?: boolean; dashed?: boolean; curve?: boolean; both?: boolean; tone?: number; muted?: boolean };
+/** Filled areas behind everything (Venn circles, pyramid steps), in colour `hue` (1–5). */
+export type Area = { circle?: [number, number, number]; poly?: [number, number][]; fill: 'node' | 'accent' | 'soft'; hue?: number };
+const hueOf = (i: number) => (i % 5) + 1;
 export type Layout = { width: number; height: number; boxes: Box[]; lines: Line[]; areas: Area[]; fs: number };
 
 let NF = FS; // font size of the boxes of the diagram being laid out
@@ -287,11 +284,14 @@ function connect(a: Box, b: Box): Line {
 
 const TAG_FS = 12;
 /** Small label on an arrow, centred on (cx, cy). */
-function tag(text: string, cx: number, cy: number, maxW: number, maxLines = 2): Box {
-  const ls = wrap(text, Math.max(20, maxW - 12), TAG_FS, maxLines);
-  const w = Math.min(maxW, Math.max(...ls.map((l) => l.length)) * charW(TAG_FS) + 14);
-  const h = ls.length * 15 + 6;
-  return { x: cx - w / 2, y: cy - h / 2, w, h, lines: ls, kind: 'tag', fs: TAG_FS };
+function tag(text: string, cx: number, cy: number, maxW: number): Box {
+  const room = Math.max(20, maxW - 12);
+  // whole words: one step smaller rather than splitting a long word
+  const fs = text.split(' ').every((w) => w.length * charW(TAG_FS) <= room) ? TAG_FS : 11;
+  const ls = wrap(text, room, fs);
+  const w = Math.min(maxW, Math.max(...ls.map((l) => l.length)) * charW(fs) + 14);
+  const h = ls.length * (fs + 3) + 6;
+  return { x: cx - w / 2, y: cy - h / 2, w, h, lines: ls, kind: 'tag', fs };
 }
 const tagW = (text: string) => Math.min(120, text.length * charW(TAG_FS) + 14);
 const mid = (p: [number, number][]): [number, number] => {
@@ -366,13 +366,17 @@ function layoutModel(d: Extract<Diagram, { type: 'model' }>, top: number, boxes:
   const straightTags = edges.filter((e) => e.label && (adjacent(e) || sameRank(e))).map((e) => tagW(e.label!));
   const detours = edges.filter((e) => !adjacent(e) && !sameRank(e));
   const modTarget = new Set(mods.map((m) => m.e));
+  const look = (e: E): Partial<Line> => (e.both ? { tone: 4 } : e.dashed ? { muted: true } : {});
   const node = (i: number): Box['kind'] => (d.highlight === d.nodes[i] ? 'accent' : isMod[i] ? 'node2' : 'node');
 
   // left → right if it fits (≤ 4 ranks, boxes at least 110 wide), else top → bottom
   const side = detours.length ? 22 : 0;
   // boxes up to 170 wide; spare room goes into the gaps (up to 110), so arrows and their labels breathe
-  const gapX = Math.max(48, ...straightTags.map((w) => w + 16), R > 1 ? Math.min(110, (inner - 2 * side - R * 170) / (R - 1)) : 0);
-  const bwH = Math.min(190, (inner - 2 * side - (R - 1) * gapX) / R);
+  // labels between stacked boxes sit right of their arrow: keep room for them on the right
+  const sameRight = Math.max(0, ...edges.filter((e) => sameRank(e) && e.label).map((e) => Math.min(160, e.label!.length * charW(TAG_FS) + 14) + 14));
+  const room = inner - 2 * side - sameRight;
+  const gapX = Math.max(48, ...straightTags.map((w) => w + 16), R > 1 ? Math.min(110, (room - R * 170) / (R - 1)) : 0);
+  const bwH = Math.min(190, (room - (R - 1) * gapX) / R);
   const horizontal = R <= 4 && bwH >= 110;
   const by = new Map<number, Box>();
   const modBoxes: Box[] = [];
@@ -385,8 +389,9 @@ function layoutModel(d: Extract<Diagram, { type: 'model' }>, top: number, boxes:
     NF = nodeFont(d.nodes.map((t, i) => ({ text: t, w: (isMod[i] ? mw : bw) - 16 })));
     const ls = d.nodes.map((t, i) => wrap(t, (isMod[i] ? mw : bw) - 16, NF, 3));
     const bh = Math.max(...ls.map((l) => boxH(l)));
-    const sameTags = edges.some((e) => sameRank(e) && e.label);
-    const gapY = sameTags ? 34 : 26;
+    const sameTagH = Math.max(0, ...edges.filter((e) => sameRank(e) && e.label).map((e) => tag(e.label!, 0, 0, bw).h));
+    const gapY = sameTagH ? Math.max(44, sameTagH + 24) : 26;
+    const detourStep = Math.max(26, ...detours.filter((e) => e.label).map((e) => tag(e.label!, 0, 0, 160).h + 8));
     const maxCol = Math.max(...layers.map((L) => L.length));
     const colH = maxCol * bh + (maxCol - 1) * gapY;
     const modTagH = Math.max(0, ...mods.map((m) => (m.label ? tag(m.label, 0, 0, 120).h : 0)));
@@ -395,7 +400,7 @@ function layoutModel(d: Extract<Diagram, { type: 'model' }>, top: number, boxes:
     const above = mods.some((m) => isMod[m.m] && !detours.includes(edges[m.e]));
     const y0 = top + (above ? bh + bandGap : 0);
     const used = R * bw + (R - 1) * gapX;
-    const x0 = PAD + (inner - used) / 2;
+    const x0 = PAD + (inner - sameRight - used) / 2;
     layers.forEach((L, r) => {
       const h = L.length * bh + (L.length - 1) * gapY;
       L.forEach((v, k) => {
@@ -411,10 +416,10 @@ function layoutModel(d: Extract<Diagram, { type: 'model' }>, top: number, boxes:
     edges.forEach((e, k) => {
       const a = by.get(e.a)!, b = by.get(e.b)!;
       let ln: Line;
-      if (adjacent(e) || sameRank(e)) ln = { ...connect(a, b), both: e.both, dashed: e.dashed };
+      if (adjacent(e) || sameRank(e)) ln = { ...connect(a, b), both: e.both, dashed: e.dashed, ...look(e) };
       else {
         // detour below the boxes, along the gaps between the columns
-        const yk = y0 + colH + 22 + level * 26;
+        const yk = y0 + colH + 22 + level * detourStep;
         const right = b.x > a.x;
         const gx1 = right ? a.x + a.w + 10 + level * 6 : a.x - 10 - level * 6;
         const gx2 = right ? b.x - 10 - level * 6 : b.x + b.w + 10 + level * 6;
@@ -423,7 +428,7 @@ function layoutModel(d: Extract<Diagram, { type: 'model' }>, top: number, boxes:
         const lowest = (v: number) => layers[rank[v]][layers[rank[v]].length - 1] === v;
         const start: [number, number][] = lowest(e.a) ? [[a.x + a.w / 2 + level * 8, a.y + a.h + 4]] : [[right ? a.x + a.w + 4 : a.x - 4, ay], [gx1, ay]];
         const end: [number, number][] = lowest(e.b) ? [[b.x + b.w / 2 - level * 8, b.y + b.h + 6]] : [[gx2, byy], [right ? b.x - 6 : b.x + b.w + 6, byy]];
-        ln = { pts: [...start, [start[start.length - 1][0], yk], [end[0][0], yk], ...end], arrow: true, both: e.both, dashed: e.dashed };
+        ln = { pts: [...start, [start[start.length - 1][0], yk], [end[0][0], yk], ...end], arrow: true, both: e.both, dashed: e.dashed, ...look(e) };
         bottom = Math.max(bottom, yk + 12);
         level++;
       }
@@ -432,9 +437,10 @@ function layoutModel(d: Extract<Diagram, { type: 'model' }>, top: number, boxes:
       if (e.label) {
         const [mx, my] = mid(ln.pts);
         const detour = ln.pts.length > 2;
-        const t = tag(e.label, mx, my, detour ? 160 : sameRank(e) ? 120 : gapX - 12, detour || sameRank(e) ? 1 : 2);
-        // an arrow that a moderator points at keeps its middle free
+        const t = tag(e.label, mx, my, detour ? 160 : sameRank(e) ? bw : gapX - 12);
+        // an arrow that a moderator points at keeps its middle free; between stacked boxes the label goes beside the arrow
         if (modTarget.has(k)) t.y = my + 6;
+        else if (sameRank(e)) t.x = Math.min(mx + 10, W - PAD - t.w);
         tagsOut.push(t);
         if (detour) bottom = Math.max(bottom, t.y + t.h + 4);
       }
@@ -475,7 +481,7 @@ function layoutModel(d: Extract<Diagram, { type: 'model' }>, top: number, boxes:
     for (const pl of placed) {
       const [px, py] = pl.p;
       lines.push({ pts: [edge(pl.box, px, py, 4), [px, py]], arrow: true, tone: 2, dashed: pl.dashed });
-      if (pl.label && pl.own) tagsOut.push({ ...tag(pl.label, (pl.box.x + pl.box.w / 2 + px) / 2, (pl.box.y + pl.box.h / 2 + py) / 2, 120, 1), tone: 2 });
+      if (pl.label && pl.own) tagsOut.push({ ...tag(pl.label, (pl.box.x + pl.box.w / 2 + px) / 2, (pl.box.y + pl.box.h / 2 + py) / 2, 120), tone: 2 });
       else if (pl.label) {
         const cx = pl.box.x + pl.box.w / 2;
         const t = tag(pl.label, cx, 0, 120);
@@ -517,17 +523,17 @@ function layoutModel(d: Extract<Diagram, { type: 'model' }>, top: number, boxes:
     edges.forEach((e, k) => {
       const a = by.get(e.a)!, b = by.get(e.b)!;
       let ln: Line;
-      if (adjacent(e) || sameRank(e)) ln = { ...connect(a, b), both: e.both, dashed: e.dashed };
+      if (adjacent(e) || sameRank(e)) ln = { ...connect(a, b), both: e.both, dashed: e.dashed, ...look(e) };
       else {
         // detour along the outside, on the side where no other box of the row is in the way
         const left = !(lastIn(e.a, 'last') && lastIn(e.b, 'last')) && lastIn(e.a, 'first') && lastIn(e.b, 'first');
         const ay = a.y + a.h / 2, byy = b.y + b.h / 2;
         if (left) {
           const x = xl - levelL++ * 7;
-          ln = { pts: [[a.x - 4, ay], [x, ay], [x, byy], [b.x - 6, byy]], arrow: true, both: e.both, dashed: e.dashed };
+          ln = { pts: [[a.x - 4, ay], [x, ay], [x, byy], [b.x - 6, byy]], arrow: true, both: e.both, dashed: e.dashed, ...look(e) };
         } else {
           const x = xr + levelR++ * 7;
-          ln = { pts: [[a.x + a.w + 4, ay], [x, ay], [x, byy], [b.x + b.w + 6, byy]], arrow: true, both: e.both, dashed: e.dashed };
+          ln = { pts: [[a.x + a.w + 4, ay], [x, ay], [x, byy], [b.x + b.w + 6, byy]], arrow: true, both: e.both, dashed: e.dashed, ...look(e) };
         }
       }
       edgeLine.set(k, ln);
@@ -551,10 +557,15 @@ function layoutModel(d: Extract<Diagram, { type: 'model' }>, top: number, boxes:
         else {
           const y = Math.max(py - bh / 2, lastBottom + 30, top);
           box = { x: PAD, y, w: band, h: bh, lines: ls[md.m], kind: node(md.m) };
-          lastBottom = y + bh + (md.label ? 22 : 0);
+          lastBottom = y + bh;
           boxes.push(box);
           bottom = Math.max(bottom, lastBottom);
-          if (md.label) tagsOut.push({ ...tag(md.label, PAD + band / 2, 0, band, 1), y: y + bh + 4, tone: 2 });
+          if (md.label) {
+            const t = tag(md.label, PAD + band / 2, 0, band);
+            tagsOut.push({ ...t, y: y + bh + 4, tone: 2 });
+            lastBottom = y + bh + 8 + t.h;
+            bottom = Math.max(bottom, lastBottom);
+          }
         }
         placed.set(md.m, box);
       }
@@ -574,7 +585,7 @@ export function layoutDiagram(d: Diagram): Layout {
   const areas: Area[] = [];
   let y = PAD;
   if (d.title) {
-    const tl = wrap(d.title, W - 2 * PAD, 17, 2);
+    const tl = wrap(d.title, W - 2 * PAD, 17);
     boxes.push({ x: PAD, y, w: W - 2 * PAD, h: tl.length * 22, lines: tl, kind: 'bold' });
     y += tl.length * 22 + 12;
   }
@@ -626,22 +637,39 @@ export function layoutDiagram(d: Diagram): Layout {
         if (sideGap < 10 && Math.abs(Math.sin(a)) > 0.05) rY = Math.max(rY, (ch2 + bh / 2 + 12) / Math.abs(Math.sin(a)));
       }
     }
-    const cx = W / 2, cy = y + rY + bh / 2;
-    const nodes = ls.map((l, i) => {
-      const a = -Math.PI / 2 + (2 * Math.PI * i) / n;
-      const x = cx + R * Math.cos(a), yy = cy + rY * Math.sin(a);
-      return { x: x - bw / 2, y: yy - bh / 2, w: bw, h: bh, lines: l, kind: (items[i] === d.highlight ? 'accent' : 'node') as Box['kind'] };
-    });
+    const cx = W / 2;
+    const place = (ry: number) => {
+      const cy = y + ry + bh / 2;
+      const nodes = ls.map((l, i) => {
+        const a = -Math.PI / 2 + (2 * Math.PI * i) / n;
+        const x = cx + R * Math.cos(a), yy = cy + ry * Math.sin(a);
+        return { x: x - bw / 2, y: yy - bh / 2, w: bw, h: bh, lines: l, kind: (items[i] === d.highlight ? 'accent' : 'node') as Box['kind'], tone: hueOf(i) };
+      });
+      const cb: Box | null = centreBox ? { x: cx - 90, y: cy - boxH(centreBox) / 2, w: 180, h: boxH(centreBox), lines: centreBox, kind: 'accent' } : null;
+      return { cy, nodes, cb };
+    };
+    const clash = (a: Box, b: Box) => a.x < b.x + b.w + 6 && b.x < a.x + a.w + 6 && a.y < b.y + b.h + 6 && b.y < a.y + a.h + 6;
+    // tall boxes (long labels): stretch the circle until no two boxes touch
+    let pl = place(rY);
+    for (let k = 0; k < 40; k++) {
+      const all = pl.cb ? [...pl.nodes, pl.cb] : pl.nodes;
+      if (!all.some((a, i) => all.slice(i + 1).some((b) => clash(a, b)))) break;
+      rY += 10;
+      pl = place(rY);
+    }
+    const { cy, nodes } = pl;
     boxes.push(...nodes);
-    if (centreBox) {
-      const cb: Box = { x: cx - 90, y: cy - boxH(centreBox) / 2, w: 180, h: boxH(centreBox), lines: centreBox, kind: 'accent' };
+    if (pl.cb) {
+      const cb = pl.cb;
       boxes.push(cb);
-      nodes.forEach((b) => lines.push({ ...connect(cb, b), arrow: false }));
-    } else nodes.forEach((b, i) => lines.push({ ...connect(b, nodes[(i + 1) % n]), curve: true }));
+      nodes.forEach((b, i) => lines.push({ ...connect(cb, b), arrow: false, tone: hueOf(i) }));
+    } else nodes.forEach((b, i) => lines.push({ ...connect(b, nodes[(i + 1) % n]), curve: true, tone: hueOf(i) }));
     y = cy + rY + bh / 2;
   } else if (d.type === 'hierarchy') {
-    const rl = wrap(d.root, 220, 16, 2);
-    const root: Box = { x: W / 2 - 120, y, w: 240, h: boxH(rl), lines: rl, kind: 'accent' };
+    // a long root gets a wider box instead of many lines
+    const rw = wrap(d.root, 220, 16).length > 2 ? Math.min(inner, 380) : 240;
+    const rl = wrap(d.root, rw - 20, 16);
+    const root: Box = { x: W / 2 - rw / 2, y, w: rw, h: rl.length * 21 + 20, lines: rl, kind: 'accent', fs: 16 };
     boxes.push(root);
     y += root.h + 36;
     const k = d.children.length;
@@ -654,15 +682,16 @@ export function layoutDiagram(d: Diagram): Layout {
     lines.push({ pts: [[root.x + root.w / 2, root.y + root.h], [root.x + root.w / 2, busY]] });
     let bottom = y + ch;
     d.children.forEach((c, i) => {
-      const b: Box = { x: PAD + i * (cw + gap), y, w: cw, h: ch, lines: cl[i], kind: c.label === d.highlight ? 'accent' : 'node' };
+      const hue = hueOf(i);
+      const b: Box = { x: PAD + i * (cw + gap), y, w: cw, h: ch, lines: cl[i], kind: c.label === d.highlight ? 'accent' : 'node', tone: hue };
       boxes.push(b);
-      lines.push({ pts: [[root.x + root.w / 2, busY], [b.x + b.w / 2, busY], [b.x + b.w / 2, b.y - 6]], arrow: true });
+      lines.push({ pts: [[root.x + root.w / 2, busY], [b.x + b.w / 2, busY], [b.x + b.w / 2, b.y - 6]], arrow: true, tone: hue });
       let gy = b.y + b.h + 10;
       for (const g of c.children ?? []) {
         const gl = wrap(g, cw - 26, 13, 3);
-        const gb: Box = { x: b.x + 12, y: gy, w: cw - 12, h: gl.length * 17 + 12, lines: gl, kind: 'soft', align: 'start' };
+        const gb: Box = { x: b.x + 12, y: gy, w: cw - 12, h: gl.length * 17 + 12, lines: gl, kind: 'soft', align: 'start', tone: hue };
         boxes.push(gb);
-        lines.push({ pts: [[b.x + 6, gy - 10], [b.x + 6, gb.y + gb.h / 2], [gb.x - 2, gb.y + gb.h / 2]] });
+        lines.push({ pts: [[b.x + 6, gy - 10], [b.x + 6, gb.y + gb.h / 2], [gb.x - 2, gb.y + gb.h / 2]], tone: hue });
         gy += gb.h + 8;
       }
       bottom = Math.max(bottom, gy - 8);
@@ -679,8 +708,8 @@ export function layoutDiagram(d: Diagram): Layout {
     const bh = Math.max(...bodies.map((l) => l.length * 19 + 20));
     d.columns.forEach((_, i) => {
       const x = PAD + i * (cw + gap);
-      boxes.push({ x, y, w: cw, h: hh, lines: heads[i], kind: i === 1 ? 'accent2' : 'accent' });
-      boxes.push({ x, y: y + hh + 6, w: cw, h: bh, lines: bodies[i], kind: 'soft', align: 'start', ...(i === 1 ? { tone: 2 as const } : {}) });
+      boxes.push({ x, y, w: cw, h: hh, lines: heads[i], kind: 'accent', tone: hueOf(i) });
+      boxes.push({ x, y: y + hh + 6, w: cw, h: bh, lines: bodies[i], kind: 'soft', align: 'start', tone: hueOf(i) });
     });
     y += hh + 6 + bh;
   } else if (d.type === 'timeline') {
@@ -709,7 +738,7 @@ export function layoutDiagram(d: Diagram): Layout {
     const cl = d.cells.map((c) => wrap(c, cw - 20, NF, 4));
     const chh = Math.max(64, ...cl.map((l) => boxH(l, 12)));
     const x0 = PAD + lab + 10;
-    cl.forEach((l, i) => boxes.push({ x: x0 + (i % 2) * (cw + 6), y: y + Math.floor(i / 2) * (chh + 6), w: cw - 3, h: chh, lines: l, kind: i === 1 ? 'accent' : 'node' }));
+    cl.forEach((l, i) => boxes.push({ x: x0 + (i % 2) * (cw + 6), y: y + Math.floor(i / 2) * (chh + 6), w: cw - 3, h: chh, lines: l, kind: 'node', tone: hueOf(i) }));
     const gridH = 2 * chh + 6;
     lines.push({ pts: [[x0 - 8, y + gridH], [x0 - 8, y - 4]], arrow: true });
     lines.push({ pts: [[x0 - 8, y + gridH + 8], [W - PAD, y + gridH + 8]], arrow: true });
@@ -721,8 +750,8 @@ export function layoutDiagram(d: Diagram): Layout {
     const x0 = PAD + 30, y0 = y + 26 + plotH, x1 = W - PAD - 10, y1 = y + 26;
     lines.push({ pts: [[x0, y0], [x0, y1 - 8]], arrow: true });
     lines.push({ pts: [[x0, y0], [x1, y0]], arrow: true });
-    boxes.push({ x: x0 + 6, y: y, w: 300, h: 20, lines: [d.y], kind: 'bold', align: 'start' });
-    boxes.push({ x: x1 - 300, y: y0 + 8, w: 300, h: 20, lines: [d.x], kind: 'bold', align: 'end' });
+    boxes.push({ x: x0 + 6, y: y, w: 400, h: 20, lines: [d.y], kind: 'bold', align: 'start' });
+    boxes.push({ x: x1 - 400, y: y0 + 8, w: 400, h: 20, lines: [d.x], kind: 'bold', align: 'end' });
     const f = curve(d.shape);
     const pts: [number, number][] = [];
     for (let i = 0; i <= 40; i++) {
@@ -744,7 +773,9 @@ export function layoutDiagram(d: Diagram): Layout {
       const my = y0 - 14 - f(m.at) * (plotH - 40);
       lines.push({ pts: [[mx, y0], [mx, my]], dashed: true, muted: true });
       const lw = 130;
-      boxes.push({ x: Math.min(x1 - lw, Math.max(x0 + 4, mx - lw / 2)), y: Math.max(y1, my - 30), w: lw, h: 20, lines: [m.label], kind: 'label' });
+      const ml = wrap(m.label, lw - 8, 13);
+      const mh = ml.length * 17 + 4;
+      boxes.push({ x: Math.min(x1 - lw, Math.max(x0 + 4, mx - lw / 2)), y: Math.max(y1, my - 12 - mh), w: lw, h: mh, lines: ml, kind: 'label' });
     }
     y = y0 + 30;
     if (d.second) {
@@ -752,7 +783,7 @@ export function layoutDiagram(d: Diagram): Layout {
       const items: [string, 1 | 2][] = [[d.label || 'Kurve 1', 1], [d.second.label, 2]];
       let lx = x0;
       for (const [text, tone] of items) {
-        lines.push({ pts: [[lx, y + 10], [lx + 26, y + 10]], ...(tone === 2 ? { tone: 2 as const } : {}) });
+        lines.push({ pts: [[lx, y + 10], [lx + 26, y + 10]], ...(tone === 2 ? { tone: 2 } : {}) });
         const w = Math.min(200, text.length * charW(13) + 12);
         boxes.push({ x: lx + 32, y, w, h: 20, lines: [text], kind: 'label', align: 'start', fs: 13 });
         lx += 32 + w + 24;
@@ -762,11 +793,13 @@ export function layoutDiagram(d: Diagram): Layout {
   } else if (d.type === 'model') {
     y = layoutModel(d, y, boxes, lines);
   } else if (d.type === 'venn') {
-    const R = 150, dx = 80, cx = W / 2, labH = 22;
+    const R = 150, dx = 80, cx = W / 2;
+    const setL = d.sets.map((st) => wrap(st.label, 190, 15));
+    const labH = Math.max(...setL.map((l) => l.length)) * 20 + 2;
     const cy = y + labH + 8 + R;
-    areas.push({ circle: [cx - dx, cy, R], tone: 'soft1' }, { circle: [cx + dx, cy, R], tone: 'soft2' });
-    boxes.push({ x: cx - dx - 150, y, w: 200, h: labH, lines: [d.sets[0].label], kind: 'bold', fs: 15 });
-    boxes.push({ x: cx + dx - 50, y, w: 200, h: labH, lines: [d.sets[1].label], kind: 'bold', fs: 15 });
+    areas.push({ circle: [cx - dx, cy, R], fill: 'soft', hue: 1 }, { circle: [cx + dx, cy, R], fill: 'soft', hue: 2 });
+    boxes.push({ x: cx - dx - 150, y, w: 200, h: labH, lines: setL[0], kind: 'bold', fs: 15 });
+    boxes.push({ x: cx + dx - 50, y, w: 200, h: labH, lines: setL[1], kind: 'bold', fs: 15 });
     const region = (items: string[], x: number, w: number) => {
       // whole words: a smaller font rather than splitting a word
       const fs = [13, 12, 11].find((f) => items.every((t) => t.split(' ').every((wd) => wd.length * charW(f) <= w - 8))) ?? 11;
@@ -782,16 +815,19 @@ export function layoutDiagram(d: Diagram): Layout {
     y = cy + R;
   } else if (d.type === 'pyramid') {
     const n = d.levels.length;
-    const rowH = 52, aTop = 170, aBottom = inner;
+    const aTop = 170, aBottom = inner;
     const widthAt = (k: number) => aTop + ((aBottom - aTop) * k) / n;
-    d.levels.forEach((t, i) => {
+    // text of each step first: the step height follows the longest text
+    const texts = d.levels.map((t, i) => {
+      const tw = Math.max(60, (widthAt(i) + widthAt(i + 1)) / 2 - 36);
+      const fs = [14, 13, 12].find((f) => t.split(' ').every((wd) => wd.length * charW(f) <= tw)) ?? 12;
+      return { tw, fs, ls: wrap(t, tw, fs), lh: Math.round(fs * 1.3) };
+    });
+    const rowH = Math.max(52, ...texts.map((x) => x.ls.length * x.lh + 20));
+    texts.forEach(({ tw, fs, ls, lh }, i) => {
       const yt = y + i * rowH, yb = yt + rowH - 4;
       const wt = widthAt(i), wb = widthAt(i + 1) - ((aBottom - aTop) / n) * (4 / rowH);
-      areas.push({ poly: [[W / 2 - wt / 2, yt], [W / 2 + wt / 2, yt], [W / 2 + wb / 2, yb], [W / 2 - wb / 2, yb]], tone: i === 0 ? 'accent' : 'node' });
-      const tw = Math.max(60, (wt + wb) / 2 - 36);
-      const fs = [14, 13, 12].find((f) => t.split(' ').every((wd) => wd.length * charW(f) <= tw)) ?? 12;
-      const ls = wrap(t, tw, fs, 2);
-      const lh = Math.round(fs * 1.3);
+      areas.push({ poly: [[W / 2 - wt / 2, yt], [W / 2 + wt / 2, yt], [W / 2 + wb / 2, yb], [W / 2 - wb / 2, yb]], fill: i === 0 ? 'accent' : 'node', hue: (i % 5) + 1 });
       boxes.push({ x: W / 2 - tw / 2, y: yt + (rowH - 4) / 2 - (ls.length * lh) / 2, w: tw, h: ls.length * lh, lines: ls, kind: i === 0 ? 'textOn' : 'text', fs });
     });
     y += n * rowH - 4;
@@ -853,7 +889,7 @@ export function layoutDiagram(d: Diagram): Layout {
       const w = widthOf(nd);
       const ls = label(nd);
       const h = isQ(nd) ? boxH(ls) : ls.length * 17 + 16;
-      const b: Box = { x: cx - w / 2, y: rowY[nd.depth], w, h, lines: ls, kind: nd.depth === 0 ? 'accent' : isQ(nd) ? 'node' : 'soft', ...(isQ(nd) ? {} : { fs: 13 }), ...(nd.no ? { tone: 2 as const } : {}) };
+      const b: Box = { x: cx - w / 2, y: rowY[nd.depth], w, h, lines: ls, kind: nd.depth === 0 ? 'accent' : isQ(nd) ? 'node' : 'soft', ...(isQ(nd) ? {} : { fs: 13 }), ...(nd.no ? { tone: 2 } : {}) };
       place.set(nd, b);
       boxes.push(b);
       y = Math.max(y, b.y + b.h);
@@ -863,8 +899,8 @@ export function layoutDiagram(d: Diagram): Layout {
       for (const { n: c, yes } of nd.kids) {
         const b = place.get(c)!;
         const px = p.x + p.w / 2, cx = b.x + b.w / 2, midY = p.y + p.h + 18;
-        lines.push({ pts: [[px, p.y + p.h + 2], [px, midY], [cx, midY], [cx, b.y - 6]], arrow: true, ...(c.no ? { tone: 2 as const } : {}) });
-        boxes.push({ ...tag(yes ? 'Ja' : 'Nein', cx, (midY + b.y - 6) / 2 + 2, 60, 1), ...(c.no ? { tone: 2 as const } : {}) });
+        lines.push({ pts: [[px, p.y + p.h + 2], [px, midY], [cx, midY], [cx, b.y - 6]], arrow: true, ...(c.no ? { tone: 2 } : {}) });
+        boxes.push({ ...tag(yes ? 'Ja' : 'Nein', cx, (midY + b.y - 6) / 2 + 2, 60), ...(c.no ? { tone: 2 } : {}) });
       }
     }
   }
@@ -889,19 +925,35 @@ function curve(s: Shape): (t: number) => number {
 }
 
 // ---------- drawing ----------
+/** One colour: accent = filled with white text, node = box fill, stroke = border, line = lines/arrows, soft = very light fill. */
+export type Tone = { accent: string; node: string; stroke: string; line: string; soft: string };
+/** tones: 1 teal, 2 berry, 3 amber, 4 blue, 5 violet. The single fields are colour 1 (kept for convenience). */
 export type Palette = {
-  bg?: string; node: string; nodeStroke: string; text: string; accent: string; onAccent: string; soft: string; line: string; muted: string;
-  accent2: string; node2: string; stroke2: string; line2: string; shadow: string; soft2: string;
+  bg?: string; text: string; onAccent: string; muted: string; shadow: string; tones: Tone[];
+  node: string; nodeStroke: string; accent: string; soft: string; line: string;
 };
+const tone = (accent: string, node: string, stroke: string, soft: string): Tone => ({ accent, node, stroke, line: stroke, soft });
+const LIGHT: Tone[] = [
+  tone('#09817e', '#dff3f2', '#09817e', '#f4fcfc'),
+  tone('#a63d73', '#fbe9f2', '#a63d73', '#fdf3f8'),
+  tone('#965700', '#fdf0db', '#b06a00', '#fff8ec'),
+  tone('#2f5fc4', '#e4ecfb', '#2f5fc4', '#f3f6fd'),
+  tone('#6646bd', '#ece6fa', '#6646bd', '#f6f3fd'),
+];
+const DARK: Tone[] = [
+  tone('#1f7a75', '#163634', '#3fc6bf', '#112725'),
+  tone('#9c3f76', '#3a1d2e', '#e486bb', '#241520'),
+  tone('#94590a', '#3a2a10', '#f0b45a', '#241a0b'),
+  tone('#2f55a8', '#18243d', '#7fa5f0', '#111a2c'),
+  tone('#5a3fa6', '#251c3d', '#a993f0', '#18132a'),
+];
+const pal = (tones: Tone[], text: string, muted: string, shadow: string): Palette => ({
+  text, muted, shadow, onAccent: '#ffffff', tones,
+  node: tones[0].node, nodeStroke: tones[0].stroke, accent: tones[0].accent, soft: tones[0].soft, line: tones[0].line,
+});
 export const PALETTES: Record<'light' | 'dark', Palette> = {
-  light: {
-    node: '#dff3f2', nodeStroke: '#09817e', text: '#002a29', accent: '#09817e', onAccent: '#ffffff', soft: '#f4fcfc', line: '#09817e', muted: '#4f6f6d', soft2: '#fdf3f8',
-    accent2: '#a63d73', node2: '#fbe9f2', stroke2: '#a63d73', line2: '#a63d73', shadow: 'rgba(0,42,41,0.16)',
-  },
-  dark: {
-    node: '#163634', nodeStroke: '#3fc6bf', text: '#e2f4f3', accent: '#1f7a75', onAccent: '#ffffff', soft: '#112725', line: '#3fc6bf', muted: '#9fbfbd', soft2: '#241520',
-    accent2: '#9c3f76', node2: '#3a1d2e', stroke2: '#e486bb', line2: '#e486bb', shadow: 'rgba(0,0,0,0.55)',
-  },
+  light: pal(LIGHT, '#002a29', '#4f6f6d', 'rgba(0,42,41,0.16)'),
+  dark: pal(DARK, '#e2f4f3', '#9fbfbd', 'rgba(0,0,0,0.55)'),
 };
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -910,39 +962,40 @@ const r1 = (n: number) => Math.round(n * 10) / 10;
 export function renderDiagram(d: Diagram, p: Palette = PALETTES.light): string {
   const L = layoutDiagram(d);
   // ids per colour scheme, so several diagrams on one page never borrow each other's arrow colours
-  const id = 'dg' + (p.line + p.line2 + (p.bg ?? '')).replace(/[^0-9a-z]/gi, '');
+  const id = 'dg' + (p.tones[0].line + p.tones[1].line + (p.bg ?? '')).replace(/[^0-9a-z]/gi, '');
+  const tn = (h?: number) => p.tones[(Math.max(1, h ?? 1) - 1) % p.tones.length];
   const out: string[] = [];
   const marker = (name: string, color: string) =>
     `<marker id="${id}-${name}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 1.2 L10 5 L0 8.8 z" fill="${color}"/></marker>`;
   out.push(
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${L.width} ${L.height}" width="${L.width}" height="${L.height}" font-family="Manrope, Arial, sans-serif" role="img">`,
-    `<defs>${marker('a', p.line)}${marker('b', p.line2)}<filter id="${id}-s" x="-10%" y="-10%" width="120%" height="150%"><feDropShadow dx="0" dy="1.5" stdDeviation="1.6" flood-color="${p.shadow}"/></filter></defs>`,
+    `<defs>${p.tones.map((t, i) => marker('a' + (i + 1), t.line)).join('')}${marker('m', p.muted)}<filter id="${id}-s" x="-10%" y="-10%" width="120%" height="150%"><feDropShadow dx="0" dy="1.5" stdDeviation="1.6" flood-color="${p.shadow}"/></filter></defs>`,
   );
   if (p.bg) out.push(`<rect width="100%" height="100%" fill="${p.bg}"/>`);
   for (const a of L.areas) {
+    const t = tn(a.hue);
     if (a.circle) {
       const [cx, cy, r] = a.circle;
-      const c = a.tone === 'soft2' ? p.line2 : p.line;
-      out.push(`<circle cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(r)}" fill="${c}" fill-opacity="0.16" stroke="${c}" stroke-width="2"/>`);
+      out.push(`<circle cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(r)}" fill="${t.line}" fill-opacity="0.16" stroke="${t.line}" stroke-width="2"/>`);
     } else if (a.poly) {
-      const fill = a.tone === 'accent' ? p.accent : a.tone === 'accent2' ? p.accent2 : p.node;
-      out.push(`<polygon points="${a.poly.map(([x, y]) => `${r1(x)},${r1(y)}`).join(' ')}" fill="${fill}" stroke="${a.tone === 'node' ? p.nodeStroke : fill}" stroke-width="1.4" stroke-linejoin="round" filter="url(#${id}-s)"/>`);
+      const fill = a.fill === 'accent' ? t.accent : a.fill === 'soft' ? t.soft : t.node;
+      out.push(`<polygon points="${a.poly.map(([x, y]) => `${r1(x)},${r1(y)}`).join(' ')}" fill="${fill}" stroke="${a.fill === 'accent' ? fill : t.stroke}" stroke-width="1.4" stroke-linejoin="round" filter="url(#${id}-s)"/>`);
     }
   }
   for (const l of L.lines) {
     const pts = l.pts.map(([x, y]) => `${r1(x)},${r1(y)}`).join(' ');
-    const color = l.tone === 2 ? p.line2 : l.muted ? p.muted : p.line;
-    const m = `url(#${id}-${l.tone === 2 ? 'b' : 'a'})`;
+    const color = l.muted ? p.muted : tn(l.tone).line;
+    const m = `url(#${id}-${l.muted ? 'm' : 'a' + (((Math.max(1, l.tone ?? 1) - 1) % p.tones.length) + 1)})`;
     out.push(
-      `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="${l.muted ? 1.5 : l.pts.length > 10 ? 2.6 : 2}"${l.dashed ? ' stroke-dasharray="6 5"' : ''} stroke-linejoin="round" stroke-linecap="round"${l.arrow ? ` marker-end="${m}"` : ''}${l.both ? ` marker-start="${m}"` : ''}/>`,
+      `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="${l.muted && !l.arrow ? 1.5 : l.pts.length > 10 ? 2.6 : 2}"${l.dashed ? ' stroke-dasharray="6 5"' : ''} stroke-linejoin="round" stroke-linecap="round"${l.arrow ? ` marker-end="${m}"` : ''}${l.both ? ` marker-start="${m}"` : ''}/>`,
     );
   }
   const isMatrixY = (b: Box) => d.type === 'matrix' && b.kind === 'label' && b.w < 40;
-  const FILL: Partial<Record<Box['kind'], string>> = { accent: p.accent, accent2: p.accent2, node: p.node, node2: p.node2, soft: p.soft, tag: p.soft };
   for (const b of L.boxes) {
-    const fill = b.tone === 2 ? ({ soft: p.soft2, tag: p.soft2, node: p.node2 } as Partial<Record<Box['kind'], string>>)[b.kind] ?? FILL[b.kind] : FILL[b.kind];
+    const t = tn(b.tone ?? (b.kind === 'node2' || b.kind === 'accent2' ? 2 : 1));
+    const fill = b.kind === 'accent' || b.kind === 'accent2' ? t.accent : b.kind === 'node' || b.kind === 'node2' ? t.node : b.kind === 'soft' || b.kind === 'tag' ? t.soft : null;
     if (fill) {
-      const stroke = b.kind === 'node' || b.kind === 'soft' || b.kind === 'tag' ? (b.tone === 2 ? p.stroke2 : p.nodeStroke) : b.kind === 'node2' ? p.stroke2 : null;
+      const stroke = b.kind === 'node' || b.kind === 'node2' || b.kind === 'soft' || b.kind === 'tag' ? t.stroke : null;
       const raised = b.lines.length && (b.kind === 'node' || b.kind === 'accent' || b.kind === 'node2' || b.kind === 'accent2');
       const rx = !b.lines.length ? 4 : b.kind === 'tag' ? b.h / 2 : 12;
       out.push(
@@ -952,7 +1005,7 @@ export function renderDiagram(d: Diagram, p: Palette = PALETTES.light): string {
     if (!b.lines.length) continue;
     const color = b.kind === 'accent' || b.kind === 'accent2' || b.kind === 'textOn' ? p.onAccent : b.kind === 'label' ? p.muted : p.text;
     const fs = b.fs ?? (b.kind === 'bold' ? (d.title && b.y === PAD ? 17 : 14) : b.kind === 'soft' ? (d.type === 'compare' ? 14 : 13) : b.kind === 'label' ? 13 : L.fs);
-    const lh = b.kind === 'tag' ? 15 : b.fs ? Math.round(b.fs * 1.3) : b.kind === 'soft' ? (d.type === 'compare' ? 19 : 17) : b.kind === 'label' ? 17 : b.kind === 'bold' ? 22 : Math.round(L.fs * 1.3);
+    const lh = b.kind === 'tag' ? fs + 3 : b.fs ? Math.round(b.fs * 1.3) : b.kind === 'soft' ? (d.type === 'compare' ? 19 : 17) : b.kind === 'label' ? 17 : b.kind === 'bold' ? 22 : Math.round(L.fs * 1.3);
     const weight = b.kind === 'accent' || b.kind === 'accent2' || b.kind === 'bold' || b.kind === 'textOn' ? 700 : b.kind === 'tag' ? 600 : 500;
     if (isMatrixY(b)) {
       const cx = b.x + b.w / 2, cy = b.y + b.h / 2;

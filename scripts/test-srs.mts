@@ -456,6 +456,52 @@ console.log('Diagramme');
     ok(bars.includes('95,5 Min.') && bars.includes('140 Min.'), 'Balken zeigen die Werte mit Einheit');
     ok(/"type":"model"/.test(DIAGRAM_RULE) && /"type":"decision"/.test(DIAGRAM_RULE), 'KI-Anweisung kennt die neuen Arten');
   }
+  // ---- nothing is cut off, long labels included
+  {
+    const L50 = 'Methoden der empirischen Sozialforschung im Überblick';
+    const longs: any[] = [
+      { type: 'flow', title: L50, steps: [L50, 'Kurz', L50] },
+      { type: 'cycle', steps: [L50, 'Zwei', L50, 'Vier'] },
+      { type: 'concept', center: L50, branches: [L50, 'Daten', 'Informationen', L50, 'Wissen'] },
+      { type: 'hierarchy', root: L50, children: [{ label: L50, children: [L50, 'kurz'] }, { label: 'Qualitativ' }, { label: 'Mixed' }] },
+      { type: 'compare', columns: [{ title: L50, items: [L50, 'x'] }, { title: 'B', items: ['y'] }, { title: 'C', items: [L50] }] },
+      { type: 'timeline', events: [{ when: '1900', label: L50 }, { when: '1950', label: L50 }, { when: '2000', label: 'kurz' }] },
+      { type: 'matrix', x: 'Reliabilität', y: 'Validität', cells: [L50, L50, 'c', L50] },
+      { type: 'axes', x: 'Zeit', y: 'Behalten', shape: 'fallend', marks: [{ at: 0.3, label: 'Wiederholung' }] },
+      { type: 'model', nodes: ['Hitze', 'Eisverkauf', 'Schwimmunfälle'], links: [{ from: 'Hitze', to: 'Eisverkauf', label: 'verursacht' }, { from: 'Hitze', to: 'Schwimmunfälle', label: 'verursacht' }, { from: 'Eisverkauf', to: 'Schwimmunfälle', label: 'Scheinzusammenhang', both: true, dashed: true }] },
+      { type: 'model', nodes: [L50, 'Wirkung', 'Moderator mit langem Namen'], links: [{ from: L50, to: 'Wirkung', label: 'eine ziemlich lange Pfeilbeschriftung' }, { from: 'Moderator mit langem Namen', to: L50 + ' -> Wirkung', label: 'Scheinzusammenhang' }] },
+      { type: 'venn', sets: [{ label: L50, items: [L50] }, { label: 'B', items: ['kurz'] }], shared: ['Gemeinsamkeitenliste'] },
+      { type: 'pyramid', levels: ['Selbstverwirklichung', L50, 'Soziale Bedürfnisse', L50] },
+      { type: 'bars', bars: [{ label: L50, value: 3 }, { label: 'b', value: 5 }] },
+      { type: 'decision', question: L50 + '?', yes: { question: L50 + '?', yes: L50, no: 'kurz' }, no: L50 },
+    ];
+    for (const raw of longs) {
+      const d = parseDiagram(raw)!;
+      const L = layoutDiagram(d);
+      const svg = renderDiagram(d);
+      const text = L.boxes.flatMap((b) => b.lines).join(' ').replace(/-\s/g, '');
+      const want = JSON.stringify(raw).match(/[A-Za-zÄÖÜäöüß]{4,}/g)!.filter((w) => !['type', 'title', 'steps', 'branches', 'center', 'root', 'children', 'label', 'columns', 'items', 'events', 'when', 'cells', 'shape', 'fallend', 'marks', 'nodes', 'links', 'from', 'both', 'dashed', 'true', 'sets', 'shared', 'levels', 'bars', 'value', 'question'].includes(w) && w !== raw.type);
+      const missing = want.filter((w) => !text.includes(w));
+      const real = L.boxes.filter((b) => b.lines.length);
+      let overlaps = 0;
+      real.forEach((a, k) => real.slice(k + 1).forEach((b) => (overlaps += hit(a, b) ? 1 : 0)));
+      ok(!svg.includes('…') && missing.length === 0 && overlaps === 0, d.type + ': lange Beschriftungen stehen vollständig da, ohne „…“ und ohne Überlappung' + (missing.length ? ' [fehlt: ' + [...new Set(missing)].join(', ') + ']' : '') + (overlaps ? ' [' + overlaps + ' Überlappungen]' : ''));
+    }
+    const sch = layoutDiagram(parseDiagram(longs[8])!).boxes.find((b) => b.kind === 'tag' && b.lines.join('').includes('Scheinzusammen'))!;
+    ok(sch.lines.length === 1 && sch.lines[0] === 'Scheinzusammenhang', 'Pfeilschild „Scheinzusammenhang“ steht ganz in einer Zeile');
+  }
+  // ---- colours: every column in its own colour, the whole column
+  {
+    const cmp = renderDiagram(parseDiagram({ type: 'compare', columns: [{ title: 'Eins', items: ['a'] }, { title: 'Zwei', items: ['b'] }, { title: 'Drei', items: ['c'] }] })!, PALETTES.light);
+    const t = PALETTES.light.tones;
+    ok([0, 1, 2].every((i) => cmp.includes(`fill="${t[i].accent}"`) && cmp.includes(`fill="${t[i].soft}" stroke="${t[i].stroke}"`)), 'Vergleich: 3 Spalten in 3 Farben, Kopf und Kasten jeweils gleich');
+    const darkSvg = renderDiagram(parseDiagram(more[0])!, PALETTES.dark) + renderDiagram(parseDiagram({ type: 'hierarchy', root: 'R', children: ['a', 'b', 'c', 'd', 'e'] })!, PALETTES.dark);
+    const lightOnly = PALETTES.light.tones.flatMap((x) => [x.node, x.soft]);
+    ok(!lightOnly.some((c) => darkSvg.includes(c)), 'Dunkelmodus nutzt nur dunkle Füllfarben');
+    const hier = layoutDiagram(parseDiagram({ type: 'hierarchy', root: 'R', children: [{ label: 'A', children: ['a1'] }, { label: 'B', children: ['b1'] }] })!);
+    const bA = hier.boxes.find((b) => b.lines[0] === 'A')!, a1 = hier.boxes.find((b) => b.lines[0] === 'a1')!, bB = hier.boxes.find((b) => b.lines[0] === 'B')!;
+    ok(bA.tone === a1.tone && bA.tone !== bB.tone, 'Gliederung: jeder Ast samt Unterpunkten in seiner Farbe');
+  }
   const esc = renderDiagram(parseDiagram({ type: 'flow', steps: ['a <b> & "c"', 'd'] })!);
   ok(esc.includes('a &lt;b&gt; &amp; &quot;c&quot;') && !esc.includes('<b>'), 'Sonderzeichen werden escaped');
   ok(!/Operationalisier-/.test(renderDiagram(parseDiagram(samples[0])!)), 'lange Wörter bleiben ganz (kleinere Schrift statt Trennung)');

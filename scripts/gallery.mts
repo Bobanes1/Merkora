@@ -3,6 +3,10 @@ import { writeFileSync } from 'node:fs';
 import { parseDiagram, PALETTES, renderDiagram } from '../src/lib/diagram';
 
 const samples: unknown[] = [
+  { type: 'hierarchy', title: 'Methoden', root: 'Methoden der empirischen Sozialforschung', children: [{ label: 'Quantitativ', children: ['Befragung', 'Experiment'] }, { label: 'Qualitativ', children: ['Interview', 'Fokusgruppe'] }, { label: 'Mixed Methods', children: ['Triangulation'] }] },
+  { type: 'model', title: 'Scheinkorrelation', nodes: ['Hitze', 'Eisverkauf', 'Schwimmunfälle'], links: [{ from: 'Hitze', to: 'Eisverkauf', label: '+' }, { from: 'Hitze', to: 'Schwimmunfälle', label: '+' }, { from: 'Eisverkauf', to: 'Schwimmunfälle', label: 'Scheinzusammenhang', both: true, dashed: true }] },
+  { type: 'compare', title: 'Forschungsansätze', columns: [{ title: 'Quantitativ', items: ['standardisiert', 'große Stichproben'] }, { title: 'Qualitativ', items: ['offen', 'kleine Fallzahlen'] }, { title: 'Mixed Methods', items: ['beides kombiniert', 'Triangulation'] }] },
+  { type: 'matrix', title: 'Gütekriterien', x: 'Reliabilität', y: 'Validität', cells: ['valide, nicht reliabel', 'valide und reliabel', 'weder noch', 'reliabel, nicht valide'] },
   { type: 'model', title: 'Beispiel: Moderator', nodes: ['Freizeit', 'Nutzung von Streamingdiensten', 'Alter'], links: [{ from: 'Freizeit', to: 'Nutzung von Streamingdiensten', label: '+' }, { from: 'Alter', to: 'Freizeit -> Nutzung von Streamingdiensten', label: 'moderiert' }] },
   { type: 'model', title: 'Mediation', nodes: ['Bildung', 'Einkommen', 'Gesundheit'], links: [{ from: 'Bildung', to: 'Einkommen', label: 'a' }, { from: 'Einkommen', to: 'Gesundheit', label: 'b' }, { from: 'Bildung', to: 'Gesundheit', label: 'c (direkt)' }], highlight: 'Einkommen' },
   { type: 'model', title: 'Kommunikationsmodell', nodes: ['Sender', 'Botschaft', 'Kanal', 'Empfänger', 'Störung'], links: [{ from: 'Sender', to: 'Botschaft', label: 'codiert' }, { from: 'Botschaft', to: 'Kanal' }, { from: 'Kanal', to: 'Empfänger', label: 'decodiert' }, { from: 'Empfänger', to: 'Sender', label: 'Feedback', dashed: true }, { from: 'Störung', to: 'Kanal -> Empfänger' }] },
