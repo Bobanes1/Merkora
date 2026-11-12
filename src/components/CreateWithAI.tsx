@@ -8,12 +8,14 @@ import { generateCards, hasKey } from '../lib/ai';
 import { MATERIAL_ACCEPT, MATERIAL_LABEL, readFileText } from '../lib/files';
 import { canSurviveClose, startCardJobs } from '../lib/jobs';
 import { cleanSvg, withGraphics } from '../lib/graphics';
+import { parseDiagram, PALETTES, renderDiagram } from '../lib/diagram';
+import { useResolvedTheme } from '../lib/theme';
 import { addCards, addCourse, addDeck, addWorkspace, deckUrl, getState, updateDeck, useData } from '../lib/store';
 import { IconClose, IconDoc, IconSparkle, IconTrash, IconUpload } from './Icons';
 import { Modal } from './Modal';
 import { NoKeyNotice } from './NoKey';
 
-type Draft = { front: string; back: string; svg?: string; keep: boolean };
+type Draft = { front: string; back: string; svg?: string; diagram?: unknown; keep: boolean };
 
 /** Upload a PDF / paste notes → AI makes flashcards → review → save into a new or existing deck. */
 export function CreateWithAI({
@@ -35,6 +37,7 @@ export function CreateWithAI({
 }) {
   const data = useData();
   const navigate = useNavigate();
+  const theme = useResolvedTheme();
   const fileRef = useRef<HTMLInputElement>(null);
   const existing = deckId ? data.decks.find((d) => d.id === deckId) : undefined;
   const [notes, setNotes] = useState(initialNotes ?? '');
@@ -112,7 +115,7 @@ export function CreateWithAI({
   const runAndReview = async () => {
     setError('');
     setBusy('Die KI erstellt deine Karteikarten …');
-    const made: { front: string; back: string; svg?: string }[] = [];
+    const made: { front: string; back: string; svg?: string; diagram?: unknown }[] = [];
     try {
       const before = existing ? existing.cards.map(cardFrontText) : [];
       for (const [i, p] of parts.entries()) {
@@ -199,7 +202,11 @@ export function CreateWithAI({
                   aria-label="Rückseite"
                   onChange={(e) => setDrafts(drafts.map((x, k) => (k === i ? { ...x, back: e.target.value } : x)))}
                 />
-                {d.svg && cleanSvg(d.svg) && (
+                {!!d.diagram && !!parseDiagram(d.diagram) && (
+                  // our own SVG with escaped labels
+                  <div className="diagram draft-diagram" dangerouslySetInnerHTML={{ __html: renderDiagram(parseDiagram(d.diagram)!, PALETTES[theme]) }} />
+                )}
+                {!d.diagram && d.svg && cleanSvg(d.svg) && (
                   <img className="draft-svg" alt="Grafik zur Karte" src={'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(cleanSvg(d.svg)!)} />
                 )}
               </div>

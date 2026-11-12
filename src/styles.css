@@ -6613,3 +6613,8 @@ a.deck-row:hover {
 .parts-info p { margin: 2px 0 6px; }
 .parts-info ol { margin: 0; padding-left: 20px; font-size: 13px; line-height: 1.6; }
 .job-parts { display: block; margin: 6px 0 2px; max-width: 240px; }
+
+/* AI diagrams drawn by Merkora (light/dark) */
+.diagram { margin: 10px 0 0; }
+.diagram svg { display: block; width: 100%; height: auto; max-width: 600px; }
+.draft-diagram { max-width: 420px; }

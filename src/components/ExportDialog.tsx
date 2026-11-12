@@ -6,6 +6,7 @@ import type { Deck } from '../lib/store';
 import { download } from '../lib/util';
 import { Modal } from './Modal';
 import { toAnkiTags } from '../lib/marks';
+import { diagramsToSvg } from '../lib/diagram';
 import { ShareDialog } from './ShareDialog';
 
 const csvCell = (s: string) => `"${s.replace(/"/g, '""')}"`;
@@ -30,8 +31,9 @@ export function ExportDialog({ deck, onClose }: { deck: Deck; onClose: () => voi
       const path = await exportApkg({
         name: deck.name,
         cards: deck.cards.map((c) => ({
-          front: c.html ? c.front : textToHtml(c.front),
-          back: c.html ? c.back : textToHtml(c.back),
+          // diagrams become finished SVG so Anki shows them without Merkora
+          front: c.html ? diagramsToSvg(c.front) : textToHtml(c.front),
+          back: c.html ? diagramsToSvg(c.back) : textToHtml(c.back),
           tags: toAnkiTags(c.tags, c.marked),
           styleId: c.styleId,
         })),

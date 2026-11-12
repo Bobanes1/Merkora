@@ -1,6 +1,6 @@
 import { netFetch } from './desktop';
 import { sideText } from './content';
-import { CARD_GRAPHIC_RULE } from './graphics';
+import { DIAGRAM_RULE } from './diagram';
 import { getState, type ChatMsg, type Provider } from './store';
 import { SECOND_MODEL } from '../config';
 import { autoCardInstruction, CARD_MATERIAL_LIMIT } from './cardCount';
@@ -303,14 +303,14 @@ export function cardsPrompt(text: string, count: number, focus = '', graphics = 
     system: `Du bist ein erfahrener Lerncoach und erstellst hochwertige Karteikarten. ${LANG_RULE}
 Regeln: Eine Idee pro Karte. Vorderseite = präzise Frage oder Begriff. Rückseite = kurze, vollständige Antwort (max. 2–3 Sätze).
 Wähle prüfungsorientiert aus: Karten zu dem, was in einer Prüfung zu diesem Stoff gefragt werden kann – nicht zu Organisatorischem, Agenda oder Literaturlisten.
-${graphics ? CARD_GRAPHIC_RULE + '\n' : ''}Format: {"cards":[{"front":"...","back":"..."${graphics ? ',"svg":"<svg …>…</svg> (optional)"' : ''}}]}${JSON_RULE}`,
+${graphics ? DIAGRAM_RULE + '\n' : ''}Format: {"cards":[{"front":"...","back":"..."${graphics ? ',"diagram":{…} (optional)' : ''}}]}${JSON_RULE}`,
     user: `${
       count > 0
         ? `Erstelle genau ${count} Karteikarten zu diesem Material.`
         : autoCardInstruction()
     }${focus ? ` Schwerpunkt: ${focus}.` : ''}${partNote}\n\n${clip(text, CARD_MATERIAL_LIMIT)}`,
     // automatic: generous room so the limit never decides the number (only written tokens are billed)
-    maxTokens: count > 0 ? Math.min(32000, 400 + count * (graphics ? 900 : 220)) : 16000,
+    maxTokens: count > 0 ? Math.min(32000, 400 + count * (graphics ? 400 : 220)) : 16000,
     json: true,
   };
 }
@@ -319,11 +319,17 @@ ${graphics ? CARD_GRAPHIC_RULE + '\n' : ''}Format: {"cards":[{"front":"...","bac
  * then no cards is a valid answer, not an error.
  */
 export function parseCards(text: string, allowEmpty = false) {
-  const res = parseJson<{ cards: { front: string; back: string; svg?: string }[] }>(text);
+  const res = parseJson<{ cards: { front: string; back: string; svg?: string; diagram?: unknown }[] }>(text);
   const cards = (res.cards || []).filter((c) => c && c.front && c.back);
   if (!cards.length && !allowEmpty)
     throw new AiError('Die KI hat in diesem Material nichts Prüfungsrelevantes gefunden (z. B. nur Literaturliste oder Organisatorisches) und keine Karten erstellt.');
-  return cards.map((c) => ({ front: String(c.front).trim(), back: String(c.back).trim(), ...(c.svg ? { svg: String(c.svg) } : {}) }));
+  return cards.map((c) => ({
+    front: String(c.front).trim(),
+    back: String(c.back).trim(),
+    ...(c.diagram && typeof c.diagram === 'object' ? { diagram: c.diagram } : {}),
+    // older answers may still carry raw SVG
+    ...(c.svg ? { svg: String(c.svg) } : {}),
+  }));
 }
 
 export function summaryPrompt(material: string): Prompt {

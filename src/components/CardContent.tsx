@@ -3,6 +3,7 @@ import { sanitize } from '../lib/content';
 import { mediaUrl } from '../lib/db';
 import type { Card, Deck } from '../lib/store';
 import { useResolvedTheme } from '../lib/theme';
+import { parseDiagram, PALETTES, renderDiagram } from '../lib/diagram';
 
 /** How an imported Anki card looks: its note type CSS and the wrapping class (`card card1`). */
 export type CardLook = { css?: string; cls?: string };
@@ -22,6 +23,19 @@ async function resolveMediaRefs(text: string): Promise<string> {
   let out = text;
   ids.forEach((id, i) => (out = out.split(`merkora-media:${id}`).join(urls[i] ?? '')));
   return out;
+}
+
+/** Draws AI diagrams (stored as description) in the current colour scheme (also inside a card's shadow root). */
+export function hydrateDiagrams(root: ParentNode, dark: boolean) {
+  for (const el of Array.from(root.querySelectorAll<HTMLElement>('[data-diagram]'))) {
+    try {
+      const d = parseDiagram(JSON.parse(el.getAttribute('data-diagram') ?? ''));
+      // our own SVG with escaped labels – safe to insert
+      if (d) el.innerHTML = renderDiagram(d, PALETTES[dark ? 'dark' : 'light']);
+    } catch {
+      /* broken description: leave the card without a graphic */
+    }
+  }
 }
 
 /** Loads stored images/audio into elements that carry a data-media id (also inside a card's shadow root). */
@@ -153,10 +167,12 @@ export function CardContent({ text, html, className = '', look }: { text: string
           if (!cancelled) own.textContent = hoistFontFaces(c);
         });
       void hydrateMedia(root);
+      hydrateDiagrams(root, dark);
       if (hasMath(clean)) void renderMath(wrap, root).catch(() => undefined);
     } else {
       el.innerHTML = clean;
       void hydrateMedia(el);
+      hydrateDiagrams(el, dark);
       if (hasMath(clean)) void renderMath(el).catch(() => undefined);
     }
     return () => {

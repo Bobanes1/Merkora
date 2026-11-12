@@ -5,6 +5,7 @@ import { escapeHtml } from './content';
 import { mediaPutMany } from './db';
 import type { NewCard } from './store';
 import { uid } from './util';
+import { diagramHtml, parseDiagram } from './diagram';
 
 /** Pulls the <svg>…</svg> out of an AI answer and removes anything active (scripts, links, events). */
 export function cleanSvg(text: string): string | null {
@@ -47,12 +48,22 @@ export async function generateGraphic(topic: string, style: string): Promise<str
   return svg;
 }
 
-export const CARD_GRAPHIC_RULE = `Wo eine Grafik das Verständnis wirklich verbessert (etwa bei jeder dritten Karte), ergänze das Feld "svg" mit einer kleinen SVG-Grafik für die Rückseite (viewBox="0 0 400 260", xmlns, keine Skripte, Schrift Arial ab Größe 14, Farben #09817e, #f2b84b, #02b6b2, #002a29 auf Weiß, kurze Beschriftungen). Sonst lass "svg" weg.`;
-
-/** Turns AI cards that may carry an SVG into stored, picture-carrying cards. */
-export async function withGraphics(cards: { front: string; back: string; svg?: string }[]): Promise<NewCard[]> {
+/**
+ * Turns AI cards into stored cards. A described diagram becomes a placeholder that Merkora draws when the card
+ * is shown (so it fits light and dark); raw SVG from older answers is still stored as a picture.
+ */
+export async function withGraphics(cards: { front: string; back: string; svg?: string; diagram?: unknown }[]): Promise<NewCard[]> {
   const out: NewCard[] = [];
   for (const c of cards) {
+    const d = c.diagram ? parseDiagram(c.diagram) : null;
+    if (d) {
+      out.push({
+        front: escapeHtml(c.front).replace(/\n/g, '<br>'),
+        back: `${escapeHtml(c.back).replace(/\n/g, '<br>')}${diagramHtml(d)}`,
+        html: true,
+      });
+      continue;
+    }
     const svg = c.svg ? cleanSvg(c.svg) : null;
     if (!svg) {
       out.push({ front: c.front, back: c.back });

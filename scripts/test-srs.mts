@@ -353,6 +353,49 @@ console.log('Langes Material in Teilen');
   ok(formatCostRange(0.1, 0.25) === '0,10–0,25 $' && formatCostRange(0.002, 0.004) === '< 0,01 $' && formatCostRange(0.004, 0.03) === 'bis 0,03 $', 'Kostenspanne lesbar');
 }
 
+console.log('Diagramme');
+{
+  const { parseDiagram, layoutDiagram, renderDiagram, PALETTES, diagramHtml, diagramsToSvg, DIAGRAM_RULE } = await import('../src/lib/diagram');
+  const long = 'Ein ziemlich langer Begriff mit Erklärung zur Sache';
+  const samples = [
+    { type: 'flow', title: 'Forschungsprozess', steps: ['Forschungsfrage', 'Hypothesen', 'Operationalisierung', 'Datenerhebung', 'Auswertung', 'Bericht'] },
+    { type: 'cycle', steps: Array.from({ length: 8 }, (_, i) => 'Schritt ' + (i + 1) + ' ' + long.slice(0, 20)) },
+    { type: 'hierarchy', title: 'Methoden', root: 'Empirische Methoden', children: [{ label: 'Quantitativ', children: ['Befragung', 'Inhaltsanalyse', 'Experiment', 'Beobachtung'] }, { label: 'Qualitativ', children: ['Leitfadeninterview'] }, 'Mixed Methods', { label: long }] },
+    { type: 'compare', columns: [{ title: 'Quantitativ', items: ['standardisiert', long, 'statistisch'] }, { title: 'Qualitativ', items: ['offen'] }, { title: 'Mixed', items: ['beides'] }] },
+    { type: 'timeline', events: Array.from({ length: 8 }, (_, i) => ({ when: String(1900 + i * 15), label: long })) },
+    { type: 'concept', title: 'Wissen', center: 'Wissen (North 2013)', branches: ['Daten', 'Informationen', 'Kenntnisse', 'Fähigkeiten', 'Problemlösung', long, 'Regeln', 'Erfahrung'] },
+    { type: 'matrix', x: 'Reliabilität', y: 'Validität', cells: [long, 'hoch / hoch', long, 'gültig, aber unzuverlässig'] },
+    { type: 'axes', x: 'Zeit', y: 'Behalten', shape: 'fallend', marks: [{ at: 0.2, label: 'Wiederholung' }, { at: 0.7, label: 'Prüfung' }] },
+  ];
+  const hit = (a: any, b: any) => a.x < b.x + b.w - 0.5 && b.x < a.x + a.w - 0.5 && a.y < b.y + b.h - 0.5 && b.y < a.y + a.h - 0.5;
+  for (const raw of samples) {
+    const d = parseDiagram(raw)!;
+    const L = layoutDiagram(d);
+    const real = L.boxes.filter((b) => b.lines.length);
+    const outside = real.filter((b) => b.x < 0 || b.y < 0 || b.x + b.w > L.width + 0.5 || b.y + b.h > L.height + 0.5);
+    let overlaps = 0;
+    real.forEach((a, k) => real.slice(k + 1).forEach((b) => (overlaps += hit(a, b) ? 1 : 0)));
+    const svg = renderDiagram(d);
+    // the first label of the description must be drawn
+    const first = { flow: () => (d as any).steps[0], cycle: () => (d as any).steps[0], hierarchy: () => (d as any).root, compare: () => (d as any).columns[0].title, timeline: () => (d as any).events[0].when, concept: () => (d as any).center, matrix: () => (d as any).x, axes: () => (d as any).y }[d.type]();
+    const firstWord = String(first).split(' ')[0];
+    ok(!!d && outside.length === 0 && overlaps === 0 && /^<svg/.test(svg) && svg.includes(firstWord), d.type + ': nichts überlappt oder ragt hinaus, Beschriftung „' + firstWord + '“ vorhanden');
+  }
+  const esc = renderDiagram(parseDiagram({ type: 'flow', steps: ['a <b> & "c"', 'd'] })!);
+  ok(esc.includes('a &lt;b&gt; &amp; &quot;c&quot;') && !esc.includes('<b>'), 'Sonderzeichen werden escaped');
+  ok(!/Operationalisier-/.test(renderDiagram(parseDiagram(samples[0])!)), 'lange Wörter bleiben ganz (kleinere Schrift statt Trennung)');
+  ok(parseDiagram({ type: 'flow', steps: ['nur einer'] }) === null && parseDiagram({ type: 'quatsch' }) === null && parseDiagram('text') === null, 'unbrauchbare Beschreibung → keine Grafik');
+  const many = parseDiagram({ type: 'flow', steps: Array.from({ length: 20 }, (_, i) => 'x'.repeat(100) + i) })!;
+  ok(many.type === 'flow' && many.steps.length === 8 && many.steps[0].length <= 60, 'zu viele / zu lange Einträge werden gekürzt');
+  ok(parseDiagram({ type: 'axes', x: 'x', y: 'y', shape: 'umgekehrtes U' })!.type === 'axes' && (parseDiagram({ type: 'axes', x: 'x', y: 'y', shape: 'umgekehrtes U' }) as any).shape === 'umgekehrtes-u', 'Kurvenform wird erkannt');
+  const light = renderDiagram(parseDiagram(samples[0])!, PALETTES.light), dark = renderDiagram(parseDiagram(samples[0])!, PALETTES.dark);
+  ok(light !== dark && dark.includes(PALETTES.dark.text) && light.includes(PALETTES.light.text), 'helle und dunkle Farben');
+  const html = 'Antwort' + diagramHtml(parseDiagram(samples[0])!);
+  const out = diagramsToSvg(html);
+  ok(!out.includes('data-diagram') && out.includes('<svg') && out.includes('Forschungsfrage') && out.includes('#ffffff'), 'Anki-Export: Platzhalter → fertiges SVG auf Weiß');
+  ok(!/<svg/i.test(DIAGRAM_RULE) && /"type":"flow"/.test(DIAGRAM_RULE), 'KI-Anweisung verlangt Beschreibung, kein SVG');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

@@ -18,7 +18,7 @@ const MATERIAL_LIMIT = 36000; // materialFrom: 24k source + 12k cards
 export const estimate = {
   /** count 0 = the AI decides: output as a span (few to many cards). */
   cards: (chars: number, count: number, graphics = false): Estimate => {
-    const per = graphics ? 700 : 110;
+    const per = graphics ? 250 : 110; // a diagram is a short description, not SVG code
     const input = 450 + tokensOf(Math.min(chars, CARD_MATERIAL_LIMIT));
     if (count > 0) return { input, output: count * per };
     const r = cardRange(chars);
