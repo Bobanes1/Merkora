@@ -6,9 +6,10 @@ import { ExportDialog } from '../../components/ExportDialog';
 import { allTags, hasTag, parseTags } from '../../lib/tags';
 import { answerOnly } from '../../lib/backSide';
 import { MarkButton } from '../../components/MarkButton';
+import { GraphicDialog } from '../../components/GraphicDialog';
 import { CardContent, lookOf } from '../../components/CardContent';
 import { CreateWithAI } from '../../components/CreateWithAI';
-import { IconEdit, IconPlay, IconPlus, IconSearch, IconSparkle, IconTrash, IconDownload, IconTag, IconUpload, IconStar } from '../../components/Icons';
+import { IconEdit, IconPlay, IconPlus, IconSearch, IconSparkle, IconTrash, IconDownload, IconImage, IconTag, IconUpload, IconStar } from '../../components/Icons';
 import { isActive, JobBanner, JobError, useJob } from '../../components/Jobs';
 import { ConfirmModal, Modal } from '../../components/Modal';
 import { RichField } from '../../components/RichField';
@@ -165,6 +166,7 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
   const [q, setQ] = useState('');
   const [edit, setEdit] = useState<Card | 'new' | null>(null);
   const [del, setDel] = useState<Card | null>(null);
+  const [graphic, setGraphic] = useState<Card | null>(null);
   const [ai, setAi] = useState(false);
   const term = q.trim().toLowerCase();
   const [anki, setAnki] = useState(false);
@@ -267,6 +269,9 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
                 </div>
                 <div className="flash-actions">
                   <MarkButton deckId={deck.id} card={c} />
+                  <button type="button" className="icon-btn" aria-label="Grafik" title="Grafik erstellen, ersetzen oder entfernen" onClick={() => setGraphic(c)}>
+                    <IconImage size={16} />
+                  </button>
                   <button type="button" className="icon-btn" aria-label="Bearbeiten" onClick={() => setEdit(c)}>
                     <IconEdit size={16} />
                   </button>
@@ -296,6 +301,9 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
         />
       )}
       {edit && edit !== 'new' && <CardEditor deck={deck} card={edit} onClose={() => setEdit(null)} />}
+      {graphic && (
+        <GraphicDialog deck={deck} card={deck.cards.find((x) => x.id === graphic.id) ?? graphic} onClose={() => setGraphic(null)} />
+      )}
       {del && (
         <ConfirmModal title="Karte löschen?" text={cardFrontText(del)} onClose={() => setDel(null)} onConfirm={() => deleteCard(deck.id, del.id)} />
       )}

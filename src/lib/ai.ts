@@ -1,6 +1,6 @@
 import { netFetch } from './desktop';
 import { sideText } from './content';
-import { DIAGRAM_RULE } from './diagram';
+import { DIAGRAM_RULE, parseDiagram, type Diagram } from './diagram';
 import { FIGURE_RULE } from './slides';
 import { getState, type ChatMsg, type Provider } from './store';
 import { SECOND_MODEL } from '../config';
@@ -539,4 +539,21 @@ export async function listModels(purpose: Purpose = 'gen'): Promise<string[]> {
 export async function testConnection(purpose: Purpose = 'gen'): Promise<string> {
   const reply = await complete([{ role: 'user', content: 'Antworte nur mit dem Wort: OK' }], { maxTokens: 300, purpose });
   return reply.trim() || 'OK';
+}
+
+/**
+ * A graphic for one card (improve per card): the AI only describes it (see DIAGRAM_RULE), Merkora draws it.
+ * Small request – the card text in, one short description out.
+ */
+export async function diagramForCard(front: string, back: string, kind?: string): Promise<Diagram> {
+  const raw = await completeJson<Record<string, unknown>>(
+    `Du veranschaulichst Lernkarten mit einer einfachen Grafik. ${LANG_RULE}
+${DIAGRAM_RULE}
+Antworte nur mit dem einen Grafik-Objekt (z. B. {"type":"flow",...}), ohne "diagram"-Hülle.`,
+    `Beschreibe eine Grafik, die diese Karte am besten veranschaulicht${kind ? ` – als Art „${kind}“` : ''}.\n\nFrage: ${front}\nAntwort: ${back}`,
+    800,
+  );
+  const d = parseDiagram((raw as { diagram?: unknown }).diagram ?? raw);
+  if (!d) throw new AiError('Die KI hat keine brauchbare Grafik beschrieben. Versuch es noch einmal oder wähle eine andere Art.');
+  return d;
 }

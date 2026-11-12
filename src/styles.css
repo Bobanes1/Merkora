@@ -6627,3 +6627,17 @@ a.deck-row:hover {
 .slide-loading { padding: 24px; text-align: center; font-size: 12px; color: var(--muted); border: 1px dashed var(--line); border-radius: 8px; }
 .lightbox { position: fixed; inset: 0; z-index: 300; background: rgba(0, 10, 10, 0.82); display: flex; align-items: center; justify-content: center; padding: 24px; cursor: zoom-out; animation: fade 0.12s ease-out; }
 .lightbox img { max-width: 100%; max-height: 100%; border-radius: 8px; background: #fff; box-shadow: var(--shadow-pop); }
+
+/* graphic of one card */
+.graphic-q { margin: 0 0 10px; font-weight: 600; color: var(--ink); }
+.graphic-preview, .graphic-current { margin: 4px 0 8px; padding: 10px; border: 1px solid var(--line); border-radius: var(--r-md); }
+.graphic-current { max-height: 320px; overflow: auto; }
+.graphic-make { margin-top: 12px; }
+.graphic-make .input-row { display: flex; gap: 8px; }
+.graphic-make select { flex: 1; min-width: 0; }
+.btn.danger-text { color: var(--bad-ink); }
+
+.form-warn .link-btn {
+  margin-right: 12px;
+  font-weight: 600;
+}

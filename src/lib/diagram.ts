@@ -424,3 +424,52 @@ Beschriftungen sind kurze Stichworte (höchstens 6 Wörter). Erlaubte Formen (ge
 {"type":"concept","title":"…","center":"…","branches":["…","…","…"]} – Begriff mit 3–8 Merkmalen
 {"type":"matrix","title":"…","x":"…","y":"…","cells":["oben links","oben rechts","unten links","unten rechts"]} – Vierfeldertafel
 {"type":"axes","title":"…","x":"…","y":"…","shape":"steigend|fallend|u|umgekehrtes-u|s-kurve|linear","marks":[{"at":0.3,"label":"…"}]} – Verlauf/Kurve`;
+
+// ---------- graphics of one card (improve per card) ----------
+const DIAGRAM_RE = /<div class="diagram" data-diagram="([^"]*)"><\/div>/;
+const SLIDE_RE = /<figure class="slide-figure">[\s\S]*?<\/figure>/;
+// pictures that the AI used to draw (withGraphics stored them with alt="Grafik"); own pictures have no such alt
+const OLD_AI_IMG_RE = /(?:<br\s*\/?>)?<img data-media="[^"]*" alt="Grafik">/;
+
+const unescAttr = (s: string) => s.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+
+/** Which graphic the back of a card has. */
+export function cardGraphic(html: string): { kind: 'diagram' | 'slide' | 'image' | null; diagram?: Diagram } {
+  const m = DIAGRAM_RE.exec(html);
+  if (m) {
+    try {
+      const d = parseDiagram(JSON.parse(unescAttr(m[1])));
+      if (d) return { kind: 'diagram', diagram: d };
+    } catch {
+      /* broken description */
+    }
+    return { kind: 'diagram' };
+  }
+  if (SLIDE_RE.test(html)) return { kind: 'slide' };
+  if (OLD_AI_IMG_RE.test(html)) return { kind: 'image' };
+  return { kind: null };
+}
+
+/** Removes the graphic (diagram, slide picture or older AI picture); text and own pictures stay. */
+export function stripGraphics(html: string): string {
+  return html
+    .replace(new RegExp(DIAGRAM_RE.source, 'g'), '')
+    .replace(new RegExp(SLIDE_RE.source, 'g'), '')
+    .replace(new RegExp(OLD_AI_IMG_RE.source, 'g'), '')
+    .replace(/(<br\s*\/?>\s*)+$/i, '');
+}
+
+/** The back with the new diagram instead of any earlier graphic. */
+export const withDiagram = (html: string, d: Diagram) => stripGraphics(html) + diagramHtml(d);
+
+/** Names of the diagram kinds (for choosing one). */
+export const DIAGRAM_KINDS: { id: Diagram['type']; label: string }[] = [
+  { id: 'flow', label: 'Ablauf' },
+  { id: 'cycle', label: 'Kreislauf' },
+  { id: 'hierarchy', label: 'Gliederung' },
+  { id: 'compare', label: 'Vergleich' },
+  { id: 'timeline', label: 'Zeitstrahl' },
+  { id: 'concept', label: 'Begriffsnetz' },
+  { id: 'matrix', label: 'Vierfeldertafel' },
+  { id: 'axes', label: 'Graph / Kurve' },
+];

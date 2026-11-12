@@ -417,6 +417,24 @@ console.log('Modelle aus PDF-Folien');
   ok(h.includes('data-media="abc"') && h.includes('&lt;b&gt;&amp;&quot;x&quot;.pdf') && !h.includes('<b>'), 'Folienbild-HTML sauber escaped');
 }
 
+console.log('Grafik pro Karte');
+{
+  const { cardGraphic, stripGraphics, withDiagram, diagramHtml, parseDiagram } = await import('../src/lib/diagram');
+  const { figureHtml } = await import('../src/lib/slides');
+  const d1 = parseDiagram({ type: 'flow', steps: ['A', 'B'] })!;
+  const d2 = parseDiagram({ type: 'compare', columns: [{ title: 'X', items: ['1'] }, { title: 'Y', items: ['2'] }] })!;
+  const own = '<img data-media="mein-bild" alt="">';
+  const withD = 'Antwort ' + own + diagramHtml(d1);
+  const withSlide = 'Antwort' + figureHtml('m1', 'Folie 3 · S.pdf');
+  const withOld = 'Antwort<br><img data-media="m2" alt="Grafik">';
+  ok(cardGraphic(withD).kind === 'diagram' && cardGraphic(withD).diagram?.type === 'flow', 'Merkora-Grafik erkannt');
+  ok(cardGraphic(withSlide).kind === 'slide' && cardGraphic(withOld).kind === 'image' && cardGraphic('nur Text ' + own).kind === null, 'Folienbild, ältere KI-Grafik und „keine Grafik“ erkannt');
+  ok(stripGraphics(withD) === 'Antwort ' + own && stripGraphics(withSlide) === 'Antwort' && stripGraphics(withOld) === 'Antwort', 'Entfernen: nur die Grafik geht, Text und eigene Bilder bleiben');
+  const replaced = withDiagram(withSlide, d2);
+  ok(cardGraphic(replaced).diagram?.type === 'compare' && !replaced.includes('slide-figure'), 'Ersetzen: Folienbild → neue Grafik');
+  ok(cardGraphic(withDiagram('Text', d1)).kind === 'diagram', 'Karte ohne Grafik bekommt eine');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));
