@@ -396,6 +396,27 @@ console.log('Diagramme');
   ok(!/<svg/i.test(DIAGRAM_RULE) && /"type":"flow"/.test(DIAGRAM_RULE), 'KI-Anweisung verlangt Beschreibung, kein SVG');
 }
 
+console.log('Modelle aus PDF-Folien');
+{
+  const { pickFigurePages, markFigures, FIGURE_RULE, figureHtml } = await import('../src/lib/slides');
+  // 10 slides: logo (120x40) and ~6 template lines on every slide; slide 3 has a picture, slide 6 a model drawn with shapes
+  const stats = Array.from({ length: 10 }, (_, i) => ({
+    images: ['120x40', ...(i === 2 ? ['800x450'] : [])],
+    paths: 6 + (i === 5 ? 40 : 0) + (i === 8 ? 4 : 0),
+  }));
+  ok(JSON.stringify(pickFigurePages(stats)) === '[3,6]', 'Folie mit Bild und Folie mit gezeichnetem Modell erkannt; Logo und Vorlagenlinien zählen nicht');
+  ok(pickFigurePages([]).length === 0, 'leeres PDF → keine Abbildungen');
+  const m = markFigures([
+    { name: 'S1.pdf', pages: ['Einleitung', 'Modell A', 'Fazit'], figures: [2] },
+    { name: 'S2.pdf', pages: ['Modell B', 'Text'], figures: [1] },
+  ]);
+  ok(m.texts[0].text.includes('[Abbildung 1 – Folie 2 aus S1.pdf]\nModell A') && m.texts[1].text.startsWith('[Abbildung 2 – Folie 1 aus S2.pdf]'), 'Markierungen an der richtigen Folie, Nummern laufen über alle Dateien');
+  ok(m.figures[1].file === 'S1.pdf' && m.figures[1].page === 2 && m.figures[2].file === 'S2.pdf' && m.figures[2].page === 1, 'Zuordnung Nummer → Datei und Folie');
+  ok(/"figure": 7/.test(FIGURE_RULE), 'Anweisung nennt das Feld „figure“');
+  const h = figureHtml('abc', 'Folie 3 · <b>&"x".pdf');
+  ok(h.includes('data-media="abc"') && h.includes('&lt;b&gt;&amp;&quot;x&quot;.pdf') && !h.includes('<b>'), 'Folienbild-HTML sauber escaped');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

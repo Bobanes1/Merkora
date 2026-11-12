@@ -25,6 +25,45 @@ async function resolveMediaRefs(text: string): Promise<string> {
   return out;
 }
 
+/** Big view of a slide picture; a click or Escape closes it. */
+function openLightbox(src: string, alt: string) {
+  const box = document.createElement('div');
+  box.className = 'lightbox';
+  box.setAttribute('role', 'dialog');
+  box.setAttribute('aria-label', alt || 'Bild');
+  const img = document.createElement('img');
+  img.src = src;
+  img.alt = alt;
+  box.append(img);
+  const close = () => {
+    box.remove();
+    window.removeEventListener('keydown', onKey, true);
+  };
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      close();
+    }
+  };
+  box.addEventListener('click', (e) => {
+    e.stopPropagation();
+    close();
+  });
+  window.addEventListener('keydown', onKey, true);
+  document.body.append(box);
+}
+
+/** Slide pictures open big on click – without flipping the flashcard underneath. */
+function zoomableSlides(root: ParentNode) {
+  for (const img of Array.from(root.querySelectorAll<HTMLImageElement>('img.slide-img'))) {
+    img.title = 'Zum Vergrößern klicken';
+    img.onclick = (e) => {
+      e.stopPropagation();
+      if (img.src) openLightbox(img.src, img.alt);
+    };
+  }
+}
+
 /** Draws AI diagrams (stored as description) in the current colour scheme (also inside a card's shadow root). */
 export function hydrateDiagrams(root: ParentNode, dark: boolean) {
   for (const el of Array.from(root.querySelectorAll<HTMLElement>('[data-diagram]'))) {
@@ -168,11 +207,13 @@ export function CardContent({ text, html, className = '', look }: { text: string
         });
       void hydrateMedia(root);
       hydrateDiagrams(root, dark);
+      zoomableSlides(root);
       if (hasMath(clean)) void renderMath(wrap, root).catch(() => undefined);
     } else {
       el.innerHTML = clean;
       void hydrateMedia(el);
       hydrateDiagrams(el, dark);
+      zoomableSlides(el);
       if (hasMath(clean)) void renderMath(el).catch(() => undefined);
     }
     return () => {

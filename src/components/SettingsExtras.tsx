@@ -340,3 +340,17 @@ export function CostSettings() {
     </div>
   );
 }
+
+/** Models and figures from PDF slides on AI cards – can be switched off. */
+export function SlideFigureSettings() {
+  const on = useStore((x) => x.data.settings.slideFigures ?? true);
+  return (
+    <label className="check-row">
+      <input type="checkbox" checked={on} onChange={(e) => setSettings({ slideFigures: e.target.checked })} />
+      <span>
+        <b>Modelle und Abbildungen aus PDF-Folien übernehmen</b> – bei „Mit KI erstellen“ erkennt Merkora Folien mit Abbildungen, und
+        die KI kann ein Bild der passenden Folie an eine Karte hängen. Es werden keine Bilder an die KI geschickt.
+      </span>
+    </label>
+  );
+}

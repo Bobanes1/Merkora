@@ -182,6 +182,8 @@ export type Settings = {
   noKeyHintClosed?: boolean;
   /** Show the estimated AI tokens and costs before a task (on by default). */
   showCosts?: boolean;
+  /** Take models and figures from PDF slides onto AI cards (on by default). */
+  slideFigures?: boolean;
   /** Own price in US-$ per 1M tokens (input/output) – overrides the price list. */
   priceIn?: number;
   priceOut?: number;

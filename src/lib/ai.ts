@@ -1,6 +1,7 @@
 import { netFetch } from './desktop';
 import { sideText } from './content';
 import { DIAGRAM_RULE } from './diagram';
+import { FIGURE_RULE } from './slides';
 import { getState, type ChatMsg, type Provider } from './store';
 import { SECOND_MODEL } from '../config';
 import { autoCardInstruction, CARD_MATERIAL_LIMIT } from './cardCount';
@@ -291,7 +292,7 @@ const JSON_RULE = '\nAntworte ausschließlich mit gültigem JSON, ohne Erklärte
 /** For long material processed in steps: which part this is, and the questions of the cards made so far. */
 export type PartInfo = { i: number; n: number; avoid?: string[] };
 
-export function cardsPrompt(text: string, count: number, focus = '', graphics = false, part?: PartInfo): Prompt {
+export function cardsPrompt(text: string, count: number, focus = '', graphics = false, part?: PartInfo, figures = false): Prompt {
   const partNote = part && part.n > 1
     ? `\n\nDies ist Teil ${part.i} von ${part.n} des Lernmaterials. Erstelle Karten nur zu diesem Teil${count > 0 ? '' : ' und entscheide die Anzahl nur nach seinem Inhalt'}.${
         part.avoid?.length
@@ -303,7 +304,7 @@ export function cardsPrompt(text: string, count: number, focus = '', graphics = 
     system: `Du bist ein erfahrener Lerncoach und erstellst hochwertige Karteikarten. ${LANG_RULE}
 Regeln: Eine Idee pro Karte. Vorderseite = präzise Frage oder Begriff. Rückseite = kurze, vollständige Antwort (max. 2–3 Sätze).
 Wähle prüfungsorientiert aus: Karten zu dem, was in einer Prüfung zu diesem Stoff gefragt werden kann – nicht zu Organisatorischem, Agenda oder Literaturlisten.
-${graphics ? DIAGRAM_RULE + '\n' : ''}Format: {"cards":[{"front":"...","back":"..."${graphics ? ',"diagram":{…} (optional)' : ''}}]}${JSON_RULE}`,
+${graphics ? DIAGRAM_RULE + '\n' : ''}${figures ? FIGURE_RULE + '\n' : ''}Format: {"cards":[{"front":"...","back":"..."${graphics ? ',"diagram":{…} (optional)' : ''}${figures ? ',"figure":7 (optional)' : ''}}]}${JSON_RULE}`,
     user: `${
       count > 0
         ? `Erstelle genau ${count} Karteikarten zu diesem Material.`
@@ -319,7 +320,7 @@ ${graphics ? DIAGRAM_RULE + '\n' : ''}Format: {"cards":[{"front":"...","back":".
  * then no cards is a valid answer, not an error.
  */
 export function parseCards(text: string, allowEmpty = false) {
-  const res = parseJson<{ cards: { front: string; back: string; svg?: string; diagram?: unknown }[] }>(text);
+  const res = parseJson<{ cards: { front: string; back: string; svg?: string; diagram?: unknown; figure?: unknown }[] }>(text);
   const cards = (res.cards || []).filter((c) => c && c.front && c.back);
   if (!cards.length && !allowEmpty)
     throw new AiError('Die KI hat in diesem Material nichts Prüfungsrelevantes gefunden (z. B. nur Literaturliste oder Organisatorisches) und keine Karten erstellt.');
@@ -327,6 +328,8 @@ export function parseCards(text: string, allowEmpty = false) {
     front: String(c.front).trim(),
     back: String(c.back).trim(),
     ...(c.diagram && typeof c.diagram === 'object' ? { diagram: c.diagram } : {}),
+    // a slide of the PDF that shows the answer (see lib/slides.ts)
+    ...(Number.isInteger(Number(c.figure)) && Number(c.figure) > 0 ? { figure: Number(c.figure) } : {}),
     // older answers may still carry raw SVG
     ...(c.svg ? { svg: String(c.svg) } : {}),
   }));
@@ -373,9 +376,9 @@ export function runPrompt(p: Prompt, signal?: AbortSignal) {
   return complete([{ role: 'user', content: p.user }], { system: p.system, maxTokens: p.maxTokens, json: p.json, signal });
 }
 
-export async function generateCards(text: string, count: number, focus = '', graphics = false, part?: PartInfo) {
+export async function generateCards(text: string, count: number, focus = '', graphics = false, part?: PartInfo, figures = false) {
   // with several parts, a part without exam-relevant content may give no cards
-  return parseCards(await runPrompt(cardsPrompt(text, count, focus, graphics, part)), !!part && part.n > 1);
+  return parseCards(await runPrompt(cardsPrompt(text, count, focus, graphics, part, figures)), !!part && part.n > 1);
 }
 
 // ---------- work that keeps running on the provider's servers ----------

@@ -6,6 +6,7 @@ import { mediaPutMany } from './db';
 import type { NewCard } from './store';
 import { uid } from './util';
 import { diagramHtml, parseDiagram } from './diagram';
+import { figureForCard } from './figureFiles';
 
 /** Pulls the <svg>…</svg> out of an AI answer and removes anything active (scripts, links, events). */
 export function cleanSvg(text: string): string | null {
@@ -52,9 +53,22 @@ export async function generateGraphic(topic: string, style: string): Promise<str
  * Turns AI cards into stored cards. A described diagram becomes a placeholder that Merkora draws when the card
  * is shown (so it fits light and dark); raw SVG from older answers is still stored as a picture.
  */
-export async function withGraphics(cards: { front: string; back: string; svg?: string; diagram?: unknown }[]): Promise<NewCard[]> {
+export async function withGraphics(
+  cards: { front: string; back: string; svg?: string; diagram?: unknown; figure?: unknown }[],
+  figureSet?: string,
+): Promise<NewCard[]> {
   const out: NewCard[] = [];
   for (const c of cards) {
+    // a picture of the PDF slide that shows the answer comes first (instead of a drawn diagram)
+    const slide = c.figure ? await figureForCard(figureSet, c.figure) : '';
+    if (slide) {
+      out.push({
+        front: escapeHtml(c.front).replace(/\n/g, '<br>'),
+        back: `${escapeHtml(c.back).replace(/\n/g, '<br>')}${slide}`,
+        html: true,
+      });
+      continue;
+    }
     const d = c.diagram ? parseDiagram(c.diagram) : null;
     if (d) {
       out.push({

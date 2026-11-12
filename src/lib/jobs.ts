@@ -80,6 +80,7 @@ function promptFor(job: Job, deck: Deck): Prompt {
         p.focus ?? '',
         !!p.graphics,
         part && part.n > 1 ? { i: part.i, n: part.n, avoid: part.i > 1 ? avoidList(deck.cards.map(cardFrontText)) : [] } : undefined,
+        !!(job.params as CardParams).figureSet,
       );
     }
   }
@@ -94,13 +95,15 @@ type CardParams = {
   count?: number;
   focus?: string;
   graphics?: boolean;
+  /** PDF slides with figures of this run (lib/figureFiles.ts) – the AI may name one per card. */
+  figureSet?: string;
   part?: { i: number; n: number };
   rest?: string[];
   counts?: number[];
 };
 
 /** Starts card creation for one or several parts (several = one after another, without repeating cards). */
-export function startCardJobs(deck: Deck, parts: string[], o: { counts: number[]; focus: string; graphics: boolean }) {
+export function startCardJobs(deck: Deck, parts: string[], o: { counts: number[]; focus: string; graphics: boolean; figureSet?: string }) {
   if (!parts.length) return;
   const n = parts.length;
   const params: CardParams = {
@@ -108,6 +111,7 @@ export function startCardJobs(deck: Deck, parts: string[], o: { counts: number[]
     count: o.counts[0] ?? 0,
     focus: o.focus,
     graphics: o.graphics,
+    ...(o.figureSet ? { figureSet: o.figureSet } : {}),
     ...(n > 1 ? { part: { i: 1, n }, rest: parts.slice(1), counts: o.counts.slice(1) } : {}),
   };
   return addJob({ kind: 'cards', deckId: deck.id, title: partTitle(deck, params), params });
@@ -142,7 +146,7 @@ async function applyResult(job: Job, text: string) {
     case 'cards': {
       // a part of long material may contain nothing exam-relevant (e.g. only the literature list)
       const part = (job.params as CardParams).part;
-      const cards = await withGraphics(parseCards(text, !!part && part.n > 1));
+      const cards = await withGraphics(parseCards(text, !!part && part.n > 1), (job.params as CardParams).figureSet);
       addCards(job.deckId, cards);
       return cards.length;
     }

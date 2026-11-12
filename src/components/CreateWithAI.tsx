@@ -5,17 +5,42 @@ import { estimate } from '../lib/costs';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { generateCards, hasKey } from '../lib/ai';
-import { MATERIAL_ACCEPT, MATERIAL_LABEL, readFileText } from '../lib/files';
+import { isPdf, MATERIAL_ACCEPT, MATERIAL_LABEL, readFileText, readPdfDetailed } from '../lib/files';
+import { figureLabel, markFigures, pickFigurePages } from '../lib/slides';
+import { figureInfo, figurePreview, registerFigures } from '../lib/figureFiles';
 import { canSurviveClose, startCardJobs } from '../lib/jobs';
 import { cleanSvg, withGraphics } from '../lib/graphics';
 import { parseDiagram, PALETTES, renderDiagram } from '../lib/diagram';
 import { useResolvedTheme } from '../lib/theme';
-import { addCards, addCourse, addDeck, addWorkspace, deckUrl, getState, updateDeck, useData } from '../lib/store';
+import { addCards, addCourse, addDeck, addWorkspace, deckUrl, getState, updateDeck, useData, useStore } from '../lib/store';
 import { IconClose, IconDoc, IconSparkle, IconTrash, IconUpload } from './Icons';
 import { Modal } from './Modal';
 import { NoKeyNotice } from './NoKey';
 
-type Draft = { front: string; back: string; svg?: string; diagram?: unknown; keep: boolean };
+type Draft = { front: string; back: string; svg?: string; diagram?: unknown; figure?: unknown; keep: boolean };
+type PdfInfo = { file: File; pages: string[]; figures: number[] };
+
+/** Small look at the PDF slide the AI chose for a card (in the review list). */
+function DraftFigure({ setId, num }: { setId?: string; num: unknown }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const info = figureInfo(setId, num);
+  useEffect(() => {
+    let u: string | null = null;
+    void figurePreview(setId, num).then((b) => {
+      if (b) setUrl((u = URL.createObjectURL(b)));
+    });
+    return () => {
+      if (u) URL.revokeObjectURL(u);
+    };
+  }, [setId, num]);
+  if (!info) return null;
+  return (
+    <figure className="slide-figure draft-figure">
+      {url ? <img className="slide-img" src={url} alt={figureLabel(info)} /> : <div className="slide-loading">Folie wird geladen …</div>}
+      <figcaption>{figureLabel(info)}</figcaption>
+    </figure>
+  );
+}
 
 /** Upload a PDF / paste notes → AI makes flashcards → review → save into a new or existing deck. */
 export function CreateWithAI({
@@ -41,14 +66,25 @@ export function CreateWithAI({
   const fileRef = useRef<HTMLInputElement>(null);
   const existing = deckId ? data.decks.find((d) => d.id === deckId) : undefined;
   const [notes, setNotes] = useState(initialNotes ?? '');
-  const [files, setFiles] = useState<{ id: number; name: string; text: string }[]>([]);
+  const [files, setFiles] = useState<{ id: number; name: string; text: string; pdf?: PdfInfo }[]>([]);
+  // models and figures from PDF slides (Einstellungen › KI) – per run it can be switched off as well
+  const slideOn = useStore((s) => s.data.settings.slideFigures ?? true);
+  const [useFigures, setUseFigures] = useState(true);
+  const figureCount = files.reduce((n, f) => n + (f.pdf?.figures.length ?? 0), 0);
+  const withFigures = slideOn && useFigures && figureCount > 0;
+  const marked = withFigures ? markFigures(files.filter((f) => f.pdf).map((f) => ({ name: f.name, pages: f.pdf!.pages, figures: f.pdf!.figures }))) : null;
+  const [figSet, setFigSet] = useState<string | undefined>();
+  /** Keeps the PDFs of this run so that the chosen slides can become pictures (also in background jobs). */
+  const prepareFigures = () =>
+    marked ? registerFigures(Object.fromEntries(files.filter((f) => f.pdf).map((f) => [f.name, f.pdf!.file])), marked.figures) : undefined;
   const [useSource, setUseSource] = useState(false);
   const oldSource = existing?.source.trim() ?? '';
   // everything the AI should use: attached files, own notes and (if ticked) the deck's earlier material
   const text = [...files.map((x) => x.text), notes.trim(), useSource ? oldSource : ''].filter(Boolean).join('\n\n');
   // long material is split into parts the AI works through one after another
   const parts = splitMaterial([
-    ...files.map((x) => ({ name: x.name, text: x.text })),
+    // with figures: the text of PDFs carries markers like "[Abbildung 7 – Folie 12 aus …]"
+    ...files.map((x) => ({ name: x.name, text: (marked && x.pdf && marked.texts.find((t) => t.name === x.name)?.text) || x.text })),
     ...(notes.trim() ? [{ name: 'Notizen', text: notes.trim() }] : []),
     ...(useSource && oldSource ? [{ name: 'Bisheriges Lernmaterial', text: oldSource }] : []),
   ]);
@@ -73,8 +109,15 @@ export function CreateWithAI({
     for (const [i, f] of all.entries()) {
       setBusy(all.length > 1 ? `Datei ${i + 1} von ${all.length} wird gelesen …` : 'Datei wird gelesen …');
       try {
-        const t = await readFileText(f);
-        setFiles((cur) => [...cur.filter((x) => x.name !== f.name), { id: Date.now() + i, name: f.name, text: t }]);
+        let t: string;
+        let pdf: PdfInfo | undefined;
+        if (slideOn && isPdf(f)) {
+          // also notes which slides show a model or figure
+          const r = await readPdfDetailed(f);
+          t = r.pages.filter((x) => x).join('\n\n');
+          pdf = { file: f, pages: r.pages, figures: pickFigurePages(r.stats) };
+        } else t = await readFileText(f);
+        setFiles((cur) => [...cur.filter((x) => x.name !== f.name), { id: Date.now() + i, name: f.name, text: t, ...(pdf ? { pdf } : {}) }]);
         setName((n) => n || f.name.replace(/\.[^.]+$/, ''));
       } catch (e) {
         failed.push(`${f.name}: ${(e as Error).message}`);
@@ -106,7 +149,7 @@ export function CreateWithAI({
     }
     const fresh = getState().data.decks.find((d) => d.id === target!.id)!;
     // long material: one part after another, each knowing the cards made before
-    startCardJobs(fresh, parts.map((p) => p.text), { counts, focus, graphics });
+    startCardJobs(fresh, parts.map((p) => p.text), { counts, focus, graphics, figureSet: prepareFigures() });
     onClose();
     navigate(deckUrl(getState().data, fresh, 'cards'));
   };
@@ -115,13 +158,15 @@ export function CreateWithAI({
   const runAndReview = async () => {
     setError('');
     setBusy('Die KI erstellt deine Karteikarten …');
-    const made: { front: string; back: string; svg?: string; diagram?: unknown }[] = [];
+    const made: { front: string; back: string; svg?: string; diagram?: unknown; figure?: unknown }[] = [];
+    const set = prepareFigures();
+    setFigSet(set);
     try {
       const before = existing ? existing.cards.map(cardFrontText) : [];
       for (const [i, p] of parts.entries()) {
         if (parts.length > 1) setBusy(`Teil ${i + 1} von ${parts.length}: Die KI erstellt Karten … (${made.length} bisher)`);
         const avoid = i > 0 ? avoidList([...before, ...made.map((c) => c.front)]) : [];
-        made.push(...(await generateCards(p.text, counts[i], focus, graphics, parts.length > 1 ? { i: i + 1, n: parts.length, avoid } : undefined)));
+        made.push(...(await generateCards(p.text, counts[i], focus, graphics, parts.length > 1 ? { i: i + 1, n: parts.length, avoid } : undefined, !!set)));
       }
       // review only once all parts are done
       if (made.length) setDrafts(made.map((c) => ({ ...c, keep: true })));
@@ -148,7 +193,7 @@ export function CreateWithAI({
     } else if (!useSource) {
       updateDeck(target.id, { source: [oldSource, text].filter(Boolean).join('\n\n') });
     }
-    addCards(target.id, await withGraphics(keep));
+    addCards(target.id, await withGraphics(keep, figSet));
     const fresh = getState().data.decks.find((d) => d.id === target!.id)!;
     onClose();
     navigate(deckUrl(getState().data, fresh, 'cards'));
@@ -202,7 +247,8 @@ export function CreateWithAI({
                   aria-label="Rückseite"
                   onChange={(e) => setDrafts(drafts.map((x, k) => (k === i ? { ...x, back: e.target.value } : x)))}
                 />
-                {!!d.diagram && !!parseDiagram(d.diagram) && (
+                {!!d.figure && figureInfo(figSet, d.figure) && <DraftFigure setId={figSet} num={d.figure} />}
+                {!d.figure && !!d.diagram && !!parseDiagram(d.diagram) && (
                   // our own SVG with escaped labels
                   <div className="diagram draft-diagram" dangerouslySetInnerHTML={{ __html: renderDiagram(parseDiagram(d.diagram)!, PALETTES[theme]) }} />
                 )}
@@ -384,6 +430,15 @@ export function CreateWithAI({
           <input id="ai-focus" className="input" value={focus} placeholder="z. B. Definitionen, Formeln" onChange={(e) => setFocus(e.target.value)} />
         </div>
       </div>
+      {slideOn && figureCount > 0 && (
+        <label className="check-row">
+          <input type="checkbox" checked={useFigures} onChange={(e) => setUseFigures(e.target.checked)} />
+          <span>
+            <b>Modelle und Abbildungen aus den Folien übernehmen</b> – {figureCount} {figureCount === 1 ? 'Folie' : 'Folien'} mit Abbildungen erkannt. Die KI
+            wählt passende Folien für die Karten aus, Merkora hängt ein Bild genau dieser Folie an.
+          </span>
+        </label>
+      )}
       <label className="check-row graphics-opt">
         <input type="checkbox" checked={graphics} onChange={(e) => setGraphics(e.target.checked)} />
         <span>
