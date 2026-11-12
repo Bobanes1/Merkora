@@ -6621,7 +6621,8 @@ a.deck-row:hover {
 
 /* pictures of PDF slides on cards */
 .slide-figure { margin: 12px 0 0; }
-.slide-img { display: block; width: 100%; max-width: 640px; height: auto; border-radius: 8px; border: 1px solid var(--line); background: #fff; cursor: zoom-in; }
+.slide-img { display: block; width: auto; max-width: min(100%, 640px); height: auto; max-height: 360px; object-fit: contain; border-radius: 8px; border: 1px solid var(--line); background: #fff; cursor: zoom-in; }
+.flash-text .card-content img.slide-img { max-height: 220px; }
 .slide-figure figcaption { margin-top: 4px; font-size: 12px; color: var(--muted); }
 .draft-figure { max-width: 420px; }
 .slide-loading { padding: 24px; text-align: center; font-size: 12px; color: var(--muted); border: 1px dashed var(--line); border-radius: 8px; }
