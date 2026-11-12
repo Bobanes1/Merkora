@@ -1,6 +1,6 @@
 import { netFetch } from './desktop';
 import { sideText } from './content';
-import { DIAGRAM_RULE, parseDiagram, type Diagram } from './diagram';
+import { DIAGRAM_KINDS, DIAGRAM_RULE, parseDiagram, type Diagram } from './diagram';
 import { FIGURE_RULE } from './slides';
 import { getState, type ChatMsg, type Provider } from './store';
 import { SECOND_MODEL } from '../config';
@@ -550,7 +550,7 @@ export async function diagramForCard(front: string, back: string, kind?: string)
     `Du veranschaulichst Lernkarten mit einer einfachen Grafik. ${LANG_RULE}
 ${DIAGRAM_RULE}
 Antworte nur mit dem einen Grafik-Objekt (z. B. {"type":"flow",...}), ohne "diagram"-Hülle.`,
-    `Beschreibe eine Grafik, die diese Karte am besten veranschaulicht${kind ? ` – als Art „${kind}“` : ''}.\n\nFrage: ${front}\nAntwort: ${back}`,
+    `Beschreibe eine Grafik, die diese Karte am besten veranschaulicht${kind ? ` – als Art „${kind}“ ("type":"${DIAGRAM_KINDS.find((k) => k.label === kind)?.id ?? ''}")` : ''}.\n\nFrage: ${front}\nAntwort: ${back}`,
     800,
   );
   const d = parseDiagram((raw as { diagram?: unknown }).diagram ?? raw);

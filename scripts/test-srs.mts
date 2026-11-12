@@ -381,6 +381,81 @@ console.log('Diagramme');
     const firstWord = String(first).split(' ')[0];
     ok(!!d && outside.length === 0 && overlaps === 0 && /^<svg/.test(svg) && svg.includes(firstWord), d.type + ': nichts überlappt oder ragt hinaus, Beschriftung „' + firstWord + '“ vorhanden');
   }
+  // ---- new kinds: model, venn, pyramid, bars, decision
+  const moderator = { type: 'model', title: 'Beispiel: Moderator', nodes: ['Freizeit', 'Nutzung von Streamingdiensten', 'Alter'], links: [{ from: 'Freizeit', to: 'Nutzung von Streamingdiensten', label: '+' }, { from: 'Alter', to: 'Freizeit -> Nutzung von Streamingdiensten', label: 'moderiert' }] };
+  const mediator = { type: 'model', nodes: ['Bildung', 'Einkommen', 'Gesundheit'], links: [{ from: 'Bildung', to: 'Einkommen', label: 'a' }, { from: 'Einkommen', to: 'Gesundheit', label: 'b' }, { from: 'Bildung', to: 'Gesundheit', label: 'c (direkt)' }] };
+  const comm = { type: 'model', title: 'Kommunikationsmodell', nodes: ['Sender', 'Botschaft', 'Kanal', 'Empfänger', 'Störung'], links: [{ from: 'Sender', to: 'Botschaft', label: 'codiert' }, { from: 'Botschaft', to: 'Kanal' }, { from: 'Kanal', to: 'Empfänger', label: 'decodiert' }, { from: 'Empfänger', to: 'Sender', label: 'Feedback', dashed: true }, { from: 'Störung', to: 'Kanal -> Empfänger' }] };
+  const eight = { type: 'model', nodes: ['A1 Ursache', 'B2 Schritt', 'C3 Schritt', 'D4 Schritt', 'E5 Schritt', 'F6 Wirkung', 'G7 Moderator', 'H8 Begleitfaktor'], links: [{ from: 'A1 Ursache', to: 'B2 Schritt' }, { from: 'B2 Schritt', to: 'C3 Schritt' }, { from: 'C3 Schritt', to: 'D4 Schritt', label: 'verstärkt' }, { from: 'D4 Schritt', to: 'E5 Schritt' }, { from: 'E5 Schritt', to: 'F6 Wirkung' }, { from: 'G7 Moderator', to: 'C3 Schritt -> D4 Schritt' }, { from: 'H8 Begleitfaktor', to: 'A1 Ursache', both: true }, { from: 'A1 Ursache', to: 'F6 Wirkung', dashed: true }] };
+  const more = [
+    moderator, mediator, comm, eight,
+    { type: 'venn', title: 'Qualitativ und quantitativ', sets: [{ label: 'Qualitativ', items: ['offen', 'kleine Fallzahlen', 'verstehen'] }, { label: 'Quantitativ', items: ['standardisiert', 'große Stichproben', 'messen'] }], shared: ['systematisch', 'theoriegeleitet'] },
+    { type: 'pyramid', title: 'Bedürfnispyramide', levels: ['Selbstverwirklichung', 'Individualbedürfnisse', 'Soziale Bedürfnisse', 'Sicherheit', 'Physiologische Bedürfnisse'] },
+    { type: 'bars', title: 'Mediennutzung pro Tag', unit: 'Min.', bars: [{ label: 'Streaming', value: 140 }, { label: 'Fernsehen (linear)', value: 95.5 }, { label: 'Radio', value: 60 }, { label: 'Zeitung', value: 12 }] },
+    { type: 'decision', title: 'Welcher Test?', question: 'Sind die Daten normalverteilt?', yes: { question: 'Zwei Gruppen?', yes: 't-Test', no: 'ANOVA' }, no: 'Mann-Whitney-U-Test' },
+    { type: 'axes', x: 'Übung', y: 'Leistung', shape: 's-kurve', label: 'mit Feedback', second: { shape: 'linear', label: 'ohne Feedback' } },
+  ];
+  const crosses = (L: any) => {
+    // a line segment must not run through a box (tags and plain text excluded)
+    const solid = L.boxes.filter((b: any) => b.lines.length && ['node', 'accent', 'node2', 'accent2', 'soft'].includes(b.kind));
+    let n = 0;
+    for (const l of L.lines) for (let i = 1; i < l.pts.length; i++) {
+      const [ax, ay] = l.pts[i - 1], [bx, by] = l.pts[i];
+      for (const b of solid) {
+        const x0 = b.x + 3, x1 = b.x + b.w - 3, y0 = b.y + 3, y1 = b.y + b.h - 3;
+        let t0 = 0, t1 = 1;
+        const clip = (pp: number, q: number) => {
+          if (pp === 0) return q >= 0;
+          const r = q / pp;
+          if (pp < 0) { if (r > t1) return false; if (r > t0) t0 = r; } else { if (r < t0) return false; if (r < t1) t1 = r; }
+          return true;
+        };
+        const dx = bx - ax, dy = by - ay;
+        if (clip(-dx, ax - x0) && clip(dx, x1 - ax) && clip(-dy, ay - y0) && clip(dy, y1 - ay) && t0 < t1) n++;
+      }
+    }
+    return n;
+  };
+  for (const raw of more) {
+    const d = parseDiagram(raw)!;
+    if (!d) { ok(false, (raw as any).type + ': wird erkannt'); continue; }
+    const L = layoutDiagram(d);
+    const real = L.boxes.filter((b) => b.lines.length);
+    const outside = real.filter((b) => b.x < 0 || b.y < 0 || b.x + b.w > L.width + 0.5 || b.y + b.h > L.height + 0.5);
+    let overlaps = 0;
+    const pairs: string[] = [];
+    real.forEach((a, k) => real.slice(k + 1).forEach((b) => { if (hit(a, b)) { overlaps++; pairs.push(a.lines[0] + ' / ' + b.lines[0]); } }));
+    const svg = renderDiagram(d, PALETTES.dark);
+    const cr = d.type === 'model' || d.type === 'decision' ? crosses(L) : 0;
+    ok(outside.length === 0 && overlaps === 0 && cr === 0 && /^<svg/.test(svg), d.type + (d.title ? ' „' + d.title + '“' : '') + ': nichts überlappt, ragt hinaus oder kreuzt einen Kasten' + (overlaps ? ' [' + pairs.join('; ') + ']' : '') + (outside.length ? ' [außen: ' + outside.map((b) => b.lines[0]).join(', ') + ']' : '') + (cr ? ' [' + cr + ' Kreuzungen]' : ''));
+  }
+  {
+    const d = parseDiagram(moderator)! as any;
+    const L = layoutDiagram(d);
+    const modLine = L.lines.find((l) => l.tone === 2)!;
+    const main = L.lines.find((l) => l.tone !== 2 && l.pts.length === 2)!;
+    const m = [(main.pts[0][0] + main.pts[1][0]) / 2, (main.pts[0][1] + main.pts[1][1]) / 2];
+    const end = modLine.pts[modLine.pts.length - 1];
+    ok(Math.hypot(end[0] - m[0], end[1] - m[1]) < 1, 'Moderator-Pfeil endet auf der Mitte des Pfeils Freizeit → Nutzung');
+    const alter = L.boxes.find((b) => b.lines[0] === 'Alter')!;
+    ok(alter.kind === 'node2' && alter.y + alter.h < main.pts[0][1], 'Moderator steht über dem Pfeil, in der zweiten Farbe');
+  }
+  {
+    const ids = parseDiagram({ type: 'model', nodes: [{ id: 'x', label: 'Bildung' }, { id: 'y', label: 'Einkommen' }], links: [{ from: 'x', to: 'y' }, { from: 'bildung', to: 'Gesundheit' }] }) as any;
+    ok(ids && ids.links[0].from === 'Bildung' && ids.links[0].to === 'Einkommen' && ids.nodes.includes('Gesundheit') && ids.links[1].from === 'Bildung', 'Modell: IDs und Groß-/Kleinschreibung werden aufgelöst, unbekannte Kästen ergänzt');
+    const mod = parseDiagram({ type: 'model', nodes: ['A', 'B', 'M'], links: [{ from: 'M', to: 'A → B' }] }) as any;
+    ok(mod && mod.links.some((l: any) => l.from === 'A' && l.to === 'B') && mod.links.some((l: any) => l.from === 'M' && l.to === 'A -> B'), 'Pfeil auf einen fehlenden Pfeil: der Pfeil A→B wird ergänzt');
+    ok(parseDiagram({ type: 'model', nodes: ['A'], links: [] }) === null && parseDiagram({ type: 'model', nodes: ['A', 'B'], links: [{ from: 'A', to: 'A' }] }) === null, 'Modell ohne brauchbare Pfeile → keine Grafik');
+    const again = parseDiagram(JSON.parse(JSON.stringify(parseDiagram(comm))));
+    ok(JSON.stringify(again) === JSON.stringify(parseDiagram(comm)), 'gespeichertes Modell wird beim Anzeigen gleich gelesen');
+    const dec = parseDiagram({ type: 'decision', question: 'Q?', yes: { question: 'Q2?', yes: { question: 'zu tief', yes: 'a', no: 'b' }, no: 'c' }, no: 'd' }) as any;
+    ok(dec && typeof dec.yes === 'object' && typeof dec.yes.yes === 'string', 'Entscheidungsbaum: zu tiefe Fragen werden zur Antwort');
+    const hl = parseDiagram({ type: 'flow', steps: ['A', 'B', 'C'], highlight: 'b' })!;
+    const kinds = layoutDiagram(hl).boxes.filter((b) => b.lines.length).map((b) => b.kind).join(',');
+    ok((hl as any).highlight === 'B' && kinds === 'node,accent,node', 'Hervorhebung trifft den gewählten Schritt statt des ersten');
+    const bars = renderDiagram(parseDiagram(more[6])!);
+    ok(bars.includes('95,5 Min.') && bars.includes('140 Min.'), 'Balken zeigen die Werte mit Einheit');
+    ok(/"type":"model"/.test(DIAGRAM_RULE) && /"type":"decision"/.test(DIAGRAM_RULE), 'KI-Anweisung kennt die neuen Arten');
+  }
   const esc = renderDiagram(parseDiagram({ type: 'flow', steps: ['a <b> & "c"', 'd'] })!);
   ok(esc.includes('a &lt;b&gt; &amp; &quot;c&quot;') && !esc.includes('<b>'), 'Sonderzeichen werden escaped');
   ok(!/Operationalisier-/.test(renderDiagram(parseDiagram(samples[0])!)), 'lange Wörter bleiben ganz (kleinere Schrift statt Trennung)');
