@@ -1,5 +1,5 @@
 /** Release information. AI features always use the user's own API key (no built-in key). */
-export const APP_VERSION = '0.8.2';
+export const APP_VERSION = '0.8.3';
 
 /**
  * A second AI model just for the chat (tutor, explanations, grading) – switched off for now:
