@@ -254,7 +254,7 @@ export function wrap(text: string, maxW: number, fs = FS, maxLines = 4): string[
 export type Box = {
   x: number; y: number; w: number; h: number; lines: string[];
   kind: 'node' | 'accent' | 'soft' | 'label' | 'bold' | 'node2' | 'accent2' | 'tag' | 'text' | 'textOn';
-  align?: 'middle' | 'start' | 'end'; fs?: number;
+  align?: 'middle' | 'start' | 'end'; fs?: number; tone?: 2;
 };
 export type Line = { pts: [number, number][]; arrow?: boolean; dashed?: boolean; curve?: boolean; both?: boolean; tone?: 2; muted?: boolean };
 /** Filled areas behind everything (Venn circles, pyramid steps). */
@@ -475,12 +475,12 @@ function layoutModel(d: Extract<Diagram, { type: 'model' }>, top: number, boxes:
     for (const pl of placed) {
       const [px, py] = pl.p;
       lines.push({ pts: [edge(pl.box, px, py, 4), [px, py]], arrow: true, tone: 2, dashed: pl.dashed });
-      if (pl.label && pl.own) tagsOut.push(tag(pl.label, (pl.box.x + pl.box.w / 2 + px) / 2, (pl.box.y + pl.box.h / 2 + py) / 2, 120, 1));
+      if (pl.label && pl.own) tagsOut.push({ ...tag(pl.label, (pl.box.x + pl.box.w / 2 + px) / 2, (pl.box.y + pl.box.h / 2 + py) / 2, 120, 1), tone: 2 });
       else if (pl.label) {
         const cx = pl.box.x + pl.box.w / 2;
         const t = tag(pl.label, cx, 0, 120);
         t.y = pl.below ? pl.box.y - t.h - 6 : pl.box.y + pl.box.h + 6;
-        tagsOut.push(t);
+        tagsOut.push({ ...t, tone: 2 });
       }
     }
   } else {
@@ -554,7 +554,7 @@ function layoutModel(d: Extract<Diagram, { type: 'model' }>, top: number, boxes:
           lastBottom = y + bh + (md.label ? 22 : 0);
           boxes.push(box);
           bottom = Math.max(bottom, lastBottom);
-          if (md.label) tagsOut.push({ ...tag(md.label, PAD + band / 2, 0, band, 1), y: y + bh + 4 });
+          if (md.label) tagsOut.push({ ...tag(md.label, PAD + band / 2, 0, band, 1), y: y + bh + 4, tone: 2 });
         }
         placed.set(md.m, box);
       }
@@ -680,7 +680,7 @@ export function layoutDiagram(d: Diagram): Layout {
     d.columns.forEach((_, i) => {
       const x = PAD + i * (cw + gap);
       boxes.push({ x, y, w: cw, h: hh, lines: heads[i], kind: i === 1 ? 'accent2' : 'accent' });
-      boxes.push({ x, y: y + hh + 6, w: cw, h: bh, lines: bodies[i], kind: 'soft', align: 'start' });
+      boxes.push({ x, y: y + hh + 6, w: cw, h: bh, lines: bodies[i], kind: 'soft', align: 'start', ...(i === 1 ? { tone: 2 as const } : {}) });
     });
     y += hh + 6 + bh;
   } else if (d.type === 'timeline') {
@@ -815,7 +815,7 @@ export function layoutDiagram(d: Diagram): Layout {
     y -= 8;
   } else if (d.type === 'decision') {
     // leaves left → right: the yes side, then the no side
-    type N = { text: string; depth: number; kids: { n: N; yes: boolean }[]; leaf0: number; leaves: number };
+    type N = { text: string; depth: number; kids: { n: N; yes: boolean }[]; leaf0: number; leaves: number; no?: boolean };
     let leaf = 0;
     const build = (text: string, depth: number, yes?: DecisionBranch, no?: DecisionBranch): N => {
       const nd: N = { text, depth, kids: [], leaf0: leaf, leaves: 0 };
@@ -832,6 +832,8 @@ export function layoutDiagram(d: Diagram): Layout {
       return nd;
     };
     const root = build(d.question, 0, d.yes, d.no);
+    const mark = (nd: N, no: boolean) => ((nd.no = no), nd.kids.forEach((k) => mark(k.n, no || !k.yes)));
+    mark(root, false);
     const cols = root.leaves, gap = 14;
     const cw = (inner - (cols - 1) * gap) / cols;
     const all: N[] = [];
@@ -851,7 +853,7 @@ export function layoutDiagram(d: Diagram): Layout {
       const w = widthOf(nd);
       const ls = label(nd);
       const h = isQ(nd) ? boxH(ls) : ls.length * 17 + 16;
-      const b: Box = { x: cx - w / 2, y: rowY[nd.depth], w, h, lines: ls, kind: nd.depth === 0 ? 'accent' : isQ(nd) ? 'node' : 'soft', ...(isQ(nd) ? {} : { fs: 13 }) };
+      const b: Box = { x: cx - w / 2, y: rowY[nd.depth], w, h, lines: ls, kind: nd.depth === 0 ? 'accent' : isQ(nd) ? 'node' : 'soft', ...(isQ(nd) ? {} : { fs: 13 }), ...(nd.no ? { tone: 2 as const } : {}) };
       place.set(nd, b);
       boxes.push(b);
       y = Math.max(y, b.y + b.h);
@@ -861,8 +863,8 @@ export function layoutDiagram(d: Diagram): Layout {
       for (const { n: c, yes } of nd.kids) {
         const b = place.get(c)!;
         const px = p.x + p.w / 2, cx = b.x + b.w / 2, midY = p.y + p.h + 18;
-        lines.push({ pts: [[px, p.y + p.h + 2], [px, midY], [cx, midY], [cx, b.y - 6]], arrow: true, ...(yes ? {} : { tone: 2 as const }) });
-        boxes.push(tag(yes ? 'Ja' : 'Nein', cx, (midY + b.y - 6) / 2 + 2, 60, 1));
+        lines.push({ pts: [[px, p.y + p.h + 2], [px, midY], [cx, midY], [cx, b.y - 6]], arrow: true, ...(c.no ? { tone: 2 as const } : {}) });
+        boxes.push({ ...tag(yes ? 'Ja' : 'Nein', cx, (midY + b.y - 6) / 2 + 2, 60, 1), ...(c.no ? { tone: 2 as const } : {}) });
       }
     }
   }
@@ -889,15 +891,15 @@ function curve(s: Shape): (t: number) => number {
 // ---------- drawing ----------
 export type Palette = {
   bg?: string; node: string; nodeStroke: string; text: string; accent: string; onAccent: string; soft: string; line: string; muted: string;
-  accent2: string; node2: string; stroke2: string; line2: string; shadow: string;
+  accent2: string; node2: string; stroke2: string; line2: string; shadow: string; soft2: string;
 };
 export const PALETTES: Record<'light' | 'dark', Palette> = {
   light: {
-    node: '#dff3f2', nodeStroke: '#09817e', text: '#002a29', accent: '#09817e', onAccent: '#ffffff', soft: '#f4fcfc', line: '#09817e', muted: '#4f6f6d',
+    node: '#dff3f2', nodeStroke: '#09817e', text: '#002a29', accent: '#09817e', onAccent: '#ffffff', soft: '#f4fcfc', line: '#09817e', muted: '#4f6f6d', soft2: '#fdf3f8',
     accent2: '#a63d73', node2: '#fbe9f2', stroke2: '#a63d73', line2: '#a63d73', shadow: 'rgba(0,42,41,0.16)',
   },
   dark: {
-    node: '#163634', nodeStroke: '#3fc6bf', text: '#e2f4f3', accent: '#1f7a75', onAccent: '#ffffff', soft: '#112725', line: '#3fc6bf', muted: '#9fbfbd',
+    node: '#163634', nodeStroke: '#3fc6bf', text: '#e2f4f3', accent: '#1f7a75', onAccent: '#ffffff', soft: '#112725', line: '#3fc6bf', muted: '#9fbfbd', soft2: '#241520',
     accent2: '#9c3f76', node2: '#3a1d2e', stroke2: '#e486bb', line2: '#e486bb', shadow: 'rgba(0,0,0,0.55)',
   },
 };
@@ -938,9 +940,9 @@ export function renderDiagram(d: Diagram, p: Palette = PALETTES.light): string {
   const isMatrixY = (b: Box) => d.type === 'matrix' && b.kind === 'label' && b.w < 40;
   const FILL: Partial<Record<Box['kind'], string>> = { accent: p.accent, accent2: p.accent2, node: p.node, node2: p.node2, soft: p.soft, tag: p.soft };
   for (const b of L.boxes) {
-    const fill = FILL[b.kind];
+    const fill = b.tone === 2 ? ({ soft: p.soft2, tag: p.soft2, node: p.node2 } as Partial<Record<Box['kind'], string>>)[b.kind] ?? FILL[b.kind] : FILL[b.kind];
     if (fill) {
-      const stroke = b.kind === 'node' || b.kind === 'soft' || b.kind === 'tag' ? p.nodeStroke : b.kind === 'node2' ? p.stroke2 : null;
+      const stroke = b.kind === 'node' || b.kind === 'soft' || b.kind === 'tag' ? (b.tone === 2 ? p.stroke2 : p.nodeStroke) : b.kind === 'node2' ? p.stroke2 : null;
       const raised = b.lines.length && (b.kind === 'node' || b.kind === 'accent' || b.kind === 'node2' || b.kind === 'accent2');
       const rx = !b.lines.length ? 4 : b.kind === 'tag' ? b.h / 2 : 12;
       out.push(
