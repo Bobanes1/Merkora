@@ -556,6 +556,25 @@ console.log('Grafik pro Karte');
   ok(cardGraphic(withDiagram('Text', d1)).kind === 'diagram', 'Karte ohne Grafik bekommt eine');
 }
 
+console.log('PDF-Text ohne wiederholte Kopfzeilen');
+{
+  const { stripRepeatedLines, pagesToText } = await import('../src/lib/pdfText');
+  const head = 'UNIVERSITÉ DE FRIBOURG / UNIVERSITÄT FREIBURG I FACULTÉ DES SCIENCES';
+  const head2 = 'SOCIALES ET DU MANAGEMENT / WIRTSCHAFTS- UND SOZIALWISSENSCHAFTLICHE FAKULTÄT';
+  const pages = Array.from({ length: 8 }, (_, i) => [head, head2, `Thema ${i + 1}: Inhalt der Folie`, `Erklärung zu Punkt ${i + 1}`, 'Methoden I – HS 2026', String(i + 2)].join('\n'));
+  pages[0] = [head, head2, 'METHODEN DER EMPIRISCHEN SOZIALFORSCHUNG', 'Einführung'].join('\n');
+  const out = stripRepeatedLines(pages);
+  const text = pagesToText(out);
+  ok(!text.includes('UNIVERSITÉ') && !text.includes('WIRTSCHAFTS-') && !text.includes('HS 2026'), 'Kopf- und Fußzeilen auf jeder Folie fallen weg');
+  ok(text.includes('METHODEN DER EMPIRISCHEN SOZIALFORSCHUNG') && text.includes('Thema 3: Inhalt der Folie') && text.includes('Erklärung zu Punkt 8'), 'Folieninhalt bleibt vollständig');
+  ok(!/^\d+$/m.test(text), 'Seitenzahlen fallen weg');
+  ok(out.length === pages.length, 'Folien behalten ihre Nummern (für Abbildungen)');
+  const few = ['A\nKopf', 'B\nKopf', 'C\nKopf'];
+  ok(JSON.stringify(stripRepeatedLines(few)) === JSON.stringify(few), 'kurze PDFs (unter 4 Folien) bleiben unverändert');
+  const body = Array.from({ length: 6 }, (_, i) => ['Titel ' + i, 'a', 'b', 'c', 'd', 'Definition: Reliabilität', 'e', 'f', 'g', 'h', 'Ende ' + i].join('\n'));
+  ok(stripRepeatedLines(body).every((p) => p.includes('Definition: Reliabilität')), 'wiederholte Zeilen mitten auf der Folie bleiben');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

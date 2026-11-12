@@ -91,6 +91,8 @@ export type Deck = {
   updatedAt?: number;
   cards: Card[];
   source: string;
+  /** Original files of the material (PDF presentations), stored like pictures; shown under "Lernmaterial". */
+  files?: DeckFile[];
   summary?: string;
   quiz?: QuizQuestion[];
   podcast?: PodcastLine[];
@@ -107,6 +109,8 @@ export type Deck = {
   mockExam?: MockExam;
   mockHistory?: MockHistory[];
 };
+/** A stored material file (media id = `id`). */
+export type DeckFile = { id: string; name: string; size: number; addedAt: number };
 /** A folder inside a course that groups decks. */
 export type Folder = { id: string; name: string };
 export type Course = { id: string; workspaceId: string; name: string; slug: string; folders?: Folder[] };
@@ -786,6 +790,7 @@ export async function collectMediaGarbage() {
         if (!c.html) continue;
         for (const s of [c.front, c.back]) for (const m of s.matchAll(re)) used.add(m[1]);
       }
+    for (const d of data.decks) for (const f of d.files ?? []) used.add(f.id);
     const keys = (await mediaKeys()).map(String);
     const unused = keys.filter((k) => !used.has(k));
     if (unused.length) await mediaDeleteMany(unused);

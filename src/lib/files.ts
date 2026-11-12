@@ -1,3 +1,5 @@
+import { pagesToText, stripRepeatedLines } from './pdfText';
+
 /** File types the AI card creation can read. */
 export const MATERIAL_ACCEPT =
   '.pdf,.docx,.pptx,.odt,.odp,.txt,.md,.markdown,.csv,.html,.htm,text/*,application/pdf,' +
@@ -21,10 +23,7 @@ export async function readFileText(file: File): Promise<string> {
   if (/\.(doc|ppt)$/.test(name))
     throw new Error('Alte Word-/PowerPoint-Dateien (.doc/.ppt) werden nicht unterstützt. Speichere sie bitte als .docx bzw. .pptx (Datei › Speichern unter).');
   if (name.endsWith('.pdf') || file.type === 'application/pdf') {
-    const pdfjs = await import('pdfjs-dist');
-    const workerUrl = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
-    pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
-    const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+    const { doc } = await loadPdf(file);
     const pages: string[] = [];
     for (let i = 1; i <= doc.numPages; i++) {
       const page = await doc.getPage(i);
@@ -41,7 +40,8 @@ export async function readFileText(file: File): Promise<string> {
       if (line) lines.push(line);
       pages.push(lines.join('\n'));
     }
-    const text = pages.join('\n\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+    // headers / footers repeated on every slide are left out
+    const text = pagesToText(stripRepeatedLines(pages));
     if (!text) throw new Error('In diesem PDF wurde kein Text gefunden (vielleicht ist es eingescannt).');
     return text;
   }
@@ -56,7 +56,7 @@ export async function readFileText(file: File): Promise<string> {
 
 export const isPdf = (file: File) => file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf';
 
-async function loadPdf(file: File) {
+async function loadPdf(file: Blob) {
   const pdfjs = await import('pdfjs-dist');
   const workerUrl = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
   pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
@@ -103,12 +103,22 @@ export async function readPdfDetailed(file: File): Promise<{ pages: string[]; st
     page.cleanup();
   }
   if (!pages.some((p) => p)) throw new Error('In diesem PDF wurde kein Text gefunden (vielleicht ist es eingescannt).');
-  return { pages, stats };
+  return { pages: stripRepeatedLines(pages), stats };
 }
 
 /** A picture of one PDF slide (JPEG, about 1400 px wide). */
-export async function renderPdfPage(file: File, pageNo: number, width = 1400): Promise<Blob> {
+export async function renderPdfPage(file: Blob, pageNo: number, width = 1400): Promise<Blob> {
   const { doc } = await loadPdf(file);
+  return renderPage(doc, pageNo, width);
+}
+
+/** An opened PDF for leafing through its slides (loaded once, every slide rendered on demand). */
+export async function openPdf(file: Blob): Promise<{ pages: number; render: (pageNo: number, width?: number) => Promise<Blob>; close: () => void }> {
+  const { doc } = await loadPdf(file);
+  return { pages: doc.numPages, render: (n, w = 1400) => renderPage(doc, n, w), close: () => void doc.destroy() };
+}
+
+async function renderPage(doc: Awaited<ReturnType<typeof loadPdf>>['doc'], pageNo: number, width: number): Promise<Blob> {
   const page = await doc.getPage(pageNo);
   const base = page.getViewport({ scale: 1 });
   const viewport = page.getViewport({ scale: width / base.width });

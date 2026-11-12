@@ -8,6 +8,7 @@ import { generateCards, hasKey } from '../lib/ai';
 import { isPdf, MATERIAL_ACCEPT, MATERIAL_LABEL, readFileText, readPdfDetailed } from '../lib/files';
 import { figureLabel, markFigures, pickFigurePages } from '../lib/slides';
 import { figureInfo, figurePreview, registerFigures } from '../lib/figureFiles';
+import { attachPdfs } from '../lib/deckFiles';
 import { canSurviveClose, startCardJobs } from '../lib/jobs';
 import { cleanSvg, withGraphics } from '../lib/graphics';
 import { parseDiagram, PALETTES, renderDiagram } from '../lib/diagram';
@@ -66,7 +67,7 @@ export function CreateWithAI({
   const fileRef = useRef<HTMLInputElement>(null);
   const existing = deckId ? data.decks.find((d) => d.id === deckId) : undefined;
   const [notes, setNotes] = useState(initialNotes ?? '');
-  const [files, setFiles] = useState<{ id: number; name: string; text: string; pdf?: PdfInfo }[]>([]);
+  const [files, setFiles] = useState<{ id: number; name: string; text: string; pdf?: PdfInfo; src?: File }[]>([]);
   // models and figures from PDF slides (Einstellungen › KI) – per run it can be switched off as well
   const slideOn = useStore((s) => s.data.settings.slideFigures ?? true);
   const [useFigures, setUseFigures] = useState(true);
@@ -117,7 +118,7 @@ export function CreateWithAI({
           t = r.pages.filter((x) => x).join('\n\n');
           pdf = { file: f, pages: r.pages, figures: pickFigurePages(r.stats) };
         } else t = await readFileText(f);
-        setFiles((cur) => [...cur.filter((x) => x.name !== f.name), { id: Date.now() + i, name: f.name, text: t, ...(pdf ? { pdf } : {}) }]);
+        setFiles((cur) => [...cur.filter((x) => x.name !== f.name), { id: Date.now() + i, name: f.name, text: t, ...(pdf ? { pdf } : {}), ...(isPdf(f) ? { src: f } : {}) }]);
         setName((n) => n || f.name.replace(/\.[^.]+$/, ''));
       } catch (e) {
         failed.push(`${f.name}: ${(e as Error).message}`);
@@ -147,6 +148,8 @@ export function CreateWithAI({
     } else if (!useSource) {
       updateDeck(target.id, { source: [oldSource, text].filter(Boolean).join('\n\n') });
     }
+    // the presentations themselves stay with the deck (shown under "Lernmaterial")
+    void attachPdfs(target.id, files.flatMap((x) => (x.src ? [x.src] : [])));
     const fresh = getState().data.decks.find((d) => d.id === target!.id)!;
     // long material: one part after another, each knowing the cards made before
     startCardJobs(fresh, parts.map((p) => p.text), { counts, focus, graphics, figureSet: prepareFigures() });
@@ -194,6 +197,7 @@ export function CreateWithAI({
       updateDeck(target.id, { source: [oldSource, text].filter(Boolean).join('\n\n') });
     }
     addCards(target.id, await withGraphics(keep, figSet));
+    await attachPdfs(target.id, files.flatMap((x) => (x.src ? [x.src] : [])));
     const fresh = getState().data.decks.find((d) => d.id === target!.id)!;
     onClose();
     navigate(deckUrl(getState().data, fresh, 'cards'));

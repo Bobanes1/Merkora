@@ -26,7 +26,7 @@ async function resolveMediaRefs(text: string): Promise<string> {
 }
 
 /** Big view of a slide picture; a click or Escape closes it. */
-function openLightbox(src: string, alt: string) {
+export function openLightbox(src: string, alt: string) {
   const box = document.createElement('div');
   box.className = 'lightbox';
   box.setAttribute('role', 'dialog');

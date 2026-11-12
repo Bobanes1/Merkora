@@ -6642,3 +6642,21 @@ a.deck-row:hover {
   margin-right: 12px;
   font-weight: 600;
 }
+
+/* presentations under "Lernmaterial" */
+.slides-view { margin: 12px 0 16px; padding: 12px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface-2); outline: none; }
+.slides-view:focus-visible { box-shadow: 0 0 0 2px var(--primary); }
+.slides-files { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; }
+.slides-files .chip { display: inline-flex; align-items: center; gap: 6px; max-width: 320px; }
+.slides-files .chip.active { border-color: var(--primary); color: var(--primary); font-weight: 600; }
+.slides-file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slides-stage { display: flex; justify-content: center; align-items: center; min-height: 240px; }
+.slides-img { display: block; max-width: 100%; max-height: 70vh; height: auto; border-radius: 8px; border: 1px solid var(--line); background: #fff; cursor: zoom-in; }
+.slides-nav { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.slides-nav input[type='range'] { flex: 1; }
+.slides-count { font-size: 13px; color: var(--muted); white-space: nowrap; min-width: 92px; text-align: center; }
+.source-details { margin-top: 4px; }
+.source-details > summary { cursor: pointer; padding: 6px 0; font-weight: 600; }
+.source-details[open] > summary { margin-bottom: 8px; }
+.source-ask { margin: 10px 0; }
+.source-ask-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }

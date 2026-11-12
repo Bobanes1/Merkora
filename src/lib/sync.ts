@@ -397,6 +397,7 @@ function referencedMedia(d: Data) {
   const re = /data-media="([^"]+)"/g;
   for (const deck of d.decks)
     for (const c of deck.cards) if (c.html) for (const s of [c.front, c.back]) for (const m of s.matchAll(re)) ids.add(m[1]);
+  for (const deck of d.decks) for (const f of deck.files ?? []) ids.add(f.id);
   return ids;
 }
 
