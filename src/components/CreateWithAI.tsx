@@ -9,6 +9,7 @@ import { isPdf, MATERIAL_ACCEPT, MATERIAL_LABEL, readFileText, readPdfDetailed }
 import { figureLabel, markFigures, pickFigurePages } from '../lib/slides';
 import { figureInfo, figurePreview, registerFigures } from '../lib/figureFiles';
 import { attachPdfs } from '../lib/deckFiles';
+import { SLIDE_FIGURES } from '../config';
 import { canSurviveClose, startCardJobs } from '../lib/jobs';
 import { cleanSvg, withGraphics } from '../lib/graphics';
 import { parseDiagram, PALETTES, renderDiagram } from '../lib/diagram';
@@ -69,7 +70,8 @@ export function CreateWithAI({
   const [notes, setNotes] = useState(initialNotes ?? '');
   const [files, setFiles] = useState<{ id: number; name: string; text: string; pdf?: PdfInfo; src?: File }[]>([]);
   // models and figures from PDF slides (Einstellungen › KI) – per run it can be switched off as well
-  const slideOn = useStore((s) => s.data.settings.slideFigures ?? true);
+  const slideSetting = useStore((s) => s.data.settings.slideFigures ?? true);
+  const slideOn = SLIDE_FIGURES && slideSetting;
   const [useFigures, setUseFigures] = useState(true);
   const figureCount = files.reduce((n, f) => n + (f.pdf?.figures.length ?? 0), 0);
   const withFigures = slideOn && useFigures && figureCount > 0;

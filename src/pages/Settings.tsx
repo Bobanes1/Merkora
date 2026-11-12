@@ -6,7 +6,7 @@ import { ConfirmModal } from '../components/Modal';
 import { PROVIDERS, listModels, testConnection } from '../lib/ai';
 import { desktop, getState, isDesktop, replaceAll, resetAll, setApiKey, setChatKey, setPrivacy, setSettings, useStore, type Data, type Provider } from '../lib/store';
 import { download } from '../lib/util';
-import { APP_VERSION, SECOND_MODEL } from '../config';
+import { APP_VERSION, SECOND_MODEL, SLIDE_FIGURES } from '../config';
 import { SyncPanel } from '../components/SyncPanel';
 import { BackupsPanel, CostSettings, LearningPanel, RemindersPanel, SlideFigureSettings } from '../components/SettingsExtras';
 import { checkForUpdate, installUpdate, useUpdate } from '../lib/update';
@@ -213,7 +213,7 @@ export default function Settings() {
         </div>
         {status && <div className={status.ok ? 'form-ok' : 'form-error'}>{status.text}</div>}
         <CostSettings />
-        <SlideFigureSettings />
+        {SLIDE_FIGURES && <SlideFigureSettings />}
       </section>
 
       {SECOND_MODEL && <ChatModelPanel />}
