@@ -10,6 +10,8 @@ import {
   playerLevel,
   starsFor,
   answerXp,
+  mcRating,
+  PATH_RATINGS,
   totalXp,
   xpStreak,
   xpToday,
@@ -19,7 +21,8 @@ import {
 import { comfort, Confetti, Mascot, praise } from '../../components/Mascot';
 import { FloorDecor, NodeDecor, PathLink, SandFloor, SwimmingFish, themeFor, Waves } from '../../components/PathDecor';
 import { addXp, logReview, reviewCard, savePathResult, setDailyGoal, useData, type Deck } from '../../lib/store';
-import { RATINGS, type Rating } from '../../lib/srs';
+import type { Rating } from '../../lib/srs';
+import { cardBackText, cardFrontText } from '../../lib/content';
 
 const HEARTS = 3;
 const OFFSETS = [0, 56, 84, 56, 0, -56, -84, -56];
@@ -226,6 +229,18 @@ function Lesson({ deck, node, onExit }: { deck: Deck; node: PathNode; onExit: ()
   const [reacts, setReacts] = useState(0);
   const ex = queue[0];
   const doneCount = Object.keys(first).length;
+  // the clock for multiple choice starts when a question appears
+  const shownAt = useRef(Date.now());
+  useEffect(() => {
+    shownAt.current = Date.now();
+  }, [ex?.cardId, queue.length]);
+  /** A multiple-choice answer: right or wrong, and how long it took. */
+  const answerMc = (k: number) => {
+    if (!ex || ex.type !== 'mc') return;
+    const chars = (ex.reverse ? cardBackText(ex.prompt) : cardFrontText(ex.prompt)).length + ex.options.join(' ').length;
+    const correct = k === ex.answer;
+    answer(correct, mcRating(correct, Date.now() - shownAt.current, chars));
+  };
 
   /** Multiple choice gives right/wrong; a flip card is rated like when learning (1 Nochmal … 4 Einfach). */
   const answer = (correct: boolean, rating: Rating = correct ? 3 : 1) => {
@@ -279,11 +294,11 @@ function Lesson({ deck, node, onExit }: { deck: Deck; node: PathNode; onExit: ()
       else if (ex?.type === 'mc' && !result && ['1', '2', '3', '4'].includes(e.key)) {
         const n = Number(e.key) - 1;
         setPicked(n);
-        answer(n === ex.answer);
+        answerMc(n);
       } else if (ex?.type === 'flip' && !result && e.key === ' ') {
         e.preventDefault();
         setShown(true);
-      } else if (ex?.type === 'flip' && shown && !result && ['1', '2', '3', '4'].includes(e.key)) {
+      } else if (ex?.type === 'flip' && shown && !result && ['1', '2', '3'].includes(e.key)) {
         const r = Number(e.key) as Rating;
         answer(r >= 2, r);
       }
@@ -412,7 +427,7 @@ function Lesson({ deck, node, onExit }: { deck: Deck; node: PathNode; onExit: ()
                     disabled={picked !== null}
                     onClick={() => {
                       setPicked(k);
-                      answer(k === ex.answer);
+                      answerMc(k);
                     }}
                   >
                     <span className="opt-letter">{k + 1}</span>
@@ -434,7 +449,7 @@ function Lesson({ deck, node, onExit }: { deck: Deck; node: PathNode; onExit: ()
                   <>
                     <small className="ex-kind center-text">Wie gut wusstest du es?</small>
                     <div className="rate-row path-rate">
-                      {RATINGS.map((r) => (
+                      {PATH_RATINGS.map((r) => (
                         <button type="button" key={r.value} className={`rate ${r.cls}`} onClick={() => answer(r.value >= 2, r.value)}>
                           <b>{r.label}</b>
                           <small>Taste {r.key}</small>
@@ -464,9 +479,11 @@ function Lesson({ deck, node, onExit }: { deck: Deck; node: PathNode; onExit: ()
           )}
           <span>
             <b>
-              {!result.correct ? 'Nicht ganz.' : result.rating === 2 ? 'Gewusst – aber noch wackelig.' : result.rating === 4 ? 'Sitzt sicher!' : ['Richtig!', 'Super!', 'Stark!', 'Genau!'][doneCount % 4]}
+              {!result.correct ? 'Nicht ganz.' : result.rating === 2 && ex.type === 'flip' ? 'Gewusst – aber noch wackelig.' : ['Richtig!', 'Super!', 'Stark!', 'Genau!'][doneCount % 4]}
             </b>
-            {result.correct && result.rating === 2 && <small>Die Karte kommt im Lernplan bald wieder.</small>}
+            {result.correct && result.rating === 2 && (
+              <small>{ex.type === 'mc' ? 'Richtig – hat etwas gedauert, die Karte kommt bald wieder.' : 'Die Karte kommt im Lernplan bald wieder.'}</small>
+            )}
             {!result.correct && ex.type === 'mc' && <small>Richtig wäre: {ex.options[ex.answer]}</small>}
             {!result.correct && <small>Die Karte kommt am Ende nochmal.</small>}
           </span>

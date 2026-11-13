@@ -722,11 +722,15 @@ console.log('Interaktive Mindmap');
   ok(Math.max(...left('center')) < Math.min(...right('branch')) && Math.max(...left('branch')) < Math.min(...right('leaf')) && new Set(right('branch').map(Math.round)).size === 1 && new Set(right('leaf').map(Math.round)).size === 1, 'von links nach rechts: Thema, dann Äste, dann Punkte – jeweils bündig in einer Spalte');
 }
 
-console.log('Lernpfad mit vier Antworten');
+console.log('Lernpfad: Antworten und Zeit');
 {
-  const { answerXp } = await import('../src/lib/path');
+  const { answerXp, mcRating, mcTimeLimit, PATH_RATINGS } = await import('../src/lib/path');
   ok(answerXp(1, true, 0) === 0 && answerXp(2, true, 0) < answerXp(3, true, 0) && answerXp(3, true, 0) < answerXp(4, true, 0), 'Nochmal 0 XP, Schwer < Gut < Einfach');
   ok(answerXp(4, false, 0) === 3 && answerXp(3, true, 2) === answerXp(3, true, 0) + 2, 'zweiter Versuch gibt wenig, eine Serie 2 XP extra');
+  ok(mcRating(false, 500, 50) === 1 && mcRating(true, 3000, 50) === 3 && mcRating(true, 9000, 50) === 2, 'Multiple Choice: falsch → Nochmal, schnell richtig → Gut, lange überlegt → Schwer');
+  ok(mcRating(true, 9000, 200) === 3 && mcTimeLimit(200) > mcTimeLimit(50), 'lange Fragen bekommen mehr Zeit');
+  ok(mcTimeLimit(5000) === 25000, 'höchstens 25 Sekunden');
+  ok(PATH_RATINGS.map((r) => r.label).join('/') === 'Nicht gewusst/Unsicher/Gewusst' && PATH_RATINGS.map((r) => r.value).join('') === '123', 'Aufdecken: drei Knöpfe Nicht gewusst / Unsicher / Gewusst (= Nochmal / Schwer / Gut)');
 }
 
 console.log('Kurze Decknamen');

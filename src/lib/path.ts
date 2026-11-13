@@ -117,6 +117,22 @@ export function answerXp(rating: Rating, firstTry: boolean, combo: number): numb
   return base + (combo >= 2 ? 2 : 0);
 }
 
+/** Time for a multiple-choice question before a right answer counts as "took a while": 4 s plus reading time, at most 25 s. */
+export const mcTimeLimit = (chars: number) => Math.min(25000, 4000 + chars * 40);
+
+/** Multiple choice rates itself: wrong → Nochmal, right and quick → Gut, right after long thinking → Schwer. */
+export function mcRating(correct: boolean, ms: number, chars: number): Rating {
+  if (!correct) return 1;
+  return ms <= mcTimeLimit(chars) ? 3 : 2;
+}
+
+/** The three answers for flip cards in the learning path (quick to choose, still telling the plan about shaky answers). */
+export const PATH_RATINGS: { value: Rating; label: string; key: string; cls: string }[] = [
+  { value: 1, label: 'Nicht gewusst', key: '1', cls: 'again' },
+  { value: 2, label: 'Unsicher', key: '2', cls: 'hard' },
+  { value: 3, label: 'Gewusst', key: '3', cls: 'good' },
+];
+
 export function starsFor(firstTryCorrect: number, total: number) {
   const r = total ? firstTryCorrect / total : 0;
   return r >= 0.95 ? 3 : r >= 0.7 ? 2 : 1;
