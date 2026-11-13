@@ -641,7 +641,7 @@ export async function explainTerm(term: string, branch: string, deckName: string
     [
       {
         role: 'user',
-        content: `Erkläre kurz das Unterthema „${term}“${branch && branch !== term ? ` (gehört zu „${branch}“)` : ''} aus dem Deck „${deckName}“: 3–5 Sätze, verständlich, mit einem kleinen Beispiel, und wie es mit dem übergeordneten Thema zusammenhängt. Markdown erlaubt, keine Überschrift.${material ? `\n\nLernmaterial dazu:\n${material}` : ''}`,
+        content: `Erkläre kurz das Unterthema „${term}“${branch && branch !== term ? ` (gehört zu „${branch}“)` : ''} aus dem Deck „${deckName}“: 3–5 Sätze, verständlich, mit einem kleinen Beispiel, und wie es mit dem übergeordneten Thema zusammenhängt. Stütze dich auf den Kontext aus dem Deck unten und erkläre den Begriff so, wie er in diesem Deck gemeint ist. Gibt der Kontext wenig her, erkläre ihn fachlich passend zum Thema des Decks. Schreibe nie, dass du keinen Zugriff auf das Deck hast. Markdown erlaubt, keine Überschrift.${material ? `\n\nKontext aus dem Deck:\n${material}` : ''}`,
       },
     ],
     { system: `Du bist Pip, ein geduldiger Lerntutor. ${LANG_RULE}`, maxTokens: 700, purpose: 'chat' },

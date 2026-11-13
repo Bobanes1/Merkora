@@ -13,7 +13,7 @@ export function CourseDocs({ course }: { course: Course }) {
   const doc = files.find((f) => f.fileId === open);
   const deck = doc ? data.decks.find((d) => d.id === doc.deckId) : undefined;
 
-  if (!files.length && !texts.length) return <p className="muted">Noch keine Dokumente in diesem Kurs – lade sie im Deck unter „Material“ hoch.</p>;
+  if (!files.length && !texts.length) return <p className="muted">Noch keine Dokumente in diesem Kurs – lade sie im Deck unter „Lernen › Material“ hoch.</p>;
 
   return (
     <div className="course-docs">

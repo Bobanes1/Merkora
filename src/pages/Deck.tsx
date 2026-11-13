@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ChatPanel } from '../components/ChatPanel';
 import { ExamDialog } from '../components/ExamDialog';
@@ -8,6 +8,7 @@ import { PromptModal } from '../components/Modal';
 import MatchTab from './tabs/MatchTab';
 import PathTab from './tabs/PathTab';
 import { addTodo, dueCards, findPath, useData } from '../lib/store';
+import { shortName } from '../lib/deckNames';
 import CardsTab from './tabs/CardsTab';
 import LearnTab from './tabs/LearnTab';
 import MasteryTab from './tabs/MasteryTab';
@@ -18,19 +19,24 @@ import SummaryTab from './tabs/SummaryTab';
 import MindmapTab from './tabs/MindmapTab';
 
 const TABS = [
-  { id: 'cards', label: 'Karteikarten', icon: IconCards, group: 'Lernen' },
+  { id: 'cards', label: 'Karten', icon: IconCards, group: 'Lernen' },
   { id: 'learn', label: 'Lernen', icon: IconPlay, group: 'Lernen' },
-  { id: 'mastery', label: 'Fortschritt', icon: IconChart, group: 'Lernen' },
   { id: 'path', label: 'Lernpfad', icon: IconPath, group: 'Üben' },
   { id: 'match', label: 'Zuordnen', icon: IconMatch, group: 'Üben' },
   { id: 'quiz', label: 'Quiz', icon: IconQuiz, group: 'Üben' },
-  { id: 'exam', label: 'Probeprüfung', icon: IconTarget, group: 'Üben' },
+  { id: 'exam', label: 'Prüfung üben', icon: IconTarget, group: 'Üben' },
   { id: 'summary', label: 'Zusammenfassung', icon: IconDoc, group: 'Verstehen' },
   { id: 'mindmap', label: 'Mindmap', icon: IconMindmap, group: 'Verstehen' },
-  { id: 'source', label: 'Material', icon: IconNote, group: 'Verstehen' },
 ] as const;
 const GROUPS = ['Lernen', 'Üben', 'Verstehen'] as const;
-type TabId = (typeof TABS)[number]['id'];
+/** Progress and material live inside "Lernen" (switch on top) – their addresses stay valid. */
+const LEARN_VIEWS = [
+  { id: 'learn', label: 'Lernen', icon: IconPlay },
+  { id: 'mastery', label: 'Fortschritt', icon: IconChart },
+  { id: 'source', label: 'Material', icon: IconNote },
+] as const;
+type TabId = (typeof TABS)[number]['id'] | 'mastery' | 'source';
+const VALID: string[] = [...TABS.map((t) => t.id), 'mastery', 'source'];
 
 export default function DeckPage() {
   const { ws, course, deck: deckSlug } = useParams();
@@ -39,15 +45,11 @@ export default function DeckPage() {
   const [chat, setChat] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 1280);
   const { workspace, course: crs, deck } = findPath(data, ws, course, deckSlug);
   const tabParam = params.get('tab') as TabId | null;
-  const tab: TabId = TABS.some((t) => t.id === tabParam) ? (tabParam as TabId) : 'cards';
+  const tab: TabId = tabParam && VALID.includes(tabParam) ? tabParam : 'cards';
+  const barTab = tab === 'mastery' || tab === 'source' ? 'learn' : tab;
   const setTab = (t: TabId) => setParams({ tab: t });
   const [examDialog, setExamDialog] = useState(false);
   const [todoDialog, setTodoDialog] = useState(false);
-  // the tab bar scrolls sideways on narrow windows: keep the open tab in view
-  const tabsRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    tabsRef.current?.querySelector('.tab.on')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  }, [tab]);
 
   useEffect(() => {
     if (deck) document.title = `${deck.name} – Merkora`;
@@ -78,7 +80,7 @@ export default function DeckPage() {
             <Link to={`/library/${workspace.slug}/${crs.slug}`}>{crs.name}</Link>
             <span>›</span>
             <span className="crumb-current" title={deck.name}>
-              {deck.name}
+              {shortName(deck, data.decks.filter((d) => d.courseId === deck.courseId))}
             </span>
           </nav>
           <div className="deck-actions">
@@ -107,28 +109,34 @@ export default function DeckPage() {
             </button>
           </div>
         </div>
-        <div className="tabs tab-groups" role="tablist" ref={tabsRef}>
+        <div className="tabs tab-groups" role="tablist">
           {GROUPS.map((g) => (
-            <div key={g} className="tab-group" role="presentation">
-              <small className="tab-group-label">{g}</small>
-              <div className="tab-group-row">
-                {TABS.filter((t) => t.group === g).map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={tab === t.id}
-                    className={`tab ${tab === t.id ? 'on' : ''}`}
-                    onClick={() => setTab(t.id)}
-                  >
-                    <t.icon size={16} />
-                    <span>{t.label}</span>
-                  </button>
-                ))}
-              </div>
+            <div key={g} className="tab-group" role="presentation" aria-label={g}>
+              {TABS.filter((t) => t.group === g).map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={barTab === t.id}
+                  className={`tab ${barTab === t.id ? 'on' : ''}`}
+                  onClick={() => setTab(t.id)}
+                >
+                  <t.icon size={14} />
+                  <span>{t.label}</span>
+                </button>
+              ))}
             </div>
           ))}
         </div>
+        {barTab === 'learn' && (
+          <div className="seg compact learn-switch" role="radiogroup" aria-label="Ansicht">
+            {LEARN_VIEWS.map((v) => (
+              <button key={v.id} type="button" role="radio" aria-checked={tab === v.id} className={tab === v.id ? 'on' : ''} onClick={() => setTab(v.id)}>
+                <v.icon size={13} /> {v.label}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="tab-body">
           {tab === 'cards' && <CardsTab deck={deck} onLearn={() => setTab('learn')} />}
           {tab === 'learn' && <LearnTab deck={deck} onDone={() => setTab('mastery')} />}

@@ -274,7 +274,15 @@ export function MindmapView({ map, deck, onCards }: { map: Map; deck: Deck; onCa
           </g>
         </svg>
         {sel && sel.kind !== 'center' && (
-          <MindmapInfo key={sel.id} deck={deck} term={sel.label} branch={sel.kind === 'leaf' ? map.branches[sel.branch]?.label ?? '' : sel.label} onCards={onCards} />
+          <MindmapInfo
+            key={sel.id}
+            deck={deck}
+            term={sel.label}
+            branch={sel.kind === 'leaf' ? map.branches[sel.branch]?.label ?? '' : sel.label}
+            subPoints={sel.kind === 'leaf' ? undefined : map.branches[sel.branch]?.children}
+            map={map}
+            onCards={onCards}
+          />
         )}
       </div>
     </div>

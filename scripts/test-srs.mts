@@ -943,6 +943,30 @@ console.log('Kurs-Dokumente');
   ok(fileSize(2_400_000) === '2,4 MB' && fileSize(830_000) === '830 KB', 'Dateigröße lesbar');
 }
 
+console.log('Mindmap: Ast-Karten und Erklärungs-Kontext');
+{
+  const { branchCards, explainContext } = await import('../src/lib/related');
+  const cards = [
+    { front: 'Was ist Wissen nach North?', back: 'vernetzte Information' },
+    { front: 'Theoretische Erkenntnisse', back: 'Wissen über Zusammenhänge' },
+    { front: 'Praktische Regeln?', back: 'Handlungsanweisungen' },
+    { front: 'Fremdes Thema', back: 'nichts' },
+  ];
+  const g = branchCards(cards, ['Wissen (North et al. 2013)', 'Theoretische Erkenntnisse', 'Praktische Regeln und Handlungsanweisungen']);
+  const all = g.flatMap((x) => x.cards);
+  ok(all.length === 3 && new Set(all).size === 3, 'Karten der Unterpunkte dabei, keine Dubletten');
+  ok(g[0].label.startsWith('Wissen') && g[0].cards[0] === cards[0], 'Karten zum Ast stehen vorn');
+  ok(!all.includes(cards[3]), 'Karten ohne Bezug bleiben weg');
+  const map = { center: 'KoWi', branches: [{ label: 'Wissen (North et al. 2013)', children: ['Theoretische Erkenntnisse', 'Praktische Regeln und Handlungsanweisungen'] }] };
+  const noMat = explainContext({ source: '', cards: [{ front: '<b>Praktische Regeln?</b>', back: 'Handlungs&shy;anweisungen <i>wie</i>' }] }, 'Praktische Regeln und Handlungsanweisungen', 'Wissen (North et al. 2013)', map);
+  ok(noMat.includes('Ast „Wissen (North et al. 2013)“') && noMat.includes('KARTEIKARTEN'), 'ohne Material: Mindmap-Ast und Karten sind im Kontext');
+  ok(!/<[a-z]/i.test(noMat), 'HTML wird entfernt');
+  const withMat = explainContext({ source: 'Einleitung.\n\nPraktische Regeln sagen, wie man handelt.', cards: [] }, 'Praktische Regeln', 'Wissen', undefined);
+  ok(withMat.includes('LERNMATERIAL') && withMat.includes('wie man handelt'), 'mit Material: passende Absätze sind dabei');
+  const long = explainContext({ source: ('Praktische Regeln ' + 'x'.repeat(300) + '\n\n').repeat(40), cards: [] }, 'Praktische Regeln', '', undefined, 1000);
+  ok(long.length <= 1000, 'Längengrenze wird eingehalten');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

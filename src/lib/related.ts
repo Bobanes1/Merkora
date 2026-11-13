@@ -58,3 +58,43 @@ export function materialAbout(source: string, term: string, limit = 4000): strin
   }
   return out;
 }
+
+/** A branch of the mind map: its own cards first, then the cards of each sub-point – every card once. */
+export function branchCards<T extends { front: string; back: string }>(cards: T[], labels: string[]): { label: string; cards: T[] }[] {
+  const seen = new Set<T>();
+  return labels
+    .map((label) => ({
+      label,
+      cards: relatedCards(cards, label, Infinity).filter((c) => !seen.has(c) && (seen.add(c), true)),
+    }))
+    .filter((g) => g.cards.length);
+}
+
+type MapLike = { center: string; branches: { label: string; children: string[] }[] };
+
+/**
+ * What the AI gets to explain a term of the mind map: its place in the map, the matching parts of the material
+ * and the matching cards (or, for decks without material text, the first cards) – at most `limit` characters.
+ */
+export function explainContext(
+  deck: { source?: string; cards: { front: string; back: string }[] },
+  term: string,
+  branch: string,
+  map?: MapLike,
+  limit = 3500,
+): string {
+  const parts: string[] = [];
+  if (map) {
+    const b = map.branches.find((x) => x.label === branch) ?? map.branches.find((x) => x.children.includes(term));
+    parts.push(`MINDMAP: Hauptthema „${map.center}“${b ? ` › Ast „${b.label}“: ${b.children.join('; ')}` : ''}`);
+  }
+  const material = materialAbout(deck.source ?? '', term, Math.round(limit * 0.4));
+  if (material) parts.push('LERNMATERIAL:\n' + material);
+  const qa = (c: { front: string; back: string }) => `F: ${plain(c.front)}\nA: ${plain(c.back)}`;
+  let cards = relatedCards(deck.cards, term, 8);
+  if (!cards.length && branch && branch !== term) cards = relatedCards(deck.cards, branch, 8);
+  if (cards.length) parts.push('KARTEIKARTEN DAZU:\n' + cards.map(qa).join('\n'));
+  let out = parts.join('\n\n');
+  if (out.length < 300 && deck.cards.length) out += (out ? '\n\n' : '') + 'KARTEIKARTEN DES DECKS:\n' + deck.cards.slice(0, 15).map(qa).join('\n');
+  return out.length > limit ? out.slice(0, limit) : out;
+}
