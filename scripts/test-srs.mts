@@ -687,6 +687,37 @@ console.log('Vorlesen');
   ok(md.length === 3 && md[0] === 'Überblick.' && md[1] === 'Punkt eins. Link zwei.' && !md.join(' ').includes('*') && !md.join(' ').includes('---'), 'Markdown → Absätze ohne Zeichen wie ** und Tabellenlinien');
 }
 
+console.log('Interaktive Mindmap');
+{
+  const { mindmapLayout } = await import('../src/lib/mindmapLayout');
+  const { parseDiagram } = await import('../src/lib/diagram');
+  const labels = ['Forschungsprozess', 'Gütekriterien', 'Stichproben und Auswahlverfahren', 'Befragung', 'Inhaltsanalyse', 'Experiment', 'Beobachtung', 'Auswertung'];
+  const mk = (n: number) => parseDiagram({ type: 'mindmap', center: 'Methoden der empirischen Sozialforschung', branches: labels.slice(0, n).map((l) => ({ label: l, children: ['Operationalisierung der Begriffe', 'Reliabilität', 'Validität prüfen', 'Pretest', 'Stichprobenfehler'] })), icons: { Befragung: 'chat' } }) as any;
+  const overlaps = (nodes: any[]) => {
+    const shown = nodes.filter((x) => x.shown);
+    let ov = 0;
+    for (let i = 0; i < shown.length; i++)
+      for (let j = i + 1; j < shown.length; j++) {
+        const a = shown[i], b = shown[j];
+        if (Math.abs(a.home.x - b.home.x) < (a.w + b.w) / 2 + 4 && Math.abs(a.home.y - b.home.y) < (a.h + b.h) / 2 + 4) ov++;
+      }
+    return ov;
+  };
+  for (const n of [3, 5, 8]) {
+    const d = mk(n);
+    const allOpen = mindmapLayout(d, new Set(d.branches.map((_: any, i: number) => i)));
+    const closed = mindmapLayout(d, new Set());
+    ok(overlaps(allOpen) === 0 && overlaps(closed) === 0 && closed.filter((x) => x.shown).length === n + 1, `Mindmap mit ${n} Ästen: zu- und aufgeklappt überlappt nichts`);
+  }
+  const d = mk(6);
+  const one = mindmapLayout(d, new Set([2]));
+  const leaves = one.filter((x) => x.kind === 'leaf');
+  const b2 = one.find((x) => x.id === 'b2')!;
+  ok(leaves.filter((x) => x.shown).every((x) => x.branch === 2 && Math.sign(x.home.x) === Math.sign(b2.home.x) && Math.abs(x.home.x) > Math.abs(b2.home.x)), 'aufgeklappte Punkte stehen außen neben ihrem Ast');
+  ok(leaves.filter((x) => !x.shown).every((x) => { const b = one.find((y) => y.id === `b${x.branch}`)!; return x.home.x === b.home.x && x.home.y === b.home.y; }), 'zugeklappte Punkte warten unsichtbar auf ihrem Ast (von dort klappen sie auf)');
+  ok(one.find((x) => x.label === 'Befragung')?.icon === 'chat', 'Symbole erscheinen auch in der interaktiven Mindmap');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

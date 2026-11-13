@@ -1,19 +1,18 @@
 import { useState } from 'react';
 import { CostHint } from '../../components/CostHint';
-import { IconDownload, IconRefresh, IconSearch, IconSparkle } from '../../components/Icons';
+import { IconDownload, IconRefresh, IconSparkle } from '../../components/Icons';
+import { MindmapView } from '../../components/MindmapView';
 import { NoKeyNotice } from '../../components/NoKey';
 import { materialFrom, mindmapFor } from '../../lib/ai';
 import { estimate } from '../../lib/costs';
 import { PALETTES, renderDiagram } from '../../lib/diagram';
 import { updateDeck, type Deck } from '../../lib/store';
-import { useResolvedTheme } from '../../lib/theme';
 import { download, slugify } from '../../lib/util';
 import { useAiReady } from './SummaryTab';
 
 /** Mind map of the deck's material: made by the AI once, drawn by Merkora (light / dark), saved with the deck. */
 export default function MindmapTab({ deck, onCards }: { deck: Deck; onCards: (term: string) => void }) {
   const ready = useAiReady();
-  const theme = useResolvedTheme();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const material = materialFrom(deck.source, deck.cards);
@@ -77,17 +76,7 @@ export default function MindmapTab({ deck, onCards }: { deck: Deck; onCards: (te
         </button>
       </div>
       {err}
-      <div className="diagram mindmap-view" dangerouslySetInnerHTML={{ __html: renderDiagram(map, PALETTES[theme]) }} />
-      <div className="mindmap-links">
-        <span className="muted small">
-          <IconSearch size={13} /> Karten zu:
-        </span>
-        {map.branches.map((b) => (
-          <button key={b.label} type="button" className="tag" onClick={() => onCards(b.label)}>
-            {b.label}
-          </button>
-        ))}
-      </div>
+      <MindmapView map={map} onCards={onCards} />
     </div>
   );
 }

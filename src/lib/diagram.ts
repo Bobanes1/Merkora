@@ -1183,7 +1183,7 @@ export function diagramsToSvg(html: string): string {
 /** What the AI is told when cards may get a graphic: describe it, never draw it. */
 export const DIAGRAM_RULE = `Wo eine Grafik das Verständnis wirklich verbessert (Abläufe, Gliederungen, Vergleiche, Modelle, Kurven), ergänze das Feld "diagram" mit einer kurzen Beschreibung – kein SVG, keine Koordinaten, Merkora zeichnet sie selbst. Sonst lass "diagram" weg.
 Beschriftungen sind kurze Stichworte (höchstens 6 Wörter). Erlaubte Formen (genau eine wählen):
-{"type":"flow","title":"…","steps":["…","…"]} – Ablauf, 2–8 Schritte
+{"type":"flow","title":"…","steps":["Planung","Erhebung"],"icons":{"Planung":"kalender","Erhebung":"liste"}} – Ablauf, 2–8 Schritte
 {"type":"cycle","title":"…","steps":["…","…","…"]} – Kreislauf, 3–8 Schritte
 {"type":"hierarchy","title":"…","root":"…","children":[{"label":"…","children":["…"]}]} – Gliederung, 2–5 Äste mit höchstens 4 Unterpunkten
 {"type":"compare","title":"…","columns":[{"title":"…","items":["…"]}]} – Vergleich, 2–3 Spalten mit je höchstens 6 Punkten
@@ -1191,13 +1191,13 @@ Beschriftungen sind kurze Stichworte (höchstens 6 Wörter). Erlaubte Formen (ge
 {"type":"concept","title":"…","center":"…","branches":["…","…","…"]} – Begriff mit 3–8 Merkmalen
 {"type":"matrix","title":"…","x":"…","y":"…","cells":["oben links","oben rechts","unten links","unten rechts"]} – Vierfeldertafel
 {"type":"axes","title":"…","x":"…","y":"…","shape":"steigend|fallend|u|umgekehrtes-u|s-kurve|linear","marks":[{"at":0.3,"label":"…"}]} – Verlauf/Kurve; für zwei Gruppen zusätzlich "label":"…","second":{"shape":"…","label":"…"}
-{"type":"model","title":"…","nodes":["A","B","M"],"links":[{"from":"A","to":"B","label":"+"},{"from":"M","to":"A -> B","label":"moderiert"}]} – Modell mit Pfeilen zwischen Begriffen/Variablen (Hypothesen, Ursache–Wirkung, Mediator, Moderator, Kommunikationsmodelle); 2–8 Kästen; "to":"A -> B" zeigt auf den Pfeil A→B; optional "both":true (Wechselwirkung/Korrelation), "dashed":true (indirekt/vermutet)
+{"type":"model","title":"…","nodes":["A","B","M"],"links":[{"from":"A","to":"B","label":"+"},{"from":"M","to":"A -> B","label":"moderiert"}],"icons":{"A":"uhr","B":"fernseher","M":"person"}} – Modell mit Pfeilen zwischen Begriffen/Variablen (Hypothesen, Ursache–Wirkung, Mediator, Moderator, Kommunikationsmodelle); 2–8 Kästen; "to":"A -> B" zeigt auf den Pfeil A→B; optional "both":true (Wechselwirkung/Korrelation), "dashed":true (indirekt/vermutet)
 {"type":"venn","title":"…","sets":[{"label":"…","items":["…"]},{"label":"…","items":["…"]}],"shared":["…"]} – Gemeinsamkeiten und Unterschiede zweier Begriffe
 {"type":"pyramid","title":"…","levels":["Spitze","…","Basis"]} – Stufenmodell, 3–6 Stufen von oben nach unten
 {"type":"bars","title":"…","unit":"%","bars":[{"label":"…","value":42}]} – Zahlenvergleich, 2–8 Balken, nur mit Zahlen aus dem Material
 {"type":"decision","title":"…","question":"…?","yes":"…","no":{"question":"…?","yes":"…","no":"…"}} – Entscheidungsbaum, höchstens zwei Fragen tief
 Bei flow, cycle, hierarchy, concept und model kann "highlight" einen Kasten hervorheben, der den Kern der Karte trifft.
-Optional "icons":{"Beschriftung":"symbol"} – ein kleines Symbol vor der Beschriftung eines Kastens, nur wo es das Verständnis stützt (nicht bei jedem Kasten). Erlaubte Symbole: ${ICON_NAMES.join(", ")}.`;
+Symbole: Gib im diagram-Objekt "icons":{"Beschriftung":"symbol"} an – für die meisten Kästen ein passendes kleines Symbol (Schlüssel = genau die Beschriftung des Kastens), bei flow, cycle, hierarchy, concept, compare, matrix, model, pyramid und decision. Lass ein Symbol nur weg, wenn keines passt. Erlaubte Symbole: ${ICON_NAMES.join(", ")}.`;
 
 // ---------- graphics of one card (improve per card) ----------
 const DIAGRAM_RE = /<div class="diagram" data-diagram="([^"]*)"><\/div>/;

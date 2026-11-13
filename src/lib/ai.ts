@@ -321,14 +321,17 @@ ${graphics ? DIAGRAM_RULE + '\n' : ''}${figures ? FIGURE_RULE + '\n' : ''}Format
  * then no cards is a valid answer, not an error.
  */
 export function parseCards(text: string, allowEmpty = false) {
-  const res = parseJson<{ cards: { front: string; back: string; svg?: string; diagram?: unknown; figure?: unknown }[] }>(text);
+  const res = parseJson<{ cards: { front: string; back: string; svg?: string; diagram?: unknown; figure?: unknown; icons?: unknown }[] }>(text);
   const cards = (res.cards || []).filter((c) => c && c.front && c.back);
   if (!cards.length && !allowEmpty)
     throw new AiError('Die KI hat in diesem Material nichts Prüfungsrelevantes gefunden (z. B. nur Literaturliste oder Organisatorisches) und keine Karten erstellt.');
   return cards.map((c) => ({
     front: String(c.front).trim(),
     back: String(c.back).trim(),
-    ...(c.diagram && typeof c.diagram === 'object' ? { diagram: c.diagram } : {}),
+    // symbols written next to the diagram instead of inside it still count
+    ...(c.diagram && typeof c.diagram === 'object'
+      ? { diagram: c.icons && typeof c.icons === 'object' && !(c.diagram as { icons?: unknown }).icons ? { ...(c.diagram as object), icons: c.icons } : c.diagram }
+      : {}),
     // a slide of the PDF that shows the answer (see lib/slides.ts)
     ...(Number.isInteger(Number(c.figure)) && Number(c.figure) > 0 ? { figure: Number(c.figure) } : {}),
     // older answers may still carry raw SVG
