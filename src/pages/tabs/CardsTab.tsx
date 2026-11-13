@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { ImproveCardDialog } from '../../components/ImproveCardDialog';
 import { isLeech } from '../../lib/cardLinks';
 import { swapSides } from '../../lib/askSide';
+import { MoveCardsDialog } from '../../components/MoveCardsDialog';
 import { createPortal } from 'react-dom';
 import { AnkiImport } from '../../components/AnkiImport';
 import { OcclusionEditor, type Embed } from '../../components/OcclusionEditor';
@@ -198,6 +199,11 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
   const [onlyMarked, setOnlyMarked] = useState(false);
   const [onlyLeech, setOnlyLeech] = useState(params.get('filter') === 'leech');
   const [improve, setImprove] = useState<Card | null>(null);
+  // choosing cards (to move them to another deck)
+  const [sel, setSel] = useState<Set<string> | null>(null);
+  const [moving, setMoving] = useState(false);
+  const [notice, setNotice] = useState('');
+  const toggleSel = (id: string) => setSel((s) => (s ? (s.has(id) ? new Set([...s].filter((x) => x !== id)) : new Set([...s, id])) : s));
   const markedCount = deck.cards.filter((c) => c.marked).length;
   const leechCount = deck.cards.filter(isLeech).length;
   const tags = allTags(deck.cards);
@@ -222,6 +228,16 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
         <button type="button" className="btn outline sm" onClick={() => setEdit('new')}>
           <IconPlus size={15} /> Karte
         </button>
+        <button
+          type="button"
+          className={'btn sm ' + (sel ? 'outline' : 'ghost')}
+          onClick={() => setSel(sel ? null : new Set())}
+          disabled={!deck.cards.length}
+          aria-pressed={!!sel}
+          title="Karten auswählen, z. B. um sie in ein anderes Deck zu verschieben"
+        >
+          {sel ? 'Fertig' : 'Auswählen'}
+        </button>
         <button type="button" className="btn ghost sm" onClick={() => setExporting(true)} disabled={!deck.cards.length}>
           <IconDownload size={15} /> Exportieren
         </button>
@@ -229,6 +245,31 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
           <IconPlay size={12} /> Lernen
         </button>
       </div>
+      {sel && (
+        <div className="select-bar" role="region" aria-label="Auswahl">
+          <b>{sel.size === 1 ? '1 Karte ausgewählt' : `${sel.size} Karten ausgewählt`}</b>
+          <button type="button" className="link-btn" onClick={() => setSel(new Set(filtered.map((c) => c.id)))}>
+            {filtered.length === deck.cards.length ? 'Alle auswählen' : `Alle ${filtered.length} angezeigten auswählen`}
+          </button>
+          {sel.size > 0 && (
+            <button type="button" className="link-btn" onClick={() => setSel(new Set())}>
+              Auswahl aufheben
+            </button>
+          )}
+          <span className="grow" />
+          <button type="button" className="btn primary sm" disabled={!sel.size} onClick={() => setMoving(true)}>
+            In anderes Deck verschieben
+          </button>
+        </div>
+      )}
+      {notice && (
+        <div className="form-ok move-notice" role="status">
+          {notice}
+          <button type="button" className="icon-btn" aria-label="Hinweis schließen" onClick={() => setNotice('')}>
+            ×
+          </button>
+        </div>
+      )}
       {isActive(job) && job && <JobBanner job={job} />}
       <JobError job={job} />
       <div className="search">
@@ -285,7 +326,21 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
           {cards.map((c) => {
             const lvl = LEVELS.find((l) => l.id === levelOf(c.srs))!;
             return (
-              <article key={c.id} className="flash-row">
+              <article
+                key={c.id}
+                className={'flash-row' + (sel ? ' selecting' : '') + (sel?.has(c.id) ? ' chosen' : '')}
+                onClick={sel ? () => toggleSel(c.id) : undefined}
+              >
+                {sel && (
+                  <input
+                    type="checkbox"
+                    className="row-check"
+                    checked={sel.has(c.id)}
+                    onChange={() => toggleSel(c.id)}
+                    onClick={(e) => e.stopPropagation()}
+                    aria-label={`Karte auswählen: ${cardFrontText(c).slice(0, 60)}`}
+                  />
+                )}
                 <div className="flash-text">
                   <CardContent text={c.front} html={c.html} look={lookOf(deck, c)} className="ft-front" />
                   <CardContent text={c.html ? answerOnly(c.front, c.back) : c.back} html={c.html} look={lookOf(deck, c)} className="ft-back" />
@@ -354,6 +409,17 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
         <GraphicDialog deck={deck} card={deck.cards.find((x) => x.id === graphic.id) ?? graphic} onClose={() => setGraphic(null)} />
       )}
       {improve && <ImproveCardDialog deck={deck} card={deck.cards.find((x) => x.id === improve.id) ?? improve} onClose={() => setImprove(null)} />}
+      {moving && sel && (
+        <MoveCardsDialog
+          deck={deck}
+          cardIds={[...sel]}
+          onClose={() => setMoving(false)}
+          onMoved={(n, to) => {
+            setSel(null);
+            setNotice(n === 1 ? `1 Karte nach „${to.name}“ verschoben.` : `${n} Karten nach „${to.name}“ verschoben.`);
+          }}
+        />
+      )}
       {del && (
         <ConfirmModal title="Karte löschen?" text={cardFrontText(del)} onClose={() => setDel(null)} onConfirm={() => deleteCard(deck.id, del.id)} />
       )}

@@ -755,6 +755,27 @@ console.log('Prüfung für ganzen Kurs oder Ordner');
   ok(nextExamForDeck(data, 'neu')?.id === 'e' && typeof nextExamAt(data, 'neu') === 'number', 'Planung vor der Prüfung gilt auch für das neue Deck');
 }
 
+console.log('Karten in anderes Deck verschieben');
+{
+  const { moveCardsIn } = await import('../src/lib/moveCards');
+  const card = (id: string, extra: any = {}) => ({ id, front: 'F' + id, back: 'B' + id, createdAt: 0, srs: { ease: 2.5, interval: 7, reps: 4, lapses: 1, due: 99 }, ...extra });
+  const decks: any[] = [
+    { id: 'A', courseId: 'k', name: 'A', cards: [card('1'), card('2', { styleId: 's1', html: true }), card('3')], styles: { s1: '.card{color:red}' } },
+    { id: 'B', courseId: 'k', name: 'B', cards: [card('9')] },
+  ];
+  const reviews: any[] = [{ deckId: 'A', cardId: '1', at: 1, rating: 3 }, { deckId: 'A', cardId: '3', at: 2, rating: 1 }];
+  let n = 0;
+  const r = moveCardsIn(decks, reviews, 'A', ['1', '2'], 'B', () => 'neu' + ++n, 5);
+  const A = r.decks.find((d) => d.id === 'A')!, B = r.decks.find((d) => d.id === 'B')!;
+  ok(r.moved === 2 && A.cards.map((c) => c.id).join() === '3' && B.cards.length === 3, '2 Karten wandern von A nach B');
+  const m1 = B.cards.find((c) => c.front === 'F1')!;
+  ok(m1.id !== '1' && m1.srs.reps === 4 && m1.srs.interval === 7, 'Lernstand zieht mit (neue ID, damit eine synchronisierte Kopie die Karte nicht im alten Deck zurückbringt)');
+  ok(JSON.stringify(r.gone.sort()) === '["1","2"]', 'alte IDs werden als gelöscht vermerkt');
+  ok(r.reviews[0].deckId === 'B' && r.reviews[0].cardId === m1.id && r.reviews[1].deckId === 'A', 'Lerngeschichte zieht mit, andere bleiben');
+  ok((B as any).styles?.s1 === '.card{color:red}', 'Anki-Aussehen der Karte kommt mit ins neue Deck');
+  ok(moveCardsIn(decks, reviews, 'A', ['1'], 'A', () => 'x').moved === 0 && moveCardsIn(decks, reviews, 'A', ['1'], 'Z', () => 'x').moved === 0, 'gleiches oder unbekanntes Ziel: nichts passiert');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

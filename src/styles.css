@@ -6778,3 +6778,12 @@ a.deck-row:hover {
 .seg.ask-side.compact { margin-top: 0; font-size: 12px; }
 .seg.ask-side.compact button { padding: 4px 8px; }
 .swap-row { display: flex; justify-content: flex-end; margin-bottom: -4px; }
+
+/* choosing cards to move them */
+.select-bar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 12px; margin-bottom: 10px;
+  border-radius: var(--r-md); background: var(--primary-soft); color: var(--primary-ink); }
+.flash-row.selecting { cursor: pointer; }
+.flash-row.chosen { outline: 2px solid var(--primary); outline-offset: -2px; }
+.flash-row .row-check { width: 18px; height: 18px; margin: 4px 10px 0 0; flex: none; align-self: flex-start; accent-color: var(--primary); }
+.move-notice { display: flex; align-items: center; gap: 8px; justify-content: space-between; margin-bottom: 10px; }
+.flash-row.selecting .flash-actions { display: none; }

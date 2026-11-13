@@ -8,6 +8,7 @@ import { newSrs, schedule, setSchedulerOptions, type Rating, type Srs } from './
 import { dayKey, uid, uniqueSlug } from './util';
 import type { Diagram } from './diagram';
 import type { AskSide } from './askSide';
+import { moveCardsIn } from './moveCards';
 
 export type Provider = 'openai' | 'anthropic' | 'gemini' | 'openrouter' | 'custom';
 
@@ -713,6 +714,16 @@ export function updateCard(deckId: string, cardId: string, patch: Partial<Card>)
 export function deleteCard(deckId: string, cardId: string) {
   updateDeck(deckId, (x) => ({ cards: x.cards.filter((c) => c.id !== cardId) }));
   update((d) => ({ ...d, deleted: tomb(d, [cardId]) }));
+}
+/** Moves cards to another deck, with their learning state and history. Returns how many were moved. */
+export function moveCards(fromDeckId: string, cardIds: string[], toDeckId: string): number {
+  let n = 0;
+  update((d) => {
+    const r = moveCardsIn(d.decks, d.reviews, fromDeckId, cardIds, toDeckId, uid);
+    n = r.moved;
+    return r.moved ? { ...d, decks: r.decks, reviews: r.reviews, deleted: tomb(d, r.gone) } : d;
+  });
+  return n;
 }
 export function resetProgress(deckId: string) {
   const now = Date.now();
