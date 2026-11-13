@@ -2,7 +2,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { Mascot, TildaFace, type Mood, type Who } from '../src/components/Mascot';
+import { FinnFace, Mascot, type Mood, type Who } from '../src/components/Mascot';
 
 const moods: Mood[] = ['idle', 'wave', 'think', 'happy', 'cheer', 'sad'];
 const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
@@ -11,8 +11,8 @@ const row = (who: Who, size: number) =>
     .map((m) => `<figure>${renderToStaticMarkup(createElement(Mascot, { who, mood: m, size }))}<figcaption>${m}</figcaption></figure>`)
     .join('')}</div>`;
 const panel = (dark: boolean) => `<section class="p ${dark ? 'dark' : ''}">
-  <h2>Tilda (Chat-Tutorin)</h2>${row('tilda', 110)}
-  <p class="faces">${[20, 26, 40].map((s) => renderToStaticMarkup(createElement(TildaFace, { size: s }))).join(' ')} <span>Avatar neben den Antworten</span></p>
+  <h2>Finn (Tutor im Chat)</h2>${row('finn', 110)}
+  <p class="faces">${[20, 26, 40].map((s) => renderToStaticMarkup(createElement(FinnFace, { size: s }))).join(' ')} <span>Avatar neben den Antworten</span></p>
   <h2>Zum Vergleich: Pip und Flo</h2>${row('pip', 80)}${row('flo', 80)}
 </section>`;
 writeFileSync(

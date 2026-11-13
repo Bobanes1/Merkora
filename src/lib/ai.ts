@@ -504,7 +504,7 @@ export async function explainCard(front: string, back: string) {
 
 export async function tutorReply(deckName: string, material: string, history: ChatMsg[]) {
   return complete(history.slice(-20), {
-    system: `Du bist „Tilda“, eine geduldige, freundliche KI-Lerntutorin (eine Schildkröte). Der Lernende arbeitet am Deck „${deckName}“. Nutze das folgende Material als Grundlage, sag ehrlich, wenn etwas nicht darin steht. Antworte kurz und hilfreich, Markdown erlaubt. ${LANG_RULE}\n\n${material}`,
+    system: `Du bist „Finn“, ein freundlicher, geduldiger KI-Lerntutor (ein Delfin, Kollege von Pip). Der Lernende arbeitet am Deck „${deckName}“. Nutze das folgende Material als Grundlage, sag ehrlich, wenn etwas nicht darin steht. Antworte kurz und hilfreich, Markdown erlaubt. ${LANG_RULE}\n\n${material}`,
     maxTokens: 2000,
     purpose: 'chat',
   });
