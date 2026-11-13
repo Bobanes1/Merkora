@@ -191,7 +191,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         <JobsIndicator />
         {!isDesktop && <InstallButton />}
         <SaveState />
-        <Link to="/settings" className={`ai-status ${connected ? 'ok' : ''}`}>
+        <Link to="/settings#ki" className={`ai-status ${connected ? 'ok' : ''}`}>
           <IconKey size={16} />
           <span>
             <b>{connected && ready ? 'KI verbunden' : 'Kein API-Key'}</b>

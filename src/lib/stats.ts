@@ -1,6 +1,6 @@
 import { LEVELS, levelOf, levelWeight, type Level } from './srs';
 import type { Card, Review } from './store';
-import { DAY, startOfDay } from './util';
+import { DAY, dayKey, startOfDay } from './util';
 
 export function levelCounts(cards: Card[]) {
   const counts: Record<Level, number> = { new: 0, learning: 0, familiar: 0, mastered: 0 };
@@ -106,4 +106,32 @@ export type CourseSort = 'name' | 'cards' | 'mastery' | 'due';
 export function sortCourses<T extends { name: string; sum: CourseSummary }>(list: T[], by: CourseSort, asc = by === 'name'): T[] {
   const cmp = (a: T, b: T) => (by === 'name' ? a.name.localeCompare(b.name, 'de') : a.sum[by] - b.sum[by]) || a.name.localeCompare(b.name, 'de');
   return [...list].sort((a, b) => (asc ? cmp(a, b) : -cmp(a, b)));
+}
+
+// ---------- start page ----------
+/** Cards learned per calendar day (YYYY-MM-DD); a card repeated on the same day counts once. */
+export function studyDays(reviews: { cardId: string; deckId: string; at: number }[]): Map<string, number> {
+  const seen = new Map<string, Set<string>>();
+  for (const r of reviews) {
+    const k = dayKey(r.at);
+    let s = seen.get(k);
+    if (!s) seen.set(k, (s = new Set()));
+    s.add(r.deckId + '|' + r.cardId);
+  }
+  return new Map([...seen].map(([k, s]) => [k, s.size]));
+}
+
+export type DeckSort = 'due' | 'studied' | 'created';
+
+/** Decks for "Meine Decks": most due first, last studied first (never studied last) or newest first; ties by name. */
+export function sortDecks<T extends { id: string; name: string; createdAt: number; updatedAt?: number }>(
+  decks: T[],
+  by: DeckSort,
+  reviews: { deckId: string; at: number }[],
+  dueOf: (d: T) => number,
+): T[] {
+  const last = new Map<string, number>();
+  for (const r of reviews) last.set(r.deckId, Math.max(last.get(r.deckId) ?? 0, r.at));
+  const key = (d: T) => (by === 'due' ? dueOf(d) : by === 'studied' ? (last.get(d.id) ?? -1) : (d.updatedAt ?? d.createdAt));
+  return [...decks].sort((a, b) => key(b) - key(a) || a.name.localeCompare(b.name, 'de'));
 }

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { CardContent, lookOf } from '../../components/CardContent';
 import { IconCheck, IconClose, IconFlame, IconGift, IconHeart, IconLock, IconStar, IconTarget, IconTrophy } from '../../components/Icons';
 import {
@@ -46,7 +47,7 @@ export function GameBar() {
           <small>{streak === 1 ? 'Tag Serie' : 'Tage Serie'}</small>
         </span>
       </div>
-      <div className="gb-item grow" title="Tagesziel">
+      <div className="gb-item grow" title="Tagesziel – ändern unter Einstellungen › Lernen">
         <span className="gb-icon goal">
           <IconTarget size={18} />
         </span>
@@ -56,13 +57,6 @@ export function GameBar() {
               {Math.min(today, goal)} / {goal} XP
             </b>
             <small>{today >= goal ? 'Tagesziel geschafft!' : 'Tagesziel'}</small>
-            <select aria-label="Tagesziel ändern" value={goal} onChange={(e) => setDailyGoal(+e.target.value)}>
-              {[20, 50, 100, 200].map((g) => (
-                <option key={g} value={g}>
-                  {g} XP
-                </option>
-              ))}
-            </select>
           </span>
           <span className="bar">
             <i style={{ width: `${Math.min(100, (today / goal) * 100)}%` }} />
@@ -86,6 +80,17 @@ export default function PathTab({ deck }: { deck: Deck }) {
   const nodes = useMemo(() => flatNodes(units), [units]);
   const states = nodeStates(deck, nodes);
   const [playing, setPlaying] = useState<PathNode | null>(null);
+  // "Starten" on the start page: open the current level right away (once – going back shows the path)
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    if (params.get('play') !== '1') return;
+    const cur = nodes.find((n) => states[n.key] === 'current');
+    if (cur) setPlaying(cur);
+    const next = new URLSearchParams(params);
+    next.delete('play');
+    setParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [showUnits, setShowUnits] = useState(3);
   const progress = pathProgress(deck);
   const currentRef = useRef<HTMLButtonElement>(null);

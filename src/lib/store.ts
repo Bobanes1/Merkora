@@ -216,6 +216,13 @@ export type Settings = {
   homeTodosCollapsed?: boolean;
   statsOpen?: { section?: boolean; groups?: string[] };
   libraryView?: 'tiles' | 'list';
+  /** Daily goals on the start page (cards learned, minutes). */
+  cardGoal?: number;
+  minuteGoal?: number;
+  /** "Meine Decks" on the start page. */
+  homeDeckSort?: 'due' | 'studied' | 'created';
+  /** "Mit Grafiken" when creating cards with AI (default on). */
+  cardGraphics?: boolean;
   /** Take models and figures from PDF slides onto AI cards (on by default). */
   slideFigures?: boolean;
   /** Own price in US-$ per 1M tokens (input/output) – overrides the price list. */

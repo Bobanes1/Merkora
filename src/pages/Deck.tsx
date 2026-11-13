@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ChatPanel } from '../components/ChatPanel';
 import { ExamDialog } from '../components/ExamDialog';
@@ -18,17 +18,18 @@ import SummaryTab from './tabs/SummaryTab';
 import MindmapTab from './tabs/MindmapTab';
 
 const TABS = [
-  { id: 'cards', label: 'Karteikarten', icon: IconCards },
-  { id: 'learn', label: 'Lernen', icon: IconPlay },
-  { id: 'path', label: 'Lernpfad', icon: IconPath },
-  { id: 'match', label: 'Zuordnen', icon: IconMatch },
-  { id: 'mastery', label: 'Lernfortschritt', icon: IconChart },
-  { id: 'summary', label: 'Zusammenfassung', icon: IconDoc },
-  { id: 'mindmap', label: 'Mindmap', icon: IconMindmap },
-  { id: 'quiz', label: 'Quiz', icon: IconQuiz },
-  { id: 'exam', label: 'Probeprüfung', icon: IconTarget },
-  { id: 'source', label: 'Lernmaterial', icon: IconNote },
+  { id: 'cards', label: 'Karteikarten', icon: IconCards, group: 'Lernen' },
+  { id: 'learn', label: 'Lernen', icon: IconPlay, group: 'Lernen' },
+  { id: 'mastery', label: 'Fortschritt', icon: IconChart, group: 'Lernen' },
+  { id: 'path', label: 'Lernpfad', icon: IconPath, group: 'Üben' },
+  { id: 'match', label: 'Zuordnen', icon: IconMatch, group: 'Üben' },
+  { id: 'quiz', label: 'Quiz', icon: IconQuiz, group: 'Üben' },
+  { id: 'exam', label: 'Probeprüfung', icon: IconTarget, group: 'Üben' },
+  { id: 'summary', label: 'Zusammenfassung', icon: IconDoc, group: 'Verstehen' },
+  { id: 'mindmap', label: 'Mindmap', icon: IconMindmap, group: 'Verstehen' },
+  { id: 'source', label: 'Material', icon: IconNote, group: 'Verstehen' },
 ] as const;
+const GROUPS = ['Lernen', 'Üben', 'Verstehen'] as const;
 type TabId = (typeof TABS)[number]['id'];
 
 export default function DeckPage() {
@@ -42,6 +43,11 @@ export default function DeckPage() {
   const setTab = (t: TabId) => setParams({ tab: t });
   const [examDialog, setExamDialog] = useState(false);
   const [todoDialog, setTodoDialog] = useState(false);
+  // the tab bar scrolls sideways on narrow windows: keep the open tab in view
+  const tabsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    tabsRef.current?.querySelector('.tab.on')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [tab]);
 
   useEffect(() => {
     if (deck) document.title = `${deck.name} – Merkora`;
@@ -71,16 +77,18 @@ export default function DeckPage() {
             <span>›</span>
             <Link to={`/library/${workspace.slug}/${crs.slug}`}>{crs.name}</Link>
             <span>›</span>
-            <span className="crumb-current">{deck.name}</span>
+            <span className="crumb-current" title={deck.name}>
+              {deck.name}
+            </span>
           </nav>
-          <div className="row-gap">
+          <div className="deck-actions">
             {exam ? (
-              <Link to="/calendar" className="exam-chip" title="Zum Kalender">
-                <IconCalendar size={14} /> {exam.title} · {countdownText(exam)}
+              <Link to="/calendar" className="exam-chip" title={`${exam.title} · zu den Prüfungen`}>
+                <IconCalendar size={14} /> {countdownText(exam)}
               </Link>
             ) : (
-              <button type="button" className="btn ghost sm" onClick={() => setExamDialog(true)}>
-                <IconCalendar size={14} /> Prüfung verknüpfen
+              <button type="button" className="btn ghost sm" onClick={() => setExamDialog(true)} title="Prüfung mit diesem Deck verknüpfen">
+                <IconCalendar size={14} /> Prüfung
               </button>
             )}
             <button
@@ -89,9 +97,9 @@ export default function DeckPage() {
               onClick={() => setTodoDialog(true)}
               title={todos ? `${todos} offene${todos === 1 ? 's' : ''} To-do${todos === 1 ? '' : 's'} – auf der Startseite` : 'To-do zu diesem Deck anlegen'}
             >
-              <IconCheck size={14} /> {todos ? `${todos} To-do${todos === 1 ? '' : 's'}` : '+ To-do'}
+              <IconCheck size={14} /> {todos ? `${todos} To-do${todos === 1 ? '' : 's'}` : 'To-do'}
             </button>
-            <button type="button" className={`btn ${chat ? 'soft' : 'outline'} sm`} onClick={() => setChat(!chat)}>
+            <button type="button" className={`btn ${chat ? 'soft' : 'ghost'} sm`} aria-pressed={chat} onClick={() => setChat(!chat)}>
               <IconChat size={15} /> Tutor
             </button>
             <button type="button" className="btn primary sm" onClick={() => setTab('learn')}>
@@ -99,19 +107,26 @@ export default function DeckPage() {
             </button>
           </div>
         </div>
-        <div className="tabs" role="tablist">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              role="tab"
-              aria-selected={tab === t.id}
-              className={`tab ${tab === t.id ? 'on' : ''}`}
-              onClick={() => setTab(t.id)}
-            >
-              <t.icon size={16} />
-              <span>{t.label}</span>
-            </button>
+        <div className="tabs tab-groups" role="tablist" ref={tabsRef}>
+          {GROUPS.map((g) => (
+            <div key={g} className="tab-group" role="presentation">
+              <small className="tab-group-label">{g}</small>
+              <div className="tab-group-row">
+                {TABS.filter((t) => t.group === g).map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={tab === t.id}
+                    className={`tab ${tab === t.id ? 'on' : ''}`}
+                    onClick={() => setTab(t.id)}
+                  >
+                    <t.icon size={16} />
+                    <span>{t.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
           ))}
         </div>
         <div className="tab-body">

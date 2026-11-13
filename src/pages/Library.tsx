@@ -24,6 +24,8 @@ import { StudySession, type SessionItem } from '../components/StudySession';
 import { countdownText, examCovers, upcomingExams } from '../lib/exams';
 import { courseSummary, masteryPercent, sortCourses, type CourseSort } from '../lib/stats';
 import { allAcross, dueAcross } from '../lib/sessions';
+import { courseDocs } from '../lib/courseDocs';
+import { CourseDocs } from '../components/CourseDocs';
 import {
   addCourse,
   addFolder,
@@ -525,6 +527,10 @@ function CourseView({
   const navigate = useNavigate();
   const decks = data.decks.filter((d) => d.courseId === course.id);
   const [selected, setSelected] = useState<string | null>(null);
+  // right column: the chosen deck's cards or all documents of the course
+  const [view, setView] = useState<'deck' | 'docs'>('deck');
+  const docs = courseDocs(course, data.decks);
+  const docCount = docs.files.length + docs.texts.length;
   const [closed, setClosed] = useState<Record<string, boolean>>({});
   const [addMenu, setAddMenu] = useState(false);
   const deck = decks.find((d) => d.id === selected) ?? decks[0];
@@ -560,7 +566,11 @@ function CourseView({
           type="button"
           className="cdeck-main"
           title={selected === d.id ? 'Nochmal klicken zum Öffnen' : undefined}
-          onClick={() => (selected === d.id ? navigate(deckUrl(data, d)) : setSelected(d.id))}
+          onClick={() => {
+            if (selected === d.id && view === 'deck') return navigate(deckUrl(data, d));
+            setSelected(d.id);
+            setView('deck');
+          }}
         >
           <IconCards size={16} />
           <span className="cdeck-name" title={d.name}>{names.get(d.id)}</span>
@@ -694,7 +704,19 @@ function CourseView({
         </section>
 
         <section className="panel course-preview">
-          {deck ? (
+          {docCount > 0 && (
+            <div className="seg compact preview-switch" role="tablist" aria-label="Ansicht">
+              <button type="button" role="tab" aria-selected={view === 'deck'} className={view === 'deck' ? 'on' : ''} onClick={() => setView('deck')}>
+                Kartendeck
+              </button>
+              <button type="button" role="tab" aria-selected={view === 'docs'} className={view === 'docs' ? 'on' : ''} onClick={() => setView('docs')}>
+                Dokumente ({docCount})
+              </button>
+            </div>
+          )}
+          {view === 'docs' && docCount > 0 ? (
+            <CourseDocs course={course} />
+          ) : deck ? (
             <>
               <div className="preview-head">
                 <div>

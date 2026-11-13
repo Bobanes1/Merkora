@@ -14,7 +14,7 @@ import { canSurviveClose, startCardJobs } from '../lib/jobs';
 import { cleanSvg, withGraphics } from '../lib/graphics';
 import { parseDiagram, PALETTES, renderDiagram } from '../lib/diagram';
 import { useResolvedTheme } from '../lib/theme';
-import { addCards, addCourse, addDeck, addWorkspace, deckUrl, getState, updateDeck, useData, useStore } from '../lib/store';
+import { addCards, addCourse, addDeck, addWorkspace, deckUrl, getState, setSettings, updateDeck, useData, useStore } from '../lib/store';
 import { IconClose, IconDoc, IconSparkle, IconTrash, IconUpload } from './Icons';
 import { Modal } from './Modal';
 import { NoKeyNotice } from './NoKey';
@@ -97,7 +97,12 @@ export function CreateWithAI({
   // fixed number: at most 50 for one part, 300 for several
   const counts = shareCount(count > 0 ? Math.min(count, parts.length > 1 ? 300 : 50) : 0, parts);
   const [focus, setFocus] = useState('');
-  const [graphics, setGraphics] = useState(false);
+  // "Mit Grafiken" is on unless switched off once (remembered)
+  const [graphics, setGraphicsState] = useState(data.settings.cardGraphics !== false);
+  const setGraphics = (v: boolean) => {
+    setGraphicsState(v);
+    setSettings({ cardGraphics: v ? undefined : false });
+  };
   const [courseId, setCourseId] = useState(presetCourse ?? data.courses[0]?.id ?? '');
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');

@@ -892,14 +892,55 @@ console.log('Statistik: Kurse und Ordner');
 
 console.log('Pip auf der Startseite');
 {
-  const { pipPoke } = await import('../src/lib/pipLines');
-  const ctx = { cardsToday: 23, exam: { title: 'Statistik', days: 5 } };
-  const lines = Array.from({ length: 8 }, (_, n) => pipPoke(ctx, n));
-  ok(lines.some((l) => l.text.includes('23 Karten')), 'mit Lernfortschritt heute: Satz mit der Zahl');
-  ok(lines.some((l) => l.text.includes('5 Tage bis Statistik')), 'mit naher Prüfung: Satz mit den Tagen');
-  ok(lines.every((l, i) => i === 0 || (l.text !== lines[i - 1].text && l.move !== lines[i - 1].move)), 'aufeinanderfolgende Klicks: nie zweimal derselbe Satz oder dieselbe Bewegung');
-  ok(!pipPoke({ cardsToday: 0 }, 0).text.includes('Karten heute'), 'ohne Lernen heute kein Zahlen-Satz');
-  ok(new Set(lines.map((l) => l.move)).has('flip'), 'Salto ist dabei');
+  const { pokeMove } = await import('../src/lib/pipLines');
+  const moves = Array.from({ length: 9 }, (_, n) => pokeMove(n));
+  ok(moves.every((m, i) => i === 0 || m !== moves[i - 1]), 'aufeinanderfolgende Klicks: nie zweimal dieselbe Bewegung');
+  ok(moves.includes('flip') && moves.includes('cheer') && moves.includes('wave'), 'Salto, Jubeln und Winken sind dabei');
+}
+
+console.log('Startseite: Lerntage und Deck-Sortierung');
+{
+  const { studyDays, sortDecks } = await import('../src/lib/stats');
+  const t = (d: number, h: number) => new Date(2026, 10, d, h).getTime();
+  const days = studyDays([
+    { deckId: 'A', cardId: '1', at: t(12, 9) },
+    { deckId: 'A', cardId: '1', at: t(12, 18) },
+    { deckId: 'A', cardId: '2', at: t(12, 19) },
+    { deckId: 'B', cardId: '1', at: t(13, 8) },
+  ]);
+  ok(days.get('2026-11-12') === 2 && days.get('2026-11-13') === 1 && !days.has('2026-11-11'), 'Karten je Tag, dieselbe Karte am selben Tag nur einmal');
+  const decks = [
+    { id: 'a', name: 'Anatomie', createdAt: 3 },
+    { id: 'b', name: 'Biologie', createdAt: 1, updatedAt: 9 },
+    { id: 'c', name: 'Chemie', createdAt: 5 },
+    { id: 'd', name: 'Didaktik', createdAt: 2 },
+  ];
+  const due: Record<string, number> = { a: 3, b: 0, c: 3, d: 10 };
+  const reviews = [{ deckId: 'c', at: 50 }, { deckId: 'a', at: 80 }, { deckId: 'c', at: 20 }];
+  ok(sortDecks(decks, 'due', reviews, (d) => due[d.id]).map((d) => d.id).join() === 'd,a,c,b', 'fällig zuerst, Gleichstand nach Name');
+  ok(sortDecks(decks, 'studied', reviews, (d) => due[d.id]).map((d) => d.id).join() === 'a,c,b,d', 'zuletzt gelernt, nie gelernte am Ende');
+  ok(sortDecks(decks, 'created', reviews, (d) => due[d.id]).map((d) => d.id).join() === 'b,c,a,d', 'zuletzt erstellt bzw. geändert');
+}
+
+console.log('Kurs-Dokumente');
+{
+  const { courseDocs, fileSize } = await import('../src/lib/courseDocs');
+  const f = (id: string) => ({ id, name: id + '.pdf', size: 2_400_000 });
+  const course = { id: 'c1', folders: [{ id: 'f2', name: 'Zweiter' }, { id: 'f1', name: 'Erster' }] };
+  const decks = [
+    { id: 'lose', name: 'Lose', courseId: 'c1', files: [f('x')] },
+    { id: 'd1', name: 'D1', courseId: 'c1', folderId: 'f1', files: [f('a'), f('b')] },
+    { id: 'd2', name: 'D2', courseId: 'c1', folderId: 'f2', files: [f('c')] },
+    { id: 'text', name: 'Word-Deck', courseId: 'c1', folderId: 'f1', source: '  Text aus Word  ' },
+    { id: 'leer', name: 'Leer', courseId: 'c1' },
+    { id: 'fremd', name: 'Fremd', courseId: 'c2', files: [f('z')], source: 'x' },
+  ];
+  const r = courseDocs(course, decks);
+  ok(r.files.map((x) => x.fileId).join() === 'c,a,b,x', 'Reihenfolge wie die Ordner, Decks ohne Ordner zuletzt');
+  ok(r.files[0].folder === 'Zweiter' && r.files[3].folder === undefined, 'Ordnername ist dabei');
+  ok(r.texts.length === 1 && r.texts[0].deckId === 'text' && r.texts[0].chars === 13, 'Decks nur mit Text in der Textliste');
+  ok(!r.files.some((x) => x.fileId === 'z') && !r.texts.some((x) => x.deckId === 'fremd'), 'fremde Kurse sind nicht dabei');
+  ok(fileSize(2_400_000) === '2,4 MB' && fileSize(830_000) === '830 KB', 'Dateigröße lesbar');
 }
 
 console.log('Kurze Decknamen');

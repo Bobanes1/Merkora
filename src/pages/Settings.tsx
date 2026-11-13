@@ -8,7 +8,58 @@ import { desktop, getState, isDesktop, replaceAll, resetAll, setApiKey, setChatK
 import { download } from '../lib/util';
 import { APP_VERSION, SECOND_MODEL, SLIDE_FIGURES } from '../config';
 import { SyncPanel } from '../components/SyncPanel';
-import { BackupsPanel, BoldSettings, CostSettings, LearningPanel, RemindersPanel, SlideFigureSettings } from '../components/SettingsExtras';
+import { BackupsPanel, BoldSettings, CostSettings, GoalSettings, LearningPanel, RemindersPanel, SlideFigureSettings } from '../components/SettingsExtras';
+
+const AREAS = [
+  { id: 'ki', label: 'KI' },
+  { id: 'lernen', label: 'Lernen' },
+  { id: 'darstellung', label: 'Darstellung' },
+  { id: 'daten', label: 'Daten & Sync' },
+  { id: 'app', label: 'Über die App' },
+] as const;
+
+/** Left (or on top on small windows): jump to an area; the one in view is marked. */
+function SettingsNav() {
+  const [active, setActive] = useState<string>(AREAS[0].id);
+  useEffect(() => {
+    const els = AREAS.map((a) => document.getElementById(a.id)).filter((e): e is HTMLElement => !!e);
+    const io = new IntersectionObserver(
+      (entries) => {
+        const vis = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+        if (vis) setActive(vis.target.id);
+      },
+      { rootMargin: '-15% 0px -70% 0px' },
+    );
+    els.forEach((e) => io.observe(e));
+    // a link like /settings#lernen opens right there
+    const h = window.location.hash.slice(1);
+    if (h && document.getElementById(h)) {
+      document.getElementById(h)!.scrollIntoView();
+      setActive(h);
+    }
+    return () => io.disconnect();
+  }, []);
+  return (
+    <nav className="settings-nav" aria-label="Bereiche der Einstellungen">
+      {AREAS.map((a) => (
+        <a
+          key={a.id}
+          href={`#${a.id}`}
+          className={active === a.id ? 'on' : ''}
+          aria-current={active === a.id ? 'true' : undefined}
+          onClick={(e) => {
+            e.preventDefault();
+            document.getElementById(a.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            window.history.replaceState(null, '', `#${a.id}`);
+            setActive(a.id);
+          }}
+        >
+          {a.label}
+        </a>
+      ))}
+    </nav>
+  );
+}
 import { checkForUpdate, installUpdate, useUpdate } from '../lib/update';
 
 
@@ -81,11 +132,15 @@ export default function Settings() {
   };
 
   return (
-    <div className="page narrow">
+    <div className="page settings-page">
       <header className="page-head">
         <h1>Einstellungen</h1>
       </header>
-
+      <div className="settings-layout">
+      <SettingsNav />
+      <div className="settings-body">
+      <div id="ki" className="settings-area">
+      <h2 className="settings-area-title">KI</h2>
       <section className="panel">
         <h2>{SECOND_MODEL ? 'KI für Inhalte' : 'KI'}</h2>
         <p className="muted">
@@ -218,15 +273,19 @@ export default function Settings() {
       </section>
 
       {SECOND_MODEL && <ChatModelPanel />}
+      </div>
 
+      <div id="lernen" className="settings-area">
+      <h2 className="settings-area-title">Lernen</h2>
       <LearningPanel />
-
+      <GoalSettings />
       <RemindersPanel />
+      </div>
 
-      <SyncPanel />
-
+      <div id="darstellung" className="settings-area">
+      <h2 className="settings-area-title">Darstellung</h2>
       <section className="panel">
-        <h2>Darstellung</h2>
+        <h2>Farbschema und Animationen</h2>
         <div className="seg" role="radiogroup" aria-label="Farbschema">
           {(
             [
@@ -252,6 +311,11 @@ export default function Settings() {
           <span>Pip, Flo und die Animationen beim Lernen anzeigen (Konfetti, Sterne, Karten-Drehungen).</span>
         </label>
       </section>
+      </div>
+
+      <div id="daten" className="settings-area">
+      <h2 className="settings-area-title">Daten & Sync</h2>
+      <SyncPanel />
 
       <section className="panel">
         <h2>Deine Daten</h2>
@@ -286,8 +350,15 @@ export default function Settings() {
           <BackupsPanel />
         </section>
       )}
+      </div>
+
+      <div id="app" className="settings-area">
+      <h2 className="settings-area-title">Über die App</h2>
       {isDesktop && <UpdatePanel />}
       <p className="muted small version-line">Merkora Version {APP_VERSION}</p>
+      </div>
+      </div>
+      </div>
       {manage && <ManagePrivacy onClose={() => setManage(false)} />}
       {confirmReset && (
         <ConfirmModal

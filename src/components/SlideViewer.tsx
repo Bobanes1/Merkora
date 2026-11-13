@@ -8,9 +8,9 @@ import { IconChevron, IconDoc, IconTrash } from './Icons';
 type Pdf = Awaited<ReturnType<typeof openPdf>>;
 
 /** The deck's presentations to leaf through (arrow keys work too); a click on a slide shows it big. */
-export function SlideViewer({ deck }: { deck: Deck }) {
+export function SlideViewer({ deck, fileId }: { deck: Deck; fileId?: string }) {
   const files = deck.files ?? [];
-  const [cur, setCur] = useState(files[0]?.id);
+  const [cur, setCur] = useState(fileId ?? files[0]?.id);
   const file = files.find((f) => f.id === cur) ?? files[0];
   const [pdf, setPdf] = useState<Pdf | null>(null);
   const [state, setState] = useState<'loading' | 'ok' | 'missing' | 'error'>('loading');

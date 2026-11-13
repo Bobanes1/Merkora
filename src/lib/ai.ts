@@ -305,6 +305,7 @@ export function cardsPrompt(text: string, count: number, focus = '', graphics = 
   return {
     system: `Du bist ein erfahrener Lerncoach und erstellst hochwertige Karteikarten. ${LANG_RULE}
 Regeln: Eine Idee pro Karte. Vorderseite = präzise Frage oder Begriff. Rückseite = kurze, vollständige Antwort (max. 2–3 Sätze).
+${TERM_RULE}
 Wähle prüfungsorientiert aus: Karten zu dem, was in einer Prüfung zu diesem Stoff gefragt werden kann – nicht zu Organisatorischem, Agenda oder Literaturlisten.${boldOn() ? '\n' + EMPHASIS_RULE : ''}
 ${graphics ? DIAGRAM_RULE + '\n' : ''}${figures ? FIGURE_RULE + '\n' : ''}Format: {"cards":[{"front":"...","back":"..."${graphics ? ',"diagram":{…} (optional)' : ''}${figures ? ',"figure":7 (optional)' : ''}}]}${JSON_RULE}`,
     user: `${
@@ -572,7 +573,8 @@ export async function improveCard(front: string, back: string, lapses: number): 
 Schlage drei Wege vor:
 - "rewrite": dieselbe Karte klarer – eindeutige, konkrete Frage, kurze Antwort mit dem Kern zuerst.
 - "mnemonic": eine kurze, einprägsame Eselsbrücke oder ein Bild zum Merken (1–2 Sätze).
-- "split": 2–3 kleinere Karten, die zusammen dasselbe abfragen (je eine Sache pro Karte).${boldOn() ? '\n' + EMPHASIS_RULE : ''}
+- "split": 2–3 kleinere Karten, die zusammen dasselbe abfragen (je eine Sache pro Karte).
+${TERM_RULE}${boldOn() ? '\n' + EMPHASIS_RULE : ''}
 Format: {"rewrite":{"front":"...","back":"..."},"mnemonic":"...","split":[{"front":"...","back":"..."}]}`,
     `Frage: ${front}\nAntwort: ${back}`,
     1500,
@@ -608,18 +610,30 @@ Format: {"center":"…","branches":[{"label":"…","children":["…","…"]}],"i
 export const boldOn = () => getState().data.settings.boldKeywords !== false;
 
 /** A new version of one card about the same topic (optionally with a wish like "kürzer"), from the matching material. */
-export async function regenerateCard(front: string, back: string, material: string, wish: string): Promise<{ front: string; back: string }> {
-  const r = await completeJson<{ front?: unknown; back?: unknown }>(
-    `Du schreibst eine Lernkarte neu – zum selben Thema, aber besser: eine präzise Frage und eine kurze, vollständige Antwort (max. 2–3 Sätze). ${LANG_RULE}${boldOn() ? '\n' + EMPHASIS_RULE : ''}
-Format: {"front":"...","back":"..."}`,
-    `Bisherige Karte:\nFrage: ${front}\nAntwort: ${back}${wish.trim() ? `\n\nWunsch: ${wish.trim()}` : ''}${material ? `\n\nPassendes Lernmaterial:\n${material}` : ''}`,
-    900,
+export async function regenerateCard(
+  front: string,
+  back: string,
+  material: string,
+  wish: string,
+  graphic = false,
+): Promise<{ front: string; back: string; diagram?: Diagram }> {
+  const r = await completeJson<{ front?: unknown; back?: unknown; diagram?: unknown }>(
+    `Du schreibst eine Lernkarte neu – zum selben Thema, aber besser: eine präzise Frage und eine kurze, vollständige Antwort (max. 2–3 Sätze). ${LANG_RULE}
+${TERM_RULE}${boldOn() ? '\n' + EMPHASIS_RULE : ''}${graphic ? '\n' + DIAGRAM_RULE : ''}
+Format: {"front":"...","back":"..."${graphic ? ',"diagram":{…} (optional)' : ''}}`,
+    `Bisherige Karte:\nFrage: ${front}\nAntwort: ${back}${wish.trim() ? `\n\nWunsch (hat Vorrang): ${wish.trim()}` : ''}${material ? `\n\nPassendes Lernmaterial:\n${material}` : ''}`,
+    graphic ? 1400 : 900,
     'chat',
   );
   const f = String(r.front ?? '').trim(), b = String(r.back ?? '').trim();
   if (!f || !b) throw new AiError('Die KI hat keine brauchbare Karte geliefert. Versuch es noch einmal.');
-  return { front: f, back: b };
+  const diagram = graphic && r.diagram ? (parseDiagram(r.diagram) ?? undefined) : undefined;
+  return { front: f, back: b, diagram };
 }
+
+/** Single terms: a short, still understandable definition – the 2–3 sentences are for explanations. */
+export const TERM_RULE =
+  'Geht es um einen einzelnen Begriff, antworte mit einer klaren Definition in eigenen, verständlichen Worten (meist ein Satz). Ist der Begriff ohne Vorwissen schwer greifbar, ergänze einen kurzen Halbsatz zur Bedeutung oder ein kleines Beispiel („z. B. …“). Lass Füllwörter, Einleitungen und die Wiederholung der Frage weg – die Antwort soll knapp, aber für jemanden ohne das Lernmaterial verständlich sein. Die 2–3 Sätze sind für Erklärungen und Zusammenhänge gedacht.';
 
 /** A short explanation of a term of the mind map, in the context of the deck and its branch. */
 export async function explainTerm(term: string, branch: string, deckName: string, material: string): Promise<string> {

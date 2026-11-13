@@ -3,26 +3,52 @@ import { Link, useNavigate } from 'react-router-dom';
 import { AnkiImport } from '../components/AnkiImport';
 import { CreateWithAI } from '../components/CreateWithAI';
 import { ExamDialog } from '../components/ExamDialog';
-import { IconCalendar, IconCards, IconChevron, IconFlame, IconPlay, IconPlus, IconSparkle, IconStar, IconUpload } from '../components/Icons';
+import { IconCalendar, IconCards, IconChevron, IconFlame, IconPlay, IconPlus, IconSparkle, IconStar, IconTarget, IconUpload } from '../components/Icons';
 import { FoldPanel } from '../components/FoldPanel';
 import { Mascot } from '../components/Mascot';
 import { TodoList } from '../components/TodoList';
-import { pipPoke, type PokeMove } from '../lib/pipLines';
+import { pokeMove, type PokeMove } from '../lib/pipLines';
 import { todoGroups } from '../lib/todos';
 import { NoKeyHint } from '../components/NoKey';
 import { Pomodoro } from '../components/Pomodoro';
-import { countdownText, dailyPlan, daysUntil, examAt, readiness, upcomingExams } from '../lib/exams';
-import { pathProgress, xpStreak, xpToday } from '../lib/path';
-import { masteryPercent, streak } from '../lib/stats';
+import { countdownText, dailyPlan, readiness, upcomingExams } from '../lib/exams';
+import { pathProgress, playerLevel, totalXp, xpStreak, xpToday } from '../lib/path';
+import { masteryPercent, sortDecks, streak, studyDays, type DeckSort } from '../lib/stats';
 import { deckUrl, dueCards, setSettings, useStore, type Deck } from '../lib/store';
-import { DAY, dayKey, startOfDay } from '../lib/util';
+import { dayKey } from '../lib/util';
 import { shortName } from '../lib/deckNames';
 import { WeekReview } from '../components/WeekReview';
-import { GameBar } from './tabs/PathTab';
 
-const CARD_GOAL = 50;
-const MINUTE_GOAL = 60;
-type Tab = 'tasks' | 'decks' | 'recent' | 'quick';
+type Tab = 'tasks' | 'decks' | 'quick';
+const DECK_SORTS: { id: DeckSort; label: string }[] = [
+  { id: 'due', label: 'Fällig zuerst' },
+  { id: 'studied', label: 'Zuletzt gelernt' },
+  { id: 'created', label: 'Zuletzt erstellt' },
+];
+
+/** Streak, today's XP and level as one quiet line under the greeting (goals are set in the settings). */
+function HeroStats({ serie }: { serie: number }) {
+  const data = useStore((s) => s.data);
+  const today = xpToday(data);
+  const goal = data.game.dailyGoal;
+  const lvl = playerLevel(totalXp(data));
+  return (
+    <p className="hero-stats">
+      <span className={today > 0 ? 'lit' : ''} title="Tage in Folge gelernt">
+        <IconFlame size={14} /> {serie} {serie === 1 ? 'Tag' : 'Tage'} Serie
+      </span>
+      <span title="XP heute – Ziel ändern unter Einstellungen › Lernen">
+        <IconTarget size={14} /> {Math.min(today, goal)} / {goal} XP heute
+        <i className="hero-stats-bar">
+          <i style={{ width: `${Math.min(100, (today / Math.max(1, goal)) * 100)}%` }} />
+        </i>
+      </span>
+      <span title={`${lvl.into} von ${lvl.need} XP bis Stufe ${lvl.level + 1}`}>
+        <IconStar size={14} /> Stufe {lvl.level}
+      </span>
+    </p>
+  );
+}
 
 /** Progress ring for the widgets on the right. */
 function Ring({ value, goal, color, children }: { value: number; goal: number; color: string; children: ReactNode }) {
@@ -89,10 +115,11 @@ export default function Dashboard() {
   useEffect(() => {
     document.title = 'Start – Merkora';
   }, []);
-  // Pip on the banner reacts to clicks: a short move and a line, then he is calm again
-  const [poke, setPoke] = useState<{ n: number; text: string; move: PokeMove; active: boolean } | null>(null);
-  const pokeTimers = useRef<number[]>([]);
-  useEffect(() => () => pokeTimers.current.forEach((t) => clearTimeout(t)), []);
+  // Pip on the banner reacts to taps with a short move, then he is calm again
+  const [poke, setPoke] = useState<{ n: number; move: PokeMove; active: boolean } | null>(null);
+  const pokeTimer = useRef<number>();
+  useEffect(() => () => clearTimeout(pokeTimer.current), []);
+  const [deckQuery, setDeckQuery] = useState('');
 
   const now = Date.now();
   const today = dayKey(now);
@@ -109,16 +136,15 @@ export default function Dashboard() {
   const urgentTodos = todoGroups(openTodos, now)
     .filter((g) => g.id === 'overdue' || g.id === 'today')
     .reduce((a, g) => a + g.items.length, 0);
+  const cardGoal = data.settings.cardGoal ?? 50;
+  const minuteGoal = data.settings.minuteGoal ?? 60;
+  const deckSort = data.settings.homeDeckSort ?? 'due';
   const pokePip = () => {
     const n = (poke?.n ?? -1) + 1;
-    const next = exams[0];
-    const r = pipPoke({ cardsToday, exam: next ? { title: next.title, days: daysUntil(next, now) } : undefined }, n);
-    pokeTimers.current.forEach((t) => clearTimeout(t));
-    setPoke({ n, ...r, active: true });
-    pokeTimers.current = [
-      window.setTimeout(() => setPoke((p) => (p && p.n === n ? { ...p, active: false } : p)), r.move === 'flip' ? 1000 : 1700),
-      window.setTimeout(() => setPoke((p) => (p && p.n === n ? null : p)), 3200),
-    ];
+    const move = pokeMove(n);
+    clearTimeout(pokeTimer.current);
+    setPoke({ n, move, active: true });
+    pokeTimer.current = window.setTimeout(() => setPoke((p) => (p && p.n === n ? { ...p, active: false } : p)), move === 'flip' ? 1000 : 1700);
   };
   const restMood = goalReached ? 'cheer' : serie > 0 ? 'happy' : 'wave';
   const pathDeck = data.decks
@@ -130,8 +156,7 @@ export default function Dashboard() {
 
   const tabs: { id: Tab; label: string; icon: ReactNode }[] = [
     { id: 'tasks', label: 'Aufgaben', icon: <IconCalendar size={16} /> },
-    { id: 'decks', label: 'Karteikarten', icon: <IconCards size={16} /> },
-    { id: 'recent', label: 'Zuletzt erstellt', icon: <IconStar size={16} /> },
+    { id: 'decks', label: 'Meine Decks', icon: <IconCards size={16} /> },
     { id: 'quick', label: 'Schnell erstellen', icon: <IconSparkle size={16} /> },
   ];
 
@@ -146,7 +171,6 @@ export default function Dashboard() {
               pulse={poke ? `${poke.n}${poke.active ? 'a' : 'r'}` : undefined}
               size={104}
               className="hero-mascot"
-              say={poke?.text}
             />
           </button>
           <div>
@@ -158,6 +182,7 @@ export default function Dashboard() {
                   ? `Heute ${due === 1 ? 'ist 1 Karte' : `sind ${due} Karten`} fällig. Bereit, wenn du es bist.`
                   : 'Alles wiederholt. Bereit, wenn du es bist.'}
             </p>
+            <HeroStats serie={serie} />
           </div>
           {dueDecks[0] && (
             <Link to={deckUrl(data, dueDecks[0], 'learn')} className="btn hero-btn">
@@ -181,9 +206,8 @@ export default function Dashboard() {
 
         {tab === 'tasks' && (
           <div className="home-panel">
-            <GameBar />
             {pathDeck && (
-              <Link to={deckUrl(data, pathDeck.deck, 'path')} className="path-cta">
+              <Link to={deckUrl(data, pathDeck.deck, 'path') + '&play=1'} className="path-cta">
                 <span className="path-cta-icon">
                   <IconStar size={24} />
                 </span>
@@ -196,6 +220,14 @@ export default function Dashboard() {
                 <span className="btn primary sm">{pathDeck.p.done ? 'Weiterspielen' : 'Starten'}</span>
               </Link>
             )}
+            <FoldPanel
+              title="To-dos"
+              summary={openTodos.length ? `${openTodos.length} offen${urgentTodos ? ` · ${urgentTodos} heute oder überfällig` : ''}` : undefined}
+              collapsed={!!data.settings.homeTodosCollapsed}
+              onToggle={() => setSettings({ homeTodosCollapsed: !data.settings.homeTodosCollapsed })}
+            >
+              <TodoList />
+            </FoldPanel>
             {exams.length > 0 && (
               <section className="panel">
                 <div className="panel-head">
@@ -249,14 +281,6 @@ export default function Dashboard() {
                 </div>
               </FoldPanel>
             )}
-            <FoldPanel
-              title="To-dos"
-              summary={openTodos.length ? `${openTodos.length} offen${urgentTodos ? ` · ${urgentTodos} heute oder überfällig` : ''}` : undefined}
-              collapsed={!!data.settings.homeTodosCollapsed}
-              onToggle={() => setSettings({ homeTodosCollapsed: !data.settings.homeTodosCollapsed })}
-            >
-              <TodoList />
-            </FoldPanel>
             {!exams.length && !dueDecks.length && (
               <div className="home-empty">
                 <Mascot who="pip" mood="think" size={120} />
@@ -273,32 +297,36 @@ export default function Dashboard() {
         {tab === 'decks' && (
           <div className="home-panel">
             {data.decks.length ? (
-              <div className="deck-list">
-                {[...data.decks]
-                  .sort((a, b) => dueCards(b).length - dueCards(a).length || a.name.localeCompare(b.name))
-                  .map((d) => (
+              <>
+                <div className="deck-tools">
+                  <div className="seg compact" role="radiogroup" aria-label="Sortierung">
+                    {DECK_SORTS.map((o) => (
+                      <button key={o.id} type="button" role="radio" aria-checked={deckSort === o.id} className={deckSort === o.id ? 'on' : ''} onClick={() => setSettings({ homeDeckSort: o.id === 'due' ? undefined : o.id })}>
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
+                  {data.decks.length > 8 && (
+                    <input className="input deck-search" placeholder="Deck suchen …" aria-label="Deck suchen" value={deckQuery} onChange={(e) => setDeckQuery(e.target.value)} />
+                  )}
+                </div>
+                <div className="deck-list">
+                  {sortDecks(
+                    data.decks.filter((d) => !deckQuery.trim() || d.name.toLowerCase().includes(deckQuery.trim().toLowerCase())),
+                    deckSort,
+                    data.reviews,
+                    (d) => dueCards(d).length,
+                  ).map((d) => (
                     <DeckRow key={d.id} deck={d} />
                   ))}
-              </div>
+                </div>
+              </>
             ) : (
               <p className="muted">Noch keine Decks.</p>
             )}
             <Link to="/library" className="small-link">
               Zur Bibliothek <IconChevron size={12} />
             </Link>
-          </div>
-        )}
-
-        {tab === 'recent' && (
-          <div className="home-panel">
-            <div className="deck-list">
-              {[...data.decks]
-                .sort((a, b) => (b.updatedAt ?? b.createdAt) - (a.updatedAt ?? a.createdAt))
-                .slice(0, 8)
-                .map((d) => (
-                  <DeckRow key={d.id} deck={d} />
-                ))}
-            </div>
           </div>
         )}
 
@@ -324,15 +352,14 @@ export default function Dashboard() {
       </div>
 
       <aside className="home-rail">
-        <WeekStreak serie={serie} />
         <div className="widget">
           <div>
             <small>Heute gelernte Karten</small>
             <b className="w-num">
-              <span className="green">{cardsToday}</span> /{CARD_GOAL}
+              <span className="green">{cardsToday}</span> /{cardGoal}
             </b>
           </div>
-          <Ring value={cardsToday} goal={CARD_GOAL} color="var(--primary)">
+          <Ring value={cardsToday} goal={cardGoal} color="var(--primary)">
             <IconCards size={20} />
           </Ring>
         </div>
@@ -340,10 +367,10 @@ export default function Dashboard() {
           <div>
             <small>Lernzeit heute (Min.)</small>
             <b className="w-num">
-              <span className="amber">{minutesToday}</span> /{MINUTE_GOAL}
+              <span className="amber">{minutesToday}</span> /{minuteGoal}
             </b>
           </div>
-          <Ring value={minutesToday} goal={MINUTE_GOAL} color="#f2b84b">
+          <Ring value={minutesToday} goal={minuteGoal} color="#f2b84b">
             <IconFlame size={20} />
           </Ring>
         </div>
@@ -360,36 +387,7 @@ export default function Dashboard() {
   );
 }
 
-const WD = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
-
-/** This week Monday–Sunday: learned days filled, today outlined. */
-function WeekStreak({ serie }: { serie: number }) {
-  const data = useStore((s) => s.data);
-  const today = startOfDay(Date.now());
-  const monday = today - ((new Date(today).getDay() + 6) % 7) * DAY;
-  const learned = new Set([...data.reviews.map((r) => dayKey(r.at)), ...Object.keys(data.game.xpByDay).filter((k) => data.game.xpByDay[k] > 0)]);
-  return (
-    <div className="widget streak-widget">
-      <b className="streak-title">
-        <IconFlame size={18} /> {serie} {serie === 1 ? 'Tag' : 'Tage'} Serie
-      </b>
-      <div className="streak-days">
-        {WD.map((w, i) => {
-          const d = monday + i * DAY;
-          const k = dayKey(d);
-          return (
-            <span key={w} className={`sd ${learned.has(k) ? 'done' : ''} ${d === today ? 'today' : ''} ${d > today ? 'future' : ''}`}>
-              <i>{new Date(d).getDate()}</i>
-              <small>{w}</small>
-            </span>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-/** Small month calendar; exam days are marked and link to the calendar. */
+/** Small month calendar: exam days are filled, days you studied get a small orange dot. */
 function MiniCalendar() {
   const data = useStore((s) => s.data);
   const [month, setMonth] = useState(() => {
@@ -397,6 +395,7 @@ function MiniCalendar() {
     return new Date(d.getFullYear(), d.getMonth(), 1);
   });
   const examDays = new Map(data.exams.map((e) => [e.date, e.title]));
+  const studied = studyDays(data.reviews);
   const first = (month.getDay() + 6) % 7;
   const n = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
   const today = dayKey(Date.now());
@@ -427,8 +426,10 @@ function MiniCalendar() {
         {Array.from({ length: n }, (_, i) => {
           const k = dayKey(new Date(month.getFullYear(), month.getMonth(), i + 1).getTime());
           const ex = examDays.get(k);
+          const learned = studied.get(k) ?? 0;
+          const tip = [ex, learned ? `gelernt: ${learned} ${learned === 1 ? 'Karte' : 'Karten'}` : ''].filter(Boolean).join(' · ');
           return (
-            <Link key={k} to="/calendar" className={`mcal-day ${k === today ? 'today' : ''} ${ex ? 'exam' : ''}`} title={ex ?? ''}>
+            <Link key={k} to="/calendar" className={`mcal-day ${k === today ? 'today' : ''} ${ex ? 'exam' : ''} ${learned ? 'studied' : ''}`} title={tip}>
               {i + 1}
             </Link>
           );

@@ -47,7 +47,7 @@ export function CostHint({ est, label, className = '' }: { est: Estimate; label?
         </>
       ) : (
         <>
-          Preis unbekannt – <Link to="/settings">eigenen Preis eintragen</Link>
+          Preis unbekannt – <Link to="/settings#ki">eigenen Preis eintragen</Link>
         </>
       )}
     </p>

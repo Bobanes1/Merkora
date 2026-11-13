@@ -13,7 +13,7 @@ import {
   setBackupDir,
   type BackupInfo,
 } from '../lib/desktop';
-import { flush, replaceAll, setSettings, useStore } from '../lib/store';
+import { flush, replaceAll, setDailyGoal, setSettings, useStore } from '../lib/store';
 import { ConfirmModal } from './Modal';
 
 /** Daily reminder, tray, autostart and the Pomodoro lengths. */
@@ -416,5 +416,35 @@ function SpeechSettings() {
         </>
       )}
     </>
+  );
+}
+
+/** Daily goals in one place: XP (learning path, start page), cards learned and minutes (rings on the start page). */
+export function GoalSettings() {
+  const xp = useStore((x) => x.data.game.dailyGoal);
+  const s = useStore((x) => x.data.settings);
+  const row = (label: string, hint: string, value: number, options: number[], unit: string, set: (n: number) => void) => (
+    <div className="goal-row">
+      <span>
+        <b>{label}</b>
+        <small className="muted">{hint}</small>
+      </span>
+      <div className="seg compact" role="radiogroup" aria-label={label}>
+        {options.map((o) => (
+          <button key={o} type="button" role="radio" aria-checked={value === o} className={value === o ? 'on' : ''} onClick={() => set(o)}>
+            {o} {unit}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+  return (
+    <section className="panel">
+      <h2>Ziele</h2>
+      <p className="muted">Deine Tagesziele für die Startseite und den Lernpfad.</p>
+      {row('XP pro Tag', 'Punkte aus Lernen, Lernpfad und Quiz', xp, [20, 50, 100, 200], 'XP', setDailyGoal)}
+      {row('Karten pro Tag', 'heute gelernte Karten', s.cardGoal ?? 50, [20, 50, 100, 150], '', (n) => setSettings({ cardGoal: n }))}
+      {row('Lernminuten pro Tag', 'Lernzeit inkl. Fokus-Timer', s.minuteGoal ?? 60, [15, 30, 60, 90], 'Min.', (n) => setSettings({ minuteGoal: n }))}
+    </section>
   );
 }
