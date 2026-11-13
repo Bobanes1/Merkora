@@ -1,10 +1,10 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 
 export type Mood = 'idle' | 'happy' | 'sad' | 'think' | 'cheer' | 'wave';
-export type Who = 'pip' | 'flo';
+export type Who = 'pip' | 'flo' | 'tilda';
 
 /**
- * The two animated companions: Pip the dolphin (tutor, reacts while you learn) and Flo the fox (streaks and goals).
+ * The animated companions: Pip the dolphin (reacts while you learn), Flo the fox (streaks and goals) and Tilda the turtle (tutor in the chat).
  * Pure SVG + CSS animations; a new `pulse` value replays the reaction.
  */
 export function Mascot({
@@ -27,7 +27,7 @@ export function Mascot({
   return (
     <div className={`mascot-wrap say-${side} ${className}`}>
       <div key={`${mood}-${pulse ?? ''}`} className={`mascot m-${who} mood-${mood}`} style={{ width: size, height: size }} aria-hidden="true">
-        {who === 'pip' ? <Dolphin mood={mood} /> : <Fox mood={mood} />}
+        {who === 'pip' ? <Dolphin mood={mood} /> : who === 'tilda' ? <Turtle mood={mood} /> : <Fox mood={mood} />}
       </div>
       {say && (
         <div className="m-say" role="status" key={say}>
@@ -170,6 +170,121 @@ function Fox({ mood }: { mood: Mood }) {
           <path d="M100 18l1.6 4.4 4.4 1.6-4.4 1.6-1.6 4.4-1.6-4.4-4.4-1.6 4.4-1.6z" />
         </g>
       )}
+    </svg>
+  );
+}
+
+const SHELL = '#3f9a5a';
+const SHELL_DARK = '#2c7543';
+const SKIN = '#8fd19a';
+const SKIN_DARK = '#5fae6e';
+const PLATE = '#f4e6b2';
+const INK = '#14301f';
+
+/** Tilda the turtle: calm, patient tutor in the chat (reading glasses, slow swimming). */
+function Turtle({ mood }: { mood: Mood }) {
+  return (
+    <svg viewBox="0 0 120 120" width="100%" height="100%">
+      <ellipse className="m-shadow" cx="60" cy="113" rx="30" ry="4" fill="rgba(10, 50, 25,.16)" />
+      <g className="m-body">
+        {/* back feet */}
+        <ellipse cx="44" cy="105" rx="8" ry="5" fill={SKIN_DARK} />
+        <ellipse cx="76" cy="105" rx="8" ry="5" fill={SKIN_DARK} />
+        {/* front flippers */}
+        <path className="m-wing-l" d="M34 74 C20 72 10 80 9 90 C18 92 28 87 36 81z" fill={SKIN} stroke={SKIN_DARK} strokeWidth="1.5" />
+        <path className="m-wing-r" d="M86 74 C100 72 110 80 111 90 C102 92 92 87 84 81z" fill={SKIN} stroke={SKIN_DARK} strokeWidth="1.5" />
+        {/* shell with its pattern, belly plate in front */}
+        <ellipse cx="60" cy="82" rx="31" ry="26" fill={SHELL} stroke={SHELL_DARK} strokeWidth="2.5" />
+        <g fill="#56b46f" stroke={SHELL_DARK} strokeWidth="1.2">
+          <path d="M33 72l5-4 6 1 2 6-4 5-6-1z" />
+          <path d="M31 88l5-3 5 2 1 5-4 4-5-2z" />
+          <path d="M87 72l-5-4-6 1-2 6 4 5 6-1z" />
+          <path d="M89 88l-5-3-5 2-1 5 4 4 5-2z" />
+        </g>
+        <ellipse cx="60" cy="85" rx="19" ry="19" fill={PLATE} />
+        <path d="M60 67v36M43 79h34M43 91h34" stroke="#dcc483" strokeWidth="1.6" fill="none" />
+        <g className="m-head">
+          {/* neck and head */}
+          <ellipse cx="60" cy="60" rx="11" ry="8" fill={SKIN_DARK} />
+          <ellipse cx="60" cy="40" rx="26" ry="23" fill={SKIN} />
+          <ellipse cx="60" cy="50" rx="13" ry="6" fill="#a9ddb1" />
+          <circle cx="56" cy="46" r="1.2" fill={INK} />
+          <circle cx="64" cy="46" r="1.2" fill={INK} />
+          <path d={mood === 'sad' ? 'M53 55q7-5 14 0' : 'M52 52q8 7 16 0'} stroke={INK} strokeWidth="2.3" fill="none" strokeLinecap="round" />
+          {/* eyes */}
+          <circle cx="48" cy="36" r="8.5" fill="#fff" />
+          <circle cx="72" cy="36" r="8.5" fill="#fff" />
+          {happyEyes(mood) ? (
+            <path d="M42 38q6-7 12 0M66 38q6-7 12 0" stroke={INK} strokeWidth="3.2" fill="none" strokeLinecap="round" />
+          ) : (
+            <g className="m-pupils">
+              <circle cx="49" cy="37" r="4.6" fill={INK} />
+              <circle cx="71" cy="37" r="4.6" fill={INK} />
+              <circle cx="50.6" cy="35" r="1.6" fill="#fff" />
+              <circle cx="72.6" cy="35" r="1.6" fill="#fff" />
+            </g>
+          )}
+          {!happyEyes(mood) && (
+            <g className="m-lids" fill={SKIN}>
+              <rect x="39" y="27" width="18" height="18" rx="9" />
+              <rect x="63" y="27" width="18" height="18" rx="9" />
+            </g>
+          )}
+          {mood === 'sad' && <path d="M40 24l12 4M80 24l-12 4" stroke={INK} strokeWidth="2.4" strokeLinecap="round" />}
+          {/* reading glasses (pushed up while thinking) */}
+          <g className="m-glasses" fill="none" stroke="#7a4e2a" strokeWidth="2.2">
+            <circle cx="48" cy="36" r="10.5" />
+            <circle cx="72" cy="36" r="10.5" />
+            <path d="M58.5 35q1.5-2 3 0M37.5 34l-5-2M82.5 34l5-2" strokeLinecap="round" />
+          </g>
+          <circle cx="38" cy="47" r="3.8" fill="#f6a5c0" opacity={happyEyes(mood) ? 0.85 : 0.45} />
+          <circle cx="82" cy="47" r="3.8" fill="#f6a5c0" opacity={happyEyes(mood) ? 0.85 : 0.45} />
+        </g>
+      </g>
+      {mood === 'think' && (
+        <g className="m-bubbles" fill="none" stroke="#7fd0f2" strokeWidth="2">
+          <circle cx="98" cy="30" r="3.5" />
+          <circle cx="104" cy="19" r="4.5" />
+          <circle cx="112" cy="7" r="5.5" />
+        </g>
+      )}
+      {mood === 'cheer' && (
+        <g className="m-sparks" fill="#f2b84b">
+          <path d="M14 22l2 6 6 2-6 2-2 6-2-6-6-2 6-2z" />
+          <path d="M104 36l1.6 4.4 4.4 1.6-4.4 1.6-1.6 4.4-1.6-4.4-4.4-1.6 4.4-1.6z" />
+        </g>
+      )}
+      {(mood === 'happy' || mood === 'wave') && (
+        <g className="m-bubbles" fill="none" stroke="#9fdcf4" strokeWidth="1.8">
+          <circle cx="94" cy="20" r="3" />
+          <circle cx="101" cy="11" r="2" />
+          <circle cx="88" cy="11" r="1.6" />
+        </g>
+      )}
+    </svg>
+  );
+}
+
+/** Tilda's head, small and still (avatar next to her answers). */
+export function TildaFace({ size = 24 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 40 40" width={size} height={size} aria-hidden="true">
+      <ellipse cx="20" cy="21" rx="17" ry="15.5" fill={SKIN} />
+      <ellipse cx="20" cy="28" rx="8.5" ry="4" fill="#a9ddb1" />
+      <path d="M15.5 28.5q4.5 3.6 9 0" stroke={INK} strokeWidth="1.4" fill="none" strokeLinecap="round" />
+      <circle cx="13" cy="18.5" r="5.2" fill="#fff" />
+      <circle cx="27" cy="18.5" r="5.2" fill="#fff" />
+      <circle cx="13.6" cy="19" r="2.8" fill={INK} />
+      <circle cx="26.4" cy="19" r="2.8" fill={INK} />
+      <circle cx="14.5" cy="17.9" r=".9" fill="#fff" />
+      <circle cx="27.3" cy="17.9" r=".9" fill="#fff" />
+      <g fill="none" stroke="#7a4e2a" strokeWidth="1.4">
+        <circle cx="13" cy="18.5" r="6.4" />
+        <circle cx="27" cy="18.5" r="6.4" />
+        <path d="M19.4 18q.6-1 1.2 0" />
+      </g>
+      <circle cx="7" cy="25" r="2" fill="#f6a5c0" opacity=".6" />
+      <circle cx="33" cy="25" r="2" fill="#f6a5c0" opacity=".6" />
     </svg>
   );
 }

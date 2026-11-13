@@ -4,18 +4,14 @@ import { estimate } from '../lib/costs';
 import { hasKey, materialFrom, tutorReply } from '../lib/ai';
 import { getState, updateDeck, type Deck } from '../lib/store';
 import { IconClose, IconRefresh, IconSend } from './Icons';
+import { Mascot, TildaFace, type Mood } from './Mascot';
 import { Markdown } from './Markdown';
 import { NoKeyNotice } from './NoKey';
 
 const SUGGESTIONS = ['Fasse dieses Deck für mich zusammen.', 'Stell mir eine prüfungsähnliche Frage.', 'Wie lerne ich das am besten?'];
 
-export function TutorFace({ size = 64 }: { size?: number }) {
-  return (
-    <svg viewBox="0 0 40 40" width={size} height={size} aria-hidden="true">
-      <path d="M19 9 C21 4 26 2 29 2.5 C27 5 26 8 26 11z" fill="#2489bf" /><circle cx="20" cy="22" r="15" fill="#45b4e3" /><ellipse cx="20" cy="28" rx="8.5" ry="7" fill="#e3f6fd" /><ellipse cx="20" cy="26" rx="5" ry="3" fill="#9fdcf4" /><path d="M17 26.2q3 2.6 6 0" stroke="#0b2540" strokeWidth="1.2" fill="none" strokeLinecap="round" /><circle cx="14" cy="19" r="4.6" fill="#fff" /><circle cx="26" cy="19" r="4.6" fill="#fff" /><circle cx="14.4" cy="19.4" r="2.5" fill="#0b2540" /><circle cx="25.6" cy="19.4" r="2.5" fill="#0b2540" /><circle cx="15.3" cy="18.4" r=".9" fill="#fff" /><circle cx="26.5" cy="18.4" r=".9" fill="#fff" /><circle cx="10" cy="24.5" r="1.8" fill="#f6a5c0" opacity={0.7} /><circle cx="30" cy="24.5" r="1.8" fill="#f6a5c0" opacity={0.7} />
-    </svg>
-  );
-}
+/** Tilda's head – still, small (kept under the old name for other places). */
+export const TutorFace = ({ size = 64 }: { size?: number }) => <TildaFace size={size} />;
 
 export function ChatPanel({ deck, onClose }: { deck: Deck; onClose: () => void }) {
   const [input, setInput] = useState('');
@@ -23,6 +19,17 @@ export function ChatPanel({ deck, onClose }: { deck: Deck; onClose: () => void }
   const [error, setError] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
   const msgs = deck.chat;
+  // Tilda's mood follows the conversation: thinking while the answer comes, happy when it is there, sad on errors
+  const [mood, setMood] = useState<Mood>('idle');
+  const [pulse, setPulse] = useState(0);
+  const calm = useRef<number>();
+  const feel = (m: Mood, ms?: number) => {
+    window.clearTimeout(calm.current);
+    setMood(m);
+    setPulse((p) => p + 1);
+    if (ms) calm.current = window.setTimeout(() => setMood('idle'), ms);
+  };
+  useEffect(() => () => window.clearTimeout(calm.current), []);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end' });
@@ -36,12 +43,15 @@ export function ChatPanel({ deck, onClose }: { deck: Deck; onClose: () => void }
     const history = [...deck.chat, { role: 'user' as const, content: t }];
     updateDeck(deck.id, { chat: history });
     setBusy(true);
+    feel('think');
     try {
       const fresh = getState().data.decks.find((d) => d.id === deck.id) ?? deck;
       const reply = await tutorReply(fresh.name, materialFrom(fresh.source, fresh.cards, 16000), history);
       updateDeck(deck.id, (d) => ({ chat: [...d.chat, { role: 'assistant', content: reply.trim() || '…' }] }));
+      feel('happy', 2500);
     } catch (e) {
       setError((e as Error).message);
+      feel('sad', 4000);
     } finally {
       setBusy(false);
     }
@@ -52,7 +62,10 @@ export function ChatPanel({ deck, onClose }: { deck: Deck; onClose: () => void }
   return (
     <aside className="chat-panel" aria-label="KI-Tutor">
       <div className="chat-head">
-        <b>Tutor Pip</b>
+        <button type="button" className="chat-tilda" aria-label="Tilda" title="Hallo, ich bin Tilda!" onClick={() => !busy && feel('cheer', 2200)}>
+          <Mascot who="tilda" mood={mood} pulse={pulse} size={38} />
+        </button>
+        <b>Tutorin Tilda</b>
         <span className="grow" />
         {msgs.length > 0 && (
           <button type="button" className="btn ghost sm" onClick={() => updateDeck(deck.id, { chat: [] })}>
@@ -68,7 +81,7 @@ export function ChatPanel({ deck, onClose }: { deck: Deck; onClose: () => void }
           <NoKeyNotice compact />
         ) : msgs.length === 0 ? (
           <div className="chat-empty">
-            <TutorFace />
+            <Mascot who="tilda" mood="wave" size={104} />
             <p>Hallo! Wobei kann ich dir bei „{deck.name}“ helfen?</p>
             {SUGGESTIONS.map((s) => (
               <button type="button" key={s} className="chip" onClick={() => send(s)}>
@@ -77,13 +90,31 @@ export function ChatPanel({ deck, onClose }: { deck: Deck; onClose: () => void }
             ))}
           </div>
         ) : (
-          msgs.map((m, i) => (
-            <div key={i} className={`msg ${m.role}`}>
-              {m.role === 'assistant' ? <Markdown text={m.content} /> : m.content}
-            </div>
-          ))
+          msgs.map((m, i) =>
+            m.role === 'assistant' ? (
+              <div key={i} className="msg-row">
+                <TildaFace size={26} />
+                <div className={`msg assistant${i === msgs.length - 1 ? ' msg-in' : ''}`}>
+                  <Markdown text={m.content} />
+                </div>
+              </div>
+            ) : (
+              <div key={i} className={`msg ${m.role}`}>
+                {m.content}
+              </div>
+            ),
+          )
         )}
-        {busy && <div className="msg assistant typing">Pip denkt nach …</div>}
+        {busy && (
+          <div className="msg-row" role="status" aria-label="Tilda denkt nach">
+            <TildaFace size={26} />
+            <div className="msg assistant typing-dots" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </div>
+          </div>
+        )}
         {error && (
           <div className="form-error" role="alert">
             {error}

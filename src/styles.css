@@ -6708,3 +6708,81 @@ a.deck-row:hover {
 .fc-label { display: inline-flex; align-items: center; gap: 4px; }
 .fc-speak { width: 26px; height: 26px; padding: 0; color: var(--muted); }
 .fc-speak[aria-pressed='true'] { color: var(--primary); }
+
+/* Tilda the turtle: slower and calmer than Pip */
+.mascot .m-glasses,
+.mascot .m-bubbles circle {
+  transform-box: fill-box;
+}
+.mascot.m-tilda .m-body,
+.mascot.m-tilda .m-shadow {
+  animation-duration: 3.8s;
+}
+.mascot.m-tilda .m-wing-l {
+  transform-origin: 95% 30%;
+  animation: m-paddle-l 3.8s ease-in-out infinite;
+}
+.mascot.m-tilda .m-wing-r {
+  transform-origin: 5% 30%;
+  animation: m-paddle-r 3.8s ease-in-out infinite;
+}
+@keyframes m-paddle-l {
+  50% { transform: rotate(12deg); }
+}
+@keyframes m-paddle-r {
+  50% { transform: rotate(-12deg); }
+}
+/* think: glasses pushed up, head tilted, bubbles rise */
+.mascot.m-tilda.mood-think .m-glasses {
+  transform: translateY(-9px);
+  transition: transform 0.4s ease;
+}
+.mascot.m-tilda.mood-think .m-head {
+  animation: m-tilt 3.2s ease-in-out infinite;
+}
+.mascot .m-bubbles circle {
+  transform-origin: center;
+  animation: m-bubble 2.2s ease-in infinite;
+}
+.mascot .m-bubbles circle:nth-child(2) { animation-delay: 0.5s; }
+.mascot .m-bubbles circle:nth-child(3) { animation-delay: 1s; }
+@keyframes m-bubble {
+  0% { transform: translateY(6px) scale(0.6); opacity: 0; }
+  30% { opacity: 1; }
+  100% { transform: translateY(-8px) scale(1.1); opacity: 0; }
+}
+/* happy: a small hop, paddling faster */
+.mascot.m-tilda.mood-happy .m-wing-l { animation: m-paddle-l 0.5s ease-in-out 4; }
+.mascot.m-tilda.mood-happy .m-wing-r { animation: m-paddle-r 0.5s ease-in-out 4; }
+/* wave: the right flipper waves */
+.mascot.m-tilda.mood-wave .m-wing-r { transform-origin: 5% 30%; animation: m-wave 1.6s ease-in-out infinite; }
+/* cheer: one twirl, then happy jumps */
+.mascot.m-tilda.mood-cheer .m-body {
+  animation: m-twirl 0.9s ease-in-out 1, m-jump 0.9s cubic-bezier(0.3, 1.3, 0.6, 1) 0.9s infinite;
+}
+@keyframes m-twirl {
+  0% { transform: rotate(0); }
+  50% { transform: rotate(-12deg) translateY(-10px); }
+  100% { transform: rotate(0); }
+}
+/* sad: pulls the head into the shell */
+.mascot.m-tilda.mood-sad .m-head {
+  animation: m-hide 0.6s ease-out forwards;
+}
+@keyframes m-hide {
+  to { transform: translateY(9px) scale(0.92); }
+}
+
+/* Tilda in the chat */
+.chat-tilda { display: inline-flex; padding: 0; margin: -6px 0 -6px -4px; border: 0; background: none; cursor: pointer; border-radius: var(--r-full); }
+.chat-tilda:focus-visible { box-shadow: 0 0 0 2px var(--primary); }
+.msg-row { display: flex; align-items: flex-end; gap: 6px; align-self: flex-start; max-width: 96%; }
+.msg-row > svg { flex: none; margin-bottom: 2px; }
+.msg-row .msg { max-width: 100%; }
+.msg-in { animation: msg-in 0.35s cubic-bezier(0.3, 1.3, 0.6, 1) both; transform-origin: 0% 100%; }
+@keyframes msg-in { from { opacity: 0; transform: translateY(6px) scale(0.96); } }
+.typing-dots { display: inline-flex; gap: 5px; align-items: center; padding: 12px 14px; }
+.typing-dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--primary); opacity: 0.5; animation: typing-dot 1.1s ease-in-out infinite; }
+.typing-dots span:nth-child(2) { animation-delay: 0.15s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes typing-dot { 0%, 60%, 100% { transform: translateY(0); opacity: 0.45; } 30% { transform: translateY(-5px); opacity: 1; } }
