@@ -132,7 +132,11 @@ export type Exam = {
   date: string;
   /** HH:MM (optional) */
   time?: string;
+  /** Single decks of the exam. */
   deckIds: string[];
+  /** Whole courses / folders: every deck in them belongs to the exam, also decks added later. */
+  courseIds?: string[];
+  folderIds?: string[];
   note?: string;
   createdAt: number;
   updatedAt?: number;
@@ -621,6 +625,16 @@ export function renameFolder(courseId: string, folderId: string, name: string) {
 export function deleteFolder(courseId: string, folderId: string) {
   update((d) => ({
     ...d,
+    exams: d.exams.map((e) =>
+      e.folderIds?.includes(folderId)
+        ? {
+            ...e,
+            folderIds: e.folderIds.filter((x) => x !== folderId),
+            deckIds: [...new Set([...e.deckIds, ...d.decks.filter((x) => x.folderId === folderId).map((x) => x.id)])],
+            updatedAt: Date.now(),
+          }
+        : e,
+    ),
     courses: d.courses.map((c) => (c.id === courseId ? { ...c, folders: (c.folders ?? []).filter((f) => f.id !== folderId) } : c)),
     decks: d.decks.map((x) => (x.folderId === folderId ? { ...x, folderId: undefined, updatedAt: Date.now() } : x)),
   }));

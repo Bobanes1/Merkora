@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { addExam, updateExam, type Exam } from '../lib/store';
 import { dayKey } from '../lib/util';
-import { DeckPicker } from './DeckPicker';
+import { ScopePicker, type Scope } from './DeckPicker';
 import { Modal } from './Modal';
 
 /** Create or edit an exam and choose the decks it covers. */
@@ -10,7 +10,7 @@ export function ExamDialog({ exam, presetDeckId, presetDate, onClose }: { exam?:
   const [date, setDate] = useState(exam?.date ?? presetDate ?? dayKey(Date.now() + 14 * 86_400_000));
   const [time, setTime] = useState(exam?.time ?? '');
   const [note, setNote] = useState(exam?.note ?? '');
-  const [deckIds, setDeckIds] = useState<string[]>(exam?.deckIds ?? (presetDeckId ? [presetDeckId] : []));
+  const [scope, setScope] = useState<Scope>({ deckIds: exam?.deckIds ?? (presetDeckId ? [presetDeckId] : []), courseIds: exam?.courseIds, folderIds: exam?.folderIds });
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
     ref.current?.focus();
@@ -19,7 +19,15 @@ export function ExamDialog({ exam, presetDeckId, presetDate, onClose }: { exam?:
   const ok = title.trim() && /^\d{4}-\d{2}-\d{2}$/.test(date);
   const save = () => {
     if (!ok) return;
-    const patch = { title: title.trim(), date, time: time || undefined, note: note.trim() || undefined, deckIds };
+    const patch = {
+      title: title.trim(),
+      date,
+      time: time || undefined,
+      note: note.trim() || undefined,
+      deckIds: scope.deckIds,
+      courseIds: scope.courseIds?.length ? scope.courseIds : undefined,
+      folderIds: scope.folderIds?.length ? scope.folderIds : undefined,
+    };
     if (exam) updateExam(exam.id, patch);
     else addExam(patch);
     onClose();
@@ -66,8 +74,9 @@ export function ExamDialog({ exam, presetDeckId, presetDate, onClose }: { exam?:
           <input id="exam-time" type="time" className="input" value={time} onChange={(e) => setTime(e.target.value)} />
         </div>
       </div>
-      <span className="field-label">Welche Decks kommen dran?</span>
-      <DeckPicker value={deckIds} onChange={setDeckIds} />
+      <span className="field-label">Was kommt dran?</span>
+      <p className="muted small scope-hint">Hakst du einen ganzen Kurs oder Ordner an, gehören auch Decks dazu, die du später noch hinzufügst.</p>
+      <ScopePicker value={scope} onChange={setScope} whole />
       <label className="field-label" htmlFor="exam-note">
         Notiz (optional)
       </label>

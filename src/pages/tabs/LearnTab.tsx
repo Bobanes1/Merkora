@@ -27,11 +27,12 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
   const newPerDay = useStore((s) => s.data.settings.newPerDay);
   const [startAfterBoost, setStartAfterBoost] = useState(false);
   const exams = useStore((s) => s.data.exams);
-  const exam = nextExamForDeck({ exams }, deck.id);
+  const decks = useStore((s) => s.data.decks);
+  const exam = nextExamForDeck({ exams, decks }, deck.id);
   /** Time until the next review for a rating – never after the exam of this deck. */
   const preview = (s: Srs, r: Rating) => {
     const now = Date.now();
-    return formatDelay(capForExam(schedule(s, r, now), nextExamAt({ exams }, deck.id, now), now).due - now);
+    return formatDelay(capForExam(schedule(s, r, now), nextExamAt({ exams, decks }, deck.id, now), now).due - now);
   };
   const [mode, setMode] = useState<'due' | 'all' | null>(null);
   const [queue, setQueue] = useState<string[]>([]);

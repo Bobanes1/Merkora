@@ -733,6 +733,23 @@ console.log('Lernpfad: Antworten und Zeit');
   ok(PATH_RATINGS.map((r) => r.label).join('/') === 'Nicht gewusst/Unsicher/Gewusst' && PATH_RATINGS.map((r) => r.value).join('') === '123', 'Aufdecken: drei Knöpfe Nicht gewusst / Unsicher / Gewusst (= Nochmal / Schwer / Gut)');
 }
 
+console.log('Prüfung für ganzen Kurs oder Ordner');
+{
+  const { examCovers, examDecks, nextExamForDeck, nextExamAt } = await import('../src/lib/exams');
+  const day = 86_400_000;
+  const future = new Date(Date.now() + 10 * day);
+  const date = `${future.getFullYear()}-${String(future.getMonth() + 1).padStart(2, '0')}-${String(future.getDate()).padStart(2, '0')}`;
+  const deck = (id: string, courseId: string, folderId?: string) => ({ id, courseId, folderId, cards: [], name: id }) as any;
+  const decks = [deck('a', 'k1'), deck('b', 'k1', 'f1'), deck('c', 'k2'), deck('d', 'k2', 'f2')];
+  const exam = { id: 'e', title: 'Klausur', date, deckIds: ['c'], courseIds: ['k1'], folderIds: ['f2'], createdAt: 0 } as any;
+  ok(examCovers(exam, decks[0]) && examCovers(exam, decks[1]) && examCovers(exam, decks[2]) && examCovers(exam, decks[3]), 'ganzer Kurs, ganzer Ordner und einzelnes Deck gehören zur Prüfung');
+  const later = deck('neu', 'k1');
+  ok(examCovers(exam, later) && examDecks({ decks: [...decks, later] }, exam).some((d) => d.id === 'neu'), 'ein später hinzugefügtes Deck im Kurs gehört automatisch dazu');
+  ok(!examCovers(exam, deck('x', 'k3')) && !examCovers({ ...exam, courseIds: undefined, folderIds: undefined }, deck('y', 'k1')), 'andere Kurse gehören nicht dazu; alte Prüfungen nur mit Decks funktionieren wie bisher');
+  const data = { exams: [exam], decks: [...decks, later] } as any;
+  ok(nextExamForDeck(data, 'neu')?.id === 'e' && typeof nextExamAt(data, 'neu') === 'number', 'Planung vor der Prüfung gilt auch für das neue Deck');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

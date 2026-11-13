@@ -6746,3 +6746,33 @@ a.deck-row:hover {
 /* learning path: rate like when learning */
 .lesson-card .center-text { display: block; text-align: center; margin-top: 10px; }
 .lesson-card .path-rate { margin-top: 6px; }
+
+/* picking courses, folders and decks (exams, study sessions) */
+.scope { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.scope-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.scope-search { flex: 1; min-width: 180px; margin: 0; }
+.scope-sum { font-size: 13px; color: var(--muted); padding: 4px 10px; border-radius: var(--r-full); background: var(--surface-2); white-space: nowrap; }
+.scope-sum.on { color: var(--primary-ink); background: var(--primary-soft); font-weight: 600; }
+.scope-list { display: flex; flex-direction: column; gap: 8px; max-height: 46vh; overflow-y: auto; padding-right: 2px; }
+.scope-ws { display: flex; flex-direction: column; gap: 6px; }
+.scope-ws-name { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); margin: 4px 2px 0; }
+.scope-course { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--white); }
+.scope-course.has { border-color: var(--line-strong); }
+.scope-course-head { display: flex; align-items: center; gap: 6px; padding: 6px 10px 6px 4px; flex-wrap: wrap; }
+.scope-course-check { display: flex; align-items: center; gap: 8px; cursor: pointer; flex: 1; min-width: 0; }
+.scope-course-check b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scope-fold { width: 28px; height: 28px; }
+.scope-fold svg { transition: transform 0.15s; }
+.scope-fold.open svg { transform: rotate(90deg); }
+.scope-badge { font-size: 11px; font-weight: 600; color: var(--primary-ink); background: var(--primary-soft); padding: 2px 8px; border-radius: var(--r-full); white-space: nowrap; }
+.scope-body { border-top: 1px solid var(--line); padding: 6px 10px 8px 38px; display: flex; flex-direction: column; gap: 2px; }
+.scope-folder { display: flex; flex-direction: column; gap: 2px; margin: 2px 0; }
+.scope-folder-head, .scope-deck { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: var(--r-sm); cursor: pointer; }
+.scope-folder-head { font-weight: 600; }
+.scope-folder-head svg { color: var(--muted); flex: none; }
+.scope-deck:hover, .scope-folder-head:hover { background: var(--surface-2); }
+.scope-deck.in-folder { margin-left: 22px; }
+.scope-deck.auto, .scope-folder-head.auto { cursor: default; }
+.scope-deck.auto .scope-name { color: var(--muted); }
+.scope-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scope-hint { margin: -2px 0 8px; }

@@ -19,7 +19,7 @@ import { ConfirmModal, Modal, PromptModal } from '../components/Modal';
 import { NewDeckModal } from '../components/NewDeck';
 import { SessionBuilder } from '../components/SessionBuilder';
 import { StudySession, type SessionItem } from '../components/StudySession';
-import { countdownText, upcomingExams } from '../lib/exams';
+import { countdownText, examCovers, upcomingExams } from '../lib/exams';
 import { masteryPercent } from '../lib/stats';
 import {
   addCourse,
@@ -329,7 +329,7 @@ function CourseCard({ course, ws, setDialog }: { course: Course; ws: Workspace; 
   const cards = decks.flatMap((d) => d.cards);
   const pct = masteryPercent(cards);
   const due = decks.reduce((a, d) => a + dueCards(d).length, 0);
-  const exam = upcomingExams(data).find((e) => e.deckIds.some((id) => decks.some((d) => d.id === id)));
+  const exam = upcomingExams(data).find((e) => decks.some((d) => examCovers(e, d)));
   return (
     <div className="course-card">
       <Link to={`/library/${ws.slug}/${course.slug}`} className="course-card-link">
@@ -380,7 +380,7 @@ function CourseView({ course, workspace, setDialog }: { course: Course; workspac
   const cards = decks.flatMap((d) => d.cards);
   const pct = masteryPercent(cards);
   const due = decks.reduce((a, d) => a + dueCards(d).length, 0);
-  const exam = upcomingExams(data).find((e) => e.deckIds.some((id) => decks.some((d) => d.id === id)));
+  const exam = upcomingExams(data).find((e) => decks.some((d) => examCovers(e, d)));
   const folders = course.folders ?? [];
   const names = shortNames(decks);
   const loose = decks.filter((d) => !d.folderId || !folders.some((f) => f.id === d.folderId));

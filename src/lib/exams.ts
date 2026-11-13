@@ -20,12 +20,18 @@ export const upcomingExams = (data: Pick<Data, 'exams'>, now = Date.now()) =>
 export const pastExams = (data: Pick<Data, 'exams'>, now = Date.now()) =>
   (data.exams ?? []).filter((e) => examDayEnd(e) <= now).sort((a, b) => examAt(b) - examAt(a));
 
-export const examsForDeck = (data: Pick<Data, 'exams'>, deckId: string, now = Date.now()) =>
-  upcomingExams(data, now).filter((e) => e.deckIds.includes(deckId));
-export const nextExamForDeck = (data: Pick<Data, 'exams'>, deckId: string, now = Date.now()) => examsForDeck(data, deckId, now)[0];
+/** Does the exam cover this deck – picked on its own, or as part of a whole course / folder (also decks added later)? */
+export const examCovers = (e: Pick<Exam, 'deckIds' | 'courseIds' | 'folderIds'>, deck: Pick<Deck, 'id' | 'courseId' | 'folderId'>) =>
+  e.deckIds.includes(deck.id) || !!e.courseIds?.includes(deck.courseId) || (!!deck.folderId && !!e.folderIds?.includes(deck.folderId));
+
+export function examsForDeck(data: Pick<Data, 'exams' | 'decks'>, deckId: string, now = Date.now()) {
+  const deck = data.decks.find((d) => d.id === deckId);
+  return upcomingExams(data, now).filter((e) => (deck ? examCovers(e, deck) : e.deckIds.includes(deckId)));
+}
+export const nextExamForDeck = (data: Pick<Data, 'exams' | 'decks'>, deckId: string, now = Date.now()) => examsForDeck(data, deckId, now)[0];
 
 /** Moment of the next exam of this deck that is still ahead (for scheduling), or undefined. */
-export function nextExamAt(data: Pick<Data, 'exams'>, deckId: string, now = Date.now()): number | undefined {
+export function nextExamAt(data: Pick<Data, 'exams' | 'decks'>, deckId: string, now = Date.now()): number | undefined {
   const e = examsForDeck(data, deckId, now).find((x) => examAt(x) > now);
   return e ? examAt(e) : undefined;
 }
@@ -41,7 +47,7 @@ export function capForExam(s: Srs, exam: number | undefined, now = Date.now()): 
   return s.due > latest ? { ...s, due: latest } : s;
 }
 
-export const examDecks = (data: Pick<Data, 'decks'>, e: Exam): Deck[] => data.decks.filter((d) => e.deckIds.includes(d.id));
+export const examDecks = (data: Pick<Data, 'decks'>, e: Exam): Deck[] => data.decks.filter((d) => examCovers(e, d));
 export const examCards = (data: Pick<Data, 'decks'>, e: Exam): Card[] => examDecks(data, e).flatMap((d) => d.cards);
 
 /** Whole days until the exam day (0 = today). */
@@ -88,7 +94,7 @@ const icsDate = (t: number) => {
 export function toIcs(exams: Exam[], decks: Deck[]): string {
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Merkora//Pruefungskalender//DE', 'CALSCALE:GREGORIAN'];
   for (const e of exams) {
-    const names = decks.filter((d) => e.deckIds.includes(d.id)).map((d) => d.name);
+    const names = decks.filter((d) => examCovers(e, d)).map((d) => d.name);
     const desc = [names.length ? `Decks: ${names.join(', ')}` : '', e.note ?? ''].filter(Boolean).join('\n');
     lines.push('BEGIN:VEVENT', `UID:${e.id}@merkora`, `DTSTAMP:${icsDate(Date.now())}`);
     if (e.time) {
