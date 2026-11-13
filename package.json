@@ -19,6 +19,7 @@
     "devDependencies": {
         "@fontsource/manrope": "^5.1.0",
         "@fontsource/outfit": "^5.1.0",
+        "@tabler/icons": "^3.31.0",
         "@tauri-apps/api": "^2.12.4",
         "@tauri-apps/cli": "^2.12.4",
         "@tauri-apps/plugin-autostart": "^2.7.0",

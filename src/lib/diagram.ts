@@ -3,8 +3,13 @@
  * fixed templates – clean layout without overlaps, Merkora colours, light and dark.
  * Pure (no DOM) – tested in scripts/test-srs.mts.
  */
+import { ICON_NAMES, ICONS } from './diagramIcons';
 
-export type Diagram =
+export type Diagram = DiagramBase & {
+  /** Small symbol per box: box label → symbol name (see lib/diagramIcons.ts). */
+  icons?: Record<string, string>;
+};
+type DiagramBase =
   | { type: 'flow'; title?: string; steps: string[]; highlight?: string }
   | { type: 'cycle'; title?: string; steps: string[]; highlight?: string }
   | { type: 'hierarchy'; title?: string; root: string; children: { label: string; children?: string[] }[]; highlight?: string }
@@ -51,7 +56,7 @@ const shapeOf = (v: unknown): Shape => {
 };
 const EDGE_RE = /^(.+?)\s*(?:->|→|-->|=>)\s*(.+)$/;
 
-function parseModel(r: Record<string, unknown>, title: string | undefined): Diagram | null {
+function parseModel(r: Record<string, unknown>, title: string | undefined): DiagramBase | null {
   const nodes: string[] = [];
   const alias = new Map<string, string>(); // ids the AI may use in links → label
   for (const n of Array.isArray(r.nodes) ? r.nodes : []) {
@@ -115,7 +120,57 @@ function parseBranch(v: unknown, deep: boolean): DecisionBranch | null {
   return str(o.label ?? o.answer ?? o.question) || null;
 }
 
+/** The labels of a diagram that are drawn in boxes (they can carry a symbol). */
+function boxLabels(d: DiagramBase): string[] {
+  switch (d.type) {
+    case 'flow':
+    case 'cycle':
+      return d.steps;
+    case 'concept':
+      return [d.center, ...d.branches];
+    case 'hierarchy':
+      return [d.root, ...d.children.flatMap((c) => [c.label, ...(c.children ?? [])])];
+    case 'compare':
+      return d.columns.map((c) => c.title);
+    case 'matrix':
+      return d.cells;
+    case 'model':
+      return d.nodes;
+    case 'pyramid':
+      return d.levels;
+    case 'decision': {
+      const sub = (b: DecisionBranch) => (typeof b === 'string' ? [b] : [b.question, b.yes, b.no]);
+      return [d.question, ...sub(d.yes), ...sub(d.no)];
+    }
+    default:
+      return [];
+  }
+}
+const iconKey = (v: unknown) =>
+  String(v ?? '')
+    .toLowerCase()
+    .replace(/ä/g, 'ae')
+    .replace(/ö/g, 'oe')
+    .replace(/ü/g, 'ue')
+    .replace(/ß/g, 'ss')
+    .replace(/[^a-z]/g, '');
+
 export function parseDiagram(raw: unknown): Diagram | null {
+  const d = parseBase(raw);
+  if (!d) return null;
+  const given = (raw as { icons?: unknown }).icons;
+  if (!given || typeof given !== 'object') return d;
+  const labels = boxLabels(d);
+  const icons: Record<string, string> = {};
+  for (const [k, v] of Object.entries(given as Record<string, unknown>)) {
+    const label = pick(k, labels);
+    const name = ICON_NAMES.find((n) => n === iconKey(v));
+    if (label && name && !icons[label] && Object.keys(icons).length < 12) icons[label] = name;
+  }
+  return Object.keys(icons).length ? { ...d, icons } : d;
+}
+
+function parseBase(raw: unknown): DiagramBase | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
   const title = str(r.title, 70) || undefined;
@@ -251,7 +306,10 @@ export type Box = {
   kind: 'node' | 'accent' | 'soft' | 'label' | 'bold' | 'node2' | 'accent2' | 'tag' | 'text' | 'textOn';
   /** colour 1–5 (see Palette.tones); node2/accent2 mean colour 2 */
   align?: 'middle' | 'start' | 'end'; fs?: number; tone?: number;
+  /** symbol name (lib/diagramIcons.ts), drawn left of the text */
+  icon?: string;
 };
+const ICON_KINDS = new Set<Box['kind']>(['node', 'accent', 'node2', 'accent2', 'soft', 'text', 'textOn']);
 export type Line = { pts: [number, number][]; arrow?: boolean; dashed?: boolean; curve?: boolean; both?: boolean; tone?: number; muted?: boolean };
 /** Filled areas behind everything (Venn circles, pyramid steps), in colour `hue` (1–5). */
 export type Area = { circle?: [number, number, number]; poly?: [number, number][]; fill: 'node' | 'accent' | 'soft'; hue?: number };
@@ -259,6 +317,11 @@ const hueOf = (i: number) => (i % 5) + 1;
 export type Layout = { width: number; height: number; boxes: Box[]; lines: Line[]; areas: Area[]; fs: number };
 
 let NF = FS; // font size of the boxes of the diagram being laid out
+/** Symbols of the diagram being laid out (by label, spaces/hyphens ignored); a box with a symbol has 24 px less room for text. */
+const IW = 24;
+let ICON_OF = new Map<string, string>();
+const nk = (s: string) => s.toLowerCase().replace(/[\s-]+/g, '');
+const iw = (label: string) => (ICON_OF.has(nk(label)) ? IW : 0);
 const nlh = () => Math.round(NF * 1.3);
 const boxH = (lines: string[], py = 10) => lines.length * nlh() + 2 * py;
 
@@ -386,8 +449,8 @@ function layoutModel(d: Extract<Diagram, { type: 'model' }>, top: number, boxes:
   if (horizontal) {
     const bw = bwH;
     const mw = Math.min(bw, 170);
-    NF = nodeFont(d.nodes.map((t, i) => ({ text: t, w: (isMod[i] ? mw : bw) - 16 })));
-    const ls = d.nodes.map((t, i) => wrap(t, (isMod[i] ? mw : bw) - 16, NF, 3));
+    NF = nodeFont(d.nodes.map((t, i) => ({ text: t, w: (isMod[i] ? mw : bw) - 16 - iw(t) })));
+    const ls = d.nodes.map((t, i) => wrap(t, (isMod[i] ? mw : bw) - 16 - iw(t), NF, 3));
     const bh = Math.max(...ls.map((l) => boxH(l)));
     const sameTagH = Math.max(0, ...edges.filter((e) => sameRank(e) && e.label).map((e) => tag(e.label!, 0, 0, bw).h));
     const gapY = sameTagH ? Math.max(44, sameTagH + 24) : 26;
@@ -496,8 +559,8 @@ function layoutModel(d: Extract<Diagram, { type: 'model' }>, top: number, boxes:
     const maxRow = Math.max(...layers.map((L) => L.length));
     const area = inner - (band ? band + 20 : 0) - right;
     const bw = Math.min(180, (area - (maxRow - 1) * 20) / maxRow);
-    NF = nodeFont(d.nodes.map((t, i) => ({ text: t, w: (isMod[i] ? band : bw) - 16 })));
-    const ls = d.nodes.map((t, i) => wrap(t, (isMod[i] ? band : bw) - 16, NF, 3));
+    NF = nodeFont(d.nodes.map((t, i) => ({ text: t, w: (isMod[i] ? band : bw) - 16 - iw(t) })));
+    const ls = d.nodes.map((t, i) => wrap(t, (isMod[i] ? band : bw) - 16 - iw(t), NF, 3));
     const bh = Math.max(...ls.map((l) => boxH(l)));
     const tagH = Math.max(0, ...edges.map((e) => (e.label ? tag(e.label, 0, 0, 140).h : 0)));
     const gapY = Math.max(40, tagH + 22);
@@ -580,6 +643,7 @@ const NODE_KINDS = (hl: boolean, i: number, highlightIndex: number): Box['kind']
 
 export function layoutDiagram(d: Diagram): Layout {
   NF = FS;
+  ICON_OF = new Map(Object.entries(d.icons ?? {}).map(([l, i]) => [nk(l), i]));
   const boxes: Box[] = [];
   const lines: Line[] = [];
   const areas: Area[] = [];
@@ -596,10 +660,10 @@ export function layoutDiagram(d: Diagram): Layout {
     const cols = n <= 4 ? n : Math.ceil(n / Math.ceil(n / 4));
     const gap = 30;
     const bw = (inner - (cols - 1) * gap) / cols;
-    NF = nodeFont(d.steps.map((t) => ({ text: t, w: bw - 16 })));
+    NF = nodeFont(d.steps.map((t) => ({ text: t, w: bw - 16 - iw(t) })));
     const rows: Box[][] = [];
     for (let i = 0; i < n; i += cols) {
-      const row = d.steps.slice(i, i + cols).map((s) => wrap(s, bw - 16, NF));
+      const row = d.steps.slice(i, i + cols).map((s) => wrap(s, bw - 16 - iw(s), NF));
       const h = Math.max(...row.map((l) => boxH(l)));
       rows.push(row.map((l, k) => ({ x: PAD + k * (bw + gap), y, w: bw, h, lines: l, kind: NODE_KINDS(!!d.highlight, i + k, d.steps.indexOf(d.highlight ?? '')) })));
       y += h + 40;
@@ -620,11 +684,11 @@ export function layoutDiagram(d: Diagram): Layout {
     const items = d.type === 'cycle' ? d.steps : d.branches;
     const n = items.length;
     const bw = n > 6 ? 130 : 150;
-    NF = nodeFont(items.map((t) => ({ text: t, w: bw - 16 })));
-    const ls = items.map((s) => wrap(s, bw - 16, NF, 3));
+    NF = nodeFont(items.map((t) => ({ text: t, w: bw - 16 - iw(t) })));
+    const ls = items.map((s) => wrap(s, bw - 16 - iw(s), NF, 3));
     const bh = Math.max(...ls.map((l) => boxH(l, 8)));
     const minR = (bw + 14) / (2 * Math.sin(Math.PI / n));
-    const centreBox = d.type === 'concept' ? wrap(d.center, 160, 16, 3) : null;
+    const centreBox = d.type === 'concept' ? wrap(d.center, 160 - iw(d.center), 16, 3) : null;
     const rX = Math.max(minR, 150);
     const R = centreBox ? inner / 2 - bw / 2 : Math.min(rX, inner / 2 - bw / 2);
     let rY = Math.max(R * 0.72, bh + (centreBox ? boxH(centreBox) / 2 + 16 : 30));
@@ -667,16 +731,16 @@ export function layoutDiagram(d: Diagram): Layout {
     y = cy + rY + bh / 2;
   } else if (d.type === 'hierarchy') {
     // a long root gets a wider box instead of many lines
-    const rw = wrap(d.root, 220, 16).length > 2 ? Math.min(inner, 380) : 240;
-    const rl = wrap(d.root, rw - 20, 16);
+    const rw = wrap(d.root, 220 - iw(d.root), 16).length > 2 ? Math.min(inner, 380) : 240;
+    const rl = wrap(d.root, rw - 20 - iw(d.root), 16);
     const root: Box = { x: W / 2 - rw / 2, y, w: rw, h: rl.length * 21 + 20, lines: rl, kind: 'accent', fs: 16 };
     boxes.push(root);
     y += root.h + 36;
     const k = d.children.length;
     const gap = 14;
     const cw = (inner - (k - 1) * gap) / k;
-    NF = nodeFont(d.children.map((c) => ({ text: c.label, w: cw - 14 })));
-    const cl = d.children.map((c) => wrap(c.label, cw - 14, NF, 3));
+    NF = nodeFont(d.children.map((c) => ({ text: c.label, w: cw - 14 - iw(c.label) })));
+    const cl = d.children.map((c) => wrap(c.label, cw - 14 - iw(c.label), NF, 3));
     const ch = Math.max(...cl.map((l) => boxH(l)));
     const busY = y - 18;
     lines.push({ pts: [[root.x + root.w / 2, root.y + root.h], [root.x + root.w / 2, busY]] });
@@ -688,7 +752,7 @@ export function layoutDiagram(d: Diagram): Layout {
       lines.push({ pts: [[root.x + root.w / 2, busY], [b.x + b.w / 2, busY], [b.x + b.w / 2, b.y - 6]], arrow: true, tone: hue });
       let gy = b.y + b.h + 10;
       for (const g of c.children ?? []) {
-        const gl = wrap(g, cw - 26, 13, 3);
+        const gl = wrap(g, cw - 26 - iw(g), 13, 3);
         const gb: Box = { x: b.x + 12, y: gy, w: cw - 12, h: gl.length * 17 + 12, lines: gl, kind: 'soft', align: 'start', tone: hue };
         boxes.push(gb);
         lines.push({ pts: [[b.x + 6, gy - 10], [b.x + 6, gb.y + gb.h / 2], [gb.x - 2, gb.y + gb.h / 2]], tone: hue });
@@ -701,8 +765,8 @@ export function layoutDiagram(d: Diagram): Layout {
     const k = d.columns.length;
     const gap = 14;
     const cw = (inner - (k - 1) * gap) / k;
-    NF = nodeFont(d.columns.map((c) => ({ text: c.title, w: cw - 16 })));
-    const heads = d.columns.map((c) => wrap(c.title, cw - 16, NF, 2));
+    NF = nodeFont(d.columns.map((c) => ({ text: c.title, w: cw - 16 - iw(c.title) })));
+    const heads = d.columns.map((c) => wrap(c.title, cw - 16 - iw(c.title), NF, 2));
     const hh = Math.max(...heads.map((l) => boxH(l, 8)));
     const bodies = d.columns.map((c) => c.items.flatMap((it) => wrap('• ' + it, cw - 20, 14, 3)));
     const bh = Math.max(...bodies.map((l) => l.length * 19 + 20));
@@ -734,8 +798,8 @@ export function layoutDiagram(d: Diagram): Layout {
   } else if (d.type === 'matrix') {
     const lab = 26;
     const cw = (inner - lab - 10) / 2;
-    NF = nodeFont(d.cells.map((c) => ({ text: c, w: cw - 20 })));
-    const cl = d.cells.map((c) => wrap(c, cw - 20, NF, 4));
+    NF = nodeFont(d.cells.map((c) => ({ text: c, w: cw - 20 - iw(c) })));
+    const cl = d.cells.map((c) => wrap(c, cw - 20 - iw(c), NF, 4));
     const chh = Math.max(64, ...cl.map((l) => boxH(l, 12)));
     const x0 = PAD + lab + 10;
     cl.forEach((l, i) => boxes.push({ x: x0 + (i % 2) * (cw + 6), y: y + Math.floor(i / 2) * (chh + 6), w: cw - 3, h: chh, lines: l, kind: 'node', tone: hueOf(i) }));
@@ -820,15 +884,15 @@ export function layoutDiagram(d: Diagram): Layout {
     // text of each step first: the step height follows the longest text
     const texts = d.levels.map((t, i) => {
       const tw = Math.max(60, (widthAt(i) + widthAt(i + 1)) / 2 - 36);
-      const fs = [14, 13, 12].find((f) => t.split(' ').every((wd) => wd.length * charW(f) <= tw)) ?? 12;
-      return { tw, fs, ls: wrap(t, tw, fs), lh: Math.round(fs * 1.3) };
+      const fs = [14, 13, 12].find((f) => t.split(' ').every((wd) => wd.length * charW(f) <= tw - iw(t))) ?? 12;
+      return { tw, fs, ls: wrap(t, tw - iw(t), fs), lh: Math.round(fs * 1.3) };
     });
     const rowH = Math.max(52, ...texts.map((x) => x.ls.length * x.lh + 20));
     texts.forEach(({ tw, fs, ls, lh }, i) => {
       const yt = y + i * rowH, yb = yt + rowH - 4;
       const wt = widthAt(i), wb = widthAt(i + 1) - ((aBottom - aTop) / n) * (4 / rowH);
       areas.push({ poly: [[W / 2 - wt / 2, yt], [W / 2 + wt / 2, yt], [W / 2 + wb / 2, yb], [W / 2 - wb / 2, yb]], fill: i === 0 ? 'accent' : 'node', hue: (i % 5) + 1 });
-      boxes.push({ x: W / 2 - tw / 2, y: yt + (rowH - 4) / 2 - (ls.length * lh) / 2, w: tw, h: ls.length * lh, lines: ls, kind: i === 0 ? 'textOn' : 'text', fs });
+      boxes.push({ x: W / 2 - tw / 2, y: yt + (rowH - 4) / 2 - (ls.length * lh) / 2, w: tw, h: ls.length * lh, lines: ls, kind: i === 0 ? 'textOn' : 'text', fs, tone: (i % 5) + 1 });
     });
     y += n * rowH - 4;
   } else if (d.type === 'bars') {
@@ -877,8 +941,8 @@ export function layoutDiagram(d: Diagram): Layout {
     walk(root);
     const widthOf = (nd: N) => (nd.depth === 0 ? Math.min(300, inner) : Math.min(260, nd.leaves * cw + (nd.leaves - 1) * gap));
     const isQ = (nd: N) => nd.kids.length > 0;
-    NF = nodeFont(all.filter(isQ).map((nd) => ({ text: nd.text, w: widthOf(nd) - 16 })));
-    const label = (nd: N) => wrap(nd.text, widthOf(nd) - 16, isQ(nd) ? NF : 13, 3);
+    NF = nodeFont(all.filter(isQ).map((nd) => ({ text: nd.text, w: widthOf(nd) - 16 - iw(nd.text) })));
+    const label = (nd: N) => wrap(nd.text, widthOf(nd) - 16 - iw(nd.text), isQ(nd) ? NF : 13, 3);
     const depthH = [0, 1, 2].map((dp) => Math.max(0, ...all.filter((nd) => nd.depth === dp).map((nd) => (isQ(nd) ? boxH(label(nd)) : label(nd).length * 17 + 16))));
     const rowGap = 56;
     const rowY = [y, y + depthH[0] + rowGap, y + depthH[0] + depthH[1] + 2 * rowGap];
@@ -904,6 +968,13 @@ export function layoutDiagram(d: Diagram): Layout {
       }
     }
   }
+  // symbols: on the boxes whose label has one (the text was wrapped narrower for it above)
+  if (ICON_OF.size)
+    for (const b of boxes) {
+      if (!b.lines.length || !ICON_KINDS.has(b.kind)) continue;
+      const ic = ICON_OF.get(nk(b.lines.join(' ')));
+      if (ic) b.icon = ic;
+    }
   return { width: W, height: Math.ceil(y + PAD), boxes, lines, areas, fs: NF };
 }
 
@@ -1013,7 +1084,16 @@ export function renderDiagram(d: Diagram, p: Palette = PALETTES.light): string {
       continue;
     }
     const start = b.align === 'start';
-    const x = start ? b.x + (b.kind === 'label' ? 0 : 10) : b.align === 'end' ? b.x + b.w - 4 : b.x + b.w / 2;
+    let x = start ? b.x + (b.kind === 'label' ? 0 : 10) : b.align === 'end' ? b.x + b.w - 4 : b.x + b.w / 2;
+    const glyph = b.icon ? ICONS[b.icon] : undefined;
+    if (glyph) {
+      // symbol right before the text (left in the box for left-aligned text)
+      const textW = Math.max(...b.lines.map((l) => l.length)) * charW(fs);
+      const ix = start ? b.x + 8 : Math.max(b.x + 6, b.x + b.w / 2 - (18 + 6 + textW) / 2);
+      x = start ? x + IW : ix + IW + textW / 2;
+      const ink = b.kind === 'accent' || b.kind === 'accent2' || b.kind === 'textOn' ? p.onAccent : t.stroke;
+      out.push(`<g transform="translate(${r1(ix)} ${r1(b.y + b.h / 2 - 9)}) scale(0.75)" fill="none" stroke="${ink}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${glyph}</g>`);
+    }
     const top = b.y + b.h / 2 - ((b.lines.length - 1) * lh) / 2;
     const spans = b.lines.map((t, i) => `<tspan x="${r1(x)}" y="${r1(top + i * lh)}">${esc(t)}</tspan>`).join('');
     out.push(`<text font-size="${fs}" font-weight="${weight}" fill="${color}" text-anchor="${start ? 'start' : b.align === 'end' ? 'end' : 'middle'}" dominant-baseline="middle">${spans}</text>`);
@@ -1058,7 +1138,8 @@ Beschriftungen sind kurze Stichworte (höchstens 6 Wörter). Erlaubte Formen (ge
 {"type":"pyramid","title":"…","levels":["Spitze","…","Basis"]} – Stufenmodell, 3–6 Stufen von oben nach unten
 {"type":"bars","title":"…","unit":"%","bars":[{"label":"…","value":42}]} – Zahlenvergleich, 2–8 Balken, nur mit Zahlen aus dem Material
 {"type":"decision","title":"…","question":"…?","yes":"…","no":{"question":"…?","yes":"…","no":"…"}} – Entscheidungsbaum, höchstens zwei Fragen tief
-Bei flow, cycle, hierarchy, concept und model kann "highlight" einen Kasten hervorheben, der den Kern der Karte trifft.`;
+Bei flow, cycle, hierarchy, concept und model kann "highlight" einen Kasten hervorheben, der den Kern der Karte trifft.
+Optional "icons":{"Beschriftung":"symbol"} – ein kleines Symbol vor der Beschriftung eines Kastens, nur wo es das Verständnis stützt (nicht bei jedem Kasten). Erlaubte Symbole: ${ICON_NAMES.join(", ")}.`;
 
 // ---------- graphics of one card (improve per card) ----------
 const DIAGRAM_RE = /<div class="diagram" data-diagram="([^"]*)"><\/div>/;

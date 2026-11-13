@@ -502,6 +502,45 @@ console.log('Diagramme');
     const bA = hier.boxes.find((b) => b.lines[0] === 'A')!, a1 = hier.boxes.find((b) => b.lines[0] === 'a1')!, bB = hier.boxes.find((b) => b.lines[0] === 'B')!;
     ok(bA.tone === a1.tone && bA.tone !== bB.tone, 'Gliederung: jeder Ast samt Unterpunkten in seiner Farbe');
   }
+  // ---- symbols in boxes
+  {
+    const { ICON_NAMES } = await import('../src/lib/diagramIcons');
+    const withIcons: any[] = [
+      { type: 'flow', steps: ['Forschungsfrage', 'Datenerhebung', 'Auswertung'], icons: { forschungsfrage: 'Frage', Datenerhebung: 'liste', Auswertung: 'balken' } },
+      { type: 'cycle', steps: ['Plan', 'Do', 'Check', 'Act'], icons: { Plan: 'idee', Check: 'suche' } },
+      { type: 'concept', center: 'Wissen', branches: ['Daten', 'Informationen', 'Erfahrung'], icons: { Wissen: 'gehirn', Daten: 'daten' } },
+      { type: 'hierarchy', root: 'Methoden der empirischen Sozialforschung', children: [{ label: 'Quantitativ', children: ['Befragung'] }, { label: 'Qualitativ' }], icons: { 'Methoden der empirischen Sozialforschung': 'buch', Quantitativ: 'balken', Befragung: 'chat' } },
+      { type: 'compare', columns: [{ title: 'Fernsehen', items: ['linear'] }, { title: 'Streaming', items: ['auf Abruf'] }], icons: { Fernsehen: 'fernseher', Streaming: 'smartphone' } },
+      { type: 'matrix', x: 'x', y: 'y', cells: ['Gesetz', 'Markt', 'Staat', 'Bürger'], icons: { Gesetz: 'gesetz', 'Bürger': 'gruppe' } },
+      { type: 'model', nodes: ['Freizeit', 'Nutzung von Streamingdiensten', 'Alter'], links: [{ from: 'Freizeit', to: 'Nutzung von Streamingdiensten' }, { from: 'Alter', to: 'Freizeit -> Nutzung von Streamingdiensten' }], icons: { Freizeit: 'uhr', 'Nutzung von Streamingdiensten': 'fernseher', Alter: 'person' } },
+      { type: 'decision', question: 'Normalverteilt?', yes: 't-Test', no: 'Mann-Whitney-U-Test', icons: { 'Normalverteilt?': 'frage' } },
+      { type: 'pyramid', levels: ['Selbstverwirklichung', 'Soziale Bedürfnisse', 'Sicherheit'], icons: { Sicherheit: 'schloss', Selbstverwirklichung: 'stern' } },
+    ];
+    for (const raw of withIcons) {
+      const d = parseDiagram(raw)!;
+      const L = layoutDiagram(d);
+      const iconBoxes = L.boxes.filter((b) => b.icon);
+      const svg = renderDiagram(d, PALETTES.dark);
+      const real = L.boxes.filter((b) => b.lines.length);
+      let overlaps = 0;
+      real.forEach((a, k) => real.slice(k + 1).forEach((b) => (overlaps += hit(a, b) ? 1 : 0)));
+      // text of a box with a symbol fits in the box minus the symbol
+      const roomy = iconBoxes.every((b) => Math.max(...b.lines.map((l) => l.length)) * ((b.fs ?? L.fs) * 0.58) <= b.w - 24 - 8);
+      ok(iconBoxes.length === Object.keys(d.icons ?? {}).length && iconBoxes.length > 0 && svg.split('scale(0.75)').length - 1 === iconBoxes.length && overlaps === 0 && !svg.includes('…') && roomy, d.type + ': ' + iconBoxes.length + ' Symbol(e) gezeichnet, Text hat daneben Platz, nichts überlappt');
+    }
+    const p = parseDiagram({ type: 'flow', steps: ['A', 'B'], icons: { a: 'Gebäude', B: 'einhorn', C: 'haus' } }) as any;
+    ok(p.icons.A === 'gebaeude' && !('B' in p.icons) && !('C' in p.icons), 'Symbole: Name wird erkannt (Umlaute, Großschreibung), unbekannte Symbole und Beschriftungen fallen weg');
+    const many = parseDiagram({ type: 'flow', steps: Array.from({ length: 8 }, (_, i) => 'S' + i), icons: Object.fromEntries(Array.from({ length: 8 }, (_, i) => ['S' + i, 'stern'])) }) as any;
+    ok(Object.keys(many.icons).length === 8, 'mehrere Symbole pro Grafik möglich');
+    ok(parseDiagram({ type: 'flow', steps: ['A', 'B'] })!.icons === undefined, 'ohne Symbole bleibt die Beschreibung wie bisher');
+    const mod = renderDiagram(parseDiagram(withIcons[6])!, PALETTES.light);
+    ok(mod.includes(`stroke="${PALETTES.light.tones[1].stroke}" stroke-width="2" stroke-linecap`) && mod.includes(`stroke="${PALETTES.light.tones[0].stroke}" stroke-width="2" stroke-linecap`), 'Symbol in der Farbe seines Kastens (Moderator Beere, sonst Türkis)');
+    const dark = renderDiagram(parseDiagram(withIcons[6])!, PALETTES.dark);
+    ok(dark.includes(`stroke="${PALETTES.dark.tones[0].stroke}" stroke-width="2" stroke-linecap`), 'Symbol im Dunkelmodus in der hellen Randfarbe');
+    ok(ICON_NAMES.length >= 50 && ICON_NAMES.every((n) => DIAGRAM_RULE.includes(n)), 'KI-Anweisung nennt alle ' + ICON_NAMES.length + ' Symbole');
+    const roundTrip = parseDiagram(JSON.parse(JSON.stringify(parseDiagram(withIcons[6]))));
+    ok(JSON.stringify(roundTrip) === JSON.stringify(parseDiagram(withIcons[6])), 'gespeicherte Symbole werden beim Anzeigen gleich gelesen');
+  }
   const esc = renderDiagram(parseDiagram({ type: 'flow', steps: ['a <b> & "c"', 'd'] })!);
   ok(esc.includes('a &lt;b&gt; &amp; &quot;c&quot;') && !esc.includes('<b>'), 'Sonderzeichen werden escaped');
   ok(!/Operationalisier-/.test(renderDiagram(parseDiagram(samples[0])!)), 'lange Wörter bleiben ganz (kleinere Schrift statt Trennung)');
