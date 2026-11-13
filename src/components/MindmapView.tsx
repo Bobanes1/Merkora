@@ -8,8 +8,9 @@ import { useResolvedTheme } from '../lib/theme';
 type View = { x: number; y: number; k: number };
 
 /**
- * The mind map to explore: branches fold out with a click and everything glides to its new place,
- * the boxes float gently, drag to move, wheel or buttons to zoom. A click on a point offers the matching cards.
+ * The mind map to explore, read from left to right: branches fold out with a click and everything glides
+ * to its new place; drag to move (never so far that the map is lost), wheel or buttons to zoom.
+ * A click on a point offers the matching cards.
  */
 export function MindmapView({ map, onCards }: { map: Map; onCards: (term: string) => void }) {
   const theme = useResolvedTheme();
@@ -47,33 +48,36 @@ export function MindmapView({ map, onCards }: { map: Map; onCards: (term: string
   // the camera follows when branches open or close (and on resize)
   useEffect(fit, [nodes, size.w, size.h]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // one loop: gliding, fading and floating
+  // one loop while something moves: gliding to new places and fading in/out
   useEffect(() => {
     let raf = 0;
     let last = performance.now();
+    const near = (a: number, b: number) => Math.abs(a - b) < 0.3;
     const step = (now: number) => {
       const a = still ? 1 : Math.min(1, ((now - last) / 1000) * 7);
       last = now;
+      let moving = false;
       for (const n of nodes) {
         const target = { x: n.home.x, y: n.home.y, o: n.shown ? 1 : 0 };
         const c = cur.current.get(n.id) ?? (n.kind === 'leaf' ? { ...target, o: 0 } : target);
-        cur.current.set(n.id, { x: c.x + (target.x - c.x) * a, y: c.y + (target.y - c.y) * a, o: c.o + (target.o - c.o) * a });
+        const next = { x: c.x + (target.x - c.x) * a, y: c.y + (target.y - c.y) * a, o: c.o + (target.o - c.o) * a };
+        if (!near(next.x, target.x) || !near(next.y, target.y) || Math.abs(next.o - target.o) > 0.01) moving = true;
+        else Object.assign(next, target);
+        cur.current.set(n.id, next);
       }
       const v = view.current, g = goal.current;
       view.current = { x: v.x + (g.x - v.x) * a, y: v.y + (g.y - v.y) * a, k: v.k + (g.k - v.k) * a };
-      setT(now / 1000);
-      if (!still) raf = requestAnimationFrame(step);
+      if (!near(view.current.x, g.x) || !near(view.current.y, g.y) || Math.abs(view.current.k - g.k) > 0.002) moving = true;
+      else view.current = g;
+      setT(now);
+      if (moving && !still) raf = requestAnimationFrame(step);
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
   }, [nodes, still, size.w, size.h]);
 
-  const float = (n: Node): Pt => (still || n.kind === 'center' ? { x: 0, y: 0 } : { x: Math.sin(t * 0.55 + n.phase) * 3.5, y: Math.cos(t * 0.45 + n.phase * 1.3) * 4.5 });
-  const place = (n: Node) => {
-    const c = cur.current.get(n.id) ?? { x: n.home.x, y: n.home.y, o: n.shown ? 1 : 0 };
-    const f = float(n);
-    return { x: c.x + f.x, y: c.y + f.y, o: c.o };
-  };
+  void t; // redraw trigger of the loop
+  const place = (n: Node) => cur.current.get(n.id) ?? { x: n.home.x, y: n.home.y, o: n.shown ? 1 : 0 };
   const tone = (n: Node) => pal.tones[(n.hue - 1) % pal.tones.length];
 
   const toggle = (i: number) =>
@@ -88,10 +92,34 @@ export function MindmapView({ map, onCards }: { map: Map; onCards: (term: string
     setSel(null);
   };
 
-  // dragging and zooming (they set the camera directly)
+  // dragging and zooming (they set the camera directly) – the map always stays at least partly in view
+  /** Is at least one box well inside the visible area with this camera? */
+  const seen = (v: View) => {
+    const m = 60;
+    return nodes.some((n) => {
+      if (!n.shown) return false;
+      const l = size.w / 2 + v.x + (n.home.x - n.w / 2) * v.k, r = size.w / 2 + v.x + (n.home.x + n.w / 2) * v.k;
+      const t2 = size.h / 2 + v.y + (n.home.y - n.h / 2) * v.k, b = size.h / 2 + v.y + (n.home.y + n.h / 2) * v.k;
+      return r > m && l < size.w - m && b > m && t2 < size.h - m;
+    });
+  };
+  /** The camera as close to `v` as possible while some of the map stays in view (the map stops at the edge). */
+  const keepInView = (v: View): View => {
+    if (seen(v)) return v;
+    const from = view.current;
+    if (!seen(from)) return goal.current;
+    let lo = 0, hi = 1;
+    for (let i = 0; i < 12; i++) {
+      const mid = (lo + hi) / 2;
+      if (seen({ x: from.x + (v.x - from.x) * mid, y: from.y + (v.y - from.y) * mid, k: from.k + (v.k - from.k) * mid })) lo = mid;
+      else hi = mid;
+    }
+    return { x: from.x + (v.x - from.x) * lo, y: from.y + (v.y - from.y) * lo, k: from.k + (v.k - from.k) * lo };
+  };
   const setCam = (v: View) => {
-    view.current = v;
-    goal.current = v;
+    const c = keepInView(v);
+    view.current = c;
+    goal.current = c;
     setT((x) => x + 0.0001);
   };
   const drag = useRef<{ x: number; y: number; v: View; moved: boolean } | null>(null);
@@ -168,9 +196,13 @@ export function MindmapView({ map, onCards }: { map: Map; onCards: (term: string
             {drawn
               .filter(({ n }) => n.kind !== 'center')
               .map(({ n, p }) => {
-                const from = n.kind === 'branch' ? at.get(center.id)! : (at.get(`b${n.branch}`) ?? p);
+                const parent = n.kind === 'branch' ? center : nodes.find((x) => x.id === `b${n.branch}`)!;
+                const pp = at.get(parent.id) ?? p;
+                // from the right edge of the parent to the left edge of the box (read left to right)
+                const from = { x: pp.x + parent.w / 2, y: pp.y };
+                const to = { x: Math.max(from.x, p.x - n.w / 2), y: p.y };
                 const o = p.o;
-                return <path key={'l' + n.id} d={link(from, p)} fill="none" stroke={tone(n).line} strokeWidth={n.kind === 'branch' ? 3.5 : 2} strokeLinecap="round" opacity={o * (n.kind === 'branch' ? 0.85 : 0.7)} />;
+                return <path key={'l' + n.id} d={link(from, to)} fill="none" stroke={tone(n).line} strokeWidth={n.kind === 'branch' ? 3.5 : 2} strokeLinecap="round" opacity={o * (n.kind === 'branch' ? 0.85 : 0.7)} />;
               })}
             {drawn.map(({ n, p }) => {
               const tn = tone(n);

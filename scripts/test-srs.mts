@@ -716,6 +716,10 @@ console.log('Interaktive Mindmap');
   ok(leaves.filter((x) => x.shown).every((x) => x.branch === 2 && Math.sign(x.home.x) === Math.sign(b2.home.x) && Math.abs(x.home.x) > Math.abs(b2.home.x)), 'aufgeklappte Punkte stehen außen neben ihrem Ast');
   ok(leaves.filter((x) => !x.shown).every((x) => { const b = one.find((y) => y.id === `b${x.branch}`)!; return x.home.x === b.home.x && x.home.y === b.home.y; }), 'zugeklappte Punkte warten unsichtbar auf ihrem Ast (von dort klappen sie auf)');
   ok(one.find((x) => x.label === 'Befragung')?.icon === 'chat', 'Symbole erscheinen auch in der interaktiven Mindmap');
+  const full = mindmapLayout(d, new Set(d.branches.map((_: any, i: number) => i)));
+  const right = (k: string) => full.filter((x) => x.kind === k).map((x) => x.home.x - x.w / 2);
+  const left = (k: string) => full.filter((x) => x.kind === k).map((x) => x.home.x + x.w / 2);
+  ok(Math.max(...left('center')) < Math.min(...right('branch')) && Math.max(...left('branch')) < Math.min(...right('leaf')) && new Set(right('branch').map(Math.round)).size === 1 && new Set(right('leaf').map(Math.round)).size === 1, 'von links nach rechts: Thema, dann Äste, dann Punkte – jeweils bündig in einer Spalte');
 }
 
 console.log('Kurze Decknamen');

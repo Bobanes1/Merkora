@@ -46,31 +46,51 @@ export function SlideViewer({ deck }: { deck: Deck }) {
     };
   }, [file?.id]);
 
-  // the current slide as a picture (kept, so leafing back is instant)
-  useEffect(() => {
-    if (!pdf || !file) return;
-    const key = `${file.id}:${page}`;
+  // slides as pictures, each rendered once (also the ones being prepared in the background)
+  const pending = useRef(new Map<string, Promise<string>>());
+  const slide = (n: number): Promise<string> => {
+    const key = `${file!.id}:${n}`;
     const hit = cache.current.get(key);
-    if (hit) return setUrl(hit);
-    let alive = true;
-    setUrl(null);
-    pdf
-      .render(page, 1400)
-      .then((b) => {
+    if (hit) return Promise.resolve(hit);
+    let p = pending.current.get(key);
+    if (!p) {
+      p = pdf!.render(n, 1400).then((b) => {
         const u = URL.createObjectURL(b);
         cache.current.set(key, u);
-        if (alive) setUrl(u);
+        pending.current.delete(key);
+        return u;
+      });
+      pending.current.set(key, p);
+    }
+    return p;
+  };
+
+  // the current slide; the previous one stays visible until the new one is ready (no jumping)
+  useEffect(() => {
+    if (!pdf || !file) return;
+    let alive = true;
+    void slide(page)
+      .then((u) => {
+        if (!alive) return;
+        setUrl(u);
+        // prepare the neighbours, so leafing on is instant
+        for (const n of [page + 1, page + 2, page - 1]) if (n >= 1 && n <= pdf.pages) void slide(n).catch(() => undefined);
       })
       .catch(() => alive && setState('error'));
     return () => {
       alive = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pdf, page, file?.id]);
 
   useEffect(() => {
     const c = cache.current;
     return () => c.forEach((u) => URL.revokeObjectURL(u));
   }, []);
+  // a new file: start with an empty stage, but keep its height
+  useEffect(() => setUrl(null), [file?.id]);
+  const [ratio, setRatio] = useState<number | null>(null);
+  const waiting = !!url && !cache.current.has(`${file?.id}:${page}`);
 
   if (!file) return null;
   const pages = pdf?.pages ?? 0;
@@ -109,13 +129,20 @@ export function SlideViewer({ deck }: { deck: Deck }) {
           </button>
         </div>
       )}
-      <div className="slides-stage">
+      {/* fixed shape (from the first slide), so the page never jumps while leafing */}
+      <div className="slides-stage" style={ratio ? { aspectRatio: String(ratio), width: `min(100%, calc(70vh * ${ratio}))` } : undefined}>
         {state === 'missing' ? (
           <p className="muted small">Diese Präsentation ist auf diesem Gerät nicht gespeichert (vielleicht noch nicht synchronisiert).</p>
         ) : state === 'error' ? (
           <p className="muted small">Die Präsentation konnte nicht geöffnet werden.</p>
         ) : url ? (
-          <img className="slides-img" src={url} alt={alt} onClick={() => openLightbox(url, alt)} />
+          <img
+            className={'slides-img' + (waiting ? ' waiting' : '')}
+            src={url}
+            alt={alt}
+            onLoad={(e) => !ratio && setRatio(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight)}
+            onClick={() => openLightbox(url, alt)}
+          />
         ) : (
           <div className="slide-loading">Folie wird geladen …</div>
         )}

@@ -34,42 +34,41 @@ function box(label: string, kind: Node['kind'], icon?: string) {
 }
 
 /**
- * Classic mind map: the topic in the middle, branches stacked on the right and left (alternately),
- * the points of an opened branch listed beside it on the outside. Room is made only for opened branches.
+ * Read from left to right: the topic on the left, its branches in a column to the right of it,
+ * the points of an opened branch in the next column. Room is made only for opened branches.
  */
 export function mindmapLayout(map: Map, open: Set<number>): Node[] {
   const icon = (l: string) => map.icons?.[l];
   const center: Node = { id: 'c', label: map.center, kind: 'center', hue: 1, branch: -1, home: { x: 0, y: 0 }, shown: true, phase: 0, icon: icon(map.center), ...box(map.center, 'center', icon(map.center)) };
   const nodes: Node[] = [center];
   type G = { i: number; b: Node; leaves: Node[]; h: number };
-  const sides: G[][] = [[], []];
+  const groups: G[] = [];
   map.branches.forEach((br, i) => {
     const hue = (i % 5) + 2 > 5 ? 1 : (i % 5) + 2;
     const b: Node = { id: `b${i}`, label: br.label, kind: 'branch', hue, branch: i, home: { x: 0, y: 0 }, shown: true, phase: i * 1.7, icon: icon(br.label), ...box(br.label, 'branch', icon(br.label)) };
     const leaves = br.children.map((c, j): Node => ({ id: `b${i}c${j}`, label: c, kind: 'leaf', hue, branch: i, home: { x: 0, y: 0 }, shown: open.has(i), phase: i * 1.7 + j * 2.3 + 0.8, icon: icon(c), ...box(c, 'leaf', icon(c)) }));
     const leavesH = leaves.reduce((n, l) => n + l.h, 0) + Math.max(0, leaves.length - 1) * GAP_LEAF;
-    sides[i % 2].push({ i, b, leaves, h: Math.max(b.h, open.has(i) ? leavesH : 0) });
+    groups.push({ i, b, leaves, h: Math.max(b.h, open.has(i) ? leavesH : 0) });
   });
-  const branchX = (b: Node) => center.w / 2 + 70 + b.w / 2;
-  sides.forEach((groups, side) => {
-    const dir = side === 0 ? 1 : -1;
-    const total = groups.reduce((n, g) => n + g.h, 0) + Math.max(0, groups.length - 1) * GAP_GROUP;
-    let y = -total / 2;
-    for (const g of groups) {
-      const by = y + g.h / 2;
-      g.b.home = { x: dir * branchX(g.b), y: by };
-      nodes.push(g.b);
-      // points beside the branch, outside, stacked around its height
-      const leafX = branchX(g.b) + g.b.w / 2 + 56;
-      const leavesH = g.leaves.reduce((n, l) => n + l.h, 0) + Math.max(0, g.leaves.length - 1) * GAP_LEAF;
-      let ly = by - leavesH / 2;
-      for (const l of g.leaves) {
-        l.home = l.shown ? { x: dir * (leafX + l.w / 2), y: ly + l.h / 2 } : { ...g.b.home };
-        ly += l.h + GAP_LEAF;
-        nodes.push(l);
-      }
-      y += g.h + GAP_GROUP;
+  // columns: left edges line up
+  const branchLeft = center.w / 2 + 80;
+  const branchW = Math.max(...groups.map((g) => g.b.w));
+  const leafLeft = branchLeft + branchW + 64;
+  const total = groups.reduce((n, g) => n + g.h, 0) + Math.max(0, groups.length - 1) * GAP_GROUP;
+  let y = -total / 2;
+  for (const g of groups) {
+    const by = y + g.h / 2;
+    g.b.home = { x: branchLeft + g.b.w / 2, y: by };
+    nodes.push(g.b);
+    // its points in the next column, stacked around the branch's height
+    const leavesH = g.leaves.reduce((n, l) => n + l.h, 0) + Math.max(0, g.leaves.length - 1) * GAP_LEAF;
+    let ly = by - leavesH / 2;
+    for (const l of g.leaves) {
+      l.home = l.shown ? { x: leafLeft + l.w / 2, y: ly + l.h / 2 } : { ...g.b.home };
+      ly += l.h + GAP_LEAF;
+      nodes.push(l);
     }
-  });
+    y += g.h + GAP_GROUP;
+  }
   return nodes;
 }
