@@ -33,6 +33,12 @@ export const JOB_LABEL: Record<JobKind, string> = {
   quiz: 'Quiz',
   cards: 'Karteikarten',
 };
+/** Verb that fits the job's name ("Karteikarten werden …", "Zusammenfassung wird …"). */
+export const JOB_VERB: Record<JobKind, { is: string; could: string }> = {
+  summary: { is: 'wird', could: 'konnte' },
+  quiz: { is: 'wird', could: 'konnte' },
+  cards: { is: 'werden', could: 'konnten' },
+};
 export const JOB_TAB: Record<JobKind, string> = { summary: 'summary', quiz: 'quiz', cards: 'cards' };
 
 // ---------- toasts ----------

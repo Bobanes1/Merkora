@@ -1,16 +1,20 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AnkiImport } from '../components/AnkiImport';
 import { CreateWithAI } from '../components/CreateWithAI';
 import { ExamDialog } from '../components/ExamDialog';
 import { IconCalendar, IconCards, IconChevron, IconFlame, IconPlay, IconPlus, IconSparkle, IconStar, IconUpload } from '../components/Icons';
+import { FoldPanel } from '../components/FoldPanel';
 import { Mascot } from '../components/Mascot';
+import { TodoList } from '../components/TodoList';
+import { pipPoke, type PokeMove } from '../lib/pipLines';
+import { todoGroups } from '../lib/todos';
 import { NoKeyHint } from '../components/NoKey';
 import { Pomodoro } from '../components/Pomodoro';
-import { countdownText, dailyPlan, examAt, readiness, upcomingExams } from '../lib/exams';
+import { countdownText, dailyPlan, daysUntil, examAt, readiness, upcomingExams } from '../lib/exams';
 import { pathProgress, xpStreak, xpToday } from '../lib/path';
 import { masteryPercent, streak } from '../lib/stats';
-import { deckUrl, dueCards, useStore, type Deck } from '../lib/store';
+import { deckUrl, dueCards, setSettings, useStore, type Deck } from '../lib/store';
 import { DAY, dayKey, startOfDay } from '../lib/util';
 import { shortName } from '../lib/deckNames';
 import { WeekReview } from '../components/WeekReview';
@@ -85,6 +89,10 @@ export default function Dashboard() {
   useEffect(() => {
     document.title = 'Start – Merkora';
   }, []);
+  // Pip on the banner reacts to clicks: a short move and a line, then he is calm again
+  const [poke, setPoke] = useState<{ n: number; text: string; move: PokeMove; active: boolean } | null>(null);
+  const pokeTimers = useRef<number[]>([]);
+  useEffect(() => () => pokeTimers.current.forEach((t) => clearTimeout(t)), []);
 
   const now = Date.now();
   const today = dayKey(now);
@@ -97,6 +105,22 @@ export default function Dashboard() {
   const serie = Math.max(xpStreak(data), streak(data.reviews));
   const exams = upcomingExams(data);
   const dueDecks = data.decks.filter((d) => dueCards(d).length > 0).sort((a, b) => dueCards(b).length - dueCards(a).length);
+  const openTodos = (data.todos ?? []).filter((t) => !t.doneAt);
+  const urgentTodos = todoGroups(openTodos, now)
+    .filter((g) => g.id === 'overdue' || g.id === 'today')
+    .reduce((a, g) => a + g.items.length, 0);
+  const pokePip = () => {
+    const n = (poke?.n ?? -1) + 1;
+    const next = exams[0];
+    const r = pipPoke({ cardsToday, exam: next ? { title: next.title, days: daysUntil(next, now) } : undefined }, n);
+    pokeTimers.current.forEach((t) => clearTimeout(t));
+    setPoke({ n, ...r, active: true });
+    pokeTimers.current = [
+      window.setTimeout(() => setPoke((p) => (p && p.n === n ? { ...p, active: false } : p)), r.move === 'flip' ? 1000 : 1700),
+      window.setTimeout(() => setPoke((p) => (p && p.n === n ? null : p)), 3200),
+    ];
+  };
+  const restMood = goalReached ? 'cheer' : serie > 0 ? 'happy' : 'wave';
   const pathDeck = data.decks
     .filter((d) => d.cards.length)
     .map((d) => ({ deck: d, p: pathProgress(d) }))
@@ -115,7 +139,16 @@ export default function Dashboard() {
     <div className="home">
       <div className="home-main">
         <section className="hero-banner">
-          <Mascot who="pip" mood={goalReached ? 'cheer' : serie > 0 ? 'happy' : 'wave'} size={104} className="hero-mascot" />
+          <button type="button" className={`hero-pip ${poke?.active && poke.move === 'flip' ? 'poke-flip' : ''}`} aria-label="Pip" title="Pip anstupsen" onClick={pokePip}>
+            <Mascot
+              who="pip"
+              mood={poke?.active ? (poke.move === 'flip' ? 'happy' : poke.move) : restMood}
+              pulse={poke ? `${poke.n}${poke.active ? 'a' : 'r'}` : undefined}
+              size={104}
+              className="hero-mascot"
+              say={poke?.text}
+            />
+          </button>
           <div>
             <h1>{hello}!</h1>
             <p>
@@ -172,7 +205,7 @@ export default function Dashboard() {
                       <IconPlus size={14} /> Prüfung eintragen
                     </button>
                     <Link to="/calendar" className="small-link">
-                      Kalender
+                      Alle Prüfungen
                     </Link>
                   </span>
                 </div>
@@ -203,15 +236,27 @@ export default function Dashboard() {
               </button>
             )}
             {dueDecks.length > 0 && (
-              <section className="panel">
-                <h2>Heute fällig</h2>
+              <FoldPanel
+                title="Heute fällig"
+                summary={`${dueDecks.length} ${dueDecks.length === 1 ? 'Deck' : 'Decks'} · ${due} Karten`}
+                collapsed={!!data.settings.homeDueCollapsed}
+                onToggle={() => setSettings({ homeDueCollapsed: !data.settings.homeDueCollapsed })}
+              >
                 <div className="deck-list">
                   {dueDecks.slice(0, 6).map((d) => (
                     <DeckRow key={d.id} deck={d} />
                   ))}
                 </div>
-              </section>
+              </FoldPanel>
             )}
+            <FoldPanel
+              title="To-dos"
+              summary={openTodos.length ? `${openTodos.length} offen${urgentTodos ? ` · ${urgentTodos} heute oder überfällig` : ''}` : undefined}
+              collapsed={!!data.settings.homeTodosCollapsed}
+              onToggle={() => setSettings({ homeTodosCollapsed: !data.settings.homeTodosCollapsed })}
+            >
+              <TodoList />
+            </FoldPanel>
             {!exams.length && !dueDecks.length && (
               <div className="home-empty">
                 <Mascot who="pip" mood="think" size={120} />
@@ -355,7 +400,6 @@ function MiniCalendar() {
   const first = (month.getDay() + 6) % 7;
   const n = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
   const today = dayKey(Date.now());
-  const next = upcomingExams(data)[0];
   return (
     <div className="widget mini-cal">
       <div className="mini-cal-head">
@@ -390,11 +434,6 @@ function MiniCalendar() {
           );
         })}
       </div>
-      {next && (
-        <small className="muted">
-          Nächste Prüfung: <b>{next.title}</b> · {new Date(examAt(next)).toLocaleDateString('de-DE')} ({countdownText(next)})
-        </small>
-      )}
     </div>
   );
 }

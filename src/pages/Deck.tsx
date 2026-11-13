@@ -3,9 +3,11 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ChatPanel } from '../components/ChatPanel';
 import { ExamDialog } from '../components/ExamDialog';
 import { countdownText, nextExamForDeck } from '../lib/exams';
-import { IconCalendar, IconCards, IconChart, IconChat, IconDoc, IconMindmap, IconNote, IconPath, IconPlay, IconQuiz, IconTarget } from '../components/Icons';
+import { IconCalendar, IconCards, IconChart, IconChat, IconCheck, IconDoc, IconMatch, IconMindmap, IconNote, IconPath, IconPlay, IconQuiz, IconTarget } from '../components/Icons';
+import { PromptModal } from '../components/Modal';
+import MatchTab from './tabs/MatchTab';
 import PathTab from './tabs/PathTab';
-import { dueCards, findPath, useData } from '../lib/store';
+import { addTodo, dueCards, findPath, useData } from '../lib/store';
 import CardsTab from './tabs/CardsTab';
 import LearnTab from './tabs/LearnTab';
 import MasteryTab from './tabs/MasteryTab';
@@ -19,6 +21,7 @@ const TABS = [
   { id: 'cards', label: 'Karteikarten', icon: IconCards },
   { id: 'learn', label: 'Lernen', icon: IconPlay },
   { id: 'path', label: 'Lernpfad', icon: IconPath },
+  { id: 'match', label: 'Zuordnen', icon: IconMatch },
   { id: 'mastery', label: 'Lernfortschritt', icon: IconChart },
   { id: 'summary', label: 'Zusammenfassung', icon: IconDoc },
   { id: 'mindmap', label: 'Mindmap', icon: IconMindmap },
@@ -38,6 +41,7 @@ export default function DeckPage() {
   const tab: TabId = TABS.some((t) => t.id === tabParam) ? (tabParam as TabId) : 'cards';
   const setTab = (t: TabId) => setParams({ tab: t });
   const [examDialog, setExamDialog] = useState(false);
+  const [todoDialog, setTodoDialog] = useState(false);
 
   useEffect(() => {
     if (deck) document.title = `${deck.name} – Merkora`;
@@ -56,6 +60,7 @@ export default function DeckPage() {
 
   const due = dueCards(deck).length;
   const exam = nextExamForDeck(data, deck.id);
+  const todos = (data.todos ?? []).filter((t) => t.deckId === deck.id && !t.doneAt).length;
 
   return (
     <div className={`deck-layout ${chat ? 'with-chat' : ''}`}>
@@ -78,6 +83,14 @@ export default function DeckPage() {
                 <IconCalendar size={14} /> Prüfung verknüpfen
               </button>
             )}
+            <button
+              type="button"
+              className="btn ghost sm"
+              onClick={() => setTodoDialog(true)}
+              title={todos ? `${todos} offene${todos === 1 ? 's' : ''} To-do${todos === 1 ? '' : 's'} – auf der Startseite` : 'To-do zu diesem Deck anlegen'}
+            >
+              <IconCheck size={14} /> {todos ? `${todos} To-do${todos === 1 ? '' : 's'}` : '+ To-do'}
+            </button>
             <button type="button" className={`btn ${chat ? 'soft' : 'outline'} sm`} onClick={() => setChat(!chat)}>
               <IconChat size={15} /> Tutor
             </button>
@@ -105,6 +118,7 @@ export default function DeckPage() {
           {tab === 'cards' && <CardsTab deck={deck} onLearn={() => setTab('learn')} />}
           {tab === 'learn' && <LearnTab deck={deck} onDone={() => setTab('mastery')} />}
           {tab === 'path' && <PathTab key={deck.id} deck={deck} />}
+          {tab === 'match' && <MatchTab key={deck.id} deck={deck} />}
           {tab === 'mastery' && <MasteryTab deck={deck} reviews={data.reviews.filter((r) => r.deckId === deck.id)} onLearn={() => setTab('learn')} onProblems={() => setParams({ tab: 'cards', filter: 'leech' })} />}
           {tab === 'summary' && <SummaryTab deck={deck} />}
           {tab === 'mindmap' && <MindmapTab deck={deck} onCards={(term) => setParams({ tab: 'cards', q: term })} />}
@@ -115,6 +129,15 @@ export default function DeckPage() {
       </div>
       {chat && <ChatPanel deck={deck} onClose={() => setChat(false)} />}
       {examDialog && <ExamDialog presetDeckId={deck.id} onClose={() => setExamDialog(false)} />}
+      {todoDialog && (
+        <PromptModal
+          title="To-do zu diesem Deck"
+          label={`Was steht bei „${deck.name}“ an? (erscheint auf der Startseite)`}
+          confirm="Hinzufügen"
+          onSubmit={(text) => addTodo({ text, deckId: deck.id })}
+          onClose={() => setTodoDialog(false)}
+        />
+      )}
     </div>
   );
 }

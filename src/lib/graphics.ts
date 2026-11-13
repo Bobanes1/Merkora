@@ -1,6 +1,7 @@
 /** Graphics on cards: SVG diagrams made by the AI, stored like any other card picture. */
 import DOMPurify from 'dompurify';
-import { complete, LANG_RULE, AiError } from './ai';
+import { boldOn, complete, LANG_RULE, AiError } from './ai';
+import { emphasisHtml, hasEmphasis, stripEmphasis } from './emphasis';
 import { escapeHtml } from './content';
 import { mediaPutMany } from './db';
 import type { NewCard } from './store';
@@ -58,37 +59,30 @@ export async function withGraphics(
   figureSet?: string,
 ): Promise<NewCard[]> {
   const out: NewCard[] = [];
+  const bold = boldOn();
+  // key words marked **…** by the AI become bold (or lose the marks when the setting is off)
+  const html = (s: string) => (bold ? emphasisHtml(s) : emphasisHtml(stripEmphasis(s)));
   for (const c of cards) {
     // a picture of the PDF slide that shows the answer comes first (instead of a drawn diagram)
     const slide = c.figure ? await figureForCard(figureSet, c.figure) : '';
     if (slide) {
-      out.push({
-        front: escapeHtml(c.front).replace(/\n/g, '<br>'),
-        back: `${escapeHtml(c.back).replace(/\n/g, '<br>')}${slide}`,
-        html: true,
-      });
+      out.push({ front: html(c.front), back: `${html(c.back)}${slide}`, html: true });
       continue;
     }
     const d = c.diagram ? parseDiagram(c.diagram) : null;
     if (d) {
-      out.push({
-        front: escapeHtml(c.front).replace(/\n/g, '<br>'),
-        back: `${escapeHtml(c.back).replace(/\n/g, '<br>')}${diagramHtml(d)}`,
-        html: true,
-      });
+      out.push({ front: html(c.front), back: `${html(c.back)}${diagramHtml(d)}`, html: true });
       continue;
     }
     const svg = c.svg ? cleanSvg(c.svg) : null;
     if (!svg) {
-      out.push({ front: c.front, back: c.back });
+      // bold key words make it an HTML card, otherwise it stays plain text
+      if (bold && (hasEmphasis(c.front) || hasEmphasis(c.back))) out.push({ front: html(c.front), back: html(c.back), html: true });
+      else out.push({ front: stripEmphasis(c.front), back: stripEmphasis(c.back) });
       continue;
     }
     const id = await storeSvg(svg);
-    out.push({
-      front: escapeHtml(c.front).replace(/\n/g, '<br>'),
-      back: `${escapeHtml(c.back).replace(/\n/g, '<br>')}<br><img data-media="${id}" alt="Grafik">`,
-      html: true,
-    });
+    out.push({ front: html(c.front), back: `${html(c.back)}<br><img data-media="${id}" alt="Grafik">`, html: true });
   }
   return out;
 }

@@ -312,7 +312,7 @@ function Lesson({ deck, node, onExit }: { deck: Deck; node: PathNode; onExit: ()
       <div className="lesson-end panel">
         {end.win && <Confetti />}
         <Mascot
-          who={end.win ? 'pip' : 'flo'}
+          who="pip"
           mood={end.win ? 'cheer' : 'sad'}
           size={110}
           side="top"

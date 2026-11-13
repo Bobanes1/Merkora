@@ -13,54 +13,73 @@ const WEEK = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 
 function ExamCard({ exam, onEdit, onDelete, onPractice }: { exam: Exam; onEdit: () => void; onDelete: () => void; onPractice: () => void }) {
   const data = useData();
+  const [open, setOpen] = useState(false);
   const r = readiness(data, exam);
   const plan = dailyPlan(data, exam);
   const decks = examDecks(data, exam);
   const when = new Date(examAt(exam)).toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const whole = (exam.courseIds?.length ?? 0) + (exam.folderIds?.length ?? 0) > 0;
   return (
-    <article className="exam-card">
+    <article className={'exam-card' + (open ? ' open' : '')}>
       <div className="exam-date">
         <b>{new Date(examAt(exam)).getDate()}</b>
         <small>{new Date(examAt(exam)).toLocaleDateString('de-DE', { month: 'short' })}</small>
       </div>
       <div className="grow">
-        <div className="exam-title">
+        {/* compact: title, countdown and how ready – a click shows the details */}
+        <button type="button" className="exam-toggle" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+          <IconChevron size={14} className="exam-chev" />
           <h3>{exam.title}</h3>
           <span className="pill-count">{countdownText(exam)}</span>
-        </div>
-        <p className="muted small">
-          {when}
-          {exam.time ? `, ${exam.time} Uhr` : ''}
-          {exam.note ? ` · ${exam.note}` : ''}
-        </p>
-        {decks.length ? (
-          <>
-            <div className="exam-ready">
-              <span className="bar">
-                <i style={{ width: `${r.percent}%` }} />
-              </span>
-              <small>{r.percent}% vorbereitet</small>
-            </div>
-            <p className="small">
-              {plan.left > 0 ? (
-                <>
-                  Heute noch <b>{plan.left} Karten</b> ({plan.doneToday} geschafft)
-                </>
-              ) : (
-                <>Tagesziel erreicht ✓</>
-              )}{' '}
-              · {r.open} von {r.total} Karten noch nicht sicher
+        </button>
+        {decks.length > 0 && (
+          <div className="exam-ready">
+            <span className="bar">
+              <i style={{ width: `${r.percent}%` }} />
+            </span>
+            <small>{r.percent}% vorbereitet</small>
+          </div>
+        )}
+        {open && (
+          <div className="exam-details">
+            <p className="muted small">
+              {when}
+              {exam.time ? `, ${exam.time} Uhr` : ''}
+              {exam.note ? ` · ${exam.note}` : ''}
             </p>
-            <div className="exam-deck-links">
-              {decks.map((d) => (
-                <Link key={d.id} to={deckUrl(data, d, 'learn')} className="chip">
-                  {d.name}
-                </Link>
-              ))}
+            {decks.length ? (
+              <>
+                <p className="small">
+                  {plan.left > 0 ? (
+                    <>
+                      Heute noch <b>{plan.left} Karten</b> ({plan.doneToday} geschafft)
+                    </>
+                  ) : (
+                    <>Tagesziel erreicht ✓</>
+                  )}{' '}
+                  · {r.open} von {r.total} Karten noch nicht sicher
+                </p>
+                {whole && <p className="muted small">Ganze Kurse oder Ordner – neue Decks darin zählen automatisch mit.</p>}
+                <div className="exam-deck-links">
+                  {decks.map((d) => (
+                    <Link key={d.id} to={deckUrl(data, d, 'learn')} className="chip">
+                      {d.name}
+                    </Link>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p className="muted small">Noch keine Decks verknüpft.</p>
+            )}
+            <div className="row-gap">
+              <button type="button" className="btn ghost sm" onClick={onEdit}>
+                <IconEdit size={14} /> Bearbeiten
+              </button>
+              <button type="button" className="btn ghost sm danger-text" onClick={onDelete}>
+                <IconTrash size={14} /> Löschen
+              </button>
             </div>
-          </>
-        ) : (
-          <p className="muted small">Noch keine Decks verknüpft.</p>
+          </div>
         )}
       </div>
       <div className="exam-actions">
@@ -69,12 +88,6 @@ function ExamCard({ exam, onEdit, onDelete, onPractice }: { exam: Exam; onEdit: 
             <IconPlay size={12} /> Üben
           </button>
         )}
-        <button type="button" className="icon-btn" aria-label="Bearbeiten" onClick={onEdit}>
-          <IconEdit size={16} />
-        </button>
-        <button type="button" className="icon-btn" aria-label="Löschen" onClick={onDelete}>
-          <IconTrash size={16} />
-        </button>
       </div>
     </article>
   );
@@ -91,7 +104,7 @@ export default function CalendarPage() {
   const [practice, setPractice] = useState<{ title: string; items: SessionItem[] } | null>(null);
   const [showPast, setShowPast] = useState(false);
   useEffect(() => {
-    document.title = 'Kalender – Merkora';
+    document.title = 'Prüfungen – Merkora';
   }, []);
 
   const upcoming = upcomingExams(data);
@@ -101,6 +114,12 @@ export default function CalendarPage() {
     for (const e of data.exams) m.set(e.date, [...(m.get(e.date) ?? []), e]);
     return m;
   }, [data.exams]);
+  // open to-dos with a date appear on their day too
+  const todosByDay = useMemo(() => {
+    const m = new Map<string, string[]>();
+    for (const t of data.todos ?? []) if (t.due && !t.doneAt) m.set(t.due, [...(m.get(t.due) ?? []), t.text]);
+    return m;
+  }, [data.todos]);
 
   // Month grid starting on Monday
   const first = (month.getDay() + 6) % 7;
@@ -124,7 +143,7 @@ export default function CalendarPage() {
   return (
     <div className="page">
       <header className="page-head">
-        <h1>Kalender</h1>
+        <h1>Prüfungen</h1>
         <div className="row-gap">
           {data.exams.length > 0 && (
             <button
@@ -172,18 +191,24 @@ export default function CalendarPage() {
               if (!d) return <span key={i} className="day empty" />;
               const k = dayKey(d.getTime());
               const exams = byDay.get(k) ?? [];
+              const todos = todosByDay.get(k) ?? [];
               return (
                 <button
                   type="button"
                   key={i}
                   className={`day ${k === today ? 'today' : ''} ${exams.length ? 'has-exam' : ''} ${k < today ? 'past' : ''}`}
-                  title={exams.map((e) => e.title).join(', ') || 'Prüfung an diesem Tag eintragen'}
+                  title={[...exams.map((e) => e.title), ...todos.map((t) => 'To-do: ' + t)].join(', ') || 'Prüfung an diesem Tag eintragen'}
                   onClick={() => (exams.length ? setEdit({ exam: exams[0] }) : setEdit({ date: k }))}
                 >
                   <span>{d.getDate()}</span>
                   {exams.slice(0, 2).map((e) => (
                     <i key={e.id}>{e.title}</i>
                   ))}
+                  {todos.length > 0 && exams.length < 2 && (
+                    <i className="day-todo">
+                      {todos.length === 1 ? todos[0] : `${todos.length} To-dos`}
+                    </i>
+                  )}
                 </button>
               );
             })}
@@ -230,7 +255,7 @@ export default function CalendarPage() {
       {del && (
         <ConfirmModal
           title="Prüfung löschen?"
-          text={`„${del.title}“ wird aus dem Kalender entfernt. Die Decks und Karten bleiben erhalten.`}
+          text={`„${del.title}“ wird entfernt. Die Decks und Karten bleiben erhalten.`}
           onClose={() => setDel(null)}
           onConfirm={() => deleteExam(del.id)}
         />

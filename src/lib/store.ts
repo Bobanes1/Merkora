@@ -8,6 +8,7 @@ import { newSrs, schedule, setSchedulerOptions, type Rating, type Srs } from './
 import { dayKey, uid, uniqueSlug } from './util';
 import type { Diagram } from './diagram';
 import type { AskSide } from './askSide';
+import type { Todo } from './todos';
 import { moveCardsIn } from './moveCards';
 
 export type Provider = 'openai' | 'anthropic' | 'gemini' | 'openrouter' | 'custom';
@@ -102,6 +103,8 @@ export type Deck = {
   summary?: string;
   /** Mind map of the material (Merkora graphic, drawn like the card graphics). */
   mindmap?: Diagram;
+  /** Short explanations of mind map terms (made once by the AI, kept). */
+  mindmapNotes?: Record<string, string>;
   /** Best time in the matching game (ms). */
   matchBest?: number;
   /** What is asked when learning: the term (front, default), the definition (back) or mixed. */
@@ -206,6 +209,13 @@ export type Settings = {
   speechVoice?: string;
   speechRate?: number;
   speechAuto?: boolean;
+  /** Key words on AI cards in bold (on by default). */
+  boldKeywords?: boolean;
+  /** Start page: "Heute fällig" folded; statistics: what is open; library: tiles or list. */
+  homeDueCollapsed?: boolean;
+  homeTodosCollapsed?: boolean;
+  statsOpen?: { section?: boolean; groups?: string[] };
+  libraryView?: 'tiles' | 'list';
   /** Take models and figures from PDF slides onto AI cards (on by default). */
   slideFigures?: boolean;
   /** Own price in US-$ per 1M tokens (input/output) – overrides the price list. */
@@ -237,6 +247,8 @@ export type Data = {
   jobs: Job[];
   /** Exam dates (calendar). */
   exams: Exam[];
+  /** To-dos on the start page. */
+  todos?: Todo[];
   /** Deleted ids with time – so a sync doesn't bring them back. */
   deleted?: Record<string, number>;
   /** When this copy was last saved (to pick the newest copy on start). */
@@ -381,6 +393,7 @@ function normalize(raw: unknown): Data | null {
     // the podcast feature is paused – its unfinished jobs are dropped
     jobs: (d.jobs ?? []).filter((j) => (j.kind as string) !== 'podcast'),
     exams: d.exams ?? [],
+    todos: d.todos ?? [],
     deleted,
     savedAt: d.savedAt,
   };
@@ -775,6 +788,23 @@ export function updateExam(id: string, patch: Partial<Exam>) {
 }
 export function deleteExam(id: string) {
   update((d) => ({ ...d, exams: d.exams.filter((e) => e.id !== id), deleted: tomb(d, [id]) }));
+}
+
+// ---------- to-dos ----------
+export function addTodo(t: Omit<Todo, 'id' | 'createdAt'>): Todo {
+  const todo: Todo = { ...t, id: uid(), createdAt: Date.now() };
+  update((d) => ({ ...d, todos: [...(d.todos ?? []), todo] }));
+  return todo;
+}
+export function updateTodo(id: string, patch: Partial<Todo>) {
+  update((d) => ({ ...d, todos: (d.todos ?? []).map((t) => (t.id === id ? { ...t, ...patch, updatedAt: Date.now() } : t)) }));
+}
+export function toggleTodo(id: string) {
+  const t = getState().data.todos?.find((x) => x.id === id);
+  if (t) updateTodo(id, { doneAt: t.doneAt ? undefined : Date.now() });
+}
+export function deleteTodo(id: string) {
+  update((d) => ({ ...d, todos: (d.todos ?? []).filter((t) => t.id !== id), deleted: tomb(d, [id]) }));
 }
 
 // ---------- gamification ----------

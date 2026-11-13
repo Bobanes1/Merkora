@@ -2,6 +2,7 @@ import { netFetch } from './desktop';
 import { sideText } from './content';
 import { DIAGRAM_KINDS, DIAGRAM_RULE, parseDiagram, type Diagram } from './diagram';
 import { ICON_NAMES } from './diagramIcons';
+import { EMPHASIS_RULE } from './emphasis';
 import { FIGURE_RULE } from './slides';
 import { getState, type ChatMsg, type Provider } from './store';
 import { SECOND_MODEL } from '../config';
@@ -304,7 +305,7 @@ export function cardsPrompt(text: string, count: number, focus = '', graphics = 
   return {
     system: `Du bist ein erfahrener Lerncoach und erstellst hochwertige Karteikarten. ${LANG_RULE}
 Regeln: Eine Idee pro Karte. Vorderseite = präzise Frage oder Begriff. Rückseite = kurze, vollständige Antwort (max. 2–3 Sätze).
-Wähle prüfungsorientiert aus: Karten zu dem, was in einer Prüfung zu diesem Stoff gefragt werden kann – nicht zu Organisatorischem, Agenda oder Literaturlisten.
+Wähle prüfungsorientiert aus: Karten zu dem, was in einer Prüfung zu diesem Stoff gefragt werden kann – nicht zu Organisatorischem, Agenda oder Literaturlisten.${boldOn() ? '\n' + EMPHASIS_RULE : ''}
 ${graphics ? DIAGRAM_RULE + '\n' : ''}${figures ? FIGURE_RULE + '\n' : ''}Format: {"cards":[{"front":"...","back":"..."${graphics ? ',"diagram":{…} (optional)' : ''}${figures ? ',"figure":7 (optional)' : ''}}]}${JSON_RULE}`,
     user: `${
       count > 0
@@ -571,7 +572,7 @@ export async function improveCard(front: string, back: string, lapses: number): 
 Schlage drei Wege vor:
 - "rewrite": dieselbe Karte klarer – eindeutige, konkrete Frage, kurze Antwort mit dem Kern zuerst.
 - "mnemonic": eine kurze, einprägsame Eselsbrücke oder ein Bild zum Merken (1–2 Sätze).
-- "split": 2–3 kleinere Karten, die zusammen dasselbe abfragen (je eine Sache pro Karte).
+- "split": 2–3 kleinere Karten, die zusammen dasselbe abfragen (je eine Sache pro Karte).${boldOn() ? '\n' + EMPHASIS_RULE : ''}
 Format: {"rewrite":{"front":"...","back":"..."},"mnemonic":"...","split":[{"front":"...","back":"..."}]}`,
     `Frage: ${front}\nAntwort: ${back}`,
     1500,
@@ -601,4 +602,34 @@ Format: {"center":"…","branches":[{"label":"…","children":["…","…"]}],"i
   const d = parseDiagram({ ...raw, type: 'mindmap' });
   if (!d) throw new AiError('Die KI hat keine brauchbare Mindmap geliefert. Versuch es noch einmal.');
   return d;
+}
+
+/** Bold key words on AI cards (setting, on by default). */
+export const boldOn = () => getState().data.settings.boldKeywords !== false;
+
+/** A new version of one card about the same topic (optionally with a wish like "kürzer"), from the matching material. */
+export async function regenerateCard(front: string, back: string, material: string, wish: string): Promise<{ front: string; back: string }> {
+  const r = await completeJson<{ front?: unknown; back?: unknown }>(
+    `Du schreibst eine Lernkarte neu – zum selben Thema, aber besser: eine präzise Frage und eine kurze, vollständige Antwort (max. 2–3 Sätze). ${LANG_RULE}${boldOn() ? '\n' + EMPHASIS_RULE : ''}
+Format: {"front":"...","back":"..."}`,
+    `Bisherige Karte:\nFrage: ${front}\nAntwort: ${back}${wish.trim() ? `\n\nWunsch: ${wish.trim()}` : ''}${material ? `\n\nPassendes Lernmaterial:\n${material}` : ''}`,
+    900,
+    'chat',
+  );
+  const f = String(r.front ?? '').trim(), b = String(r.back ?? '').trim();
+  if (!f || !b) throw new AiError('Die KI hat keine brauchbare Karte geliefert. Versuch es noch einmal.');
+  return { front: f, back: b };
+}
+
+/** A short explanation of a term of the mind map, in the context of the deck and its branch. */
+export async function explainTerm(term: string, branch: string, deckName: string, material: string): Promise<string> {
+  return complete(
+    [
+      {
+        role: 'user',
+        content: `Erkläre kurz das Unterthema „${term}“${branch && branch !== term ? ` (gehört zu „${branch}“)` : ''} aus dem Deck „${deckName}“: 3–5 Sätze, verständlich, mit einem kleinen Beispiel, und wie es mit dem übergeordneten Thema zusammenhängt. Markdown erlaubt, keine Überschrift.${material ? `\n\nLernmaterial dazu:\n${material}` : ''}`,
+      },
+    ],
+    { system: `Du bist Pip, ein geduldiger Lerntutor. ${LANG_RULE}`, maxTokens: 700, purpose: 'chat' },
+  );
 }

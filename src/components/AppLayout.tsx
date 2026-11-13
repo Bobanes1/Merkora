@@ -176,7 +176,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
             <IconLibrary /> Bibliothek
           </NavLink>
           <NavLink to="/calendar" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-            <IconCalendar /> Kalender
+            <IconCalendar /> Prüfungen
           </NavLink>
           <NavLink to="/stats" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             <IconChart /> Statistik

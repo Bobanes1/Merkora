@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { answerOnly } from '../lib/backSide';
+import { ASK_SIDES, asksBack, sidesFor, type AskSide } from '../lib/askSide';
+import { stopSpeaking } from '../lib/speech';
+import { htmlSpeech } from '../lib/speechText';
+import { SpeakButton } from './SpeakButton';
 import { MarkButton } from './MarkButton';
 import { capForExam, nextExamAt } from '../lib/exams';
 import { RATINGS, formatDelay, schedule, type Rating } from '../lib/srs';
@@ -20,6 +23,10 @@ export function StudySession({ title, items, onExit }: { title: string; items: S
   const [queue, setQueue] = useState(items);
   const [flipped, setFlipped] = useState(false);
   const [done, setDone] = useState(0);
+  // which side is asked in this round (term, definition or mixed)
+  const [side, setSide] = useState<AskSide>('front');
+  const [seed] = useState(() => Date.now());
+  useEffect(() => () => stopSpeaking(), []);
   const item = queue[0];
   const deck = item ? data.decks.find((d) => d.id === item.deckId) : undefined;
   const card = deck?.cards.find((c) => c.id === item.cardId);
@@ -62,6 +69,13 @@ export function StudySession({ title, items, onExit }: { title: string; items: S
         {done} / {done + queue.length}
       </span>
       <span className="grow" />
+      <div className="seg ask-side compact" role="radiogroup" aria-label="Was wird gefragt?">
+        {ASK_SIDES.map((o) => (
+          <button key={o.id} type="button" role="radio" aria-checked={side === o.id} className={side === o.id ? 'on' : ''} title={o.hint} onClick={() => setSide(o.id)}>
+            {o.label}
+          </button>
+        ))}
+      </div>
       <FocusButton />
       <button type="button" className="icon-btn" aria-label="Runde beenden" onClick={onExit}>
         <IconClose size={18} />
@@ -83,6 +97,8 @@ export function StudySession({ title, items, onExit }: { title: string; items: S
     );
 
   const look = lookOf(deck, card);
+  const qa = sidesFor(card, asksBack(side, card.id, seed));
+  const say = (t: string) => (card.html ? htmlSpeech(t) : t);
   const preview = (r: Rating) => {
     if (card.srs.due > Date.now()) return `Taste ${r}`;
     const now = Date.now();
@@ -97,13 +113,17 @@ export function StudySession({ title, items, onExit }: { title: string; items: S
       <small className="muted">{deck.name}</small>
       <div className={`flashcard ${flipped ? 'flipped' : ''}`} onClick={() => setFlipped(true)}>
         <MarkButton deckId={deck.id} card={card} className="fc-mark" />
-        <small>Frage</small>
-        <CardContent text={card.front} html={card.html} look={look} className="fc-front" />
+        <small className="fc-label">
+          Frage <SpeakButton text={say(qa.question)} label="Frage vorlesen" className="icon-btn fc-speak" />
+        </small>
+        <CardContent text={qa.question} html={card.html} look={look} className="fc-front" />
         {flipped && (
           <>
             <hr />
-            <small>Antwort</small>
-            <CardContent text={card.html ? answerOnly(card.front, card.back) : card.back} html={card.html} look={look} className="fc-back" />
+            <small className="fc-label">
+              Antwort <SpeakButton text={say(qa.answer)} label="Antwort vorlesen" className="icon-btn fc-speak" />
+            </small>
+            <CardContent text={qa.answer} html={card.html} look={look} className="fc-back" />
           </>
         )}
         {!flipped && <span className="fc-hint">Klicken oder Leertaste zum Umdrehen</span>}

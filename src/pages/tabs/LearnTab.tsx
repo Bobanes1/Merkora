@@ -18,7 +18,6 @@ import { becomesLeech } from '../../lib/cardLinks';
 import { ASK_SIDES, asksBack, sidesFor, type AskSide } from '../../lib/askSide';
 import { htmlToText } from '../../lib/content';
 import { ImproveCardDialog } from '../../components/ImproveCardDialog';
-import { MatchGame } from '../../components/MatchGame';
 import { SpeakButton } from '../../components/SpeakButton';
 import { htmlSpeech } from '../../lib/speechText';
 import { speak, stopSpeaking } from '../../lib/speech';
@@ -50,7 +49,6 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
   /** A card that has just become a problem card (forgotten again and again). */
   const [leech, setLeech] = useState<string | null>(null);
   const [improving, setImproving] = useState<string | null>(null);
-  const [game, setGame] = useState(false);
   const autoRead = useStore((s) => !!s.data.settings.speechAuto);
   // Pip's reactions: streaks, cards that finally sit, half time, last cards …
   const [run, setRun] = useState({ streak: 0, misses: 0, firstTry: 0, seen: new Set<string>() });
@@ -227,7 +225,6 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
       </div>
     );
 
-  if (game) return <MatchGame deck={deck} onClose={() => setGame(false)} />;
 
   if (mode === null || !card)
     return (
@@ -283,9 +280,6 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
           <button type="button" className="btn outline" onClick={() => start('all')}>
             <IconShuffle size={16} /> Alle Karten üben
           </button>
-          <button type="button" className="btn outline" onClick={() => setGame(true)} title="Fragen und Antworten so schnell wie möglich zusammenklicken">
-            Zuordnen-Spiel
-          </button>
           {mode !== null && (
             <button type="button" className="btn ghost" onClick={onDone}>
               Fortschritt ansehen
@@ -312,9 +306,6 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
           <i style={{ width: `${(done / Math.max(1, total)) * 100}%` }} />
         </span>
         <span className="muted small">{mode === 'due' ? 'Fällige Karten' : 'Freies Üben'}</span>
-        <button type="button" className="btn ghost sm" onClick={() => setGame(true)} title="Zwischendurch: Fragen und Antworten so schnell wie möglich zusammenklicken">
-          Zuordnen-Spiel
-        </button>
         <AskSidePicker deck={deck} compact />
         <FocusButton />
       </div>

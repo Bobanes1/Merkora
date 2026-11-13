@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Link } from 'react-router-dom';
-import { askNotifications, canSurviveClose, dismissToast, getToasts, JOB_LABEL, JOB_TAB, subscribeToasts, retryJob } from '../lib/jobs';
+import { askNotifications, canSurviveClose, dismissToast, getToasts, JOB_LABEL, JOB_TAB, JOB_VERB, subscribeToasts, retryJob } from '../lib/jobs';
 import { deckUrl, getState, removeJob, useStore, type Job, type JobKind } from '../lib/store';
 import { IconBell, IconCheck, IconClose, IconSparkle } from './Icons';
 import { Mascot } from './Mascot';
@@ -48,7 +48,7 @@ export function JobBanner({ job }: { job: Job }) {
       <Mascot className="job-mascot" mood="think" size={58} />
       <div className="job-text">
         <b>
-          {JOB_LABEL[job.kind]} {partOf(job) ? `– Teil ${partOf(job)!.i} von ${partOf(job)!.n} – ` : ''}wird im Hintergrund erstellt …{' '}
+          {JOB_LABEL[job.kind]} {partOf(job) ? `– Teil ${partOf(job)!.i} von ${partOf(job)!.n} – ` : ''}{JOB_VERB[job.kind].is} im Hintergrund erstellt …{' '}
           <span className="muted">({elapsed})</span>
         </b>
         {partOf(job) && (
@@ -82,7 +82,7 @@ export function JobError({ job }: { job?: Job }) {
   if (!job || job.status !== 'error') return null;
   return (
     <div className="form-error" role="alert">
-      {job.title.split(' · ')[0] || JOB_LABEL[job.kind]} konnte nicht erstellt werden: {job.error}{' '}
+      {job.title.split(' · ')[0] || JOB_LABEL[job.kind]} {JOB_VERB[job.kind].could} nicht erstellt werden: {job.error}{' '}
       <button type="button" className="link-btn" onClick={() => retryJob(job.id)}>
         Erneut versuchen
       </button>{' '}

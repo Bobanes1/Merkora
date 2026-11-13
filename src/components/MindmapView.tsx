@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { PALETTES } from '../lib/diagram';
 import { CHAR, ICON_W, mindmapLayout, type Map, type Node, type Pt } from '../lib/mindmapLayout';
 import { ICONS } from '../lib/diagramIcons';
-import { useStore } from '../lib/store';
+import { useStore, type Deck } from '../lib/store';
+import { MindmapInfo } from './MindmapInfo';
 import { useResolvedTheme } from '../lib/theme';
 
 type View = { x: number; y: number; k: number };
@@ -12,7 +13,7 @@ type View = { x: number; y: number; k: number };
  * to its new place; drag to move (never so far that the map is lost), wheel or buttons to zoom.
  * A click on a point offers the matching cards.
  */
-export function MindmapView({ map, onCards }: { map: Map; onCards: (term: string) => void }) {
+export function MindmapView({ map, deck, onCards }: { map: Map; deck: Deck; onCards: (term: string) => void }) {
   const theme = useResolvedTheme();
   const pal = PALETTES[theme];
   const animOn = useStore((s) => s.data.settings.animations !== false);
@@ -124,7 +125,8 @@ export function MindmapView({ map, onCards }: { map: Map; onCards: (term: string
   };
   const drag = useRef<{ x: number; y: number; v: View; moved: boolean } | null>(null);
   const onDown = (e: React.PointerEvent) => {
-    if ((e.target as Element).closest('.mm-node')) return;
+    // clicks on boxes or in the panel of a term are not drags
+    if ((e.target as Element).closest('.mm-node, .mm-info')) return;
     drag.current = { x: e.clientX, y: e.clientY, v: view.current, moved: false };
     (e.currentTarget as Element).setPointerCapture(e.pointerId);
   };
@@ -151,6 +153,8 @@ export function MindmapView({ map, onCards }: { map: Map; onCards: (term: string
     const el = wrapRef.current;
     if (!el) return;
     const wheel = (e: WheelEvent) => {
+      // scrolling inside the panel of a term scrolls the panel, not the map
+      if ((e.target as Element).closest?.('.mm-info')) return;
       e.preventDefault();
       const r = el.getBoundingClientRect();
       zoomRef.current(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX - r.left - r.width / 2, e.clientY - r.top - r.height / 2);
@@ -270,12 +274,7 @@ export function MindmapView({ map, onCards }: { map: Map; onCards: (term: string
           </g>
         </svg>
         {sel && sel.kind !== 'center' && (
-          <div className="mm-pop" role="status">
-            <b>{sel.label}</b>
-            <button type="button" className="btn outline sm" onClick={() => onCards(sel.label)}>
-              Karten dazu ansehen
-            </button>
-          </div>
+          <MindmapInfo key={sel.id} deck={deck} term={sel.label} branch={sel.kind === 'leaf' ? map.branches[sel.branch]?.label ?? '' : sel.label} onCards={onCards} />
         )}
       </div>
     </div>

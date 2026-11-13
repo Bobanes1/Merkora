@@ -53,3 +53,19 @@ export function pipSummary(o: { done: number; firstTry: number; today: number; b
   if (o.done >= 5) return `${o.firstTry} von ${o.done} auf Anhieb gewusst.`;
   return 'Runde geschafft – stark!';
 }
+
+export type PokeMove = 'cheer' | 'wave' | 'happy' | 'flip';
+export type PokeContext = { cardsToday: number; exam?: { title: string; days: number } };
+const MOVES: PokeMove[] = ['cheer', 'wave', 'flip', 'happy'];
+const POKES = ['Kitzelt! 😄', 'Lust auf eine Runde?', 'Hey! Schön, dass du da bist.', 'Ich bin bereit, wenn du es bist!', 'Noch ein Salto gefällig?', 'Wusstest du? Kurze Runden wirken oft am besten.'];
+
+/** Pip on the start page when clicked: n-th click → a line that fits the day and a move; consecutive clicks never repeat either. */
+export function pipPoke(ctx: PokeContext, n: number): { text: string; move: PokeMove } {
+  const lines: string[] = [];
+  if (ctx.cardsToday >= 5) lines.push(`Schon ${ctx.cardsToday} Karten heute – stark!`);
+  if (ctx.exam && ctx.exam.days >= 0 && ctx.exam.days <= 14)
+    lines.push(ctx.exam.days === 0 ? `Heute ist ${ctx.exam.title} – du schaffst das!` : `Noch ${ctx.exam.days} ${ctx.exam.days === 1 ? 'Tag' : 'Tage'} bis ${ctx.exam.title} – wir schaffen das.`);
+  lines.push(...POKES);
+  const i = ((n % lines.length) + lines.length) % lines.length;
+  return { text: lines[i], move: MOVES[((n % MOVES.length) + MOVES.length) % MOVES.length] };
+}

@@ -4,7 +4,7 @@ import { estimate } from '../lib/costs';
 import { hasKey, materialFrom, tutorReply } from '../lib/ai';
 import { getState, updateDeck, type Deck } from '../lib/store';
 import { IconClose, IconRefresh, IconSend } from './Icons';
-import { Mascot, PipFace, type Mood } from './Mascot';
+import { Mascot, PipFace } from './Mascot';
 import { Markdown } from './Markdown';
 import { NoKeyNotice } from './NoKey';
 
@@ -19,17 +19,6 @@ export function ChatPanel({ deck, onClose }: { deck: Deck; onClose: () => void }
   const [error, setError] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
   const msgs = deck.chat;
-  // Pip's mood follows the conversation: thinking while the answer comes, happy when it is there, sad on errors
-  const [mood, setMood] = useState<Mood>('idle');
-  const [pulse, setPulse] = useState(0);
-  const calm = useRef<number>();
-  const feel = (m: Mood, ms?: number) => {
-    window.clearTimeout(calm.current);
-    setMood(m);
-    setPulse((p) => p + 1);
-    if (ms) calm.current = window.setTimeout(() => setMood('idle'), ms);
-  };
-  useEffect(() => () => window.clearTimeout(calm.current), []);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end' });
@@ -43,15 +32,12 @@ export function ChatPanel({ deck, onClose }: { deck: Deck; onClose: () => void }
     const history = [...deck.chat, { role: 'user' as const, content: t }];
     updateDeck(deck.id, { chat: history });
     setBusy(true);
-    feel('think');
     try {
       const fresh = getState().data.decks.find((d) => d.id === deck.id) ?? deck;
       const reply = await tutorReply(fresh.name, materialFrom(fresh.source, fresh.cards, 16000), history);
       updateDeck(deck.id, (d) => ({ chat: [...d.chat, { role: 'assistant', content: reply.trim() || '…' }] }));
-      feel('happy', 2500);
     } catch (e) {
       setError((e as Error).message);
-      feel('sad', 4000);
     } finally {
       setBusy(false);
     }
@@ -62,9 +48,6 @@ export function ChatPanel({ deck, onClose }: { deck: Deck; onClose: () => void }
   return (
     <aside className="chat-panel" aria-label="KI-Tutor">
       <div className="chat-head">
-        <button type="button" className="chat-mascot" aria-label="Pip" title="Hallo, ich bin Pip!" onClick={() => !busy && feel('cheer', 2200)}>
-          <Mascot who="pip" mood={mood} pulse={pulse} size={38} />
-        </button>
         <b>Tutor Pip</b>
         <span className="grow" />
         {msgs.length > 0 && (

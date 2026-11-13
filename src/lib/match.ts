@@ -54,3 +54,6 @@ export const isPair = (a: Tile, b: Tile) => a.pairId === b.pairId && a.side !== 
 
 /** Time shown: seconds with one decimal, e.g. "23,4 s". */
 export const formatTime = (ms: number) => (Math.round(ms / 100) / 10).toFixed(1).replace('.', ',') + ' s';
+
+/** How many cards can appear in the game at all (short text, no pictures). */
+export const matchableCount = (cards: Pick<MatchCandidate, 'front' | 'back' | 'media'>[]) => cards.filter((c) => !c.media && fits(c.front) && fits(c.back)).length;

@@ -266,7 +266,7 @@ export function LearningPanel() {
       <p className="muted small">
         Neue Karten werden auf die Tage verteilt, statt alle auf einmal fällig zu werden. Alle Decks eines Kurses teilen sich diese Zahl
         (der Reihe nach), so wie Unterdecks in Anki. Wiederholungen bereits gelernter Karten kommen immer dazu. Willst du an einem Tag mehr, gibt es beim Lernen den Knopf „10 neue Karten“. Für Decks mit Prüfungstermin plant der
-        Kalender zusätzlich, was bis zur Prüfung nötig ist.
+        Bereich „Prüfungen“ zusätzlich, was bis zur Prüfung nötig ist.
       </p>
       <h3 className="settings-sub">Planung der Wiederholungen</h3>
       <div className="row-gap" role="radiogroup" aria-label="Planung">
@@ -301,6 +301,20 @@ export function LearningPanel() {
 }
 
 /** Show estimated AI tokens/costs before a task – and an own price (e.g. for a local server). */
+/** Key words on AI cards in bold. */
+export function BoldSettings() {
+  const on = useStore((x) => x.data.settings.boldKeywords !== false);
+  return (
+    <label className="check-row">
+      <input type="checkbox" checked={on} onChange={(e) => setSettings({ boldKeywords: e.target.checked })} />
+      <span>
+        <b>Wichtige Wörter fett markieren</b> – die KI hebt auf neuen Karten die 1–3 wichtigsten Begriffe der Antwort hervor, damit sie
+        besser hängen bleiben.
+      </span>
+    </label>
+  );
+}
+
 export function CostSettings() {
   const s = useStore((x) => x.data.settings);
   const on = s.showCosts ?? true;

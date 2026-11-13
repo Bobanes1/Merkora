@@ -776,6 +776,132 @@ console.log('Karten in anderes Deck verschieben');
   ok(moveCardsIn(decks, reviews, 'A', ['1'], 'A', () => 'x').moved === 0 && moveCardsIn(decks, reviews, 'A', ['1'], 'Z', () => 'x').moved === 0, 'gleiches oder unbekanntes Ziel: nichts passiert');
 }
 
+console.log('Fette Schlüsselwörter');
+{
+  const { emphasisHtml, stripEmphasis, hasEmphasis } = await import('../src/lib/emphasis');
+  ok(emphasisHtml('Die **Mitose** teilt') === 'Die <b>Mitose</b> teilt', '**Wort** wird fett');
+  ok(emphasisHtml('**A** und **B**') === '<b>A</b> und <b>B</b>', 'mehrere Markierungen');
+  ok(emphasisHtml('a < b & **c**') === 'a &lt; b &amp; <b>c</b>', 'HTML wird escaped');
+  ok(emphasisHtml('Zeile 1\nZeile 2') === 'Zeile 1<br>Zeile 2', 'Zeilenumbruch wird <br>');
+  ok(emphasisHtml('nur ** einmal') === 'nur ** einmal', 'unpaariges ** bleibt Text');
+  ok(stripEmphasis('Die **Mitose** und **Meiose**') === 'Die Mitose und Meiose', 'stripEmphasis entfernt die Sternchen');
+  ok(hasEmphasis('x **y**') && !hasEmphasis('x ** y'), 'hasEmphasis erkennt Markierungen');
+}
+
+console.log('Mindmap: verwandte Karten und Material');
+{
+  const { relatedCards, materialAbout } = await import('../src/lib/related');
+  const cards = [
+    { id: '1', front: 'Was ist Osmose?', back: 'Diffusion durch eine Membran' },
+    { id: '2', front: 'Zelle', back: 'Die osmose in der Zelle …' },
+    { id: '3', front: 'Mitose', back: 'Kernteilung' },
+    ...Array.from({ length: 8 }, (_, i) => ({ id: 'x' + i, front: 'Osmose ' + i, back: '' })),
+  ];
+  const r = relatedCards(cards, 'Osmose');
+  ok(r.length === 5, 'höchstens 5 Treffer');
+  ok(r[0].id === '1' && !r.some((c) => c.id === '3'), 'Treffer in der Frage zuerst, Fremdes nicht');
+  ok(relatedCards(cards.slice(0, 3), 'OSMOSE').map((c) => c.id).join() === '1,2', 'ohne Groß-/Kleinschreibung, auch in der Antwort');
+  const src = 'Einleitung zur Zelle.\n\nOsmose ist Wanderung von Wasser.\n\nAnderes Thema.\n\nNochmal Osmose hier.';
+  const m = materialAbout(src, 'Osmose');
+  ok(m.includes('Wanderung') && m.includes('Nochmal') && !m.includes('Anderes'), 'nur Absätze mit dem Begriff');
+  ok(materialAbout('Osmose ' + 'x'.repeat(5000), 'Osmose', 100).length <= 100, 'auf die Länge gekürzt');
+}
+
+console.log('Ordner lernen');
+{
+  const { dueAcross, allAcross } = await import('../src/lib/sessions');
+  const s = (due: number, last?: number) => ({ ...newSrs(0), due, last });
+  const decks = [
+    { id: 'A', cards: [{ id: 'a1', srs: s(300, 1) }, { id: 'a2', srs: s(5000, 1) }, { id: 'a3', srs: s(0) }, { id: 'a4', srs: s(0) }] },
+    { id: 'B', cards: [{ id: 'b1', srs: s(100, 1) }, { id: 'b2', srs: s(200, 1) }] },
+  ];
+  const items = dueAcross(decks, (d) => (d.id === 'A' ? 1 : 0), 1000);
+  ok(items.map((i) => i.cardId).join() === 'a3,b1,b2,a1', `fällige Karten aus allen Decks nach Fälligkeit (${items.map((i) => i.cardId).join()})`);
+  ok(!items.some((i) => i.cardId === 'a2'), 'nicht fällige bleiben weg');
+  ok(!items.some((i) => i.cardId === 'a4'), 'Tageskontingent für neue Karten wird eingehalten');
+  ok(items.find((i) => i.cardId === 'b1')!.deckId === 'B', 'jede Karte behält ihr Deck');
+  const all = allAcross(decks, () => 0.5);
+  ok(all.length === 6 && new Set(all.map((i) => i.cardId)).size === 6, 'Üben: alle Karten, jede einmal');
+}
+
+console.log('To-dos');
+{
+  const { todoGroups, mergeTodos, todoSuggestions, dueText } = await import('../src/lib/todos');
+  const now = new Date(2026, 10, 13, 12).getTime();
+  const t = (id: string, due?: string, doneAt?: number, createdAt = 1) => ({ id, text: id, due, doneAt, createdAt });
+  const g = todoGroups([t('nodate'), t('soon2', '2026-11-20'), t('today', '2026-11-13'), t('late', '2026-11-10'), t('soon1', '2026-11-14'), t('done', '2026-11-01', 5)], now);
+  ok(g.map((x) => x.id).join() === 'overdue,today,soon,nodate,done', 'Gruppen: überfällig, heute, demnächst, ohne Datum, erledigt');
+  ok(g.find((x) => x.id === 'soon')!.items.map((x) => x.id).join() === 'soon1,soon2', 'innerhalb der Gruppe nach Datum');
+  ok(g.find((x) => x.id === 'done')!.items[0].id === 'done' && g[g.length - 1].id === 'done', 'Erledigte zuletzt (auch mit altem Datum nicht überfällig)');
+  ok(todoGroups([], now).length === 0, 'keine leeren Gruppen');
+  ok(dueText('2026-11-13', now) === 'heute' && dueText('2026-11-14', now) === 'morgen', 'Datum als „heute“ / „morgen“');
+  const a = [{ ...t('x'), updatedAt: 10 }, t('gone')];
+  const b = [{ ...t('x'), doneAt: 20, updatedAt: 20 }, t('gone'), t('new')];
+  const m = mergeTodos(a, b, (id) => id === 'gone');
+  ok(!m.some((x) => x.id === 'gone'), 'gelöschtes To-do kommt per Sync nicht zurück');
+  ok(m.find((x) => x.id === 'x')!.doneAt === 20 && m.some((x) => x.id === 'new'), 'neuere Änderung (abgehakt) gewinnt, neue kommen dazu');
+  const ideas = todoSuggestions({ exams: [{ id: 'e', title: 'Statistik', date: '2026-11-18' }], decks: [{ id: 'd', name: 'Bio', leeches: 3 }], todos: [] }, now);
+  ok(ideas.length === 2 && ideas[0].examId === 'e' && ideas[1].deckId === 'd', 'Vorschläge: Probeprüfung bei naher Prüfung, Problemkarten');
+  ok(todoSuggestions({ exams: [{ id: 'e', title: 'Statistik', date: '2027-01-30' }], decks: [], todos: [] }, now).length === 0, 'ferne Prüfung: kein Vorschlag');
+  ok(todoSuggestions({ exams: [], decks: [{ id: 'd', name: 'Bio', leeches: 3 }], todos: [t('Problemkarten in Bio verbessern')] }, now).length === 0, 'schon vorhandene Vorschläge fallen weg');
+}
+
+console.log('Statistik: Kurse und Ordner');
+{
+  const { groupTotals, statsTree, courseSummary, sortCourses } = await import('../src/lib/stats');
+  const row = (deckId: string, cards: number, mastery: number, due: number, reviews: number, known: number) => ({ deckId, name: deckId, cards, mastery, due, reviews, known });
+  const t = groupTotals([row('a', 10, 100, 2, 4, 4), row('b', 30, 0, 5, 6, 2)]);
+  ok(t.cards === 40 && t.due === 7 && t.reviews === 10, 'Karten, Fällige und Wiederholungen summiert');
+  ok(t.mastery === 25, `Fortschritt nach Kartenzahl gewichtet (${t.mastery} %)`);
+  ok(t.correct === 60 && groupTotals([row('c', 5, 0, 0, 0, 0)]).correct === null, '„gewusst“ aus allen Wiederholungen, sonst –');
+  const data = {
+    workspaces: [{ id: 'w1', name: 'Uni' }, { id: 'w2', name: 'Leer' }],
+    courses: [
+      { id: 'c1', workspaceId: 'w1', name: 'Bio', folders: [{ id: 'f1', name: 'Kap 1' }, { id: 'f2', name: 'Leer' }] },
+      { id: 'c2', workspaceId: 'w1', name: 'Ohne Decks' },
+      { id: 'c3', workspaceId: 'w2', name: 'Auch leer' },
+    ],
+    decks: [
+      { id: 'd1', courseId: 'c1', folderId: 'f1' },
+      { id: 'd2', courseId: 'c1' },
+      { id: 'd3', courseId: 'c1', folderId: 'f1' },
+    ],
+  };
+  const tree = statsTree(data, [row('d1', 1, 0, 0, 0, 0), row('d2', 2, 0, 0, 0, 0), row('d3', 3, 0, 0, 0, 0)]);
+  ok(tree.length === 1 && tree[0].courses.length === 1, 'leere Kurse und Workspaces fallen weg');
+  const c = tree[0].courses[0];
+  ok(c.folders.length === 1 && c.folders[0].decks.map((d) => d.deckId).join() === 'd1,d3', 'Decks im richtigen Ordner, Reihenfolge wie in der Bibliothek');
+  ok(c.decks.map((d) => d.deckId).join() === 'd2' && c.totals.cards === 6 && c.folders[0].totals.cards === 4, 'Decks ohne Ordner direkt unter dem Kurs, Summen stimmen');
+  const card = (lvl: 'new' | 'done') => ({ id: 'k', front: '', back: '', createdAt: 0, srs: lvl === 'new' ? newSrs(0) : { ...newSrs(0), reps: 8, interval: 60, last: 1, due: 9e15 } });
+  const decks = [
+    { courseId: 'c1', cards: [card('new'), card('done')] },
+    { courseId: 'c1', cards: [card('done')] },
+    { courseId: 'c2', cards: [card('new')] },
+  ] as any[];
+  const s = courseSummary({ id: 'c1', folders: [1, 2] }, decks, (d) => d.cards.length);
+  ok(s.decks === 2 && s.folders === 2 && s.cards === 3 && s.due === 3, 'Kurs-Kennzahlen: Decks, Ordner, Karten, fällig');
+  const list = [
+    { name: 'Chemie', sum: { decks: 1, folders: 0, cards: 5, mastery: 80, due: 0 } },
+    { name: 'Biologie', sum: { decks: 1, folders: 0, cards: 50, mastery: 10, due: 9 } },
+    { name: 'Anatomie', sum: { decks: 1, folders: 0, cards: 20, mastery: 40, due: 3 } },
+  ];
+  ok(sortCourses(list, 'name').map((x) => x.name).join() === 'Anatomie,Biologie,Chemie', 'Sortieren nach Name A–Z');
+  ok(sortCourses(list, 'cards').map((x) => x.name).join() === 'Biologie,Anatomie,Chemie', 'nach Karten: größte zuerst');
+  ok(sortCourses(list, 'mastery', true)[0].name === 'Biologie' && sortCourses(list, 'due')[0].name === 'Biologie', 'nach Fortschritt (aufsteigend) und Fällig');
+}
+
+console.log('Pip auf der Startseite');
+{
+  const { pipPoke } = await import('../src/lib/pipLines');
+  const ctx = { cardsToday: 23, exam: { title: 'Statistik', days: 5 } };
+  const lines = Array.from({ length: 8 }, (_, n) => pipPoke(ctx, n));
+  ok(lines.some((l) => l.text.includes('23 Karten')), 'mit Lernfortschritt heute: Satz mit der Zahl');
+  ok(lines.some((l) => l.text.includes('5 Tage bis Statistik')), 'mit naher Prüfung: Satz mit den Tagen');
+  ok(lines.every((l, i) => i === 0 || (l.text !== lines[i - 1].text && l.move !== lines[i - 1].move)), 'aufeinanderfolgende Klicks: nie zweimal derselbe Satz oder dieselbe Bewegung');
+  ok(!pipPoke({ cardsToday: 0 }, 0).text.includes('Karten heute'), 'ohne Lernen heute kein Zahlen-Satz');
+  ok(new Set(lines.map((l) => l.move)).has('flip'), 'Salto ist dabei');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

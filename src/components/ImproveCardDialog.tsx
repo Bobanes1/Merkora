@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { hasKey, improveCard, type CardImprovement } from '../lib/ai';
+import { boldOn, hasKey, improveCard, type CardImprovement } from '../lib/ai';
+import { emphasisHtml, stripEmphasis } from '../lib/emphasis';
 import { cardBackText, cardFrontText, escapeHtml, textToHtml } from '../lib/content';
 import { tokensOf } from '../lib/costs';
 import { cardGraphic, withDiagram } from '../lib/diagram';
@@ -37,7 +38,8 @@ export function ImproveCardDialog({ deck, card, onClose }: { deck: Deck; card: C
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const side = (s: string) => (card.html ? textToHtml(s) : s);
+  // AI text with **key words** → card HTML (bold), or without the marks when bold words are off
+  const side = (s: string) => emphasisHtml(boldOn() ? s : stripEmphasis(s));
   // the card counts as fixed: it is no longer a problem card
   const fixedSrs = { ...card.srs, lapses: 0 };
   const apply = () => {
@@ -46,12 +48,12 @@ export function ImproveCardDialog({ deck, card, onClose }: { deck: Deck; card: C
       // a Merkora graphic on the card stays
       const d = card.html ? cardGraphic(card.back).diagram : undefined;
       const newBack = d ? withDiagram(side(tip.rewrite.back), d) : side(tip.rewrite.back);
-      updateCard(deck.id, card.id, { front: side(tip.rewrite.front), back: newBack, srs: fixedSrs });
+      updateCard(deck.id, card.id, { front: side(tip.rewrite.front), back: newBack, html: true, srs: fixedSrs });
     } else if (way === 'mnemonic') {
-      const extra = card.html ? `<br><br><i>Eselsbrücke: ${escapeHtml(tip.mnemonic)}</i>` : `\n\nEselsbrücke: ${tip.mnemonic}`;
+      const extra = card.html ? `<br><br><i>Eselsbrücke: ${side(tip.mnemonic)}</i>` : `\n\nEselsbrücke: ${stripEmphasis(tip.mnemonic)}`;
       updateCard(deck.id, card.id, { back: card.back + extra, srs: fixedSrs });
     } else {
-      addCards(deck.id, tip.split.map((p) => ({ front: p.front, back: p.back, ...(card.tags?.length ? { tags: card.tags } : {}) })));
+      addCards(deck.id, tip.split.map((p) => ({ front: side(p.front), back: side(p.back), html: true, ...(card.tags?.length ? { tags: card.tags } : {}) })));
       deleteCard(deck.id, card.id);
     }
     onClose();

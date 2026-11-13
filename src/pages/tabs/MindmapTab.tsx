@@ -76,7 +76,7 @@ export default function MindmapTab({ deck, onCards }: { deck: Deck; onCards: (te
         </button>
       </div>
       {err}
-      <MindmapView map={map} onCards={onCards} />
+      <MindmapView map={map} deck={deck} onCards={onCards} />
     </div>
   );
 }

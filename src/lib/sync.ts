@@ -6,6 +6,7 @@
 import { useSyncExternalStore } from 'react';
 import { mediaGet, mediaKeys, mediaPutMany } from './db';
 import { applySynced, getState, subscribe, type Card, type Data, type Deck } from './store';
+import { mergeTodos } from './todos';
 
 export type SyncProvider = 'dropbox' | 'gdrive';
 export type SyncConf = {
@@ -386,6 +387,7 @@ export function mergeData(local: Data, remote: Data): Data {
     decks: unionById(local.decks, remote.decks ?? [], isDel, (x, y) => mergeDeck(x, y, isDel)),
     reviews: reviews.sort((x, y) => x.at - y.at),
     exams: unionById(local.exams ?? [], remote.exams ?? [], isDel, (x, y) => ((y.updatedAt ?? y.createdAt) > (x.updatedAt ?? x.createdAt) ? y : x)),
+    todos: mergeTodos(local.todos ?? [], remote.todos ?? [], isDel),
     game: { ...local.game, xpByDay: xp, minutesByDay: minutes },
     deleted,
   };

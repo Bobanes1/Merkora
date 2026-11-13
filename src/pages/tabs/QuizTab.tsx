@@ -74,7 +74,7 @@ export default function QuizTab({ deck }: { deck: Deck }) {
         <div className="empty">
           {right / quiz.length >= 0.8 && <Confetti />}
           <Mascot
-            who={right / quiz.length >= 0.5 ? 'pip' : 'flo'}
+            who="pip"
             mood={right / quiz.length >= 0.8 ? 'cheer' : right / quiz.length >= 0.5 ? 'happy' : 'sad'}
             size={96}
             side="top"

@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ImproveCardDialog } from '../../components/ImproveCardDialog';
 import { isLeech } from '../../lib/cardLinks';
 import { swapSides } from '../../lib/askSide';
 import { MoveCardsDialog } from '../../components/MoveCardsDialog';
+import { RegenerateCardDialog } from '../../components/RegenerateCardDialog';
 import { createPortal } from 'react-dom';
 import { AnkiImport } from '../../components/AnkiImport';
 import { OcclusionEditor, type Embed } from '../../components/OcclusionEditor';
@@ -28,12 +29,15 @@ function CardEditor({
   card,
   onClose,
   onAnki,
+  onRegenerate,
   embed,
 }: {
   deck: Deck;
   card?: Card;
   onClose: () => void;
   onAnki?: () => void;
+  /** Existing card: open "Neu generieren" instead. */
+  onRegenerate?: () => void;
   /** Inside the shared "Neue Karte" window (see NewCardWindow). */
   embed?: Embed;
 }) {
@@ -59,6 +63,12 @@ function CardEditor({
   };
   const footer = (
     <>
+      {card && onRegenerate && (
+        <button type="button" className="btn ghost" onClick={onRegenerate} title="Die KI schreibt die Karte neu (Lernstand bleibt)">
+          <IconSparkle size={15} /> Neu generieren
+        </button>
+      )}
+      <span className="grow" />
       {!card && (
         <button type="button" className="btn ghost" onClick={() => save(true)} disabled={!ok}>
           Speichern & nächste
@@ -190,6 +200,7 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
   const [edit, setEdit] = useState<Card | 'new' | null>(null);
   const [del, setDel] = useState<Card | null>(null);
   const [graphic, setGraphic] = useState<Card | null>(null);
+  const [regen, setRegen] = useState<Card | null>(null);
   const [ai, setAi] = useState(false);
   const term = q.trim().toLowerCase();
   const [anki, setAnki] = useState(false);
@@ -203,6 +214,13 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
   const [sel, setSel] = useState<Set<string> | null>(null);
   const [moving, setMoving] = useState(false);
   const [notice, setNotice] = useState('');
+  // Esc leaves the selection
+  useEffect(() => {
+    if (!sel) return;
+    const k = (e: KeyboardEvent) => e.key === 'Escape' && !document.querySelector('.modal') && setSel(null);
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  }, [sel]);
   const toggleSel = (id: string) => setSel((s) => (s ? (s.has(id) ? new Set([...s].filter((x) => x !== id)) : new Set([...s, id])) : s));
   const markedCount = deck.cards.filter((c) => c.marked).length;
   const leechCount = deck.cards.filter(isLeech).length;
@@ -236,7 +254,7 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
           aria-pressed={!!sel}
           title="Karten auswählen, z. B. um sie in ein anderes Deck zu verschieben"
         >
-          {sel ? 'Fertig' : 'Auswählen'}
+          {sel ? 'Abbrechen' : 'Auswählen'}
         </button>
         <button type="button" className="btn ghost sm" onClick={() => setExporting(true)} disabled={!deck.cards.length}>
           <IconDownload size={15} /> Exportieren
@@ -259,6 +277,9 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
           <span className="grow" />
           <button type="button" className="btn primary sm" disabled={!sel.size} onClick={() => setMoving(true)}>
             In anderes Deck verschieben
+          </button>
+          <button type="button" className="btn ghost sm" onClick={() => setSel(null)}>
+            × Abbrechen
           </button>
         </div>
       )}
@@ -368,6 +389,9 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
                 <div className="flash-actions">
                   <MarkButton deckId={deck.id} card={c} />
 
+                  <button type="button" className="icon-btn" aria-label="Neu generieren" title="Karte mit der KI neu generieren" onClick={() => setRegen(c)}>
+                    <IconSparkle size={16} />
+                  </button>
                   <button type="button" className="icon-btn" aria-label="Grafik" title="Grafik erstellen, ersetzen oder entfernen" onClick={() => setGraphic(c)}>
                     <IconImage size={16} />
                   </button>
@@ -404,7 +428,18 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
           }}
         />
       )}
-      {edit && edit !== 'new' && <CardEditor deck={deck} card={edit} onClose={() => setEdit(null)} />}
+      {edit && edit !== 'new' && (
+        <CardEditor
+          deck={deck}
+          card={edit}
+          onClose={() => setEdit(null)}
+          onRegenerate={() => {
+            setRegen(edit);
+            setEdit(null);
+          }}
+        />
+      )}
+      {regen && <RegenerateCardDialog deck={deck} card={deck.cards.find((x) => x.id === regen.id) ?? regen} onClose={() => setRegen(null)} />}
       {graphic && (
         <GraphicDialog deck={deck} card={deck.cards.find((x) => x.id === graphic.id) ?? graphic} onClose={() => setGraphic(null)} />
       )}

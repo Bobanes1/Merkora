@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { levelCounts, masteryPercent, streak } from '../lib/stats';
-import { deckUrl, dueCards, useData } from '../lib/store';
+import { groupTotals, levelCounts, masteryPercent, statsTree, streak, type DeckStat, type StatTotals } from '../lib/stats';
+import { deckUrl, dueCards, setSettings, useData } from '../lib/store';
+import { IconCards, IconChevronDown, IconFolder } from '../components/Icons';
 import { DAY, dayKey, startOfDay } from '../lib/util';
 import { WeekReview } from '../components/WeekReview';
 
@@ -67,19 +68,68 @@ export default function Stats() {
   });
   const maxW = Math.max(1, ...week.map((w) => w.min));
 
-  // ---- per deck
-  const rows = data.decks
-    .map((d) => {
-      const rv = last30.filter((r) => r.deckId === d.id);
-      return {
-        deck: d,
-        mastery: masteryPercent(d.cards),
-        due: dueCards(d, now).length,
-        reviews: rv.length,
-        correct: rv.length ? Math.round((rv.filter((r) => r.rating >= 3).length / rv.length) * 100) : null,
-      };
-    })
-    .sort((a, b) => b.reviews - a.reviews || a.deck.name.localeCompare(b.deck.name));
+  // ---- per deck, grouped like the library (workspace → course → folder → deck)
+  const rows: DeckStat[] = data.decks.map((d) => {
+    const rv = last30.filter((r) => r.deckId === d.id);
+    return {
+      deckId: d.id,
+      name: d.name,
+      cards: d.cards.length,
+      mastery: masteryPercent(d.cards),
+      due: dueCards(d, now).length,
+      reviews: rv.length,
+      known: rv.filter((r) => r.rating >= 3).length,
+    };
+  });
+  const tree = statsTree(data, rows);
+  const allTotals = groupTotals(rows);
+  const openIds = new Set(data.settings.statsOpen?.groups ?? []);
+  const sectionOpen = data.settings.statsOpen?.section !== false;
+  const groupIds = tree.flatMap((w) => w.courses.flatMap((c) => [c.id, ...c.folders.map((f) => f.id)]));
+  const setOpen = (groups: string[], section = sectionOpen) => setSettings({ statsOpen: { section, groups } });
+  const toggle = (id: string) => setOpen(openIds.has(id) ? [...openIds].filter((x) => x !== id) : [...openIds, id]);
+  const cells = (t: StatTotals) => (
+    <>
+      <td>{t.cards}</td>
+      <td>
+        <span className="bar mini">
+          <i style={{ width: `${t.mastery}%` }} />
+        </span>{' '}
+        {t.mastery}%
+      </td>
+      <td>{t.due}</td>
+      <td>{t.reviews}</td>
+      <td>{t.correct === null ? '–' : `${t.correct}%`}</td>
+    </>
+  );
+  const deckLine = (r: DeckStat, depth: number) => {
+    const deck = data.decks.find((d) => d.id === r.deckId)!;
+    return (
+      <tr key={r.deckId} className={`st-deck depth-${depth}`}>
+        <td>
+          <span className="st-name">
+            <IconCards size={14} />
+            <Link to={deckUrl(data, deck)} title={r.name}>
+              {r.name}
+            </Link>
+          </span>
+        </td>
+        {cells(groupTotals([r]))}
+      </tr>
+    );
+  };
+  const groupLine = (id: string, name: string, t: StatTotals, kind: 'course' | 'folder', depth: number) => (
+    <tr key={id} className={`st-group st-${kind} depth-${depth}`}>
+      <td>
+        <button type="button" className="st-toggle" aria-expanded={openIds.has(id)} onClick={() => toggle(id)}>
+          <IconChevronDown size={14} className="fold-chev" />
+          <IconFolder size={15} />
+          <b title={name}>{name}</b>
+        </button>
+      </td>
+      {cells(t)}
+    </tr>
+  );
 
   return (
     <div className="page">
@@ -210,41 +260,60 @@ export default function Stats() {
         </details>
       </section>
 
-      <section className="panel">
-        <h2>Decks</h2>
-        <div className="table-wrap">
-          <table className="deck-stats">
-            <thead>
-              <tr>
-                <th>Deck</th>
-                <th>Karten</th>
-                <th>Fortschritt</th>
-                <th>Fällig</th>
-                <th>Wiederholt (30 T.)</th>
-                <th>Gewusst</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.deck.id}>
-                  <td>
-                    <Link to={deckUrl(data, r.deck)}>{r.deck.name}</Link>
-                  </td>
-                  <td>{r.deck.cards.length}</td>
-                  <td>
-                    <span className="bar mini">
-                      <i style={{ width: `${r.mastery}%` }} />
-                    </span>{' '}
-                    {r.mastery}%
-                  </td>
-                  <td>{r.due}</td>
-                  <td>{r.reviews}</td>
-                  <td>{r.correct === null ? '–' : `${r.correct}%`}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <section className={`panel fold-panel st-panel ${sectionOpen ? '' : 'folded'}`}>
+        <div className="fold-head">
+          <button type="button" className="fold-toggle" aria-expanded={sectionOpen} onClick={() => setOpen([...openIds], !sectionOpen)}>
+            <IconChevronDown size={16} className="fold-chev" />
+            <h2>Decks</h2>
+            <small className="muted fold-sum">
+              {rows.length} {rows.length === 1 ? 'Deck' : 'Decks'} · {allTotals.cards} Karten
+            </small>
+          </button>
+          {sectionOpen && groupIds.length > 0 && (
+            <span className="row-gap">
+              <button type="button" className="link-btn" onClick={() => setOpen(groupIds)}>
+                Alle aufklappen
+              </button>
+              <button type="button" className="link-btn" onClick={() => setOpen([])}>
+                Alle zuklappen
+              </button>
+            </span>
+          )}
         </div>
+        {sectionOpen && (
+          <div className="table-wrap fold-body">
+            <table className="deck-stats">
+              <thead>
+                <tr>
+                  <th>Kurs / Ordner / Deck</th>
+                  <th>Karten</th>
+                  <th>Fortschritt</th>
+                  <th>Fällig</th>
+                  <th>Wiederholt (30 T.)</th>
+                  <th>Gewusst</th>
+                </tr>
+              </thead>
+              {tree.map((w) => (
+                <tbody key={w.id}>
+                  {tree.length > 1 && (
+                    <tr className="st-ws">
+                      <td colSpan={6}>{w.name}</td>
+                    </tr>
+                  )}
+                  {w.courses.flatMap((c) => [
+                    groupLine(c.id, c.name, c.totals, 'course', 0),
+                    ...(openIds.has(c.id)
+                      ? [
+                          ...c.folders.flatMap((f) => [groupLine(f.id, f.name, f.totals, 'folder', 1), ...(openIds.has(f.id) ? f.decks.map((r) => deckLine(r, 2)) : [])]),
+                          ...c.decks.map((r) => deckLine(r, 1)),
+                        ]
+                      : []),
+                  ])}
+                </tbody>
+              ))}
+            </table>
+          </div>
+        )}
       </section>
       {tip.node}
     </div>

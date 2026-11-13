@@ -4,7 +4,7 @@ import { CostHint } from './CostHint';
 import { estimate } from '../lib/costs';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { generateCards, hasKey } from '../lib/ai';
+import { generateCards, hasKey, boldOn } from '../lib/ai';
 import { isPdf, MATERIAL_ACCEPT, MATERIAL_LABEL, readFileText, readPdfDetailed } from '../lib/files';
 import { figureLabel, markFigures, pickFigurePages } from '../lib/slides';
 import { figureInfo, figurePreview, registerFigures } from '../lib/figureFiles';
@@ -229,7 +229,9 @@ export function CreateWithAI({
           </>
         }
       >
-        <p className="muted">Bearbeite oder entferne Karten, bevor du sie speicherst.</p>
+        <p className="muted">
+          Bearbeite oder entferne Karten, bevor du sie speicherst.{boldOn() && <> Wörter in **Sternchen** werden fett gespeichert.</>}
+        </p>
         {error && (
           <div className="form-warn" role="alert">
             {error}

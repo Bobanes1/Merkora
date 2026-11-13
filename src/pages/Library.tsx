@@ -9,6 +9,8 @@ import {
   IconChevronDown,
   IconEdit,
   IconFolder,
+  IconGrid,
+  IconList,
   IconPlay,
   IconPlus,
   IconShuffle,
@@ -20,7 +22,8 @@ import { NewDeckModal } from '../components/NewDeck';
 import { SessionBuilder } from '../components/SessionBuilder';
 import { StudySession, type SessionItem } from '../components/StudySession';
 import { countdownText, examCovers, upcomingExams } from '../lib/exams';
-import { masteryPercent } from '../lib/stats';
+import { courseSummary, masteryPercent, sortCourses, type CourseSort } from '../lib/stats';
+import { allAcross, dueAcross } from '../lib/sessions';
 import {
   addCourse,
   addFolder,
@@ -31,6 +34,8 @@ import {
   deleteFolder,
   deleteWorkspace,
   dueCards,
+  newCardsLeft,
+  setSettings,
   moveDeck,
   renameCourse,
   renameFolder,
@@ -99,6 +104,7 @@ export default function Library() {
   const workspace = ws ? data.workspaces.find((w) => w.slug === ws) : undefined;
   const crs = workspace && course ? data.courses.find((c) => c.workspaceId === workspace.id && c.slug === course) : undefined;
   const shownWs = workspace ? [workspace] : data.workspaces;
+  const view = data.settings.libraryView ?? 'tiles';
 
   useEffect(() => {
     document.title = `${crs?.name ?? workspace?.name ?? 'Bibliothek'} – Merkora`;
@@ -141,12 +147,20 @@ export default function Library() {
       </nav>
 
       {crs && workspace ? (
-        <CourseView course={crs} workspace={workspace} setDialog={setDialog} />
+        <CourseView course={crs} workspace={workspace} setDialog={setDialog} onStudy={(title, items) => setSession({ title, items })} />
       ) : (
         <>
           <header className="page-head">
             <h1>{workspace?.name ?? 'Bibliothek'}</h1>
             <div className="row-gap">
+              <div className="seg view-toggle" role="radiogroup" aria-label="Ansicht">
+                <button type="button" role="radio" aria-checked={view === 'tiles'} className={view === 'tiles' ? 'on' : ''} title="Kacheln" onClick={() => setSettings({ libraryView: undefined })}>
+                  <IconGrid size={15} /> <span>Kacheln</span>
+                </button>
+                <button type="button" role="radio" aria-checked={view === 'list'} className={view === 'list' ? 'on' : ''} title="Liste" onClick={() => setSettings({ libraryView: 'list' })}>
+                  <IconList size={15} /> <span>Liste</span>
+                </button>
+              </div>
               <button type="button" className="btn outline" onClick={() => setBuilder(true)} disabled={!data.decks.length}>
                 <IconShuffle size={16} /> Lernrunde
               </button>
@@ -185,6 +199,9 @@ export default function Library() {
                     </button>
                   </div>
                 </div>
+                {view === 'list' ? (
+                  <CourseList courses={courses} ws={w} setDialog={setDialog} />
+                ) : (
                 <div className="course-grid">
                   {courses.map((c) => (
                     <CourseCard key={c.id} course={c} ws={w} setDialog={setDialog} />
@@ -195,6 +212,7 @@ export default function Library() {
                     <small>z. B. ein Fach oder Semester</small>
                   </button>
                 </div>
+                )}
               </section>
             );
           })}
@@ -326,9 +344,9 @@ export default function Library() {
 function CourseCard({ course, ws, setDialog }: { course: Course; ws: Workspace; setDialog: (d: Dialog) => void }) {
   const data = useData();
   const decks = data.decks.filter((d) => d.courseId === course.id);
-  const cards = decks.flatMap((d) => d.cards);
-  const pct = masteryPercent(cards);
-  const due = decks.reduce((a, d) => a + dueCards(d).length, 0);
+  const sum = courseSummary(course, decks, (d) => dueCards(d as Deck).length);
+  const pct = sum.mastery;
+  const due = sum.due;
   const exam = upcomingExams(data).find((e) => decks.some((d) => examCovers(e, d)));
   return (
     <div className="course-card">
@@ -339,7 +357,7 @@ function CourseCard({ course, ws, setDialog }: { course: Course; ws: Workspace; 
         <b>{course.name}</b>
         <small>
           {decks.length} {decks.length === 1 ? 'Deck' : 'Decks'}
-          {(course.folders?.length ?? 0) > 0 && ` · ${course.folders!.length} ${course.folders!.length === 1 ? 'Ordner' : 'Ordner'}`} · {cards.length} Karten
+          {sum.folders > 0 && ` · ${sum.folders} Ordner`} · {sum.cards} Karten
         </small>
         <span className="course-bar">
           <span className="bar">
@@ -368,8 +386,141 @@ function CourseCard({ course, ws, setDialog }: { course: Course; ws: Workspace; 
   );
 }
 
+/** Library as a list: one row per course (sortable), folders and decks fold out below it. */
+function CourseList({ courses, ws, setDialog }: { courses: Course[]; ws: Workspace; setDialog: (d: Dialog) => void }) {
+  const data = useData();
+  const [sort, setSort] = useState<{ by: CourseSort; asc: boolean }>({ by: 'name', asc: true });
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const exams = upcomingExams(data);
+  const list = sortCourses(
+    courses.map((c) => ({ course: c, name: c.name, sum: courseSummary(c, data.decks, (d) => dueCards(d as Deck).length) })),
+    sort.by,
+    sort.asc,
+  );
+  const head = (by: CourseSort, label: string) => (
+    <button
+      type="button"
+      className={'clist-sort' + (sort.by === by ? ' on' : '')}
+      aria-sort={sort.by === by ? (sort.asc ? 'ascending' : 'descending') : undefined}
+      onClick={() => setSort((s) => ({ by, asc: s.by === by ? !s.asc : by === 'name' }))}
+    >
+      {label}
+      {sort.by === by ? (sort.asc ? ' ↑' : ' ↓') : ''}
+    </button>
+  );
+  const deckLink = (d: Deck, indent: boolean) => {
+    const n = dueCards(d).length;
+    return (
+      <Link key={d.id} to={deckUrl(data, d)} className={'clist-deck' + (indent ? ' deep' : '')}>
+        <IconCards size={14} />
+        <span className="clist-deck-name" title={d.name}>
+          {d.name}
+        </span>
+        <small className="muted">{d.cards.length} {d.cards.length === 1 ? 'Karte' : 'Karten'}</small>
+        {n > 0 && <span className="pill-count">{n}</span>}
+      </Link>
+    );
+  };
+  return (
+    <div className="clist">
+      <div className="clist-head">
+        <span className="clist-name">{head('name', 'Kurs')}</span>
+        <span className="clist-num">{head('cards', 'Karten')}</span>
+        <span className="clist-pct">{head('mastery', 'Fortschritt')}</span>
+        <span className="clist-due">{head('due', 'Fällig')}</span>
+        <span className="clist-exam">Prüfung</span>
+        <span className="clist-act" />
+      </div>
+      {list.map(({ course: c, sum }) => {
+        const decks = data.decks.filter((d) => d.courseId === c.id);
+        const folders = (c.folders ?? []).filter((f) => decks.some((d) => d.folderId === f.id));
+        const loose = decks.filter((d) => !d.folderId || !(c.folders ?? []).some((f) => f.id === d.folderId));
+        const exam = exams.find((e) => decks.some((d) => examCovers(e, d)));
+        const isOpen = open.has(c.id);
+        return (
+          <div key={c.id} className={'clist-course' + (isOpen ? ' open' : '')}>
+            <div className="clist-row">
+              <span className="clist-name">
+                <button
+                  type="button"
+                  className="icon-btn clist-toggle"
+                  aria-expanded={isOpen}
+                  aria-label={isOpen ? 'Zuklappen' : 'Ordner und Decks zeigen'}
+                  disabled={!decks.length}
+                  onClick={() => setOpen((o) => (o.has(c.id) ? new Set([...o].filter((x) => x !== c.id)) : new Set(o).add(c.id)))}
+                >
+                  <IconChevronDown size={15} className="fold-chev" />
+                </button>
+                <IconFolder size={17} className="clist-icon" />
+                <Link to={`/library/${ws.slug}/${c.slug}`} title={c.name}>
+                  {c.name}
+                </Link>
+              </span>
+              <span className="clist-num">
+                <small className="muted">
+                  {sum.decks} {sum.decks === 1 ? 'Deck' : 'Decks'}
+                  {sum.folders > 0 && ` · ${sum.folders} Ordner`} ·{' '}
+                </small>
+                {sum.cards}
+              </span>
+              <span className="clist-pct">
+                <span className="bar mini">
+                  <i style={{ width: `${sum.mastery}%` }} />
+                </span>
+                <small>{sum.mastery}%</small>
+              </span>
+              <span className="clist-due">{sum.due > 0 ? <span className="pill-count">{sum.due}</span> : <span className="pill-ok">erledigt</span>}</span>
+              <span className="clist-exam">
+                {exam && (
+                  <span className="exam-chip small" title={exam.title}>
+                    <IconCalendar size={12} /> {countdownText(exam)}
+                  </span>
+                )}
+              </span>
+              <span className="clist-act">
+                <button type="button" className="icon-btn" aria-label="Kurs umbenennen" onClick={() => setDialog({ kind: 'rename-course', course: c })}>
+                  <IconEdit size={15} />
+                </button>
+                <button type="button" className="icon-btn" aria-label="Kurs löschen" onClick={() => setDialog({ kind: 'del-course', course: c })}>
+                  <IconTrash size={15} />
+                </button>
+              </span>
+            </div>
+            {isOpen && (
+              <div className="clist-body">
+                {folders.map((f) => (
+                  <div key={f.id} className="clist-folder">
+                    <span className="clist-folder-name">
+                      <IconFolder size={14} /> <b>{f.name}</b>
+                    </span>
+                    {decks.filter((d) => d.folderId === f.id).map((d) => deckLink(d, true))}
+                  </div>
+                ))}
+                {loose.map((d) => deckLink(d, false))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+      <button type="button" className="clist-add" onClick={() => setDialog({ kind: 'course', ws })}>
+        <IconPlus size={15} /> Neuer Kurs
+      </button>
+    </div>
+  );
+}
+
 /** Course page: key figures on top, decks in folders on the left, the chosen deck's cards on the right. */
-function CourseView({ course, workspace, setDialog }: { course: Course; workspace: Workspace; setDialog: (d: Dialog) => void }) {
+function CourseView({
+  course,
+  workspace,
+  setDialog,
+  onStudy,
+}: {
+  course: Course;
+  workspace: Workspace;
+  setDialog: (d: Dialog) => void;
+  onStudy: (title: string, items: SessionItem[]) => void;
+}) {
   const data = useData();
   const navigate = useNavigate();
   const decks = data.decks.filter((d) => d.courseId === course.id);
@@ -384,12 +535,33 @@ function CourseView({ course, workspace, setDialog }: { course: Course; workspac
   const folders = course.folders ?? [];
   const names = shortNames(decks);
   const loose = decks.filter((d) => !d.folderId || !folders.some((f) => f.id === d.folderId));
+  // a whole folder or course in one round: due cards first; with nothing due, practise all of them
+  const studyButton = (title: string, group: Deck[], label: (n: number) => string, cls = 'btn outline sm') => {
+    const items = dueAcross(group, (d) => newCardsLeft(d as Deck));
+    const total = group.reduce((a, d) => a + d.cards.length, 0);
+    if (!total) return null;
+    return (
+      <button
+        type="button"
+        className={cls}
+        title={items.length ? `${items.length} fällige Karten aus ${group.length} Decks lernen` : 'Alles erledigt – trotzdem alle Karten üben (ohne den Plan zu verschieben)'}
+        onClick={() => onStudy(title, items.length ? items : allAcross(group))}
+      >
+        <IconPlay size={12} /> {label(items.length)}
+      </button>
+    );
+  };
 
   const deckRow = (d: Deck) => {
     const n = dueCards(d).length;
     return (
       <div key={d.id} className={`cdeck ${deck?.id === d.id ? 'on' : ''}`}>
-        <button type="button" className="cdeck-main" onClick={() => setSelected(d.id)}>
+        <button
+          type="button"
+          className="cdeck-main"
+          title={selected === d.id ? 'Nochmal klicken zum Öffnen' : undefined}
+          onClick={() => (selected === d.id ? navigate(deckUrl(data, d)) : setSelected(d.id))}
+        >
           <IconCards size={16} />
           <span className="cdeck-name" title={d.name}>{names.get(d.id)}</span>
           {n > 0 && <span className="pill-count">{n}</span>}
@@ -421,6 +593,8 @@ function CourseView({ course, workspace, setDialog }: { course: Course; workspac
           <button type="button" className="icon-btn" aria-label="Kurs umbenennen" onClick={() => setDialog({ kind: 'rename-course', course })}>
             <IconEdit size={16} />
           </button>
+          <span className="grow" />
+          {studyButton(`Kurs: ${course.name}`, decks, (n) => (n ? `Ganzen Kurs lernen (${n})` : 'Ganzen Kurs üben'), 'btn primary sm')}
         </div>
         <div className="course-stats">
           <div className="cstat">
@@ -488,6 +662,7 @@ function CourseView({ course, workspace, setDialog }: { course: Course; workspac
                     <b>{f.name}</b>
                     <small className="muted">{inside.length}</small>
                   </button>
+                  {studyButton(`Ordner: ${f.name}`, inside, (n) => (n ? `Lernen ${n}` : 'Üben'), 'btn ghost sm cfolder-study')}
                   <span className="cdeck-actions">
                     <button type="button" className="icon-btn" aria-label="Deck in diesem Ordner" title="Neues Deck in diesem Ordner" onClick={() => setDialog({ kind: 'deck', course, folderId: f.id })}>
                       <IconPlus size={14} />

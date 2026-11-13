@@ -406,7 +406,7 @@ function Result({ deck, ex, onNew }: { deck: Deck; ex: MockExam; onNew: () => vo
     <div className="mock-result">
       <div className="panel mock-score">
         {r.passed && r.percent >= 80 && <Confetti />}
-        <Mascot who={r.passed ? 'pip' : 'flo'} mood={r.percent >= 80 ? 'cheer' : r.passed ? 'happy' : 'sad'} size={88} side="top" />
+        <Mascot who="pip" mood={r.percent >= 80 ? 'cheer' : r.passed ? 'happy' : 'sad'} size={88} side="top" />
         <small className="muted">{ex.title}</small>
         <div className={`mock-grade ${r.passed ? 'pass' : 'fail'}`}>
           {ex.scale !== 'pct' && <span>Note</span>}

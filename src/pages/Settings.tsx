@@ -8,7 +8,7 @@ import { desktop, getState, isDesktop, replaceAll, resetAll, setApiKey, setChatK
 import { download } from '../lib/util';
 import { APP_VERSION, SECOND_MODEL, SLIDE_FIGURES } from '../config';
 import { SyncPanel } from '../components/SyncPanel';
-import { BackupsPanel, CostSettings, LearningPanel, RemindersPanel, SlideFigureSettings } from '../components/SettingsExtras';
+import { BackupsPanel, BoldSettings, CostSettings, LearningPanel, RemindersPanel, SlideFigureSettings } from '../components/SettingsExtras';
 import { checkForUpdate, installUpdate, useUpdate } from '../lib/update';
 
 
@@ -212,6 +212,7 @@ export default function Settings() {
           )}
         </div>
         {status && <div className={status.ok ? 'form-ok' : 'form-error'}>{status.text}</div>}
+        <BoldSettings />
         <CostSettings />
         {SLIDE_FIGURES && <SlideFigureSettings />}
       </section>
