@@ -248,7 +248,7 @@ export default function Settings() {
         </div>
         <label className="check-row">
           <input type="checkbox" checked={settings.animations} onChange={(e) => setSettings({ animations: e.target.checked })} />
-          <span>Pip, Finn, Flo und die Animationen beim Lernen anzeigen (Konfetti, Sterne, Karten-Drehungen).</span>
+          <span>Pip, Flo und die Animationen beim Lernen anzeigen (Konfetti, Sterne, Karten-Drehungen).</span>
         </label>
       </section>
 
@@ -349,7 +349,7 @@ function ChatModelPanel() {
   return (
     <section className="panel">
       <h2>KI für den Chat</h2>
-      <p className="muted">Für Gespräche mit Finn, Erklärungen zu Karten und das Bewerten getippter Antworten.</p>
+      <p className="muted">Für Gespräche mit Pip, Erklärungen zu Karten und das Bewerten getippter Antworten.</p>
       <label className="check-row">
         <input type="checkbox" checked={settings.chatSeparate} onChange={(e) => setSettings({ chatSeparate: e.target.checked })} />
         <span>

@@ -1,11 +1,10 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 
 export type Mood = 'idle' | 'happy' | 'sad' | 'think' | 'cheer' | 'wave';
-export type Who = 'pip' | 'flo' | 'finn';
+export type Who = 'pip' | 'flo';
 
 /**
- * The animated companions: Pip the dolphin (reacts while you learn), his colleague Finn (tutor in the chat, with reading glasses)
- * and Flo the fox (streaks and goals).
+ * The two animated companions: Pip the dolphin (tutor in the chat, reacts while you learn) and Flo the fox (streaks and goals).
  * Pure SVG + CSS animations; a new `pulse` value replays the reaction.
  */
 export function Mascot({
@@ -28,7 +27,7 @@ export function Mascot({
   return (
     <div className={`mascot-wrap say-${side} ${className}`}>
       <div key={`${mood}-${pulse ?? ''}`} className={`mascot m-${who} mood-${mood}`} style={{ width: size, height: size }} aria-hidden="true">
-        {who === 'pip' ? <Dolphin mood={mood} /> : who === 'finn' ? <Dolphin mood={mood} look={FINN} /> : <Fox mood={mood} />}
+        {who === 'pip' ? <Dolphin mood={mood} /> : <Fox mood={mood} />}
       </div>
       {say && (
         <div className="m-say" role="status" key={say}>
@@ -41,13 +40,10 @@ export function Mascot({
 
 const happyEyes = (mood: Mood) => mood === 'happy' || mood === 'cheer';
 
-type DolphinLook = { body: string; dark: string; belly: string; snout: string; glasses?: boolean };
-const PIP: DolphinLook = { body: '#45b4e3', dark: '#2489bf', belly: '#e3f6fd', snout: '#9fdcf4' };
-/** Finn, Pip's colleague: same family, teal, with reading glasses – the tutor in the chat. */
-const FINN: DolphinLook = { body: '#3dbba3', dark: '#1f8f7a', belly: '#e2f8f2', snout: '#9be3d3', glasses: true };
+const PIP = { body: '#45b4e3', dark: '#2489bf', belly: '#e3f6fd', snout: '#9fdcf4' };
 
-function Dolphin({ mood, look = PIP }: { mood: Mood; look?: DolphinLook }) {
-  const { body, dark } = look;
+function Dolphin({ mood }: { mood: Mood }) {
+  const { body, dark } = PIP;
   return (
     <svg viewBox="0 0 120 120" width="100%" height="100%">
       <ellipse className="m-shadow" cx="60" cy="113" rx="26" ry="4" fill="rgba(4, 44, 70,.16)" />
@@ -62,10 +58,10 @@ function Dolphin({ mood, look = PIP }: { mood: Mood; look?: DolphinLook }) {
           {/* dorsal fin */}
           <path d="M58 30 C62 17 72 11 80 11 C75 18 72 25 72 35z" fill={dark} />
           <ellipse cx="60" cy="64" rx="32" ry="37" fill={body} />
-          <ellipse cx="60" cy="80" rx="21" ry="20" fill={look.belly} />
+          <ellipse cx="60" cy="80" rx="21" ry="20" fill={PIP.belly} />
           <ellipse cx="60" cy="33" rx="3" ry="1.6" fill={dark} />
           {/* snout and smile */}
-          <ellipse cx="60" cy="74" rx="12.5" ry="7.5" fill={look.snout} />
+          <ellipse cx="60" cy="74" rx="12.5" ry="7.5" fill={PIP.snout} />
           <path d={mood === 'sad' ? 'M53 78q7-5 14 0' : 'M52 74q8 7 16 0'} stroke="#0b2540" strokeWidth="2.4" fill="none" strokeLinecap="round" />
           {/* eyes */}
           <circle cx="46" cy="57" r="10" fill="#fff" />
@@ -87,13 +83,6 @@ function Dolphin({ mood, look = PIP }: { mood: Mood; look?: DolphinLook }) {
             </g>
           )}
           {mood === 'sad' && <path d="M37 44l15 5M83 44l-15 5" stroke="#0b2540" strokeWidth="2.6" strokeLinecap="round" />}
-          {look.glasses && (
-            <g className="m-glasses" fill="none" stroke="#5a3a1e" strokeWidth="2.4">
-              <circle cx="46" cy="57" r="12" />
-              <circle cx="74" cy="57" r="12" />
-              <path d="M58 56q2-2.5 4 0M34 55l-6-3M86 55l6-3" strokeLinecap="round" />
-            </g>
-          )}
           <circle cx="36" cy="70" r="4.2" fill="#f6a5c0" opacity={happyEyes(mood) ? 0.85 : 0.45} />
           <circle cx="84" cy="70" r="4.2" fill="#f6a5c0" opacity={happyEyes(mood) ? 0.85 : 0.45} />
         </g>
@@ -186,14 +175,14 @@ function Fox({ mood }: { mood: Mood }) {
   );
 }
 
-/** Finn's head, small and still (avatar next to his answers). */
-export function FinnFace({ size = 24 }: { size?: number }) {
+/** Pip's head, small and still (avatar next to his answers in the chat). */
+export function PipFace({ size = 24 }: { size?: number }) {
   return (
     <svg viewBox="0 0 40 40" width={size} height={size} aria-hidden="true">
-      <path d="M19 9 C21 4 26 2 29 2.5 C27 5 26 8 26 11z" fill={FINN.dark} />
-      <circle cx="20" cy="22" r="15" fill={FINN.body} />
-      <ellipse cx="20" cy="28" rx="8.5" ry="7" fill={FINN.belly} />
-      <ellipse cx="20" cy="26" rx="5" ry="3" fill={FINN.snout} />
+      <path d="M19 9 C21 4 26 2 29 2.5 C27 5 26 8 26 11z" fill={PIP.dark} />
+      <circle cx="20" cy="22" r="15" fill={PIP.body} />
+      <ellipse cx="20" cy="28" rx="8.5" ry="7" fill={PIP.belly} />
+      <ellipse cx="20" cy="26" rx="5" ry="3" fill={PIP.snout} />
       <path d="M17 26.2q3 2.6 6 0" stroke="#0b2540" strokeWidth="1.2" fill="none" strokeLinecap="round" />
       <circle cx="14" cy="19" r="4.6" fill="#fff" />
       <circle cx="26" cy="19" r="4.6" fill="#fff" />
@@ -201,11 +190,6 @@ export function FinnFace({ size = 24 }: { size?: number }) {
       <circle cx="25.6" cy="19.4" r="2.5" fill="#0b2540" />
       <circle cx="15.3" cy="18.4" r=".9" fill="#fff" />
       <circle cx="26.5" cy="18.4" r=".9" fill="#fff" />
-      <g fill="none" stroke="#5a3a1e" strokeWidth="1.3">
-        <circle cx="14" cy="19" r="5.6" />
-        <circle cx="26" cy="19" r="5.6" />
-        <path d="M19.6 18.6q.4-.8.8 0" />
-      </g>
       <circle cx="10" cy="24.5" r="1.8" fill="#f6a5c0" opacity={0.7} />
       <circle cx="30" cy="24.5" r="1.8" fill="#f6a5c0" opacity={0.7} />
     </svg>

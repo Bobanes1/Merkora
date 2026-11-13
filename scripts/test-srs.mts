@@ -722,6 +722,13 @@ console.log('Interaktive Mindmap');
   ok(Math.max(...left('center')) < Math.min(...right('branch')) && Math.max(...left('branch')) < Math.min(...right('leaf')) && new Set(right('branch').map(Math.round)).size === 1 && new Set(right('leaf').map(Math.round)).size === 1, 'von links nach rechts: Thema, dann Äste, dann Punkte – jeweils bündig in einer Spalte');
 }
 
+console.log('Lernpfad mit vier Antworten');
+{
+  const { answerXp } = await import('../src/lib/path');
+  ok(answerXp(1, true, 0) === 0 && answerXp(2, true, 0) < answerXp(3, true, 0) && answerXp(3, true, 0) < answerXp(4, true, 0), 'Nochmal 0 XP, Schwer < Gut < Einfach');
+  ok(answerXp(4, false, 0) === 3 && answerXp(3, true, 2) === answerXp(3, true, 0) + 2, 'zweiter Versuch gibt wenig, eine Serie 2 XP extra');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

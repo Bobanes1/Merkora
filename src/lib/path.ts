@@ -1,5 +1,6 @@
 /** Learning path ("Lernpfad"): the deck split into small levels, with review chests and a final test. */
 import { cardBackText, cardFrontText, cardHasMedia } from './content';
+import type { Rating } from './srs';
 import type { Card, Data, Deck } from './store';
 import { DAY, dayKey, startOfDay } from './util';
 
@@ -104,6 +105,16 @@ export function buildExercises(deck: Deck, node: PathNode): Exercise[] {
     const options = shuffle([right, ...others]).map((o) => clip(o));
     return { type: 'mc', cardId: id, prompt: card, reverse, options, answer: options.indexOf(clip(right)) };
   });
+}
+
+/**
+ * XP for an answer in the learning path, with the same four answers as when learning:
+ * "Nochmal" nothing, "Schwer" a little, "Gut" and "Einfach" more; a second try only a bit. A streak adds 2.
+ */
+export function answerXp(rating: Rating, firstTry: boolean, combo: number): number {
+  if (rating === 1) return 0;
+  const base = firstTry ? (rating === 2 ? 6 : rating === 3 ? 10 : 12) : 3;
+  return base + (combo >= 2 ? 2 : 0);
 }
 
 export function starsFor(firstTryCorrect: number, total: number) {

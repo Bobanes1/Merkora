@@ -4,14 +4,14 @@ import { estimate } from '../lib/costs';
 import { hasKey, materialFrom, tutorReply } from '../lib/ai';
 import { getState, updateDeck, type Deck } from '../lib/store';
 import { IconClose, IconRefresh, IconSend } from './Icons';
-import { FinnFace, Mascot, type Mood } from './Mascot';
+import { Mascot, PipFace, type Mood } from './Mascot';
 import { Markdown } from './Markdown';
 import { NoKeyNotice } from './NoKey';
 
 const SUGGESTIONS = ['Fasse dieses Deck für mich zusammen.', 'Stell mir eine prüfungsähnliche Frage.', 'Wie lerne ich das am besten?'];
 
-/** Finn's head – still, small (kept under the old name for other places). */
-export const TutorFace = ({ size = 64 }: { size?: number }) => <FinnFace size={size} />;
+/** Pip's head – still, small. */
+export const TutorFace = ({ size = 64 }: { size?: number }) => <PipFace size={size} />;
 
 export function ChatPanel({ deck, onClose }: { deck: Deck; onClose: () => void }) {
   const [input, setInput] = useState('');
@@ -19,7 +19,7 @@ export function ChatPanel({ deck, onClose }: { deck: Deck; onClose: () => void }
   const [error, setError] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
   const msgs = deck.chat;
-  // Finn's mood follows the conversation: thinking while the answer comes, happy when it is there, sad on errors
+  // Pip's mood follows the conversation: thinking while the answer comes, happy when it is there, sad on errors
   const [mood, setMood] = useState<Mood>('idle');
   const [pulse, setPulse] = useState(0);
   const calm = useRef<number>();
@@ -62,10 +62,10 @@ export function ChatPanel({ deck, onClose }: { deck: Deck; onClose: () => void }
   return (
     <aside className="chat-panel" aria-label="KI-Tutor">
       <div className="chat-head">
-        <button type="button" className="chat-mascot" aria-label="Finn" title="Hallo, ich bin Finn – ein Kollege von Pip!" onClick={() => !busy && feel('cheer', 2200)}>
-          <Mascot who="finn" mood={mood} pulse={pulse} size={38} />
+        <button type="button" className="chat-mascot" aria-label="Pip" title="Hallo, ich bin Pip!" onClick={() => !busy && feel('cheer', 2200)}>
+          <Mascot who="pip" mood={mood} pulse={pulse} size={38} />
         </button>
-        <b>Tutor Finn</b>
+        <b>Tutor Pip</b>
         <span className="grow" />
         {msgs.length > 0 && (
           <button type="button" className="btn ghost sm" onClick={() => updateDeck(deck.id, { chat: [] })}>
@@ -81,7 +81,7 @@ export function ChatPanel({ deck, onClose }: { deck: Deck; onClose: () => void }
           <NoKeyNotice compact />
         ) : msgs.length === 0 ? (
           <div className="chat-empty">
-            <Mascot who="finn" mood="wave" size={104} />
+            <Mascot who="pip" mood="wave" size={104} />
             <p>Hallo! Wobei kann ich dir bei „{deck.name}“ helfen?</p>
             {SUGGESTIONS.map((s) => (
               <button type="button" key={s} className="chip" onClick={() => send(s)}>
@@ -93,7 +93,7 @@ export function ChatPanel({ deck, onClose }: { deck: Deck; onClose: () => void }
           msgs.map((m, i) =>
             m.role === 'assistant' ? (
               <div key={i} className="msg-row">
-                <FinnFace size={26} />
+                <PipFace size={26} />
                 <div className={`msg assistant${i === msgs.length - 1 ? ' msg-in' : ''}`}>
                   <Markdown text={m.content} />
                 </div>
@@ -106,8 +106,8 @@ export function ChatPanel({ deck, onClose }: { deck: Deck; onClose: () => void }
           )
         )}
         {busy && (
-          <div className="msg-row" role="status" aria-label="Finn denkt nach">
-            <FinnFace size={26} />
+          <div className="msg-row" role="status" aria-label="Pip denkt nach">
+            <PipFace size={26} />
             <div className="msg assistant typing-dots" aria-hidden="true">
               <span />
               <span />

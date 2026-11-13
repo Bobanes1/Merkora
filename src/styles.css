@@ -3666,26 +3666,26 @@ a.deck-row:hover {
 .mascot.mood-happy .m-tail {
   animation: m-wag 0.4s ease-in-out infinite;
 }
-/* cheer: big jumps, wings up, sparkles */
+/* cheer: two big jumps with flapping, then calm again (sparkles stay a moment) */
 .mascot.mood-cheer .m-body {
-  animation: m-jump 0.8s cubic-bezier(0.3, 1.3, 0.6, 1) infinite;
+  animation: m-jump 0.8s cubic-bezier(0.3, 1.3, 0.6, 1) 2, m-bob 2.6s ease-in-out 1.6s infinite;
 }
 .mascot.mood-cheer .m-shadow {
-  animation: m-shadow-jump 0.8s cubic-bezier(0.3, 1.3, 0.6, 1) infinite;
+  animation: m-shadow-jump 0.8s cubic-bezier(0.3, 1.3, 0.6, 1) 2, m-shadow 2.6s ease-in-out 1.6s infinite;
 }
 .mascot.mood-cheer .m-wing-l {
-  animation: m-flap-l 0.2s ease-in-out infinite;
+  animation: m-flap-l 0.2s ease-in-out 8;
 }
 .mascot.mood-cheer .m-wing-r {
-  animation: m-flap-r 0.2s ease-in-out infinite;
+  animation: m-flap-r 0.2s ease-in-out 8;
 }
 .mascot.mood-cheer .m-tail {
-  animation: m-wag 0.3s ease-in-out infinite;
+  animation: m-wag 0.3s ease-in-out 5, m-wag 1.6s ease-in-out 1.5s infinite;
 }
 .mascot .m-sparks path {
   transform-box: fill-box;
   transform-origin: center;
-  animation: m-spark 0.9s ease-in-out infinite alternate;
+  animation: m-spark 0.9s ease-in-out 4 alternate;
 }
 .mascot .m-sparks path:nth-child(2) {
   animation-delay: 0.45s;
@@ -6709,15 +6709,6 @@ a.deck-row:hover {
 .fc-speak { width: 26px; height: 26px; padding: 0; color: var(--muted); }
 .fc-speak[aria-pressed='true'] { color: var(--primary); }
 
-/* Finn (Pip's colleague, tutor in the chat): pushes his glasses up while thinking */
-.mascot .m-glasses {
-  transform-box: fill-box;
-  transition: transform 0.4s ease;
-}
-.mascot.m-finn.mood-think .m-glasses {
-  transform: translateY(-10px);
-}
-
 /* the tutor in the chat */
 .chat-mascot { display: inline-flex; padding: 0; margin: -6px 0 -6px -4px; border: 0; background: none; cursor: pointer; border-radius: var(--r-full); }
 .chat-mascot:focus-visible { box-shadow: 0 0 0 2px var(--primary); }
@@ -6752,3 +6743,6 @@ a.deck-row:hover {
 .slides-stage[style] { min-height: 0; margin: 0 auto; }
 .slides-stage[style] .slides-img { width: 100%; height: 100%; max-height: none; object-fit: contain; }
 .slides-img.waiting { opacity: 0.85; transition: opacity 0.15s; }
+/* learning path: rate like when learning */
+.lesson-card .center-text { display: block; text-align: center; margin-top: 10px; }
+.lesson-card .path-rate { margin-top: 6px; }

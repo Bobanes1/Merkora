@@ -9,6 +9,7 @@ import {
   pathProgress,
   playerLevel,
   starsFor,
+  answerXp,
   totalXp,
   xpStreak,
   xpToday,
@@ -18,6 +19,7 @@ import {
 import { comfort, Confetti, Mascot, praise } from '../../components/Mascot';
 import { FloorDecor, NodeDecor, PathLink, SandFloor, SwimmingFish, themeFor, Waves } from '../../components/PathDecor';
 import { addXp, logReview, reviewCard, savePathResult, setDailyGoal, useData, type Deck } from '../../lib/store';
+import { RATINGS, type Rating } from '../../lib/srs';
 
 const HEARTS = 3;
 const OFFSETS = [0, 56, 84, 56, 0, -56, -84, -56];
@@ -207,7 +209,7 @@ export default function PathTab({ deck }: { deck: Deck }) {
 }
 
 // ---------- one level ----------
-type Answer = { cardId: string; correct: boolean };
+type Answer = { cardId: string; correct: boolean; rating: Rating };
 
 function Lesson({ deck, node, onExit }: { deck: Deck; node: PathNode; onExit: () => void }) {
   const [queue, setQueue] = useState<Exercise[]>(() => buildExercises(deck, node));
@@ -225,16 +227,18 @@ function Lesson({ deck, node, onExit }: { deck: Deck; node: PathNode; onExit: ()
   const ex = queue[0];
   const doneCount = Object.keys(first).length;
 
-  const answer = (correct: boolean) => {
+  /** Multiple choice gives right/wrong; a flip card is rated like when learning (1 Nochmal … 4 Einfach). */
+  const answer = (correct: boolean, rating: Rating = correct ? 3 : 1) => {
     if (!ex || result) return;
     const card = deck.cards.find((c) => c.id === ex.cardId);
     const isFirst = first[ex.cardId] === undefined;
     if (isFirst && card) {
-      if (card.srs.due <= Date.now()) reviewCard(deck.id, card.id, correct ? 3 : 1);
-      else logReview(deck.id, card.id, correct ? 3 : 1);
+      // the learning plan gets the real rating, just like in "Lernen"
+      if (card.srs.due <= Date.now()) reviewCard(deck.id, card.id, rating);
+      else logReview(deck.id, card.id, rating);
       setFirst((f) => ({ ...f, [ex.cardId]: correct }));
     }
-    const gain = correct ? (isFirst ? 10 : 3) + (combo >= 2 ? 2 : 0) : 0;
+    const gain = answerXp(rating, isFirst, combo);
     if (gain) {
       addXp(gain);
       setEarned((e) => e + gain);
@@ -243,7 +247,7 @@ function Lesson({ deck, node, onExit }: { deck: Deck; node: PathNode; onExit: ()
     setReacts((n) => n + 1);
     setCombo(correct ? combo + 1 : 0);
     if (!correct) setHearts((h) => h - 1);
-    setResult({ cardId: ex.cardId, correct });
+    setResult({ cardId: ex.cardId, correct, rating });
   };
 
   const next = () => {
@@ -279,6 +283,9 @@ function Lesson({ deck, node, onExit }: { deck: Deck; node: PathNode; onExit: ()
       } else if (ex?.type === 'flip' && !result && e.key === ' ') {
         e.preventDefault();
         setShown(true);
+      } else if (ex?.type === 'flip' && shown && !result && ['1', '2', '3', '4'].includes(e.key)) {
+        const r = Number(e.key) as Rating;
+        answer(r >= 2, r);
       }
     };
     window.addEventListener('keydown', k);
@@ -424,14 +431,17 @@ function Lesson({ deck, node, onExit }: { deck: Deck; node: PathNode; onExit: ()
                 <hr />
                 <CardContent text={ex.prompt.back} html={ex.prompt.html} look={lookOf(deck, deck.cards.find((c) => c.id === ex.cardId))} className="ex-answer" />
                 {!result && (
-                  <div className="row-gap center">
-                    <button type="button" className="btn outline" onClick={() => answer(false)}>
-                      Nicht gewusst
-                    </button>
-                    <button type="button" className="btn primary" onClick={() => answer(true)}>
-                      Gewusst
-                    </button>
-                  </div>
+                  <>
+                    <small className="ex-kind center-text">Wie gut wusstest du es?</small>
+                    <div className="rate-row path-rate">
+                      {RATINGS.map((r) => (
+                        <button type="button" key={r.value} className={`rate ${r.cls}`} onClick={() => answer(r.value >= 2, r.value)}>
+                          <b>{r.label}</b>
+                          <small>Taste {r.key}</small>
+                        </button>
+                      ))}
+                    </div>
+                  </>
                 )}
               </>
             ) : (
@@ -453,7 +463,10 @@ function Lesson({ deck, node, onExit }: { deck: Deck; node: PathNode; onExit: ()
             </span>
           )}
           <span>
-            <b>{result.correct ? ['Richtig!', 'Super!', 'Stark!', 'Genau!'][doneCount % 4] : 'Nicht ganz.'}</b>
+            <b>
+              {!result.correct ? 'Nicht ganz.' : result.rating === 2 ? 'Gewusst – aber noch wackelig.' : result.rating === 4 ? 'Sitzt sicher!' : ['Richtig!', 'Super!', 'Stark!', 'Genau!'][doneCount % 4]}
+            </b>
+            {result.correct && result.rating === 2 && <small>Die Karte kommt im Lernplan bald wieder.</small>}
             {!result.correct && ex.type === 'mc' && <small>Richtig wäre: {ex.options[ex.answer]}</small>}
             {!result.correct && <small>Die Karte kommt am Ende nochmal.</small>}
           </span>
