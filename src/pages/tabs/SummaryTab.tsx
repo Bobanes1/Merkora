@@ -10,6 +10,8 @@ import { aiReady } from '../../lib/ai';
 import { startJob } from '../../lib/jobs';
 import { updateDeck, useStore, type Deck } from '../../lib/store';
 import { download, slugify } from '../../lib/util';
+import { SpeakButton } from '../../components/SpeakButton';
+import { markdownSpeech } from '../../lib/speechText';
 
 export function useAiReady() {
   return useStore((s) => aiReady(s));
@@ -72,6 +74,7 @@ export default function SummaryTab({ deck }: { deck: Deck }) {
       ) : (
         <article className="panel summary">
           <div className="toolbar">
+            <SpeakButton text={markdownSpeech(deck.summary)} label="Vorlesen" className="btn outline sm" withText />
             <span className="grow" />
             <button type="button" className="btn ghost sm" onClick={() => download(`${slugify(deck.name)}-zusammenfassung.md`, deck.summary!, 'text/markdown')}>
               <IconDownload size={14} /> Herunterladen

@@ -14,6 +14,12 @@ import { pipGreeting, pipReaction, pipSummary } from '../../lib/pipLines';
 import { answerOnly } from '../../lib/backSide';
 import { MarkButton } from '../../components/MarkButton';
 import { dayKey } from '../../lib/util';
+import { becomesLeech, spreadTwins } from '../../lib/cardLinks';
+import { ImproveCardDialog } from '../../components/ImproveCardDialog';
+import { MatchGame } from '../../components/MatchGame';
+import { SpeakButton } from '../../components/SpeakButton';
+import { htmlSpeech } from '../../lib/speechText';
+import { speak, stopSpeaking } from '../../lib/speech';
 
 type Grade = { score: number; verdict: string; feedback: string };
 
@@ -38,6 +44,11 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [lastRating, setLastRating] = useState<Rating | null>(null);
+  /** A card that has just become a problem card (forgotten again and again). */
+  const [leech, setLeech] = useState<string | null>(null);
+  const [improving, setImproving] = useState<string | null>(null);
+  const [game, setGame] = useState(false);
+  const autoRead = useStore((s) => !!s.data.settings.speechAuto);
   // Pip's reactions: streaks, cards that finally sit, half time, last cards …
   const [run, setRun] = useState({ streak: 0, misses: 0, firstTry: 0, seen: new Set<string>() });
   const [say, setSay] = useState<{ text?: string; big: boolean }>({ big: false });
@@ -74,7 +85,8 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
   const waiting = fresh.length - newInDue;
 
   const start = (m: 'due' | 'all') => {
-    const ids = m === 'due' ? dueIds : [...deck.cards.map((c) => c.id)].sort(() => Math.random() - 0.5);
+    // a card and its reversed twin never right after each other
+    const ids = spreadTwins(m === 'due' ? dueIds : [...deck.cards.map((c) => c.id)].sort(() => Math.random() - 0.5), deck.cards);
     setQueue(ids);
     setMode(m);
     setDone(0);
@@ -98,13 +110,25 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
   };
 
   const card = deck.cards.find((c) => c.id === queue[0]);
+  const frontSpeech = card ? (card.html ? htmlSpeech(card.front) : card.front) : '';
+  const backSpeech = card ? (card.html ? htmlSpeech(answerOnly(card.front, card.back)) : card.back) : '';
+  // "Karten automatisch vorlesen": question when a card appears, answer when it is turned
+  useEffect(() => {
+    if (!autoRead || !card) return;
+    speak(flipped ? backSpeech : frontSpeech);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRead, card?.id, flipped]);
+  useEffect(() => () => stopSpeaking(), []);
 
   const rate = useCallback(
     (r: Rating) => {
       if (!card) return;
       // Practice mode only moves the schedule for cards that are actually due.
       const scheduled = mode === 'due' || card.srs.due <= Date.now();
-      if (scheduled) reviewCard(deck.id, card.id, r);
+      if (scheduled) {
+        reviewCard(deck.id, card.id, r);
+        if (becomesLeech(card, { srs: schedule(card.srs, r) })) setLeech(card.id);
+      }
       else logReview(deck.id, card.id, r);
       addXp(r === 1 ? 2 : r === 2 ? 5 : r === 3 ? 8 : 10);
       countAnswerTime();
@@ -194,6 +218,8 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
       </div>
     );
 
+  if (game) return <MatchGame deck={deck} onClose={() => setGame(false)} />;
+
   if (mode === null || !card)
     return (
       <div className="empty learn-start">
@@ -248,6 +274,9 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
           <button type="button" className="btn outline" onClick={() => start('all')}>
             <IconShuffle size={16} /> Alle Karten üben
           </button>
+          <button type="button" className="btn outline" onClick={() => setGame(true)} title="Fragen und Antworten so schnell wie möglich zusammenklicken">
+            Zuordnen-Spiel
+          </button>
           {mode !== null && (
             <button type="button" className="btn ghost" onClick={onDone}>
               Fortschritt ansehen
@@ -273,18 +302,48 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
           <i style={{ width: `${(done / Math.max(1, total)) * 100}%` }} />
         </span>
         <span className="muted small">{mode === 'due' ? 'Fällige Karten' : 'Freies Üben'}</span>
+        <button type="button" className="btn ghost sm" onClick={() => setGame(true)} title="Zwischendurch: Fragen und Antworten so schnell wie möglich zusammenklicken">
+          Zuordnen-Spiel
+        </button>
         <FocusButton />
       </div>
 
+      {leech && deck.cards.some((c) => c.id === leech) && (
+        <div className="leech-hint" role="status">
+          <span>
+            Diese Karte vergisst du immer wieder: „{cardFrontText(deck.cards.find((c) => c.id === leech)!).slice(0, 80)}“. Oft hilft es, sie zu verbessern.
+          </span>
+          <button type="button" className="btn outline sm" onClick={() => setImproving(leech)}>
+            Karte verbessern
+          </button>
+          <button type="button" className="icon-btn" aria-label="Hinweis schließen" onClick={() => setLeech(null)}>
+            ×
+          </button>
+        </div>
+      )}
+      {improving && deck.cards.some((c) => c.id === improving) && (
+        <ImproveCardDialog
+          deck={deck}
+          card={deck.cards.find((c) => c.id === improving)!}
+          onClose={() => {
+            setImproving(null);
+            setLeech(null);
+          }}
+        />
+      )}
       <Mascot className="learn-mascot" mood={mood} pulse={done + queue.length} size={64} say={moodSay} />
       <div key={`${card.id}-${flipped ? 'b' : 'f'}`} className={`flashcard ${flipped ? 'flipped flip-in' : 'card-in'}`} onClick={() => !typeMode && setFlipped(true)}>
         <MarkButton deckId={deck.id} card={card} className="fc-mark" />
-        <small>Frage</small>
+        <small className="fc-label">
+          Frage <SpeakButton text={frontSpeech} label="Frage vorlesen" className="icon-btn fc-speak" />
+        </small>
         <CardContent text={card.front} html={card.html} look={lookOf(deck, card)} className="fc-front" />
         {flipped && (
           <>
             <hr />
-            <small>Antwort</small>
+            <small className="fc-label">
+              Antwort <SpeakButton text={backSpeech} label="Antwort vorlesen" className="icon-btn fc-speak" />
+            </small>
             <CardContent text={card.html ? answerOnly(card.front, card.back) : card.back} html={card.html} look={lookOf(deck, card)} className="fc-back" />
           </>
         )}

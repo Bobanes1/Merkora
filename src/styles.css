@@ -6660,3 +6660,51 @@ a.deck-row:hover {
 .source-details[open] > summary { margin-bottom: 8px; }
 .source-ask { margin: 10px 0; }
 .source-ask-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+
+/* problem cards and reversed twins */
+.leech-badge { display: inline-block; padding: 2px 8px; border-radius: var(--r-full); font-size: 11px; font-weight: 600; white-space: nowrap; cursor: pointer;
+  color: var(--warn-ink); background: var(--warn-soft); border: 1px solid color-mix(in srgb, var(--warn-ink) 45%, transparent); }
+.leech-badge:hover { border-color: var(--warn-ink); }
+.twin-badge { display: inline-block; padding: 2px 8px; border-radius: var(--r-full); font-size: 11px; font-weight: 600; white-space: nowrap; color: var(--muted); border: 1px dashed var(--line-strong); }
+.twin-btn { font-weight: 700; font-size: 15px; line-height: 1; }
+.twin-btn.on { color: var(--primary); }
+.tag.leech-filter { color: var(--warn-ink); }
+.tag.leech-filter.on { background: var(--warn-soft); border-color: var(--warn-ink); }
+.leech-hint { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 auto 10px; max-width: 720px; padding: 10px 12px; border-radius: var(--r-md);
+  background: var(--warn-soft); color: var(--warn-ink); font-size: 14px; }
+.leech-hint > span { flex: 1; min-width: 200px; }
+.leech-note { margin: 10px 0 0; font-size: 13px; color: var(--warn-ink); }
+.improve-current { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; margin: 8px 0 12px; border-radius: var(--r-md); background: var(--surface-2); }
+.improve-current span { color: var(--muted); font-size: 14px; }
+.improve-ways { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.improve-way { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-md); cursor: pointer; }
+.improve-way.on { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 7%, transparent); }
+.improve-way > span { display: flex; flex-direction: column; gap: 3px; }
+.improve-way small { font-size: 13px; }
+
+/* mind map */
+.mindmap-view { margin: 8px 0 12px; }
+.mindmap-view svg { width: 100%; height: auto; display: block; max-width: 980px; margin: 0 auto; }
+.mindmap-links { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.mindmap-links .muted { display: inline-flex; align-items: center; gap: 4px; margin-right: 4px; }
+
+/* matching game */
+.match { max-width: 880px; margin: 0 auto; }
+.match-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.match-time { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--primary); }
+.match-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.match-tile { min-height: 84px; padding: 12px; border-radius: var(--r-lg); border: 1.5px solid var(--line); background: var(--white); color: var(--ink);
+  font: inherit; font-size: 15px; line-height: 1.35; text-align: center; cursor: pointer; transition: transform 0.12s, border-color 0.12s, opacity 0.25s, background 0.12s; }
+.match-tile.back { background: var(--tint); }
+.match-tile:hover { border-color: var(--line-strong); }
+.match-tile.picked { border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 25%, transparent); transform: translateY(-1px); }
+.match-tile.wrong { border-color: var(--danger); animation: match-shake 0.4s; }
+.match-tile.gone { opacity: 0; transform: scale(0.9); pointer-events: none; }
+@keyframes match-shake { 0%, 100% { translate: 0; } 20%, 60% { translate: -5px; } 40%, 80% { translate: 5px; } }
+.match-done .match-result { font-size: 36px; font-weight: 800; color: var(--primary); margin: 4px 0; }
+@media (prefers-reduced-motion: reduce) { .match-tile.wrong { animation: none; } }
+
+/* reading aloud */
+.fc-label { display: inline-flex; align-items: center; gap: 4px; }
+.fc-speak { width: 26px; height: 26px; padding: 0; color: var(--muted); }
+.fc-speak[aria-pressed='true'] { color: var(--primary); }

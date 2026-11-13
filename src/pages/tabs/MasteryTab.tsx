@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { isLeech } from '../../lib/cardLinks';
 import { IconCards, IconCheck, IconFlame, IconPlay, IconRefresh } from '../../components/Icons';
 import { ConfirmModal } from '../../components/Modal';
 import { cardFrontText } from '../../lib/content';
@@ -34,7 +35,8 @@ function Ring({ pct }: { pct: number }) {
   );
 }
 
-export default function MasteryTab({ deck, reviews, onLearn }: { deck: Deck; reviews: Review[]; onLearn: () => void }) {
+export default function MasteryTab({ deck, reviews, onLearn, onProblems }: { deck: Deck; reviews: Review[]; onLearn: () => void; onProblems?: () => void }) {
+  const leeches = deck.cards.filter(isLeech).length;
   const [filter, setFilter] = useState<Level | 'all'>('all');
   const [confirm, setConfirm] = useState(false);
   const counts = levelCounts(deck.cards);
@@ -65,6 +67,14 @@ export default function MasteryTab({ deck, reviews, onLearn }: { deck: Deck; rev
             <button type="button" className="btn primary" onClick={onLearn} disabled={!total}>
               <IconPlay size={12} /> {due ? `${due} fällige Karten lernen` : 'Weiter üben'}
             </button>
+            {leeches > 0 && onProblems && (
+              <p className="leech-note">
+                {leeches} {leeches === 1 ? 'Karte vergisst' : 'Karten vergisst'} du immer wieder.{' '}
+                <button type="button" className="link-btn" onClick={onProblems}>
+                  Problemkarten ansehen und verbessern
+                </button>
+              </p>
+            )}
           </div>
         </section>
         <div className="mini-stats">

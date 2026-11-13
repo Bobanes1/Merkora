@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ChatPanel } from '../components/ChatPanel';
 import { ExamDialog } from '../components/ExamDialog';
 import { countdownText, nextExamForDeck } from '../lib/exams';
-import { IconCalendar, IconCards, IconChart, IconChat, IconDoc, IconNote, IconPath, IconPlay, IconQuiz, IconTarget } from '../components/Icons';
+import { IconCalendar, IconCards, IconChart, IconChat, IconDoc, IconMindmap, IconNote, IconPath, IconPlay, IconQuiz, IconTarget } from '../components/Icons';
 import PathTab from './tabs/PathTab';
 import { dueCards, findPath, useData } from '../lib/store';
 import CardsTab from './tabs/CardsTab';
@@ -13,6 +13,7 @@ import QuizTab from './tabs/QuizTab';
 import ExamTab from './tabs/ExamTab';
 import SourceTab from './tabs/SourceTab';
 import SummaryTab from './tabs/SummaryTab';
+import MindmapTab from './tabs/MindmapTab';
 
 const TABS = [
   { id: 'cards', label: 'Karteikarten', icon: IconCards },
@@ -20,6 +21,7 @@ const TABS = [
   { id: 'path', label: 'Lernpfad', icon: IconPath },
   { id: 'mastery', label: 'Lernfortschritt', icon: IconChart },
   { id: 'summary', label: 'Zusammenfassung', icon: IconDoc },
+  { id: 'mindmap', label: 'Mindmap', icon: IconMindmap },
   { id: 'quiz', label: 'Quiz', icon: IconQuiz },
   { id: 'exam', label: 'Probeprüfung', icon: IconTarget },
   { id: 'source', label: 'Lernmaterial', icon: IconNote },
@@ -103,8 +105,9 @@ export default function DeckPage() {
           {tab === 'cards' && <CardsTab deck={deck} onLearn={() => setTab('learn')} />}
           {tab === 'learn' && <LearnTab deck={deck} onDone={() => setTab('mastery')} />}
           {tab === 'path' && <PathTab key={deck.id} deck={deck} />}
-          {tab === 'mastery' && <MasteryTab deck={deck} reviews={data.reviews.filter((r) => r.deckId === deck.id)} onLearn={() => setTab('learn')} />}
+          {tab === 'mastery' && <MasteryTab deck={deck} reviews={data.reviews.filter((r) => r.deckId === deck.id)} onLearn={() => setTab('learn')} onProblems={() => setParams({ tab: 'cards', filter: 'leech' })} />}
           {tab === 'summary' && <SummaryTab deck={deck} />}
+          {tab === 'mindmap' && <MindmapTab deck={deck} onCards={(term) => setParams({ tab: 'cards', q: term })} />}
           {tab === 'quiz' && <QuizTab deck={deck} />}
           {tab === 'exam' && <ExamTab deck={deck} />}
           {tab === 'source' && <SourceTab deck={deck} />}

@@ -39,6 +39,7 @@ export const estimate = {
     );
   },
   summary: (materialChars: number): Estimate => ({ input: 150 + tokensOf(Math.min(materialChars, MATERIAL_LIMIT)), output: 1500 }),
+  mindmap: (materialChars: number): Estimate => ({ input: 350 + tokensOf(Math.min(materialChars, MATERIAL_LIMIT)), output: 700 }),
   quiz: (materialChars: number, count: number): Estimate => ({ input: 200 + tokensOf(Math.min(materialChars, MATERIAL_LIMIT)), output: count * 150 }),
   examCreate: (materialChars: number, tasks: number): Estimate => ({ input: 600 + tokensOf(Math.min(materialChars, 40000)), output: tasks * 250 }),
   /** Grading: questions, model answers and criteria in, feedback out (answers assumed ~400 characters each). */

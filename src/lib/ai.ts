@@ -1,6 +1,7 @@
 import { netFetch } from './desktop';
 import { sideText } from './content';
 import { DIAGRAM_KINDS, DIAGRAM_RULE, parseDiagram, type Diagram } from './diagram';
+import { ICON_NAMES } from './diagramIcons';
 import { FIGURE_RULE } from './slides';
 import { getState, type ChatMsg, type Provider } from './store';
 import { SECOND_MODEL } from '../config';
@@ -555,5 +556,46 @@ Antworte nur mit dem einen Grafik-Objekt (z. B. {"type":"flow",...}), ohne "diag
   );
   const d = parseDiagram((raw as { diagram?: unknown }).diagram ?? raw);
   if (!d) throw new AiError('Die KI hat keine brauchbare Grafik beschrieben. Versuch es noch einmal oder wähle eine andere Art.');
+  return d;
+}
+
+export type CardImprovement = { rewrite: { front: string; back: string }; mnemonic: string; split: { front: string; back: string }[] };
+
+/** A card that is forgotten again and again: clearer wording, a memory hook, or smaller cards. */
+export async function improveCard(front: string, back: string, lapses: number): Promise<CardImprovement> {
+  const r = await completeJson<Partial<CardImprovement>>(
+    `Du hilfst bei einer Lernkarte, die jemand immer wieder vergisst (${lapses}× vergessen). ${LANG_RULE}
+Schlage drei Wege vor:
+- "rewrite": dieselbe Karte klarer – eindeutige, konkrete Frage, kurze Antwort mit dem Kern zuerst.
+- "mnemonic": eine kurze, einprägsame Eselsbrücke oder ein Bild zum Merken (1–2 Sätze).
+- "split": 2–3 kleinere Karten, die zusammen dasselbe abfragen (je eine Sache pro Karte).
+Format: {"rewrite":{"front":"...","back":"..."},"mnemonic":"...","split":[{"front":"...","back":"..."}]}`,
+    `Frage: ${front}\nAntwort: ${back}`,
+    1500,
+    'chat',
+  );
+  const pair = (x: unknown) => {
+    const o = (x ?? {}) as { front?: unknown; back?: unknown };
+    return { front: String(o.front ?? '').trim(), back: String(o.back ?? '').trim() };
+  };
+  const rewrite = pair(r.rewrite);
+  const split = (Array.isArray(r.split) ? r.split : []).map(pair).filter((p) => p.front && p.back).slice(0, 4);
+  const mnemonic = String(r.mnemonic ?? '').trim();
+  if (!rewrite.front && !mnemonic && !split.length) throw new AiError('Die KI hat keinen brauchbaren Vorschlag geliefert. Versuch es noch einmal.');
+  return { rewrite, mnemonic, split };
+}
+
+/** A mind map of the whole material: centre, 3–8 branches with up to 5 points each (drawn by Merkora). */
+export async function mindmapFor(deckName: string, material: string): Promise<Diagram> {
+  const raw = await completeJson<Record<string, unknown>>(
+    `Du erstellst aus Lernmaterial eine übersichtliche Mindmap zum Lernen. ${LANG_RULE}
+Die Mitte ist das Thema. 3–8 Äste sind die Hauptthemen in sinnvoller Reihenfolge, jeder mit 2–5 kurzen Unterpunkten (Stichworte, höchstens 6 Wörter, keine Sätze).
+Optional "icons":{"Beschriftung":"symbol"} für einige Äste; erlaubte Symbole: ${ICON_NAMES.join(', ')}.
+Format: {"center":"…","branches":[{"label":"…","children":["…","…"]}],"icons":{}}`,
+    `Deck: ${deckName}\n\nLernmaterial:\n${material}`,
+    2000,
+  );
+  const d = parseDiagram({ ...raw, type: 'mindmap' });
+  if (!d) throw new AiError('Die KI hat keine brauchbare Mindmap geliefert. Versuch es noch einmal.');
   return d;
 }

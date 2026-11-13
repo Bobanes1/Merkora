@@ -541,6 +541,28 @@ console.log('Diagramme');
     const roundTrip = parseDiagram(JSON.parse(JSON.stringify(parseDiagram(withIcons[6]))));
     ok(JSON.stringify(roundTrip) === JSON.stringify(parseDiagram(withIcons[6])), 'gespeicherte Symbole werden beim Anzeigen gleich gelesen');
   }
+  // ---- mind map
+  {
+    const mk = (n: number) => ({
+      type: 'mindmap',
+      center: 'Methoden der empirischen Sozialforschung',
+      branches: Array.from({ length: n }, (_, i) => ({ label: ['Forschungsprozess', 'Gütekriterien', 'Stichproben und Auswahlverfahren', 'Befragung', 'Inhaltsanalyse', 'Experiment', 'Beobachtung', 'Auswertung'][i], children: ['Punkt eins mit etwas mehr Text', 'Zwei', 'Operationalisierung', 'Vier'].slice(0, 2 + (i % 3)) })),
+      icons: { Befragung: 'chat', 'Methoden der empirischen Sozialforschung': 'buch' },
+    });
+    for (const n of [3, 6, 8]) {
+      const d = parseDiagram(mk(n))!;
+      const L = layoutDiagram(d);
+      const real = L.boxes.filter((b) => b.lines.length);
+      let overlaps = 0;
+      real.forEach((a, k) => real.slice(k + 1).forEach((b) => (overlaps += hit(a, b) ? 1 : 0)));
+      const outside = real.filter((b) => b.x < 0 || b.y < 0 || b.x + b.w > L.width + 0.5 || b.y + b.h > L.height + 0.5);
+      const heads = L.boxes.filter((b) => b.kind === 'accent' && b.tone && b.lines.length && b.fs !== 16);
+      const svg = renderDiagram(d, PALETTES.dark);
+      ok(d.type === 'mindmap' && overlaps === 0 && outside.length === 0 && !svg.includes('…') && heads.length === n && new Set((d as any).branches.slice(0, 5).map((br: any) => heads.find((b) => b.lines.join(' ').replace(/- /g, '') === br.label)?.tone)).size === Math.min(5, n), `Mindmap mit ${n} Ästen: nichts überlappt oder ragt hinaus, Äste in verschiedenen Farben`);
+    }
+    ok(parseDiagram({ type: 'mindmap', center: 'X', branches: ['a', 'b'] }) === null && (parseDiagram({ type: 'mindmap', center: 'X', branches: ['a', 'b', 'c'] }) as any).branches[0].children.length === 0, 'Mindmap braucht mindestens 3 Äste; Äste als reine Wörter gehen auch');
+    ok(!DIAGRAM_RULE.includes('"type":"mindmap"'), 'Mindmap ist nicht für einzelne Karten gedacht');
+  }
   const esc = renderDiagram(parseDiagram({ type: 'flow', steps: ['a <b> & "c"', 'd'] })!);
   ok(esc.includes('a &lt;b&gt; &amp; &quot;c&quot;') && !esc.includes('<b>'), 'Sonderzeichen werden escaped');
   ok(!/Operationalisier-/.test(renderDiagram(parseDiagram(samples[0])!)), 'lange Wörter bleiben ganz (kleinere Schrift statt Trennung)');
@@ -612,6 +634,57 @@ console.log('PDF-Text ohne wiederholte Kopfzeilen');
   ok(JSON.stringify(stripRepeatedLines(few)) === JSON.stringify(few), 'kurze PDFs (unter 4 Folien) bleiben unverändert');
   const body = Array.from({ length: 6 }, (_, i) => ['Titel ' + i, 'a', 'b', 'c', 'd', 'Definition: Reliabilität', 'e', 'f', 'g', 'h', 'Ende ' + i].join('\n'));
   ok(stripRepeatedLines(body).every((p) => p.includes('Definition: Reliabilität')), 'wiederholte Zeilen mitten auf der Folie bleiben');
+}
+
+console.log('Problemkarten und umgekehrte Karten');
+{
+  const { isLeech, becomesLeech, canReverse, makeTwin, twinContent, spreadTwins, LEECH } = await import('../src/lib/cardLinks');
+  const { newSrs } = await import('../src/lib/srs');
+  const base = (id: string, extra: any = {}) => ({ id, front: 'Frage ' + id, back: 'Antwort ' + id, createdAt: 0, srs: newSrs(0), ...extra }) as any;
+  ok(!isLeech(base('a', { srs: { ...newSrs(0), lapses: LEECH - 1 } })) && isLeech(base('a', { srs: { ...newSrs(0), lapses: LEECH } })), `Problemkarte ab ${LEECH}× vergessen`);
+  ok(becomesLeech({ srs: { ...newSrs(0), lapses: 3 } }, { srs: { ...newSrs(0), lapses: 4 } }) && !becomesLeech({ srs: { ...newSrs(0), lapses: 4 } }, { srs: { ...newSrs(0), lapses: 5 } }), 'Hinweis nur beim Übergang zur Problemkarte');
+  ok(!isLeech({ srs: { ...newSrs(0), lapses: 0 } }), '„Ersetzen“ (lapses 0) nimmt die Karte aus den Problemkarten');
+  const orig = base('o', { html: true, front: '<b>Reliabilität</b>', back: 'Zuverlässigkeit einer Messung', tags: ['m'] });
+  const twin = makeTwin(orig, 't', 5);
+  ok(twin.front === 'Zuverlässigkeit einer Messung' && twin.back === '<b>Reliabilität</b>' && twin.reverseOf === 'o' && twin.srs.reps === 0 && twin.tags?.[0] === 'm', 'Zwilling: Seiten vertauscht, eigener (neuer) Lernstand, Tags übernommen');
+  const anki = base('k', { html: true, front: 'Q', back: 'Q<hr id=answer>A' });
+  ok(twinContent(anki).front === 'A', 'Zwilling einer Anki-Karte fragt nur die Antwort (ohne die wiederholte Frage)');
+  ok(!canReverse(base('i', { html: true, front: '<div class="io-wrap"><img data-media="x"></div>' })) && !canReverse(base('s', { styleId: '1' })) && !canReverse(twin) && canReverse(orig), 'nicht umgedreht: Bildverdeckung, Anki-Layout, Zwillinge selbst');
+  const cards = [base('a'), base('b'), { ...base('ta'), reverseOf: 'a' }, base('c')];
+  ok(JSON.stringify(spreadTwins(['a', 'ta', 'b', 'c'], cards)) === JSON.stringify(['a', 'b', 'c', 'ta']), 'Zwilling kommt in der Runde ans Ende, wenn das Original vorher dran ist');
+  ok(JSON.stringify(spreadTwins(['b', 'c'], cards)) === JSON.stringify(['b', 'c']), 'Runde ohne Zwillinge bleibt unverändert');
+}
+
+console.log('Zuordnen-Spiel');
+{
+  const { pickMatchCards, makeTiles, isPair, formatTime, MATCH_MAX } = await import('../src/lib/match');
+  const now = 1_000_000;
+  const c = (id: string, front: string, back: string, due = now + 1e9, leech = false, media = false) => ({ id, front, back, due, leech, media });
+  const pool = [
+    c('long', 'x'.repeat(MATCH_MAX + 1), 'kurz'),
+    c('img', 'Bild', 'Antwort', now - 1, false, true),
+    c('d1', 'Fällig 1', 'A1', now - 5),
+    c('d2', 'Fällig 2', 'A2', now - 5),
+    c('l1', 'Problem', 'A3', now + 1e9, true),
+    c('dup', 'Andere Frage', 'A1'),
+    ...Array.from({ length: 8 }, (_, i) => c('n' + i, 'Neu ' + i, 'Antwort ' + i)),
+  ];
+  const picked = pickMatchCards(pool, 6, now, () => 0.3);
+  const ids = picked.map((p) => p.id);
+  ok(picked.length === 6 && !ids.includes('long') && !ids.includes('img'), 'nur kurze Textkarten ohne Bilder');
+  ok(['d1', 'd2', 'l1'].every((id) => ids.includes(id)), 'fällige und Problemkarten zuerst');
+  ok(new Set(picked.map((p) => p.back.toLowerCase())).size === picked.length && !ids.includes('dup'), 'keine zwei Karten mit derselben Antwort');
+  const tiles = makeTiles(picked, () => 0.5);
+  ok(tiles.length === 12 && isPair(tiles.find((t) => t.key === 'd1:f')!, tiles.find((t) => t.key === 'd1:b')!) && !isPair(tiles.find((t) => t.key === 'd1:f')!, tiles.find((t) => t.key === 'd2:b')!), '12 Kacheln, Paare werden richtig erkannt');
+  ok(formatTime(23456) === '23,5 s', 'Zeit wird lesbar angezeigt');
+}
+
+console.log('Vorlesen');
+{
+  const { htmlSpeech, markdownSpeech } = await import('../src/lib/speechText');
+  ok(htmlSpeech('<b>Reliabilität</b><br>Zuverlässigkeit &amp; Genauigkeit<div class="diagram" data-diagram="{}"></div><img data-media="x">') === 'Reliabilität. Zuverlässigkeit & Genauigkeit', 'Karten-HTML → Vorlesetext ohne Grafiken und Bilder');
+  const md = markdownSpeech('## Überblick\n\n- **Punkt** eins\n- [Link](http://x) zwei\n\n| a | b |\n|---|---|\n| 1 | 2 |');
+  ok(md.length === 3 && md[0] === 'Überblick.' && md[1] === 'Punkt eins. Link zwei.' && !md.join(' ').includes('*') && !md.join(' ').includes('---'), 'Markdown → Absätze ohne Zeichen wie ** und Tabellenlinien');
 }
 
 console.log('Kurze Decknamen');

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { speak, useVoices } from '../lib/speech';
 import {
   autostartEnabled,
   backupNow,
@@ -294,6 +295,7 @@ export function LearningPanel() {
           </select>
         </>
       )}
+      <SpeechSettings />
     </section>
   );
 }
@@ -352,5 +354,53 @@ export function SlideFigureSettings() {
         die KI kann ein Bild der passenden Folie an eine Karte hängen. Es werden keine Bilder an die KI geschickt.
       </span>
     </label>
+  );
+}
+
+/** Reading aloud: voice, speed, and reading every card automatically. */
+function SpeechSettings() {
+  const voices = useVoices();
+  const voice = useStore((x) => x.data.settings.speechVoice ?? '');
+  const rate = useStore((x) => x.data.settings.speechRate ?? 1);
+  const auto = useStore((x) => !!x.data.settings.speechAuto);
+  const sorted = [...voices].sort((a, b) => Number(b.lang.toLowerCase().startsWith('de')) - Number(a.lang.toLowerCase().startsWith('de')) || a.name.localeCompare(b.name));
+  return (
+    <>
+      <h3 className="settings-sub">Vorlesen</h3>
+      {!voices.length ? (
+        <p className="muted small">Auf diesem Gerät ist keine Vorlese-Stimme installiert. Unter Windows kommen Stimmen über Einstellungen › Zeit und Sprache › Sprachausgabe dazu.</p>
+      ) : (
+        <>
+          <label className="check-row">
+            <input type="checkbox" checked={auto} onChange={(e) => setSettings({ speechAuto: e.target.checked })} />
+            <span>
+              <b>Karten beim Lernen automatisch vorlesen</b> – die Frage, sobald die Karte erscheint, die Antwort beim Umdrehen. Vorlesen geht sonst
+              jederzeit mit dem Lautsprecher-Knopf.
+            </span>
+          </label>
+          <label className="field-label" htmlFor="speech-voice">
+            Stimme
+          </label>
+          <div className="input-row">
+            <select id="speech-voice" className="input" value={voice} onChange={(e) => setSettings({ speechVoice: e.target.value || undefined })}>
+              <option value="">Automatisch (Deutsch, falls vorhanden)</option>
+              {sorted.map((v) => (
+                <option key={v.voiceURI} value={v.voiceURI}>
+                  {v.name} ({v.lang})
+                </option>
+              ))}
+            </select>
+            <button type="button" className="btn outline sm" onClick={() => speak('So klingt Merkora beim Vorlesen deiner Karteikarten.')}>
+              Probe hören
+            </button>
+          </div>
+          <label className="field-label" htmlFor="speech-rate">
+            Tempo: {rate.toLocaleString('de-DE')}×
+          </label>
+          <input id="speech-rate" type="range" min={0.6} max={1.6} step={0.1} value={rate} onChange={(e) => setSettings({ speechRate: Number(e.target.value) })} />
+          <p className="muted small">Vorgelesen wird mit den Stimmen deines Geräts – offline, ohne KI und ohne Kosten.</p>
+        </>
+      )}
+    </>
   );
 }

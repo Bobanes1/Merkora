@@ -22,7 +22,8 @@ type DiagramBase =
   | { type: 'venn'; title?: string; sets: { label: string; items: string[] }[]; shared: string[] }
   | { type: 'pyramid'; title?: string; levels: string[] }
   | { type: 'bars'; title?: string; unit?: string; bars: { label: string; value: number }[] }
-  | { type: 'decision'; title?: string; question: string; yes: DecisionBranch; no: DecisionBranch };
+  | { type: 'decision'; title?: string; question: string; yes: DecisionBranch; no: DecisionBranch }
+  | { type: 'mindmap'; title?: string; center: string; branches: { label: string; children: string[] }[] };
 
 /** Arrow of a model. `to` is a box – or "A -> B": then the arrow points at the middle of the arrow A→B (moderator). */
 export type ModelLink = { from: string; to: string; label?: string; both?: boolean; dashed?: boolean };
@@ -138,6 +139,8 @@ function boxLabels(d: DiagramBase): string[] {
       return d.nodes;
     case 'pyramid':
       return d.levels;
+    case 'mindmap':
+      return [d.center, ...d.branches.flatMap((b) => [b.label, ...b.children])];
     case 'decision': {
       const sub = (b: DecisionBranch) => (typeof b === 'string' ? [b] : [b.question, b.yes, b.no]);
       return [d.question, ...sub(d.yes), ...sub(d.no)];
@@ -209,6 +212,15 @@ function parseBase(raw: unknown): DiagramBase | null {
       if (bars.length < 2) return null;
       const unit = str(r.unit, 12);
       return { type: 'bars', title, ...(unit ? { unit } : {}), bars };
+    }
+    case 'mindmap': {
+      const center = str(r.center ?? r.root);
+      const branches = (Array.isArray(r.branches) ? r.branches : Array.isArray(r.children) ? r.children : [])
+        .map((b) => (typeof b === 'string' ? { label: str(b), children: [] } : { label: str((b as { label?: unknown })?.label), children: list((b as { children?: unknown })?.children, 5) }))
+        .filter((b) => b.label)
+        .slice(0, 8);
+      if (!center || branches.length < 3) return null;
+      return { type: 'mindmap', title, center, branches };
     }
     case 'decision': {
       const question = str(r.question);
@@ -913,6 +925,52 @@ export function layoutDiagram(d: Diagram): Layout {
     });
     lines.push({ pts: [[x0 - 1, yTop - 4], [x0 - 1, y - 4]] });
     y -= 8;
+  } else if (d.type === 'mindmap') {
+    const cw = 190, gap = 24;
+    const midW = inner - 2 * cw - 2 * gap;
+    NF = nodeFont(d.branches.map((b) => ({ text: b.label, w: cw - 16 - iw(b.label) })));
+    type G = { i: number; head: string[]; kids: string[][]; h: number };
+    const groups: G[] = d.branches.map((b, i) => {
+      const head = wrap(b.label, cw - 16 - iw(b.label), NF);
+      const kids = b.children.map((c) => wrap(c, cw - 40 - iw(c), 13));
+      const h = boxH(head) + kids.reduce((n, k) => n + 8 + k.length * 17 + 10, 0);
+      return { i, head, kids, h };
+    });
+    const sides = [groups.filter((g) => g.i % 2 === 0), groups.filter((g) => g.i % 2 === 1)];
+    const sideH = sides.map((gs) => gs.reduce((n, g) => n + g.h, 0) + Math.max(0, gs.length - 1) * 22);
+    const cl = wrap(d.center, midW - 20 - iw(d.center), 16);
+    const ch = cl.length * 21 + 24;
+    const total = Math.max(...sideH, ch);
+    const centre: Box = { x: PAD + cw + gap, y: y + (total - ch) / 2, w: midW, h: ch, lines: cl, kind: 'accent', fs: 16 };
+    sides.forEach((gs, side) => {
+      let gy = y + (total - sideH[side]) / 2;
+      const x = side === 0 ? PAD : W - PAD - cw;
+      for (const g of gs) {
+        const hue = hueOf(g.i + 1);
+        const head: Box = { x, y: gy, w: cw, h: boxH(g.head), lines: g.head, kind: 'accent', tone: hue };
+        boxes.push(head);
+        // curved link from the centre to the branch
+        const sx = side === 0 ? centre.x - 2 : centre.x + centre.w + 2, sy = centre.y + centre.h / 2;
+        const ex = side === 0 ? head.x + head.w + 2 : head.x - 2, ey = head.y + head.h / 2;
+        const pts: [number, number][] = [];
+        for (let k = 0; k <= 16; k++) {
+          const t = k / 16, mt = 1 - t, mx = (sx + ex) / 2;
+          // cubic Bézier with horizontal ends
+          pts.push([mt ** 3 * sx + 3 * mt * mt * t * mx + 3 * mt * t * t * mx + t ** 3 * ex, mt ** 3 * sy + 3 * mt * mt * t * sy + 3 * mt * t * t * ey + t ** 3 * ey]);
+        }
+        lines.push({ pts, tone: hue });
+        let ky = head.y + head.h + 8;
+        for (const k of g.kids) {
+          const kb: Box = { x: x + 20, y: ky, w: cw - 20, h: k.length * 17 + 10, lines: k, kind: 'soft', align: 'start', fs: 13, tone: hue };
+          boxes.push(kb);
+          lines.push({ pts: [[x + 9, ky - 8], [x + 9, kb.y + kb.h / 2], [kb.x - 2, kb.y + kb.h / 2]], tone: hue });
+          ky += kb.h + 8;
+        }
+        gy += g.h + 22;
+      }
+    });
+    boxes.push(centre);
+    y += total;
   } else if (d.type === 'decision') {
     // leaves left → right: the yes side, then the no side
     type N = { text: string; depth: number; kids: { n: N; yes: boolean }[]; leaf0: number; leaves: number; no?: boolean };

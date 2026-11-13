@@ -92,6 +92,18 @@ export const IconEdit = mk(
     <path d="M18.5 2.5a2.1 2.1 0 1 1 3 3L12 15l-4 1 1-4z" />
   </>,
 );
+export const IconMindmap = mk(
+  <>
+    <rect x="8.5" y="9.5" width="7" height="5" rx="1.5" />
+    <path d="M8.5 12H6M15.5 12H18M6 6.5h-2M6 17.5H4M18 6.5h2M18 17.5h2M6 6.5v11M18 6.5v11" />
+  </>,
+);
+export const IconSpeaker = mk(
+  <>
+    <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" />
+    <path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" />
+  </>,
+);
 export const IconChevron = mk(<path d="m9 6 6 6-6 6" />);
 export const IconChevronDown = mk(<path d="m6 9 6 6 6-6" />);
 export const IconClose = mk(<path d="M6 6l12 12M18 6 6 18" />);
