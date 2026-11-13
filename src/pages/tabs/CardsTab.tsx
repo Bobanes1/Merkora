@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ImproveCardDialog } from '../../components/ImproveCardDialog';
-import { canReverse, isLeech } from '../../lib/cardLinks';
+import { isLeech } from '../../lib/cardLinks';
+import { swapSides } from '../../lib/askSide';
 import { createPortal } from 'react-dom';
 import { AnkiImport } from '../../components/AnkiImport';
 import { OcclusionEditor, type Embed } from '../../components/OcclusionEditor';
@@ -18,7 +19,7 @@ import { ConfirmModal, Modal } from '../../components/Modal';
 import { RichField } from '../../components/RichField';
 import { cardBackText, cardFrontText, htmlToText, textToHtml } from '../../lib/content';
 import { LEVELS, levelOf } from '../../lib/srs';
-import { addCards, addReversed, deleteCard, removeReversed, updateCard, type Card, type Deck } from '../../lib/store';
+import { addCards, deleteCard, updateCard, type Card, type Deck } from '../../lib/store';
 import { formatDue } from '../../lib/util';
 
 function CardEditor({
@@ -78,6 +79,23 @@ function CardEditor({
           </button>
         </div>
       )}
+      <div className="swap-row">
+        <button
+          type="button"
+          className="btn ghost sm"
+          disabled={empty.front && empty.back}
+          title="Vorder- und Rückseite vertauschen"
+          onClick={() => {
+            const s = swapSides(front, back, true);
+            setFront(s.front);
+            setBack(s.back);
+            setEmpty((e) => ({ front: e.back, back: e.front }));
+            setRound((r) => r + 1);
+          }}
+        >
+          ⇄ Begriff und Definition tauschen
+        </button>
+      </div>
       <div key={round}>
         <RichField
           id="card-front"
@@ -180,11 +198,8 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
   const [onlyMarked, setOnlyMarked] = useState(false);
   const [onlyLeech, setOnlyLeech] = useState(params.get('filter') === 'leech');
   const [improve, setImprove] = useState<Card | null>(null);
-  const [reverseAll, setReverseAll] = useState(false);
   const markedCount = deck.cards.filter((c) => c.marked).length;
   const leechCount = deck.cards.filter(isLeech).length;
-  const twinOf = new Set(deck.cards.filter((c) => c.reverseOf).map((c) => c.reverseOf));
-  const reversible = deck.cards.filter((c) => canReverse(c) && !twinOf.has(c.id));
   const tags = allTags(deck.cards);
   const filtered = deck.cards.filter(
     (c) =>
@@ -206,15 +221,6 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
         </button>
         <button type="button" className="btn outline sm" onClick={() => setEdit('new')}>
           <IconPlus size={15} /> Karte
-        </button>
-        <button
-          type="button"
-          className="btn ghost sm"
-          onClick={() => setReverseAll(true)}
-          disabled={!reversible.length && !twinOf.size}
-          title="Karten zusätzlich von der Antwort her abfragen (z. B. Begriff ↔ Definition)"
-        >
-          ↔ Umgekehrt
         </button>
         <button type="button" className="btn ghost sm" onClick={() => setExporting(true)} disabled={!deck.cards.length}>
           <IconDownload size={15} /> Exportieren
@@ -301,27 +307,12 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
                       Problemkarte
                     </button>
                   )}
-                  {c.reverseOf && (
-                    <span className="twin-badge" title="Umgekehrte Karte – folgt automatisch ihrem Original">
-                      ↔ umgekehrt
-                    </span>
-                  )}
+
                   {c.srs.last && <small>{formatDue(c.srs.due)}</small>}
                 </div>
                 <div className="flash-actions">
                   <MarkButton deckId={deck.id} card={c} />
-                  {canReverse(c) && (
-                    <button
-                      type="button"
-                      className={'icon-btn twin-btn' + (twinOf.has(c.id) ? ' on' : '')}
-                      aria-label={twinOf.has(c.id) ? 'Nicht mehr umgekehrt abfragen' : 'Auch umgekehrt abfragen'}
-                      aria-pressed={twinOf.has(c.id)}
-                      title={twinOf.has(c.id) ? 'Wird auch umgekehrt abgefragt – klicken zum Entfernen' : 'Auch umgekehrt abfragen (Antwort → Frage)'}
-                      onClick={() => (twinOf.has(c.id) ? removeReversed(deck.id, [c.id]) : addReversed(deck.id, [c.id]))}
-                    >
-                      ↔
-                    </button>
-                  )}
+
                   <button type="button" className="icon-btn" aria-label="Grafik" title="Grafik erstellen, ersetzen oder entfernen" onClick={() => setGraphic(c)}>
                     <IconImage size={16} />
                   </button>
@@ -329,8 +320,7 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
                     type="button"
                     className="icon-btn"
                     aria-label="Bearbeiten"
-                    title={c.reverseOf ? 'Bearbeitet das Original – die umgekehrte Karte passt sich an' : undefined}
-                    onClick={() => setEdit(c.reverseOf ? (deck.cards.find((x) => x.id === c.reverseOf) ?? c) : c)}
+                    onClick={() => setEdit(c)}
                   >
                     <IconEdit size={16} />
                   </button>
@@ -364,34 +354,6 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
         <GraphicDialog deck={deck} card={deck.cards.find((x) => x.id === graphic.id) ?? graphic} onClose={() => setGraphic(null)} />
       )}
       {improve && <ImproveCardDialog deck={deck} card={deck.cards.find((x) => x.id === improve.id) ?? improve} onClose={() => setImprove(null)} />}
-      {reverseAll && (
-        <Modal
-          title="Umgekehrt abfragen"
-          onClose={() => setReverseAll(false)}
-          footer={
-            <>
-              {twinOf.size > 0 && (
-                <button type="button" className="btn ghost danger-text" onClick={() => (removeReversed(deck.id, [...twinOf] as string[]), setReverseAll(false))}>
-                  Alle {twinOf.size} umgekehrten Karten entfernen
-                </button>
-              )}
-              <span className="grow" />
-              <button type="button" className="btn ghost" onClick={() => setReverseAll(false)}>
-                Abbrechen
-              </button>
-              <button type="button" className="btn primary" disabled={!reversible.length} onClick={() => (addReversed(deck.id, reversible.map((c) => c.id)), setReverseAll(false))}>
-                {reversible.length} Karten auch umgekehrt abfragen
-              </button>
-            </>
-          }
-        >
-          <p>
-            Jede Karte bekommt eine Zwillingskarte, die von der Antwort her fragt – z. B. Definition → Begriff. Sie hat ihren eigenen Lernstand,
-            startet als neue Karte und passt sich an, wenn du das Original bearbeitest.
-          </p>
-          <p className="muted small">Bildverdeckungen und Anki-Karten mit eigenem Layout werden nicht umgedreht. Einzelne Karten schaltest du mit ↔ in der Kartenliste um.</p>
-        </Modal>
-      )}
       {del && (
         <ConfirmModal title="Karte löschen?" text={cardFrontText(del)} onClose={() => setDel(null)} onConfirm={() => deleteCard(deck.id, del.id)} />
       )}

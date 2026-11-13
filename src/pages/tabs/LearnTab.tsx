@@ -8,13 +8,15 @@ import { countAnswerTime } from '../../lib/pomodoro';
 import { explainCard, gradeAnswer, hasKey } from '../../lib/ai';
 import { cardBackText, cardFrontText } from '../../lib/content';
 import { RATINGS, formatDelay, schedule, type Rating, type Srs } from '../../lib/srs';
-import { addXp, toggleMark, boostNewCards, dueCards, logReview, newCardsLeft, reviewCard, useStore, type Deck } from '../../lib/store';
+import { addXp, toggleMark, boostNewCards, dueCards, logReview, newCardsLeft, reviewCard, updateDeck, useStore, type Deck } from '../../lib/store';
 import { capForExam, countdownText, nextExamAt, nextExamForDeck } from '../../lib/exams';
 import { pipGreeting, pipReaction, pipSummary } from '../../lib/pipLines';
 import { answerOnly } from '../../lib/backSide';
 import { MarkButton } from '../../components/MarkButton';
 import { dayKey } from '../../lib/util';
-import { becomesLeech, spreadTwins } from '../../lib/cardLinks';
+import { becomesLeech } from '../../lib/cardLinks';
+import { ASK_SIDES, asksBack, sidesFor, type AskSide } from '../../lib/askSide';
+import { htmlToText } from '../../lib/content';
 import { ImproveCardDialog } from '../../components/ImproveCardDialog';
 import { MatchGame } from '../../components/MatchGame';
 import { SpeakButton } from '../../components/SpeakButton';
@@ -85,9 +87,12 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
   const newInDue = dueIds.filter((id) => newDueIds.has(id)).length;
   const waiting = fresh.length - newInDue;
 
+  // which side is asked (per deck); "mixed" draws anew for every round
+  const side: AskSide = deck.askSide ?? 'front';
+  const [roundSeed, setRoundSeed] = useState(() => Date.now());
   const start = (m: 'due' | 'all') => {
-    // a card and its reversed twin never right after each other
-    const ids = spreadTwins(m === 'due' ? dueIds : [...deck.cards.map((c) => c.id)].sort(() => Math.random() - 0.5), deck.cards);
+    setRoundSeed(Date.now());
+    const ids = m === 'due' ? dueIds : [...deck.cards.map((c) => c.id)].sort(() => Math.random() - 0.5);
     setQueue(ids);
     setMode(m);
     setDone(0);
@@ -111,8 +116,11 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
   };
 
   const card = deck.cards.find((c) => c.id === queue[0]);
-  const frontSpeech = card ? (card.html ? htmlSpeech(card.front) : card.front) : '';
-  const backSpeech = card ? (card.html ? htmlSpeech(answerOnly(card.front, card.back)) : card.back) : '';
+  const fromBack = card ? asksBack(side, card.id, roundSeed) : false;
+  const qa = card ? sidesFor(card, fromBack) : { question: '', answer: '' };
+  const plain = (s: string) => (card?.html ? htmlToText(s) : s);
+  const frontSpeech = card ? (card.html ? htmlSpeech(qa.question) : qa.question) : '';
+  const backSpeech = card ? (card.html ? htmlSpeech(qa.answer) : qa.answer) : '';
   // "Karten automatisch vorlesen": question when a card appears, answer when it is turned
   useEffect(() => {
     if (!autoRead || !card) return;
@@ -181,7 +189,7 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
     setBusy('grade');
     setError('');
     try {
-      setGrade(await gradeAnswer(cardFrontText(card), cardBackText(card), typed));
+      setGrade(await gradeAnswer(plain(qa.question), plain(qa.answer), typed));
       setFlipped(true);
     } catch (e) {
       setError((e as Error).message);
@@ -194,7 +202,7 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
     setBusy('explain');
     setError('');
     try {
-      setExplain(await explainCard(cardFrontText(card), cardBackText(card)));
+      setExplain(await explainCard(plain(qa.question), plain(qa.answer)));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -284,6 +292,7 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
             </button>
           )}
         </div>
+        <AskSidePicker deck={deck} />
       </div>
     );
 
@@ -306,6 +315,7 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
         <button type="button" className="btn ghost sm" onClick={() => setGame(true)} title="Zwischendurch: Fragen und Antworten so schnell wie möglich zusammenklicken">
           Zuordnen-Spiel
         </button>
+        <AskSidePicker deck={deck} compact />
         <FocusButton />
       </div>
 
@@ -338,14 +348,14 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
         <small className="fc-label">
           Frage <SpeakButton text={frontSpeech} label="Frage vorlesen" className="icon-btn fc-speak" />
         </small>
-        <CardContent text={card.front} html={card.html} look={lookOf(deck, card)} className="fc-front" />
+        <CardContent text={qa.question} html={card.html} look={lookOf(deck, card)} className="fc-front" />
         {flipped && (
           <>
             <hr />
             <small className="fc-label">
               Antwort <SpeakButton text={backSpeech} label="Antwort vorlesen" className="icon-btn fc-speak" />
             </small>
-            <CardContent text={card.html ? answerOnly(card.front, card.back) : card.back} html={card.html} look={lookOf(deck, card)} className="fc-back" />
+            <CardContent text={qa.answer} html={card.html} look={lookOf(deck, card)} className="fc-back" />
           </>
         )}
         {!flipped && !typeMode && <span className="fc-hint">Klicken oder Leertaste zum Umdrehen</span>}
@@ -416,6 +426,28 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Ask the term first, the definition first, or mixed – saved per deck. */
+function AskSidePicker({ deck, compact }: { deck: Deck; compact?: boolean }) {
+  const side = deck.askSide ?? 'front';
+  return (
+    <div className={'seg ask-side' + (compact ? ' compact' : '')} role="radiogroup" aria-label="Was wird gefragt?">
+      {ASK_SIDES.map((o) => (
+        <button
+          key={o.id}
+          type="button"
+          role="radio"
+          aria-checked={side === o.id}
+          className={side === o.id ? 'on' : ''}
+          title={o.hint}
+          onClick={() => updateDeck(deck.id, { askSide: o.id === 'front' ? undefined : o.id })}
+        >
+          {o.label}
+        </button>
+      ))}
     </div>
   );
 }

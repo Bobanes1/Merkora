@@ -6,8 +6,8 @@ import { masterySnapshot, withSnapshot } from './weekly';
 import { DEFAULT_NEW_PER_DAY, pickDue, planNewForCourse } from './newCards';
 import { newSrs, schedule, setSchedulerOptions, type Rating, type Srs } from './srs';
 import { dayKey, uid, uniqueSlug } from './util';
-import { canReverse, makeTwin, twinContent } from './cardLinks';
 import type { Diagram } from './diagram';
+import type { AskSide } from './askSide';
 
 export type Provider = 'openai' | 'anthropic' | 'gemini' | 'openrouter' | 'custom';
 
@@ -24,7 +24,8 @@ export type Card = {
   cardClass?: string;
   /** Free tags (also taken over from Anki notes). */
   tags?: string[];
-  /** Twin card asked the other way round: id of the original (its contents follow the original). */
+  /** Only in older data: an automatic "reversed" twin card. Such cards are removed when the data is loaded
+   *  (both directions are learned with "Definition zuerst" instead). */
   reverseOf?: string;
   createdAt: number;
   updatedAt?: number;
@@ -102,6 +103,8 @@ export type Deck = {
   mindmap?: Diagram;
   /** Best time in the matching game (ms). */
   matchBest?: number;
+  /** What is asked when learning: the term (front, default), the definition (back) or mixed. */
+  askSide?: AskSide;
   quiz?: QuizQuestion[];
   podcast?: PodcastLine[];
   chat: ChatMsg[];
@@ -358,6 +361,14 @@ function normalize(raw: unknown): Data | null {
       reviews = reviews.filter((r) => r.deckId !== sample.id);
     }
   }
+  // the reversed twin cards are gone (and marked deleted, so a synced copy does not bring them back)
+  const twins = decks.flatMap((x) => (x.cards ?? []).filter((c) => c.reverseOf).map((c) => c.id));
+  const deleted = { ...(d.deleted ?? {}) };
+  if (twins.length) {
+    const now = Date.now();
+    for (const id of twins) deleted[id] = now;
+    decks = decks.map((x) => ({ ...x, cards: (x.cards ?? []).filter((c) => !c.reverseOf) }));
+  }
   return {
     version: 2,
     workspaces: d.workspaces ?? [],
@@ -369,7 +380,7 @@ function normalize(raw: unknown): Data | null {
     // the podcast feature is paused – its unfinished jobs are dropped
     jobs: (d.jobs ?? []).filter((j) => (j.kind as string) !== 'podcast'),
     exams: d.exams ?? [],
-    deleted: d.deleted ?? {},
+    deleted,
     savedAt: d.savedAt,
   };
 }
@@ -697,39 +708,11 @@ export function toggleMark(deckId: string, cardId: string) {
   updateDeck(deckId, (x) => ({ cards: x.cards.map((c) => (c.id === cardId ? { ...c, marked: c.marked ? undefined : true, updatedAt: Date.now() } : c)) }));
 }
 export function updateCard(deckId: string, cardId: string, patch: Partial<Card>) {
-  const now = Date.now();
-  updateDeck(deckId, (x) => {
-    const cards = x.cards.map((c) => (c.id === cardId ? { ...c, ...patch, updatedAt: now } : c));
-    const orig = cards.find((c) => c.id === cardId);
-    // a reversed twin follows its original
-    const content = 'front' in patch || 'back' in patch || 'html' in patch;
-    return { cards: orig && content ? cards.map((c) => (c.reverseOf === cardId ? { ...c, ...twinContent(orig), updatedAt: now } : c)) : cards };
-  });
+  updateDeck(deckId, (x) => ({ cards: x.cards.map((c) => (c.id === cardId ? { ...c, ...patch, updatedAt: Date.now() } : c)) }));
 }
 export function deleteCard(deckId: string, cardId: string) {
-  // the reversed twin goes with its original
-  const twins = (data.decks.find((x) => x.id === deckId)?.cards ?? []).filter((c) => c.reverseOf === cardId).map((c) => c.id);
-  const gone = [cardId, ...twins];
-  updateDeck(deckId, (x) => ({ cards: x.cards.filter((c) => !gone.includes(c.id)) }));
-  update((d) => ({ ...d, deleted: tomb(d, gone) }));
-}
-/** Also ask these cards the other way round (adds a twin where there is none yet). Returns how many were added. */
-export function addReversed(deckId: string, cardIds: string[]): number {
-  const deck = data.decks.find((x) => x.id === deckId);
-  if (!deck) return 0;
-  const has = new Set(deck.cards.filter((c) => c.reverseOf).map((c) => c.reverseOf));
-  const now = Date.now();
-  const twins = deck.cards.filter((c) => cardIds.includes(c.id) && canReverse(c) && !has.has(c.id)).map((c) => makeTwin(c, uid(), now));
-  if (twins.length) updateDeck(deckId, (x) => ({ cards: [...x.cards, ...twins] }));
-  return twins.length;
-}
-/** Stop asking these cards the other way round (removes their twins). */
-export function removeReversed(deckId: string, cardIds: string[]) {
-  const deck = data.decks.find((x) => x.id === deckId);
-  const twins = (deck?.cards ?? []).filter((c) => c.reverseOf && cardIds.includes(c.reverseOf)).map((c) => c.id);
-  if (!twins.length) return;
-  updateDeck(deckId, (x) => ({ cards: x.cards.filter((c) => !twins.includes(c.id)) }));
-  update((d) => ({ ...d, deleted: tomb(d, twins) }));
+  updateDeck(deckId, (x) => ({ cards: x.cards.filter((c) => c.id !== cardId) }));
+  update((d) => ({ ...d, deleted: tomb(d, [cardId]) }));
 }
 export function resetProgress(deckId: string) {
   const now = Date.now();

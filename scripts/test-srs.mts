@@ -636,23 +636,28 @@ console.log('PDF-Text ohne wiederholte Kopfzeilen');
   ok(stripRepeatedLines(body).every((p) => p.includes('Definition: Reliabilität')), 'wiederholte Zeilen mitten auf der Folie bleiben');
 }
 
-console.log('Problemkarten und umgekehrte Karten');
+console.log('Problemkarten');
 {
-  const { isLeech, becomesLeech, canReverse, makeTwin, twinContent, spreadTwins, LEECH } = await import('../src/lib/cardLinks');
+  const { isLeech, becomesLeech, LEECH } = await import('../src/lib/cardLinks');
   const { newSrs } = await import('../src/lib/srs');
   const base = (id: string, extra: any = {}) => ({ id, front: 'Frage ' + id, back: 'Antwort ' + id, createdAt: 0, srs: newSrs(0), ...extra }) as any;
   ok(!isLeech(base('a', { srs: { ...newSrs(0), lapses: LEECH - 1 } })) && isLeech(base('a', { srs: { ...newSrs(0), lapses: LEECH } })), `Problemkarte ab ${LEECH}× vergessen`);
   ok(becomesLeech({ srs: { ...newSrs(0), lapses: 3 } }, { srs: { ...newSrs(0), lapses: 4 } }) && !becomesLeech({ srs: { ...newSrs(0), lapses: 4 } }, { srs: { ...newSrs(0), lapses: 5 } }), 'Hinweis nur beim Übergang zur Problemkarte');
   ok(!isLeech({ srs: { ...newSrs(0), lapses: 0 } }), '„Ersetzen“ (lapses 0) nimmt die Karte aus den Problemkarten');
-  const orig = base('o', { html: true, front: '<b>Reliabilität</b>', back: 'Zuverlässigkeit einer Messung', tags: ['m'] });
-  const twin = makeTwin(orig, 't', 5);
-  ok(twin.front === 'Zuverlässigkeit einer Messung' && twin.back === '<b>Reliabilität</b>' && twin.reverseOf === 'o' && twin.srs.reps === 0 && twin.tags?.[0] === 'm', 'Zwilling: Seiten vertauscht, eigener (neuer) Lernstand, Tags übernommen');
-  const anki = base('k', { html: true, front: 'Q', back: 'Q<hr id=answer>A' });
-  ok(twinContent(anki).front === 'A', 'Zwilling einer Anki-Karte fragt nur die Antwort (ohne die wiederholte Frage)');
-  ok(!canReverse(base('i', { html: true, front: '<div class="io-wrap"><img data-media="x"></div>' })) && !canReverse(base('s', { styleId: '1' })) && !canReverse(twin) && canReverse(orig), 'nicht umgedreht: Bildverdeckung, Anki-Layout, Zwillinge selbst');
-  const cards = [base('a'), base('b'), { ...base('ta'), reverseOf: 'a' }, base('c')];
-  ok(JSON.stringify(spreadTwins(['a', 'ta', 'b', 'c'], cards)) === JSON.stringify(['a', 'b', 'c', 'ta']), 'Zwilling kommt in der Runde ans Ende, wenn das Original vorher dran ist');
-  ok(JSON.stringify(spreadTwins(['b', 'c'], cards)) === JSON.stringify(['b', 'c']), 'Runde ohne Zwillinge bleibt unverändert');
+}
+
+console.log('Begriff oder Definition zuerst');
+{
+  const { asksBack, sidesFor, swapSides } = await import('../src/lib/askSide');
+  const card = { front: 'Reliabilität', back: 'Zuverlässigkeit einer Messung' };
+  ok(JSON.stringify(sidesFor(card, false)) === JSON.stringify({ question: 'Reliabilität', answer: 'Zuverlässigkeit einer Messung' }) && JSON.stringify(sidesFor(card, true)) === JSON.stringify({ question: 'Zuverlässigkeit einer Messung', answer: 'Reliabilität' }), 'Definition zuerst: Rückseite wird gefragt, Vorderseite ist die Antwort');
+  const anki = { front: 'Q', back: 'Q<hr id=answer>A', html: true };
+  ok(sidesFor(anki, true).question === 'A' && sidesFor(anki, true).answer === 'Q', 'Anki-Karte: gefragt wird nur der Antwortteil, nicht die wiederholte Frage');
+  ok(!asksBack('front', 'x') && asksBack('back', 'x') && !asksBack(undefined, 'x'), 'Begriff zuerst ist der Standard');
+  const ids = Array.from({ length: 40 }, (_, i) => 'card' + i);
+  const back = ids.filter((id) => asksBack('mixed', id, 1)).length;
+  ok(back > 8 && back < 32 && ids.every((id) => asksBack('mixed', id, 1) === asksBack('mixed', id, 1)), 'Gemischt: etwa die Hälfte von hinten, pro Karte und Runde fest');
+  ok(JSON.stringify(swapSides('Begriff', 'Definition', false)) === JSON.stringify({ front: 'Definition', back: 'Begriff' }) && swapSides('Q', 'Q<hr id=answer>A', true).front === 'A', 'Tauschen im Editor: Vorder- und Rückseite wechseln (Anki: nur der Antwortteil)');
 }
 
 console.log('Zuordnen-Spiel');
