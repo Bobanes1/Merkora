@@ -7,6 +7,7 @@ import { IconCalendar, IconCards, IconChevron, IconFlame, IconPlay, IconPlus, Ic
 import { FoldPanel } from '../components/FoldPanel';
 import { Mascot } from '../components/Mascot';
 import { TodoList } from '../components/TodoList';
+import { usePhone } from '../lib/phone';
 import { pokeMove, type PokeMove } from '../lib/pipLines';
 import { todoGroups } from '../lib/todos';
 import { NoKeyHint } from '../components/NoKey';
@@ -109,6 +110,9 @@ export default function Dashboard() {
   const apiKey = useStore((s) => s.apiKey);
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>('tasks');
+  // phone: only the essentials (due decks, to-dos, next exam) – no tabs, side column or weekly review
+  const phone = usePhone();
+  const shownTab: Tab = phone ? 'tasks' : tab;
   const [create, setCreate] = useState<{ notes?: string; file?: File } | null>(null);
   const [anki, setAnki] = useState(false);
   const [exam, setExam] = useState(false);
@@ -194,8 +198,9 @@ export default function Dashboard() {
 
         {!apiKey && data.settings.provider !== 'custom' && !data.settings.noKeyHintClosed && <NoKeyHint />}
 
-        <WeekReview />
+        {!phone && <WeekReview />}
 
+        {!phone && (
         <div className="home-tabs" role="tablist">
           {tabs.map((t) => (
             <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} className={`home-tab ${tab === t.id ? 'on' : ''}`} onClick={() => setTab(t.id)}>
@@ -203,10 +208,11 @@ export default function Dashboard() {
             </button>
           ))}
         </div>
+        )}
 
-        {tab === 'tasks' && (
+        {shownTab === 'tasks' && (
           <div className="home-panel">
-            {pathDeck && (
+            {pathDeck && !phone && (
               <Link to={deckUrl(data, pathDeck.deck, 'path') + '&play=1'} className="path-cta">
                 <span className="path-cta-icon">
                   <IconStar size={24} />
@@ -226,9 +232,22 @@ export default function Dashboard() {
               collapsed={!!data.settings.homeTodosCollapsed}
               onToggle={() => setSettings({ homeTodosCollapsed: !data.settings.homeTodosCollapsed })}
             >
-              <TodoList />
+              <TodoList compactAdd={phone} />
             </FoldPanel>
-            {exams.length > 0 && (
+            {phone && exams[0] && (
+              <Link to="/calendar" className="phone-exam">
+                <IconCalendar size={16} />
+                <span className="grow">
+                  <b>{exams[0].title}</b>
+                  <small>
+                    {countdownText(exams[0])}
+                    {exams.length > 1 ? ` · +${exams.length - 1} weitere` : ''}
+                  </small>
+                </span>
+                <IconChevron size={14} />
+              </Link>
+            )}
+            {exams.length > 0 && !phone && (
               <section className="panel">
                 <div className="panel-head">
                   <h2>Anstehende Prüfungen</h2>
@@ -259,7 +278,7 @@ export default function Dashboard() {
                 })}
               </section>
             )}
-            {!exams.length && dueDecks.length > 0 && (
+            {!exams.length && dueDecks.length > 0 && !phone && (
               <button type="button" className="exam-cta" onClick={() => setExam(true)}>
                 <IconCalendar size={18} />
                 <span className="grow">
@@ -271,6 +290,7 @@ export default function Dashboard() {
             )}
             {dueDecks.length > 0 && (
               <FoldPanel
+                className="home-due"
                 title="Heute fällig"
                 summary={`${dueDecks.length} ${dueDecks.length === 1 ? 'Deck' : 'Decks'} · ${due} Karten`}
                 collapsed={!!data.settings.homeDueCollapsed}
@@ -295,7 +315,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {tab === 'decks' && (
+        {shownTab === 'decks' && (
           <div className="home-panel">
             {data.decks.length ? (
               <>
@@ -331,7 +351,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {tab === 'quick' && (
+        {shownTab === 'quick' && (
           <div className="home-panel quick-grid">
             <button type="button" className="quick-card" onClick={() => setCreate({})}>
               <IconSparkle size={22} />
@@ -352,6 +372,7 @@ export default function Dashboard() {
         )}
       </div>
 
+      {!phone && (
       <aside className="home-rail">
         <div className="widget">
           <div>
@@ -380,6 +401,7 @@ export default function Dashboard() {
         </div>
         <MiniCalendar />
       </aside>
+      )}
 
       {create && <CreateWithAI initialNotes={create.notes} initialFile={create.file} onClose={() => setCreate(null)} />}
       {anki && <AnkiImport onClose={() => setAnki(false)} />}

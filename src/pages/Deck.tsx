@@ -9,6 +9,8 @@ import MatchTab from './tabs/MatchTab';
 import PathTab from './tabs/PathTab';
 import { addTodo, dueCards, findPath, useData } from '../lib/store';
 import { shortName } from '../lib/deckNames';
+import { usePhone } from '../lib/phone';
+import { Sheet } from '../components/Sheet';
 import CardsTab from './tabs/CardsTab';
 import LearnTab from './tabs/LearnTab';
 import MasteryTab from './tabs/MasteryTab';
@@ -29,6 +31,8 @@ const TABS = [
   { id: 'mindmap', label: 'Mindmap', icon: IconMindmap, group: 'Verstehen' },
 ] as const;
 const GROUPS = ['Lernen', 'Üben', 'Verstehen'] as const;
+/** Phone: these three tabs stay visible, everything else is under "Mehr". */
+const PHONE_TABS = ['cards', 'learn', 'path'] as const;
 /** Progress and material live inside "Lernen" (switch on top) – their addresses stay valid. */
 const LEARN_VIEWS = [
   { id: 'learn', label: 'Lernen', icon: IconPlay },
@@ -42,7 +46,7 @@ export default function DeckPage() {
   const { ws, course, deck: deckSlug } = useParams();
   const data = useData();
   const [params, setParams] = useSearchParams();
-  const [chat, setChat] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 1280);
+  const [chat, setChat] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 1280 && !document.documentElement.classList.contains('phone'));
   const { workspace, course: crs, deck } = findPath(data, ws, course, deckSlug);
   const tabParam = params.get('tab') as TabId | null;
   const tab: TabId = tabParam && VALID.includes(tabParam) ? tabParam : 'cards';
@@ -50,6 +54,9 @@ export default function DeckPage() {
   const setTab = (t: TabId) => setParams({ tab: t });
   const [examDialog, setExamDialog] = useState(false);
   const [todoDialog, setTodoDialog] = useState(false);
+  const phone = usePhone();
+  const [moreTabs, setMoreTabs] = useState(false);
+  const [menu, setMenu] = useState(false);
 
   useEffect(() => {
     if (deck) document.title = `${deck.name} – Merkora`;
@@ -73,6 +80,19 @@ export default function DeckPage() {
   return (
     <div className={`deck-layout ${chat ? 'with-chat' : ''}`}>
       <div className="deck-main">
+        {phone ? (
+          <div className="deck-top phone-deck-top">
+            <Link to={`/library/${workspace.slug}/${crs.slug}`} className="icon-btn" aria-label={`Zurück zu ${crs.name}`}>
+              ‹
+            </Link>
+            <b className="phone-deck-name" title={deck.name}>
+              {shortName(deck, data.decks.filter((d) => d.courseId === deck.courseId))}
+            </b>
+            <button type="button" className="icon-btn" aria-label="Weitere Aktionen" onClick={() => setMenu(true)}>
+              ⋮
+            </button>
+          </div>
+        ) : (
         <div className="deck-top">
           <nav className="crumbs" aria-label="Pfad">
             <Link to={`/library/${workspace.slug}`}>{workspace.name}</Link>
@@ -109,6 +129,24 @@ export default function DeckPage() {
             </button>
           </div>
         </div>
+        )}
+        {phone ? (
+          <div className="tabs phone-tabs" role="tablist">
+            {TABS.filter((t) => (PHONE_TABS as readonly string[]).includes(t.id)).map((t) => (
+              <button key={t.id} type="button" role="tab" aria-selected={barTab === t.id} className={`tab ${barTab === t.id ? 'on' : ''}`} onClick={() => setTab(t.id)}>
+                <span>{t.label}</span>
+              </button>
+            ))}
+            {(() => {
+              const other = [...TABS.filter((t) => !(PHONE_TABS as readonly string[]).includes(t.id)), ...LEARN_VIEWS.filter((v) => v.id !== 'learn')].find((t) => t.id === tab);
+              return (
+                <button type="button" className={`tab ${other ? 'on' : ''}`} aria-expanded={moreTabs} onClick={() => setMoreTabs(true)}>
+                  <span>{other ? other.label : 'Mehr'} ▾</span>
+                </button>
+              );
+            })()}
+          </div>
+        ) : (
         <div className="tabs tab-groups" role="tablist">
           {GROUPS.map((g) => (
             <div key={g} className="tab-group" role="presentation" aria-label={g}>
@@ -128,7 +166,8 @@ export default function DeckPage() {
             </div>
           ))}
         </div>
-        {barTab === 'learn' && (
+        )}
+        {barTab === 'learn' && !phone && (
           <div className="seg compact learn-switch" role="radiogroup" aria-label="Ansicht">
             {LEARN_VIEWS.map((v) => (
               <button key={v.id} type="button" role="radio" aria-checked={tab === v.id} className={tab === v.id ? 'on' : ''} onClick={() => setTab(v.id)}>
@@ -150,6 +189,43 @@ export default function DeckPage() {
           {tab === 'source' && <SourceTab deck={deck} />}
         </div>
       </div>
+      {phone && tab !== 'learn' && (
+        <button type="button" className="btn primary phone-learn" onClick={() => setTab('learn')}>
+          <IconPlay size={14} /> Lernen{due > 0 ? ` (${due})` : ''}
+        </button>
+      )}
+      {phone && moreTabs && (
+        <Sheet title="Weitere Ansichten" onClose={() => setMoreTabs(false)}>
+          <div className="sheet-list">
+            {[...TABS.filter((t) => !(PHONE_TABS as readonly string[]).includes(t.id)), ...LEARN_VIEWS.filter((v) => v.id !== 'learn')].map((t) => (
+              <button key={t.id} type="button" className={tab === t.id ? 'on' : ''} onClick={() => (setMoreTabs(false), setTab(t.id as TabId))}>
+                <t.icon size={20} /> {t.label}
+              </button>
+            ))}
+          </div>
+        </Sheet>
+      )}
+      {phone && menu && (
+        <Sheet title={deck.name} onClose={() => setMenu(false)}>
+          <div className="sheet-list">
+            <button type="button" onClick={() => (setMenu(false), setChat(true))}>
+              <IconChat size={20} /> Tutor Pip fragen
+            </button>
+            <button type="button" onClick={() => (setMenu(false), setTodoDialog(true))}>
+              <IconCheck size={20} /> {todos ? `To-dos (${todos} offen) – neues anlegen` : 'To-do anlegen'}
+            </button>
+            {exam ? (
+              <Link to="/calendar" onClick={() => setMenu(false)}>
+                <IconCalendar size={20} /> {exam.title} · {countdownText(exam)}
+              </Link>
+            ) : (
+              <button type="button" onClick={() => (setMenu(false), setExamDialog(true))}>
+                <IconCalendar size={20} /> Prüfung verknüpfen
+              </button>
+            )}
+          </div>
+        </Sheet>
+      )}
       {chat && <ChatPanel deck={deck} onClose={() => setChat(false)} />}
       {examDialog && <ExamDialog presetDeckId={deck.id} onClose={() => setExamDialog(false)} />}
       {todoDialog && (

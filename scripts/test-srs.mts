@@ -1038,6 +1038,14 @@ console.log('Dropbox: Anmeldung mit Code');
   ok(b.get('code') === 'xyz' && b.get('code_verifier') === 'VER' && !b.has('redirect_uri') && b.get('grant_type') === 'authorization_code', 'Code-Tausch ohne Rücksprung-Adresse');
 }
 
+console.log('Handy: Wischen beim Lernen');
+{
+  const { swipeRating } = await import('../src/lib/phone');
+  ok(swipeRating(-120, 10) === 1 && swipeRating(130, -20) === 3, 'links = Nochmal, rechts = Gut');
+  ok(swipeRating(30, 0) === null, 'kurze Bewegung zählt als Tippen');
+  ok(swipeRating(90, 80) === null, 'eher senkrechte Bewegung (Scrollen) bewertet nicht');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

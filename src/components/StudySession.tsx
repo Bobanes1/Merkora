@@ -3,6 +3,8 @@ import { ASK_SIDES, asksBack, sidesFor, type AskSide } from '../lib/askSide';
 import { stopSpeaking } from '../lib/speech';
 import { htmlSpeech } from '../lib/speechText';
 import { SpeakButton } from './SpeakButton';
+import { usePhone } from '../lib/phone';
+import { PhoneFullscreen } from '../pages/tabs/LearnTab';
 import { MarkButton } from './MarkButton';
 import { capForExam, nextExamAt } from '../lib/exams';
 import { RATINGS, formatDelay, schedule, type Rating } from '../lib/srs';
@@ -23,6 +25,7 @@ export function StudySession({ title, items, onExit }: { title: string; items: S
   const [queue, setQueue] = useState(items);
   const [flipped, setFlipped] = useState(false);
   const [done, setDone] = useState(0);
+  const phone = usePhone();
   // "Rückgängig" for the last rating (one step)
   const [undo, setUndo] = useState<{ deckId: string; cardId: string; prevSrs: Card['srs']; at: number; xp: number; queue: SessionItem[]; done: number } | null>(null);
   // which side is asked in this round (term, definition or mixed)
@@ -124,6 +127,7 @@ export function StudySession({ title, items, onExit }: { title: string; items: S
   };
   return (
     <div className="panel session">
+      <PhoneFullscreen on={phone} />
       {head}
       <span className="bar session-bar">
         <i style={{ width: `${(done / Math.max(1, done + queue.length)) * 100}%` }} />
@@ -144,7 +148,7 @@ export function StudySession({ title, items, onExit }: { title: string; items: S
             <CardContent text={qa.answer} html={card.html} look={look} className="fc-back" />
           </>
         )}
-        {!flipped && <span className="fc-hint">Klicken oder Leertaste zum Umdrehen</span>}
+        {!flipped && <span className="fc-hint">{phone ? 'Tippen zum Umdrehen' : 'Klicken oder Leertaste zum Umdrehen'}</span>}
       </div>
       {flipped ? (
         <div className="rate-row">

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { IconPlus, IconShuffle, IconSparkle } from '../../components/Icons';
 import { CardContent, lookOf } from '../../components/CardContent';
 import { Confetti, Mascot, praise, type Mood } from '../../components/Mascot';
@@ -19,6 +19,7 @@ import { ASK_SIDES, asksBack, sidesFor, type AskSide } from '../../lib/askSide';
 import { htmlToText } from '../../lib/content';
 import { ImproveCardDialog } from '../../components/ImproveCardDialog';
 import { SpeakButton } from '../../components/SpeakButton';
+import { swipeRating, usePhone } from '../../lib/phone';
 import { htmlSpeech } from '../../lib/speechText';
 import { speak, stopSpeaking } from '../../lib/speech';
 
@@ -37,6 +38,9 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
   };
   const [mode, setMode] = useState<'due' | 'all' | null>(null);
   const [queue, setQueue] = useState<string[]>([]);
+  const phone = usePhone();
+  // phone: swiping the turned card rates it (left = Nochmal, right = Gut)
+  const swipe = useRef<{ x: number; y: number } | null>(null);
   const [flipped, setFlipped] = useState(false);
   const [done, setDone] = useState(0);
   const [typed, setTyped] = useState('');
@@ -330,12 +334,18 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
   const total = done + queue.length;
   return (
     <div className="learn">
+      <PhoneFullscreen on={phone} />
       {exam && (
         <div className="exam-hint">
           Prüfung „{exam.title}“ {countdownText(exam)} – alle Karten kommen vorher noch einmal dran.
         </div>
       )}
       <div className="learn-progress">
+        {phone && (
+          <button type="button" className="icon-btn learn-exit" aria-label="Runde beenden" onClick={() => (setQueue([]), setMode(null))}>
+            ✕
+          </button>
+        )}
         <span>
           {done} / {total}
         </span>
@@ -372,7 +382,17 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
         />
       )}
       <Mascot className="learn-mascot" mood={mood} pulse={done + queue.length} size={64} say={moodSay} />
-      <div key={`${card.id}-${flipped ? 'b' : 'f'}`} className={`flashcard ${flipped ? 'flipped flip-in' : 'card-in'}`} onClick={() => !typeMode && setFlipped(true)}>
+      <div key={`${card.id}-${flipped ? 'b' : 'f'}`} className={`flashcard ${flipped ? 'flipped flip-in' : 'card-in'}`}
+        onClick={() => !typeMode && setFlipped(true)}
+        onPointerDown={(e) => (swipe.current = { x: e.clientX, y: e.clientY })}
+        onPointerUp={(e) => {
+          const st = swipe.current;
+          swipe.current = null;
+          if (!st || !phone || !flipped) return;
+          const r = swipeRating(e.clientX - st.x, e.clientY - st.y);
+          if (r) rate(r);
+        }}
+      >
         <MarkButton deckId={deck.id} card={card} className="fc-mark" />
         <small className="fc-label">
           Frage <SpeakButton text={frontSpeech} label="Frage vorlesen" className="icon-btn fc-speak" />
@@ -387,7 +407,7 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
             <CardContent text={qa.answer} html={card.html} look={lookOf(deck, card)} className="fc-back" />
           </>
         )}
-        {!flipped && !typeMode && <span className="fc-hint">Klicken oder Leertaste zum Umdrehen</span>}
+        {!flipped && !typeMode && <span className="fc-hint">{phone ? 'Tippen zum Umdrehen – danach wischen: ← Nochmal, Gut →' : 'Klicken oder Leertaste zum Umdrehen'}</span>}
       </div>
 
       {typeMode && !flipped && (
@@ -479,4 +499,14 @@ function AskSidePicker({ deck, compact }: { deck: Deck; compact?: boolean }) {
       ))}
     </div>
   );
+}
+
+/** Phone: while a round runs, the app's bars step aside so the card has the whole screen. */
+export function PhoneFullscreen({ on }: { on: boolean }) {
+  useEffect(() => {
+    if (!on) return;
+    document.documentElement.classList.add('learning');
+    return () => document.documentElement.classList.remove('learning');
+  }, [on]);
+  return null;
 }

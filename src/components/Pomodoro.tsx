@@ -77,7 +77,7 @@ export function FocusBar() {
 export function FocusButton() {
   const on = useFocus();
   return (
-    <button type="button" className="btn ghost sm" onClick={() => setFocus(!on)} title="Vollbild ohne Ablenkung, mit Pomodoro-Timer">
+    <button type="button" className="btn ghost sm focus-btn" onClick={() => setFocus(!on)} title="Vollbild ohne Ablenkung, mit Pomodoro-Timer">
       {on ? 'Fokus beenden' : 'Fokusmodus'}
     </button>
   );

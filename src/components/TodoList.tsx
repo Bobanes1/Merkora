@@ -7,7 +7,7 @@ import { DAY, dayKey } from '../lib/util';
 import { IconCheck, IconPlus, IconSparkle } from './Icons';
 
 /** To-dos: add with Enter (optionally a date and a deck), check off, edit with a double click. */
-export function TodoList() {
+export function TodoList({ compactAdd = false }: { compactAdd?: boolean }) {
   const data = useStore((s) => s.data);
   const todos = data.todos ?? [];
   const [text, setText] = useState('');
@@ -17,6 +17,8 @@ export function TodoList() {
   const [draft, setDraft] = useState('');
   const [showDone, setShowDone] = useState(false);
   const [popped, setPopped] = useState<string | null>(null);
+  // phone: the input opens with a small "+"
+  const [adding, setAdding] = useState(!compactAdd);
   const now = Date.now();
   const today = dayKey(now);
   const tomorrow = dayKey(now + DAY);
@@ -108,6 +110,12 @@ export function TodoList() {
           ))}
         </div>
       )}
+      {!adding && (
+        <button type="button" className="btn ghost sm todo-open" onClick={() => setAdding(true)}>
+          <IconPlus size={14} /> To-do hinzufügen
+        </button>
+      )}
+      {adding && (
       <div className="todo-add">
         <input
           className="input"
@@ -140,6 +148,7 @@ export function TodoList() {
           </button>
         </div>
       </div>
+      )}
       {groups
         .filter((g) => g.id !== 'done')
         .map((g) => (

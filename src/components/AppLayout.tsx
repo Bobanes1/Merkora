@@ -23,6 +23,8 @@ import {
   IconSearch,
 } from './Icons';
 import { SearchPalette } from './SearchPalette';
+import { PhoneNav } from './PhoneNav';
+import { usePhone } from '../lib/phone';
 import { InstallButton } from './InstallButton';
 import { JobsIndicator } from './Jobs';
 import { Logo } from './Logo';
@@ -164,16 +166,26 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const chatProvider = useStore((s) => s.data.settings.chatProvider);
   const ready = useStore((s) => aiReady(s));
   const connected = !!apiKey || provider === 'custom';
+  const phone = usePhone();
 
   return (
     <div className="app-shell">
-      <header className="mobile-bar">
-        <button type="button" className="icon-btn" aria-label="Menü öffnen" onClick={() => setOpen(true)}>
-          <IconMenu size={22} />
-        </button>
-        <Logo className="small" />
-        <span style={{ width: 36 }} />
-      </header>
+      {phone ? (
+        <header className="mobile-bar phone-bar">
+          <Logo className="small" />
+          <button type="button" className="icon-btn" aria-label="Suchen" onClick={() => setSearch(true)}>
+            <IconSearch size={22} />
+          </button>
+        </header>
+      ) : (
+        <header className="mobile-bar">
+          <button type="button" className="icon-btn" aria-label="Menü öffnen" onClick={() => setOpen(true)}>
+            <IconMenu size={22} />
+          </button>
+          <Logo className="small" />
+          <span style={{ width: 36 }} />
+        </header>
+      )}
       <nav className={`sidebar ${open ? 'open' : ''}`} aria-label="Hauptnavigation">
         <div className="sidebar-top">
           <Logo className="small" />
@@ -229,6 +241,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       {newDeck && <NewDeckModal onClose={() => setNewDeck(false)} onAi={(courseId) => setAiCourse(courseId)} />}
       {aiCourse && <CreateWithAI courseId={aiCourse} onClose={() => setAiCourse(null)} onBack={() => (setAiCourse(null), setNewDeck(true))} />}
       {search && <SearchPalette onClose={() => setSearch(false)} />}
+      {phone && <PhoneNav onSearch={() => setSearch(true)} onNewDeck={() => setNewDeck(true)} />}
       <main className="app-main">
         <FocusBar />
         <UpdateNotice />

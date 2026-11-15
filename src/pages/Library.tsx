@@ -26,6 +26,7 @@ import { courseSummary, masteryPercent, sortCourses, type CourseSort } from '../
 import { allAcross, dueAcross } from '../lib/sessions';
 import { courseDocs } from '../lib/courseDocs';
 import { CourseDocs } from '../components/CourseDocs';
+import { usePhone } from '../lib/phone';
 import {
   addCourse,
   addFolder,
@@ -106,7 +107,8 @@ export default function Library() {
   const workspace = ws ? data.workspaces.find((w) => w.slug === ws) : undefined;
   const crs = workspace && course ? data.courses.find((c) => c.workspaceId === workspace.id && c.slug === course) : undefined;
   const shownWs = workspace ? [workspace] : data.workspaces;
-  const view = data.settings.libraryView ?? 'tiles';
+  const phone = usePhone();
+  const view = phone ? 'list' : (data.settings.libraryView ?? 'tiles');
 
   useEffect(() => {
     document.title = `${crs?.name ?? workspace?.name ?? 'Bibliothek'} – Merkora`;
@@ -155,6 +157,7 @@ export default function Library() {
           <header className="page-head">
             <h1>{workspace?.name ?? 'Bibliothek'}</h1>
             <div className="row-gap">
+              {!phone && (
               <div className="seg view-toggle" role="radiogroup" aria-label="Ansicht">
                 <button type="button" role="radio" aria-checked={view === 'tiles'} className={view === 'tiles' ? 'on' : ''} title="Kacheln" onClick={() => setSettings({ libraryView: undefined })}>
                   <IconGrid size={15} /> <span>Kacheln</span>
@@ -163,6 +166,7 @@ export default function Library() {
                   <IconList size={15} /> <span>Liste</span>
                 </button>
               </div>
+              )}
               <button type="button" className="btn outline" onClick={() => setBuilder(true)} disabled={!data.decks.length}>
                 <IconShuffle size={16} /> Lernrunde
               </button>
@@ -529,6 +533,7 @@ function CourseView({
   const [selected, setSelected] = useState<string | null>(null);
   // right column: the chosen deck's cards or all documents of the course
   const [view, setView] = useState<'deck' | 'docs'>('deck');
+  const phone = usePhone();
   const docs = courseDocs(course, data.decks);
   const docCount = docs.files.length + docs.texts.length;
   const [closed, setClosed] = useState<Record<string, boolean>>({});
@@ -567,7 +572,7 @@ function CourseView({
           className="cdeck-main"
           title={selected === d.id ? 'Nochmal klicken zum Öffnen' : undefined}
           onClick={() => {
-            if (selected === d.id && view === 'deck') return navigate(deckUrl(data, d));
+            if (phone || (selected === d.id && view === 'deck')) return navigate(deckUrl(data, d));
             setSelected(d.id);
             setView('deck');
           }}
@@ -703,6 +708,7 @@ function CourseView({
           )}
         </section>
 
+        {!phone && (
         <section className="panel course-preview">
           {docCount > 0 && (
             <div className="seg compact preview-switch" role="tablist" aria-label="Ansicht">
@@ -739,6 +745,7 @@ function CourseView({
             <p className="muted">Wähle links ein Deck aus.</p>
           )}
         </section>
+        )}
       </div>
     </>
   );

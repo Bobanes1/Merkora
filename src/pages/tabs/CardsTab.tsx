@@ -259,7 +259,7 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
         <button type="button" className="btn ghost sm" onClick={() => setExporting(true)} disabled={!deck.cards.length}>
           <IconDownload size={15} /> Exportieren
         </button>
-        <button type="button" className="btn primary sm" onClick={onLearn} disabled={!deck.cards.length}>
+        <button type="button" className="btn primary sm toolbar-learn" onClick={onLearn} disabled={!deck.cards.length}>
           <IconPlay size={12} /> Lernen
         </button>
       </div>

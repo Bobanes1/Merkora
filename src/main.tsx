@@ -17,6 +17,9 @@ import { initStore, isAndroid, isDesktop } from './lib/store';
 import { openExternal } from './lib/desktop';
 import { startJobRunner } from './lib/jobs';
 import { startAutoSync } from './lib/sync';
+import { initPhone } from './lib/phone';
+
+initPhone();
 
 // Desktop app self-test diagnostics: the app's own local server collects early errors (ignored unless a self-test runs).
 if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && /^473\d\d$/.test(location.port)) {

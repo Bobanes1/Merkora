@@ -7809,3 +7809,398 @@ a.deck-row:hover {
 .week-review.compact .week-decks li {
   font-size: 13px;
 }
+
+/* =====================================================================
+   Phone view (html.phone: up to 700 px wide, and always in the Android app)
+   ===================================================================== */
+html.phone body {
+  font-size: 16px;
+}
+html.phone .sidebar,
+html.phone .sidebar-backdrop {
+  display: none !important;
+}
+html.phone .app-shell {
+  flex-direction: column;
+}
+html.phone .phone-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  height: 52px;
+  padding: 0 8px 0 14px;
+  background: var(--white);
+  border-bottom: 1px solid var(--line);
+}
+html.phone .app-main {
+  padding-bottom: calc(76px + env(safe-area-inset-bottom));
+}
+html.phone .page,
+html.phone .home,
+html.phone .deck-main {
+  padding: 12px !important;
+}
+html.phone .icon-btn,
+html.phone .btn,
+html.phone .chip,
+html.phone .tab {
+  min-height: 44px;
+}
+html.phone .btn.sm {
+  min-height: 40px;
+}
+html.phone input,
+html.phone select,
+html.phone textarea {
+  font-size: 16px;
+}
+@media (hover: none) {
+  .todo-del,
+  .cdeck-actions {
+    opacity: 1 !important;
+  }
+}
+
+/* bottom navigation */
+.phone-nav {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 40;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  padding: 4px 4px calc(4px + env(safe-area-inset-bottom));
+  background: var(--white);
+  border-top: 1px solid var(--line);
+}
+.pn-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 56px;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pn-item.on {
+  color: var(--primary);
+}
+.pn-dots {
+  font-size: 16px;
+  letter-spacing: 1px;
+  line-height: 22px;
+}
+
+/* panels from the bottom (also all windows on the phone) */
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(0, 24, 23, 0.45);
+  animation: fade 0.15s ease-out;
+}
+.sheet {
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 8px 16px calc(16px + env(safe-area-inset-bottom));
+  border-radius: 20px 20px 0 0;
+  background: var(--white);
+  animation: sheet-up 0.2s ease-out;
+}
+@keyframes sheet-up {
+  from {
+    transform: translateY(40px);
+    opacity: 0;
+  }
+}
+.sheet-grip {
+  display: block;
+  width: 40px;
+  height: 4px;
+  margin: 0 auto 10px;
+  border-radius: 2px;
+  background: var(--line-strong);
+}
+.sheet-title {
+  display: block;
+  margin-bottom: 8px;
+  overflow: hidden;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sheet-list {
+  display: flex;
+  flex-direction: column;
+}
+.sheet-list > button,
+.sheet-list > a {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 52px;
+  padding: 0 6px;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  color: var(--text);
+  font-size: 16px;
+  text-align: left;
+  cursor: pointer;
+}
+.sheet-list > .on {
+  color: var(--primary);
+  font-weight: 700;
+}
+.sheet-list svg {
+  flex: none;
+  color: var(--primary);
+}
+.sheet-pomo {
+  margin-top: 12px;
+}
+html.phone .modal-backdrop {
+  align-items: flex-end;
+  padding: 0;
+}
+html.phone .modal,
+html.phone .modal.wide {
+  width: 100%;
+  max-height: 92vh;
+  border-radius: 20px 20px 0 0;
+  animation: sheet-up 0.2s ease-out;
+}
+
+/* start page */
+html.phone .home {
+  display: block;
+}
+html.phone .hero-banner {
+  gap: 10px;
+  padding: 14px;
+}
+html.phone .hero-banner h1 {
+  font-size: 22px;
+}
+html.phone .hero-mascot {
+  width: 64px !important;
+  height: 64px !important;
+}
+html.phone .hero-banner .mascot {
+  width: 64px !important;
+  height: 64px !important;
+}
+html.phone .hero-btn {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+}
+html.phone .hero-banner > div:not(.mascot-wrap) {
+  padding-bottom: 44px;
+}
+html.phone .home-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+html.phone .home-due {
+  order: -1;
+}
+html.phone .home-panel > * {
+  margin: 0;
+}
+.phone-exam {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--white);
+  color: var(--text);
+}
+.phone-exam svg:first-child {
+  color: var(--primary);
+}
+.phone-exam span {
+  display: flex;
+  flex-direction: column;
+}
+.phone-exam small {
+  color: var(--muted);
+}
+.todo-open {
+  align-self: flex-start;
+}
+
+/* library / course page */
+html.phone .course-split {
+  display: block;
+}
+html.phone .course-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+html.phone .course-stats .cstat {
+  padding: 0;
+  border: none;
+  background: none;
+}
+html.phone .course-stats .cstat-big {
+  font-size: 16px;
+}
+html.phone .course-stats .ring-stat svg {
+  display: none;
+}
+html.phone .cdeck-main,
+html.phone .cfolder-toggle {
+  min-height: 48px;
+}
+
+/* deck page */
+.phone-deck-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -4px 0 4px;
+}
+.phone-deck-top .icon-btn {
+  font-size: 22px;
+}
+.phone-deck-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 17px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tabs.phone-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  flex-wrap: nowrap;
+  gap: 0;
+  margin: 4px 0 12px;
+}
+.phone-tabs .tab {
+  justify-content: center;
+  padding: 0 4px;
+  font-size: 14px;
+}
+.phone-tabs .tab span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.phone-learn {
+  position: fixed;
+  right: 12px;
+  bottom: calc(76px + env(safe-area-inset-bottom));
+  left: 12px;
+  z-index: 35;
+  min-height: 50px;
+  font-size: 16px;
+  box-shadow: var(--shadow-pop);
+}
+html.phone .deck-main {
+  padding-bottom: 70px !important;
+}
+html.phone .chat-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  width: 100%;
+  height: 100%;
+}
+
+/* learning: the whole screen for the card */
+html.phone.learning .phone-nav,
+html.phone.learning .phone-bar,
+html.phone.learning .phone-deck-top,
+html.phone.learning .phone-tabs,
+html.phone.learning .phone-learn,
+html.phone.learning .learn-mascot,
+html.phone.learning .exam-hint {
+  display: none !important;
+}
+html.phone.learning .app-main {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+html.phone .learn-progress .ask-side,
+html.phone .learn-progress .focus-btn,
+html.phone .learn-progress .muted.small,
+html.phone .session-head .ask-side {
+  display: none;
+}
+html.phone .learn-progress {
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+html.phone.learning .flashcard {
+  min-height: calc(100vh - 260px);
+  justify-content: center;
+  touch-action: pan-y;
+}
+html.phone .rate-row {
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+html.phone .rate {
+  min-height: 56px;
+  font-size: 16px;
+}
+/* phone: card list – text over the whole width, badges and actions below it */
+html.phone .flash-row {
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+}
+html.phone .flash-text {
+  flex: 1 1 100%;
+  order: -1;
+}
+html.phone .flash-meta {
+  flex-direction: row;
+  align-items: center;
+}
+html.phone .flash-actions {
+  margin-left: auto;
+}
+html.phone .flash-actions .icon-btn {
+  min-width: 40px;
+  min-height: 40px;
+}
+html.phone .toolbar-learn {
+  display: none;
+}
+html.phone .toolbar {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+html.phone .course-title {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+html.phone .course-title h1 {
+  font-size: 22px;
+}
+html.phone .course-title .grow {
+  display: none;
+}
