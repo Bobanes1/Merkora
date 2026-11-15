@@ -301,6 +301,56 @@ fn take_open_files(state: tauri::State<'_, OpenFiles>) -> Vec<String> {
     std::mem::take(&mut *state.0.lock().unwrap())
 }
 
+// ---------- Android: in-app update (download the new APK; the phone's installer does the rest) ----------
+const APK_BASE: &str = "https://github.com/Bobanes1/Merkora/releases/download/";
+
+/// Only Merkora's own release files may be downloaded as an update.
+fn is_allowed_apk_url(url: &str) -> bool {
+    url.starts_with(APK_BASE) && url.ends_with(".apk") && !url.contains("..") && !url.contains('?') && !url.contains('#') && !url[APK_BASE.len()..].contains("//")
+}
+
+#[tauri::command]
+async fn download_apk(app: AppHandle, url: String) -> Result<String, String> {
+    if !is_allowed_apk_url(&url) {
+        return Err("Diese Adresse ist kein Merkora-Update.".into());
+    }
+    let dir = app.path().app_cache_dir().map_err(|e| e.to_string())?.join("updates");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let file = dir.join("merkora-update.apk");
+    let mut res = CLIENT.get(&url).send().await.map_err(|e| format!("Download fehlgeschlagen: {e}"))?;
+    if !res.status().is_success() {
+        return Err(format!("Download fehlgeschlagen ({}).", res.status()));
+    }
+    let total = res.content_length().unwrap_or(0);
+    let mut data: Vec<u8> = Vec::with_capacity(total as usize);
+    let mut last = 0u64;
+    while let Some(chunk) = res.chunk().await.map_err(|e| format!("Download abgebrochen: {e}"))? {
+        data.extend_from_slice(&chunk);
+        let got = data.len() as u64;
+        if total > 0 && (got - last) * 50 >= total {
+            last = got;
+            let _ = app.emit("apk-progress", got as f64 / total as f64);
+        }
+    }
+    std::fs::write(&file, &data).map_err(|e| e.to_string())?;
+    let _ = app.emit("apk-progress", 1.0f64);
+    Ok(file.to_string_lossy().into_owned())
+}
+
+#[cfg(test)]
+mod apk_tests {
+    use super::is_allowed_apk_url;
+    #[test]
+    fn only_merkora_release_apks() {
+        assert!(is_allowed_apk_url("https://github.com/Bobanes1/Merkora/releases/download/v0.9.1/Merkora_0.9.1_android.apk"));
+        assert!(!is_allowed_apk_url("https://example.com/Merkora.apk"));
+        assert!(!is_allowed_apk_url("https://github.com/Bobanes1/Merkora/releases/download/v1/../../../other/x.apk"));
+        assert!(!is_allowed_apk_url("https://github.com/Bobanes1/Merkora/releases/download/v1/x.exe"));
+        assert!(!is_allowed_apk_url("https://github.com/Bobanes1/Merkora/releases/download/v1/x.apk?y=1"));
+        assert!(!is_allowed_apk_url("https://github.com/Bobanes1/Merkoraevil/releases/download/v1/x.apk"));
+    }
+}
+
 // ---------- AI requests (sent from here, so no browser restrictions apply) ----------
 #[derive(Deserialize)]
 struct FetchReq {
@@ -461,6 +511,7 @@ pub fn run() {
             import_apkg_path,
             take_open_files,
             http_fetch,
+            download_apk,
             smoke_info,
             smoke_done,
             save_download,

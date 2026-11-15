@@ -31,6 +31,31 @@ if (!m.includes('android.permission.INTERNET')) {
 if (!m.includes('android.permission.POST_NOTIFICATIONS')) {
   m = m.replace(/<application\b/, '<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <application');
 }
+// In-app updates: Merkora may hand a downloaded APK to the phone's installer (the person still confirms it).
+if (!m.includes('android.permission.REQUEST_INSTALL_PACKAGES')) {
+  m = m.replace(/<application\b/, '<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />\n    <application');
+}
+if (!m.includes('merkora.updates')) {
+  m = m.replace(
+    /<\/application>/,
+    `    <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="\${applicationId}.merkora.updates"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/update_paths" />
+        </provider>
+    </application>`,
+  );
+}
+fs.writeFileSync(
+  path.join(xmlDir, 'update_paths.xml'),
+  `<?xml version="1.0" encoding="utf-8"?>
+<paths>
+  <cache-path name="updates" path="updates/" />
+</paths>
+`,
+);
 fs.writeFileSync(manifestFile, m);
 console.log('Android project patched: localhost http, internet and notification permissions');
 
@@ -53,12 +78,55 @@ fs.writeFileSync(
   activity,
   `package ${pkg}
 
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.view.View
+import android.webkit.JavascriptInterface
+import android.webkit.WebView
+import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import java.io.File
 
 class MainActivity : TauriActivity() {
+  // In-app update: the page downloads the new APK (Rust core) and calls MerkoraAndroid.installApk(path).
+  // Only files in Merkora's own folders are accepted; Android's installer asks the person to confirm.
+  inner class UpdateBridge {
+    @JavascriptInterface
+    fun installApk(path: String): String {
+      return try {
+        val src = File(path).canonicalFile
+        val own = listOf(cacheDir, filesDir, dataDir).map { it.canonicalPath }
+        if (!src.isFile || own.none { src.path.startsWith(it) } || !src.name.endsWith(".apk")) return "error: not allowed"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+          runOnUiThread {
+            startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + packageName)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+          }
+          return "permission"
+        }
+        val dir = File(cacheDir, "updates").apply { mkdirs() }
+        val dest = File(dir, "merkora-update.apk")
+        if (src.path != dest.canonicalPath) src.copyTo(dest, overwrite = true)
+        val uri = FileProvider.getUriForFile(this@MainActivity, packageName + ".merkora.updates", dest)
+        val intent = Intent(Intent.ACTION_VIEW)
+          .setDataAndType(uri, "application/vnd.android.package-archive")
+          .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        runOnUiThread { startActivity(intent) }
+        "ok"
+      } catch (e: Exception) {
+        "error: " + (e.message ?: e.toString())
+      }
+    }
+  }
+
+  override fun onWebViewCreate(webView: WebView) {
+    super.onWebViewCreate(webView)
+    webView.addJavascriptInterface(UpdateBridge(), "MerkoraAndroid")
+  }
+
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     val root = findViewById<View>(android.R.id.content)

@@ -1047,6 +1047,15 @@ console.log('Handy: Wischen beim Lernen');
   ok(swipeRating(90, 80) === null, 'eher senkrechte Bewegung (Scrollen) bewertet nicht');
 }
 
+console.log('Android-Update: Versionen vergleichen');
+{
+  const { isNewerVersion, apkUrl } = await import('../src/lib/androidUpdate');
+  ok(isNewerVersion('0.9.10', '0.9.9') && !isNewerVersion('0.9.9', '0.9.10'), 'mehrstellige Teile richtig verglichen');
+  ok(!isNewerVersion('0.9.0', '0.9.0') && !isNewerVersion('v0.9.0', '0.9.0'), 'gleiche Version ist nicht neuer, „v“ wird ignoriert');
+  ok(isNewerVersion('1.0.0', '0.99.99') && isNewerVersion('0.9.1', '0.9'), 'größere Hauptversion und zusätzliche Stelle');
+  ok(apkUrl('0.9.1') === 'https://github.com/Bobanes1/Merkora/releases/download/v0.9.1/Merkora_0.9.1_android.apk', 'APK-Adresse passt zum Release');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

@@ -43,6 +43,7 @@
     "allow-get-backup-dir",
     "allow-list-backups",
     "allow-read-backup",
-    "allow-backup-now"
+    "allow-backup-now",
+    "allow-download-apk"
   ]
 }

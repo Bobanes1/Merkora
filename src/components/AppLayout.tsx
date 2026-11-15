@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { aiReady, PROVIDERS } from '../lib/ai';
-import { deckUrl, dueCards, isDesktop, useStore, type Deck } from '../lib/store';
+import { deckUrl, dueCards, isAndroid, isDesktop, useStore, type Deck } from '../lib/store';
 import { SECOND_MODEL } from '../config';
 import { CreateWithAI } from './CreateWithAI';
 import { shortNames } from '../lib/deckNames';
@@ -30,6 +30,7 @@ import { JobsIndicator } from './Jobs';
 import { Logo } from './Logo';
 import { ErrorBoundary } from './ErrorBoundary';
 import { UpdateNotice } from './UpdateNotice';
+import { ApkUpdateNotice } from './ApkUpdate';
 import { MasterySnapshots } from './WeekReview';
 import { FocusBar, Pomodoro, setFocus } from './Pomodoro';
 
@@ -244,7 +245,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       {phone && <PhoneNav onSearch={() => setSearch(true)} onNewDeck={() => setNewDeck(true)} />}
       <main className="app-main">
         <FocusBar />
-        <UpdateNotice />
+        {isAndroid ? <ApkUpdateNotice /> : <UpdateNotice />}
         <MasterySnapshots />
         <ErrorBoundary key={pathname} inline>
           {children}

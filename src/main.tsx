@@ -50,6 +50,7 @@ initStore()
     void import('./lib/reminders').then((m) => m.startReminders());
     if (isDesktop) void import('./lib/smoke').then((m) => m.runSmokeTest());
     if (isDesktop && !isAndroid) void import('./lib/update').then((m) => m.startUpdateChecks());
+    if (isAndroid) void import('./lib/androidUpdate').then((m) => m.startApkUpdateChecks());
   });
 
 // Desktop app: links that would open a new window go to the normal browser instead.

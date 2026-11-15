@@ -8,7 +8,7 @@ import { desktop, getState, isAndroid, isDesktop, replaceAll, resetAll, setApiKe
 import { download } from '../lib/util';
 import { APP_VERSION, SECOND_MODEL, SLIDE_FIGURES } from '../config';
 import { SyncPanel } from '../components/SyncPanel';
-import { ANDROID_DOWNLOAD } from '../lib/desktop';
+import { ApkUpdatePanel } from '../components/ApkUpdate';
 import { BackupsPanel, BoldSettings, CostSettings, GoalSettings, LearningPanel, RemindersPanel, SlideFigureSettings } from '../components/SettingsExtras';
 
 const AREAS = [
@@ -356,13 +356,7 @@ export default function Settings() {
       <div id="app" className="settings-area">
       <h2 className="settings-area-title">Über die App</h2>
       {isAndroid ? (
-        <section className="panel">
-          <h2>Updates</h2>
-          <p className="muted">Auf dem Handy aktualisierst du Merkora, indem du die neueste APK herunterlädst und installierst – dein Lernstand bleibt erhalten.</p>
-          <a className="btn outline" href={ANDROID_DOWNLOAD} target="_blank" rel="noreferrer">
-            Neueste Version auf GitHub
-          </a>
-        </section>
+        <ApkUpdatePanel />
       ) : (
         isDesktop && <UpdatePanel />
       )}
