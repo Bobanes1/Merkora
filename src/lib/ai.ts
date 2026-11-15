@@ -1,4 +1,5 @@
 import { netFetch } from './desktop';
+import { SLIDE_IMAGE_RULE } from './slideImages';
 import { sideText } from './content';
 import { DIAGRAM_KINDS, DIAGRAM_RULE, parseDiagram, type Diagram } from './diagram';
 import { ICON_NAMES } from './diagramIcons';
@@ -170,6 +171,80 @@ function looksBroken(reply: string, messages: ChatMsg[], system?: string) {
 /** Removes visible "thinking" some models put into the answer. */
 const cleanReply = (s: string) => s.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 
+type ApiKind = 'anthropic' | 'gemini' | 'openai';
+const b64Of = (url: string) => url.slice(url.indexOf(',') + 1);
+const mimeOf = (url: string) => /^data:([^;,]+)/.exec(url)?.[1] ?? 'image/jpeg';
+/**
+ * Messages in the form each provider expects; pictures of a message go along as image parts.
+ * Pure – tested in scripts/test-srs.mts.
+ */
+export function providerMessages(kind: ApiKind, messages: ChatMsg[]): unknown[] {
+  return messages.map((m) => {
+    const imgs = m.role === 'user' ? (m.images ?? []) : [];
+    if (kind === 'gemini')
+      return {
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [...imgs.map((u) => ({ inline_data: { mime_type: mimeOf(u), data: b64Of(u) } })), { text: m.content }],
+      };
+    if (!imgs.length) return { role: m.role, content: m.content };
+    if (kind === 'anthropic')
+      return {
+        role: m.role,
+        content: [...imgs.map((u) => ({ type: 'image', source: { type: 'base64', media_type: mimeOf(u), data: b64Of(u) } })), { type: 'text', text: m.content }],
+      };
+    return { role: m.role, content: [{ type: 'text', text: m.content }, ...imgs.map((u) => ({ type: 'image_url', image_url: { url: u } }))] };
+  });
+}
+
+/** OpenRouter tells per model whether it reads images (loaded with the model list). */
+const VISION_KEY = 'merkora.visionModels';
+let visionModels: Record<string, boolean> | null = null;
+function knownVision(): Record<string, boolean> {
+  if (visionModels) return visionModels;
+  try {
+    visionModels = JSON.parse(localStorage.getItem(VISION_KEY) || '{}') as Record<string, boolean>;
+  } catch {
+    visionModels = {};
+  }
+  return visionModels;
+}
+export function rememberVision(list: { id: string; architecture?: { input_modalities?: string[] } }[]) {
+  const map: Record<string, boolean> = {};
+  for (const m of list) if (m.architecture?.input_modalities) map[m.id] = m.architecture.input_modalities.includes('image');
+  visionModels = map;
+  try {
+    localStorage.setItem(VISION_KEY, JSON.stringify(map));
+  } catch {
+    /* no storage */
+  }
+}
+/** Loads OpenRouter's model list once in the background (for supportsImages). */
+export async function loadVisionInfo(): Promise<void> {
+  const cfg = aiConfig('gen');
+  if (cfg.provider !== 'openrouter' || Object.keys(knownVision()).length) return;
+  try {
+    const res = await netFetch(`${cfg.baseUrl}/models`);
+    if (res.ok) rememberVision(((await res.json()).data || []) as { id: string }[]);
+  } catch {
+    /* offline: the name rule below decides */
+  }
+}
+
+/** Can the model for creating cards read pictures? Pure apart from the settings – tested. */
+export function supportsImages(c: { provider: string; model: string } = aiConfig('gen'), customVision = !!getState().data.settings.customVision): boolean {
+  const m = c.model.toLowerCase();
+  if (c.provider === 'anthropic' || c.provider === 'gemini') return true;
+  if (c.provider === 'openai') return /gpt-4o|gpt-4\.1|gpt-5|^o\d|chatgpt-4o/.test(m) && !/audio|realtime|search/.test(m);
+  if (c.provider === 'custom') return customVision;
+  const known = knownVision()[c.model];
+  if (known !== undefined) return known;
+  return /(^|[-/:._])vl([-/:._]|$)|vision|gpt-4o|gpt-4\.1|gpt-5|claude|gemini|gemma-3|llama-4|pixtral|grok-4|qwen.*vl/.test(m);
+}
+
+/** The provider refused the pictures (model without image input) – then it is tried with text only. */
+export const imagesRejected = (e: unknown) =>
+  e instanceof AiError && !/API-Key|Anfragen|Guthaben/.test(e.message) && /image|vision|multimodal|modalit|bild/i.test(e.message);
+
 async function completeOnce(messages: ChatMsg[], opts: Opts = {}): Promise<string> {
   const purpose = opts.purpose ?? 'gen';
   const cfg = aiConfig(purpose);
@@ -186,7 +261,7 @@ async function completeOnce(messages: ChatMsg[], opts: Opts = {}): Promise<strin
           'anthropic-version': '2023-06-01',
           'anthropic-dangerous-direct-browser-access': 'true',
         },
-        body: JSON.stringify({ model: cfg.model, max_tokens: maxTokens, system: opts.system, messages }),
+        body: JSON.stringify({ model: cfg.model, max_tokens: maxTokens, system: opts.system, messages: providerMessages('anthropic', messages) }),
       });
       if (!res.ok) await fail(res);
       const j = await res.json();
@@ -199,7 +274,7 @@ async function completeOnce(messages: ChatMsg[], opts: Opts = {}): Promise<strin
         headers: { 'content-type': 'application/json', 'x-goog-api-key': cfg.key },
         body: JSON.stringify({
           systemInstruction: opts.system ? { parts: [{ text: opts.system }] } : undefined,
-          contents: messages.map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })),
+          contents: providerMessages('gemini', messages),
           generationConfig: { maxOutputTokens: maxTokens, ...(opts.json ? { responseMimeType: 'application/json' } : {}) },
         }),
       });
@@ -217,7 +292,7 @@ async function completeOnce(messages: ChatMsg[], opts: Opts = {}): Promise<strin
       headers,
       body: JSON.stringify({
         model: cfg.model,
-        messages: [...(opts.system ? [{ role: 'system', content: opts.system }] : []), ...messages],
+        messages: [...(opts.system ? [{ role: 'system', content: opts.system }] : []), ...providerMessages('openai', messages)],
         ...(cfg.provider === 'openai'
           ? { max_completion_tokens: maxTokens }
           : // OpenRouter: thinking models need room for their thinking and must not return it instead of the answer
@@ -270,7 +345,7 @@ export async function completeJson<T>(system: string, user: string, maxTokens = 
   } catch (e) {
     if (!(e instanceof AiFormatError)) throw e;
     // one more try with more room and a clear reminder
-    return parseJson<T>(await ask(Math.round(maxTokens * 1.5), '\nWICHTIG: Deine letzte Antwort war kein vollständiges, gültiges JSON. Antworte jetzt nur mit dem JSON-Objekt und halte dich kurz genug, damit es vollständig ist.'));
+    return parseJson<T>(await ask(Math.round(maxTokens * 1.5), '\nWICHTIG: Deine letzte Antwort war kein vollständiges, gültiges JSON. Antworte jetzt nur mit dem JSON-Objekt; halte die Antworttexte kürzer, damit es vollständig ist (Grafiken behalten).'));
   }
 }
 
@@ -291,13 +366,14 @@ export function materialFrom(source: string, cards: { front: string; back: strin
 }
 
 // ---------- prompts for the bigger tasks (run as background jobs) ----------
-export type Prompt = { system: string; user: string; maxTokens: number; json: boolean };
+export type Prompt = { system: string; user: string; maxTokens: number; json: boolean; /** Slide pictures (data addresses) sent along. */ images?: string[] };
 const JSON_RULE = '\nAntworte ausschließlich mit gültigem JSON, ohne Erklärtext und ohne Markdown-Codeblock.';
 
 /** For long material processed in steps: which part this is, and the questions of the cards made so far. */
 export type PartInfo = { i: number; n: number; avoid?: string[] };
 
-export function cardsPrompt(text: string, count: number, focus = '', graphics = false, part?: PartInfo, figures = false): Prompt {
+export function cardsPrompt(text: string, count: number, focus = '', graphics = false, part?: PartInfo, figures = false, slides: string[] = []): Prompt {
+  const slideNote = slides.length ? `\n\nAngehängte Folienbilder (in dieser Reihenfolge): ${slides.map((l, i) => `Bild ${i + 1} = ${l}`).join('; ')}.` : '';
   const partNote = part && part.n > 1
     ? `\n\nDies ist Teil ${part.i} von ${part.n} des Lernmaterials. Erstelle Karten nur zu diesem Teil${count > 0 ? '' : ' und entscheide die Anzahl nur nach seinem Inhalt'}.${
         part.avoid?.length
@@ -311,14 +387,14 @@ Regeln: Eine Idee pro Karte. Vorderseite = präzise Frage oder Begriff. Rücksei
 ${TERM_RULE}
 ${FORMULA_RULE}
 Wähle prüfungsorientiert aus: Karten zu dem, was in einer Prüfung zu diesem Stoff gefragt werden kann – nicht zu Organisatorischem, Agenda oder Literaturlisten.${boldOn() ? '\n' + EMPHASIS_RULE : ''}
-${graphics ? DIAGRAM_RULE + '\n' : ''}${figures ? FIGURE_RULE + '\n' : ''}Format: {"cards":[{"front":"...","back":"..."${graphics ? ',"diagram":{…} (optional)' : ''}${figures ? ',"figure":7 (optional)' : ''}}]}${JSON_RULE}`,
+${graphics ? DIAGRAM_RULE + '\n' : ''}${figures ? FIGURE_RULE + '\n' : ''}${slides.length ? SLIDE_IMAGE_RULE + '\n' : ''}Format: {"cards":[{"front":"...","back":"..."${graphics ? ',"diagram":{"type":"flow","title":"…","steps":["…","…","…"]}' : ''}${figures ? ',"figure":7 (optional)' : ''}}]}${graphics ? ' – "diagram" bei den Karten, zu denen eine Grafik passt (etwa jede dritte Karte), sonst weglassen.' : ''}${JSON_RULE}`,
     user: `${
       count > 0
         ? `Erstelle genau ${count} Karteikarten zu diesem Material.`
         : autoCardInstruction()
-    }${focus ? ` Schwerpunkt: ${focus}.` : ''}${partNote}\n\n${clip(text, CARD_MATERIAL_LIMIT)}`,
+    }${focus ? ` Schwerpunkt: ${focus}.` : ''}${partNote}\n\n${clip(text, CARD_MATERIAL_LIMIT)}${slideNote}`,
     // automatic: generous room so the limit never decides the number (only written tokens are billed)
-    maxTokens: count > 0 ? Math.min(32000, 400 + count * (graphics ? 400 : 220)) : 16000,
+    maxTokens: count > 0 ? Math.min(32000, 400 + count * (graphics ? 500 : 220)) : 16000,
     json: true,
   };
 }
@@ -335,6 +411,8 @@ export function parseCards(text: string, allowEmpty = false) {
     front: String(c.front).trim(),
     back: String(c.back).trim(),
     // symbols written next to the diagram instead of inside it still count
+    // a diagram sent as JSON text still counts
+    ...(typeof c.diagram === 'string' && c.diagram.trim().startsWith('{') ? { diagram: c.diagram } : {}),
     ...(c.diagram && typeof c.diagram === 'object'
       ? { diagram: c.icons && typeof c.icons === 'object' && !(c.diagram as { icons?: unknown }).icons ? { ...(c.diagram as object), icons: c.icons } : c.diagram }
       : {}),
@@ -382,13 +460,35 @@ export function parseQuiz(text: string) {
 }
 
 /** Runs a prompt right here in the tab. */
-export function runPrompt(p: Prompt, signal?: AbortSignal) {
-  return complete([{ role: 'user', content: p.user }], { system: p.system, maxTokens: p.maxTokens, json: p.json, signal });
+/**
+ * Runs a prepared prompt. With slide pictures: if the model refuses pictures, once more with text only
+ * (`onImagesDropped` tells the caller, so the person learns why).
+ */
+export async function runPrompt(p: Prompt, signal?: AbortSignal, onImagesDropped?: () => void) {
+  const opts = { system: p.system, maxTokens: p.maxTokens, json: p.json, signal };
+  if (!p.images?.length) return complete([{ role: 'user', content: p.user }], opts);
+  try {
+    return await complete([{ role: 'user', content: p.user, images: p.images }], opts);
+  } catch (e) {
+    if (!imagesRejected(e)) throw e;
+    onImagesDropped?.();
+    return complete([{ role: 'user', content: p.user }], opts);
+  }
 }
 
-export async function generateCards(text: string, count: number, focus = '', graphics = false, part?: PartInfo, figures = false) {
+export async function generateCards(
+  text: string,
+  count: number,
+  focus = '',
+  graphics = false,
+  part?: PartInfo,
+  figures = false,
+  slides?: { label: string; url: string }[],
+  onImagesDropped?: () => void,
+) {
   // with several parts, a part without exam-relevant content may give no cards
-  return parseCards(await runPrompt(cardsPrompt(text, count, focus, graphics, part, figures)), !!part && part.n > 1);
+  const p = cardsPrompt(text, count, focus, graphics, part, figures, slides?.map((s) => s.label));
+  return parseCards(await runPrompt(slides?.length ? { ...p, images: slides.map((s) => s.url) } : p, undefined, onImagesDropped), !!part && part.n > 1);
 }
 
 // ---------- work that keeps running on the provider's servers ----------
@@ -538,7 +638,9 @@ export async function listModels(purpose: Purpose = 'gen'): Promise<string[]> {
     }
     const res = await netFetch(`${cfg.baseUrl}/models`, { headers: cfg.key ? { authorization: `Bearer ${cfg.key}` } : {} });
     if (!res.ok) await fail(res);
-    const ids: string[] = ((await res.json()).data || []).map((m: { id: string }) => m.id);
+    const list = ((await res.json()).data || []) as { id: string }[];
+    if (cfg.provider === 'openrouter') rememberVision(list);
+    const ids: string[] = list.map((m) => m.id);
     return cfg.provider === 'openai' ? ids.filter((id) => /^(gpt|o\d|chatgpt)/.test(id) && !/audio|realtime|tts|transcribe|image|search/.test(id)).sort() : ids.sort();
   } catch (e) {
     if (e instanceof AiError) throw e;

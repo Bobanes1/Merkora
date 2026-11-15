@@ -4,7 +4,8 @@ import { CostHint } from './CostHint';
 import { estimate } from '../lib/costs';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { generateCards, hasKey, boldOn } from '../lib/ai';
+import { aiConfig, generateCards, hasKey, boldOn, loadVisionInfo, supportsImages } from '../lib/ai';
+import { renderSlides, slidesInPart } from '../lib/slideImages';
 import { isPdf, MATERIAL_ACCEPT, MATERIAL_LABEL, readFileText, readPdfDetailed } from '../lib/files';
 import { figureLabel, markFigures, pickFigurePages } from '../lib/slides';
 import { figureInfo, figurePreview, registerFigures } from '../lib/figureFiles';
@@ -75,11 +76,21 @@ export function CreateWithAI({
   const [useFigures, setUseFigures] = useState(true);
   const figureCount = files.reduce((n, f) => n + (f.pdf?.figures.length ?? 0), 0);
   const withFigures = slideOn && useFigures && figureCount > 0;
-  const marked = withFigures ? markFigures(files.filter((f) => f.pdf).map((f) => ({ name: f.name, pages: f.pdf!.pages, figures: f.pdf!.figures }))) : null;
+  // slide pictures for the AI: slides with figures go along as images (only models that read images)
+  const [visionTick, setVisionTick] = useState(0);
+  useEffect(() => {
+    void loadVisionInfo().then(() => setVisionTick((t) => t + 1));
+  }, []);
+  const customVision = useStore((s) => !!s.data.settings.customVision);
+  const visionOk = visionTick >= 0 && supportsImages(aiConfig('gen'), customVision);
+  const slideImagesSetting = useStore((s) => s.data.settings.slideImages !== false);
+  const withSlideImages = visionOk && slideImagesSetting && figureCount > 0;
+  const [imagesDropped, setImagesDropped] = useState(false);
+  const marked = withFigures || withSlideImages ? markFigures(files.filter((f) => f.pdf).map((f) => ({ name: f.name, pages: f.pdf!.pages, figures: f.pdf!.figures }))) : null;
   const [figSet, setFigSet] = useState<string | undefined>();
   /** Keeps the PDFs of this run so that the chosen slides can become pictures (also in background jobs). */
   const prepareFigures = () =>
-    marked ? registerFigures(Object.fromEntries(files.filter((f) => f.pdf).map((f) => [f.name, f.pdf!.file])), marked.figures) : undefined;
+    marked && withFigures ? registerFigures(Object.fromEntries(files.filter((f) => f.pdf).map((f) => [f.name, f.pdf!.file])), marked.figures) : undefined;
   const [useSource, setUseSource] = useState(false);
   const oldSource = existing?.source.trim() ?? '';
   // everything the AI should use: attached files, own notes and (if ticked) the deck's earlier material
@@ -119,7 +130,7 @@ export function CreateWithAI({
       try {
         let t: string;
         let pdf: PdfInfo | undefined;
-        if (slideOn && isPdf(f)) {
+        if (isPdf(f)) {
           // also notes which slides show a model or figure
           const r = await readPdfDetailed(f);
           t = r.pages.filter((x) => x).join('\n\n');
@@ -142,7 +153,7 @@ export function CreateWithAI({
   }, []);
 
   /** Hands the work to the background: the window closes right away, cards appear in the deck when ready. */
-  const run = () => {
+  const run = async () => {
     setError('');
     let target = existing;
     if (!target) {
@@ -156,10 +167,10 @@ export function CreateWithAI({
       updateDeck(target.id, { source: [oldSource, text].filter(Boolean).join('\n\n') });
     }
     // the presentations themselves stay with the deck (shown under "Lernmaterial")
-    void attachFiles(target.id, files.flatMap((x) => (x.src ? [x.src] : [])));
+    await attachFiles(target.id, files.flatMap((x) => (x.src ? [x.src] : [])));
     const fresh = getState().data.decks.find((d) => d.id === target!.id)!;
     // long material: one part after another, each knowing the cards made before
-    startCardJobs(fresh, parts.map((p) => p.text), { counts, focus, graphics, figureSet: prepareFigures() });
+    startCardJobs(fresh, parts.map((p) => p.text), { counts, focus, graphics, figureSet: prepareFigures(), slideImages: withSlideImages });
     onClose();
     navigate(deckUrl(getState().data, fresh, 'cards'));
   };
@@ -176,7 +187,12 @@ export function CreateWithAI({
       for (const [i, p] of parts.entries()) {
         if (parts.length > 1) setBusy(`Teil ${i + 1} von ${parts.length}: Die KI erstellt Karten … (${made.length} bisher)`);
         const avoid = i > 0 ? avoidList([...before, ...made.map((c) => c.front)]) : [];
-        made.push(...(await generateCards(p.text, counts[i], focus, graphics, parts.length > 1 ? { i: i + 1, n: parts.length, avoid } : undefined, !!set)));
+        const slides = withSlideImages ? await renderSlides(slidesInPart(p.text), async (n) => files.find((x) => x.name === n)?.src) : undefined;
+        made.push(
+          ...(await generateCards(p.text, counts[i], focus, graphics, parts.length > 1 ? { i: i + 1, n: parts.length, avoid } : undefined, !!set, slides, () =>
+            setImagesDropped(true),
+          )),
+        );
       }
       // review only once all parts are done
       if (made.length) setDrafts(made.map((c) => ({ ...c, keep: true })));
@@ -302,7 +318,7 @@ export function CreateWithAI({
           <button type="button" className="btn outline" onClick={runAndReview} disabled={!!busy || text.trim().length < 40}>
             {busy ? busy : 'Erst prüfen, dann speichern'}
           </button>
-          <button type="button" className="btn primary" onClick={run} disabled={!!busy || text.trim().length < 40}>
+          <button type="button" className="btn primary" onClick={() => void run().catch((e: Error) => setError(e.message))} disabled={!!busy || text.trim().length < 40}>
             <IconSparkle size={16} /> Im Hintergrund erstellen
           </button>
         </>
@@ -450,6 +466,28 @@ export function CreateWithAI({
             <b>Modelle und Abbildungen aus den Folien übernehmen</b> – {figureCount} {figureCount === 1 ? 'Folie' : 'Folien'} mit Abbildungen erkannt. Die KI
             wählt passende Folien für die Karten aus, Merkora hängt ein Bild genau dieser Folie an.
           </span>
+        </label>
+      )}
+      {figureCount > 0 && (
+        <label className={'check-row' + (visionOk ? '' : ' disabled')}>
+          <input type="checkbox" checked={withSlideImages} disabled={!visionOk} onChange={(e) => setSettings({ slideImages: e.target.checked ? undefined : false })} />
+          <span>
+            <b>Folien-Bilder mitschicken</b> – {figureCount} {figureCount === 1 ? 'Folie zeigt' : 'Folien zeigen'} Grafiken oder Modelle. Die KI sieht sie als Bild
+            (bis zu 8 pro Teil) und kann sie für Karten und Grafiken nutzen.
+            {!visionOk && (
+              <small className="muted">
+                {' '}
+                Dein Modell ({aiConfig('gen').model}) kann keine Bilder lesen – es bekommt nur den Text der Folien.
+              </small>
+            )}
+            {imagesDropped && <small className="muted"> Das Modell hat die Bilder abgelehnt – es wurde nur der Text verwendet.</small>}
+          </span>
+        </label>
+      )}
+      {figureCount > 0 && aiConfig('gen').provider === 'custom' && (
+        <label className="check-row">
+          <input type="checkbox" checked={customVision} onChange={(e) => setSettings({ customVision: e.target.checked })} />
+          <span>Mein Modell versteht Bilder</span>
         </label>
       )}
       <label className="check-row graphics-opt">

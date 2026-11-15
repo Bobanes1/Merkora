@@ -75,9 +75,22 @@ export function openExternal(url: string) {
 // ---------- media ----------
 export const mediaFileUrl = (id: string) => convertFileSrc(id, 'media');
 
+/**
+ * File bytes for a Tauri call. On the PC they go raw (fast); on Android every call is sent as JSON,
+ * where raw bytes would arrive as a long number list – there they go as base64 text instead.
+ */
+export async function bytesBody(data: Blob | Uint8Array): Promise<Uint8Array | { b64: string }> {
+  const bytes = data instanceof Uint8Array ? data : new Uint8Array(await data.arrayBuffer());
+  return isAndroid ? { b64: toBase64(bytes) } : bytes;
+}
+export function toBase64(bytes: Uint8Array): string {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+
 export async function mediaPutFile(id: string, name: string, type: string, blob: Blob) {
-  const bytes = new Uint8Array(await blob.arrayBuffer());
-  await invoke('media_put', bytes, { headers: { 'x-id': id, 'x-name': encodeURIComponent(name), 'x-type': type || '' } });
+  await invoke('media_put', await bytesBody(blob), { headers: { 'x-id': id, 'x-name': encodeURIComponent(name), 'x-type': type || '' } });
 }
 export async function mediaGetFile(id: string): Promise<{ blob: Blob; name: string; type: string } | undefined> {
   try {
@@ -104,8 +117,8 @@ export type RustAnkiResult = {
   crt: number;
   withProgress: number;
 };
-export function importApkgBytes(bytes: Uint8Array) {
-  return invoke<RustAnkiResult>('import_apkg', bytes);
+export async function importApkgBytes(bytes: Uint8Array) {
+  return invoke<RustAnkiResult>('import_apkg', await bytesBody(bytes));
 }
 export function importApkgPath(path: string) {
   return invoke<RustAnkiResult>('import_apkg_path', { path });
@@ -165,8 +178,7 @@ export const smokeDone = (report: unknown, exit = true) => invoke('smoke_done', 
 /** Saves a file into Downloads and shows it in the file manager. Returns the full path. */
 export async function saveDownload(name: string, data: Blob | string): Promise<string> {
   const blob = typeof data === 'string' ? new Blob([data]) : data;
-  const bytes = new Uint8Array(await blob.arrayBuffer());
-  return invoke<string>('save_download', bytes, { headers: { 'x-name': encodeURIComponent(name) } });
+  return invoke<string>('save_download', await bytesBody(blob), { headers: { 'x-name': encodeURIComponent(name) } });
 }
 export type ExportDeckPayload = {
   name: string;

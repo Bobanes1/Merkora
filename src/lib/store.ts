@@ -85,7 +85,7 @@ export type MockExam = {
 };
 export type MockHistory = { at: number; title: string; level: string; percent: number; grade: string; passed: boolean; scale: string };
 export type PodcastLine = { speaker: 'A' | 'B'; text: string };
-export type ChatMsg = { role: 'user' | 'assistant'; content: string };
+export type ChatMsg = { role: 'user' | 'assistant'; content: string; /** Pictures sent along (JPEG data addresses) – only for models that read images. */ images?: string[] };
 export type PathResult = { stars: number; best: number; at: number };
 
 export type Deck = {
@@ -229,6 +229,10 @@ export type Settings = {
   quizGraphics?: boolean;
   /** Take models and figures from PDF slides onto AI cards (on by default). */
   slideFigures?: boolean;
+  /** Send pictures of PDF slides with figures to the AI (default on, only for models that read images). */
+  slideImages?: boolean;
+  /** Own server ("custom"): the model reads images. */
+  customVision?: boolean;
   /** Own price in US-$ per 1M tokens (input/output) – overrides the price list. */
   priceIn?: number;
   priceOut?: number;

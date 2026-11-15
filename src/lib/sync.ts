@@ -82,6 +82,8 @@ function randomString(n = 64) {
   return b64url(a).slice(0, n);
 }
 class SyncError extends Error {}
+/** Readable text of any error (Tauri rejects with plain strings, not Error objects). */
+export const errorText = (e: unknown) => (e instanceof Error ? e.message : typeof e === 'string' ? e : '') || '';
 class NeedsLogin extends SyncError {}
 
 async function check(res: Response, what: string) {
@@ -488,19 +490,28 @@ async function doSync() {
     const localMedia = new Set((await mediaKeys()).map(String));
     let up = 0;
     let down = 0;
+    // one picture that cannot be copied does not stop the whole sync (it is tried again next time)
+    let failed = 0;
+    let firstError = '';
     for (const id of want) {
-      if (localMedia.has(id) && !remoteMedia.has(id)) {
-        const rec = await mediaGet(id);
-        if (rec) {
-          await r.putMedia(id, rec.blob);
-          up++;
+      try {
+        if (localMedia.has(id) && !remoteMedia.has(id)) {
+          const rec = await mediaGet(id);
+          if (rec) {
+            await r.putMedia(id, rec.blob);
+            up++;
+          }
+        } else if (!localMedia.has(id) && remoteMedia.has(id)) {
+          const blob = await r.getMedia(id, remoteMedia.get(id));
+          if (blob) {
+            await mediaPutMany([{ id, rec: { blob, name: id, type: blob.type || 'application/octet-stream' } }]);
+            down++;
+          }
         }
-      } else if (!localMedia.has(id) && remoteMedia.has(id)) {
-        const blob = await r.getMedia(id, remoteMedia.get(id));
-        if (blob) {
-          await mediaPutMany([{ id, rec: { blob, name: id, type: blob.type || 'application/octet-stream' } }]);
-          down++;
-        }
+      } catch (e) {
+        if (e instanceof NeedsLogin) throw e;
+        failed++;
+        firstError ||= errorText(e);
       }
     }
 
@@ -511,12 +522,14 @@ async function doSync() {
     setConf({ lastSync: Date.now() });
     setStatus({
       state: 'ok',
-      text: `Synchronisiert${up || down ? ` (${up ? `${up} Bilder hochgeladen` : ''}${up && down ? ', ' : ''}${down ? `${down} Bilder geladen` : ''})` : ''}`,
+      text:
+        `Synchronisiert${up || down ? ` (${up ? `${up} Bilder hochgeladen` : ''}${up && down ? ', ' : ''}${down ? `${down} Bilder geladen` : ''})` : ''}` +
+        (failed ? ` – ${failed === 1 ? '1 Bild/Datei konnte' : `${failed} Bilder/Dateien konnten`} nicht übertragen werden (${firstError}), nächstes Mal neuer Versuch` : ''),
       at: Date.now(),
     });
   } catch (e) {
     if (e instanceof NeedsLogin) setStatus({ state: 'login', text: e.message, at: conf.lastSync });
-    else setStatus({ state: 'error', text: (e as Error).message || 'Synchronisieren fehlgeschlagen.', at: conf.lastSync });
+    else setStatus({ state: 'error', text: errorText(e) || 'Synchronisieren fehlgeschlagen.', at: conf.lastSync });
   }
 }
 

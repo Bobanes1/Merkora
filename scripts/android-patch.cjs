@@ -89,9 +89,54 @@ import android.webkit.WebView
 import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import org.json.JSONObject
 import java.io.File
 
 class MainActivity : TauriActivity() {
+  private var web: WebView? = null
+  // an update waiting for "Aus dieser Quelle zulassen": started again as soon as Merkora is back in front
+  private var waitingForPermission = false
+
+  private fun updateFile() = File(File(cacheDir, "updates").apply { mkdirs() }, "merkora-update.apk")
+  private fun mayInstall() = Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls()
+
+  // tells the page how starting the installer went (window.__merkoraInstallResult("ok" | "error: …"))
+  private fun report(result: String) {
+    val w = web ?: return
+    w.post { w.evaluateJavascript("window.__merkoraInstallResult && window.__merkoraInstallResult(" + JSONObject.quote(result) + ")", null) }
+  }
+
+  // runs on the UI thread; errors are reported instead of being lost
+  private fun launchInstaller() {
+    try {
+      val uri = FileProvider.getUriForFile(this, packageName + ".merkora.updates", updateFile())
+      val intent = Intent(Intent.ACTION_VIEW)
+        .setDataAndType(uri, "application/vnd.android.package-archive")
+        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+      startActivity(intent)
+      report("ok")
+    } catch (e: Exception) {
+      report("error: " + (e.message ?: e.toString()))
+    }
+  }
+
+  private fun installOrAsk(): String {
+    if (!updateFile().isFile) return "error: Update-Datei fehlt – bitte neu herunterladen."
+    if (!mayInstall()) {
+      waitingForPermission = true
+      runOnUiThread {
+        try {
+          startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + packageName)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (e: Exception) {
+          report("error: " + (e.message ?: e.toString()))
+        }
+      }
+      return "permission"
+    }
+    runOnUiThread { launchInstaller() }
+    return "started"
+  }
+
   // In-app update: the page downloads the new APK (Rust core) and calls MerkoraAndroid.installApk(path).
   // Only files in Merkora's own folders are accepted; Android's installer asks the person to confirm.
   inner class UpdateBridge {
@@ -101,30 +146,34 @@ class MainActivity : TauriActivity() {
         val src = File(path).canonicalFile
         val own = listOf(cacheDir, filesDir, dataDir).map { it.canonicalPath }
         if (!src.isFile || own.none { src.path.startsWith(it) } || !src.name.endsWith(".apk")) return "error: not allowed"
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
-          runOnUiThread {
-            startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + packageName)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-          }
-          return "permission"
-        }
-        val dir = File(cacheDir, "updates").apply { mkdirs() }
-        val dest = File(dir, "merkora-update.apk")
+        val dest = updateFile()
         if (src.path != dest.canonicalPath) src.copyTo(dest, overwrite = true)
-        val uri = FileProvider.getUriForFile(this@MainActivity, packageName + ".merkora.updates", dest)
-        val intent = Intent(Intent.ACTION_VIEW)
-          .setDataAndType(uri, "application/vnd.android.package-archive")
-          .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-        runOnUiThread { startActivity(intent) }
-        "ok"
+        installOrAsk()
       } catch (e: Exception) {
         "error: " + (e.message ?: e.toString())
       }
     }
+
+    /** Installs the APK downloaded before (no second download, e.g. after allowing the source). */
+    @JavascriptInterface
+    fun installDownloaded(): String = try { installOrAsk() } catch (e: Exception) { "error: " + (e.message ?: e.toString()) }
+
+    @JavascriptInterface
+    fun hasDownloaded(): Boolean = updateFile().isFile
   }
 
   override fun onWebViewCreate(webView: WebView) {
     super.onWebViewCreate(webView)
+    web = webView
     webView.addJavascriptInterface(UpdateBridge(), "MerkoraAndroid")
+  }
+
+  override fun onResume() {
+    super.onResume()
+    if (waitingForPermission && mayInstall()) {
+      waitingForPermission = false
+      launchInstaller()
+    }
   }
 
   override fun onCreate(savedInstanceState: Bundle?) {

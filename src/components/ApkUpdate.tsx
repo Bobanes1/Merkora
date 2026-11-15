@@ -1,9 +1,9 @@
 import { APP_VERSION } from '../config';
 import { ANDROID_DOWNLOAD } from '../lib/desktop';
-import { checkApkUpdate, hideApkNotice, installApkUpdate, useApkUpdate, type ApkState } from '../lib/androidUpdate';
+import { checkApkUpdate, downloadApkInBrowser, hideApkNotice, installApkUpdate, useApkUpdate, type ApkState } from '../lib/androidUpdate';
 import { IconClose, IconDownload } from './Icons';
 
-const busy = (u: ApkState) => u.status === 'downloading' || u.status === 'installing';
+const busy = (u: ApkState) => u.status === 'downloading';
 
 function Body({ u }: { u: ApkState }) {
   if (u.status === 'downloading')
@@ -19,14 +19,21 @@ function Body({ u }: { u: ApkState }) {
     return (
       <>
         <b>Installieren …</b>
-        <small>Tippe im Android-Fenster auf „Installieren“. Dein Lernstand bleibt erhalten.</small>
+        <small>Tippe im Android-Fenster auf „Installieren“. Dein Lernstand bleibt erhalten. Kein Fenster? Tippe auf „Nochmal“.</small>
+      </>
+    );
+  if (u.status === 'ready')
+    return (
+      <>
+        <b>Version {u.version} ist bereit</b>
+        <small>Schon heruntergeladen – tippe auf „Installieren“ und bestätige im Android-Fenster.</small>
       </>
     );
   if (u.status === 'permission')
     return (
       <>
         <b>Einmal erlauben</b>
-        <small>Android fragt einmal, ob Merkora Updates installieren darf: „Aus dieser Quelle zulassen“ einschalten, zurückkehren und nochmal auf „Installieren“ tippen.</small>
+        <small>Android fragt einmal, ob Merkora Updates installieren darf: „Aus dieser Quelle zulassen“ einschalten und zurück zu Merkora – die Installation startet dann von selbst.</small>
       </>
     );
   return (
@@ -41,7 +48,7 @@ function Body({ u }: { u: ApkState }) {
 /** Android: banner at the top when a newer version exists – update with one tap. */
 export function ApkUpdateNotice() {
   const u = useApkUpdate();
-  const show = ['available', 'downloading', 'installing', 'permission'].includes(u.status) || (u.status === 'error' && !!u.version);
+  const show = ['available', 'downloading', 'installing', 'ready', 'permission'].includes(u.status) || (u.status === 'error' && !!u.version);
   if (!show || (u.hidden && !busy(u))) return null;
   return (
     <div className="update-notice" role="status">
@@ -52,8 +59,13 @@ export function ApkUpdateNotice() {
       {!busy(u) && (
         <>
           <button type="button" className="btn primary sm" onClick={() => void installApkUpdate()}>
-            {u.status === 'error' ? 'Nochmal versuchen' : u.status === 'permission' ? 'Installieren' : 'Jetzt aktualisieren'}
+            {u.status === 'error' ? 'Nochmal versuchen' : u.status === 'installing' ? 'Nochmal' : u.status === 'permission' || u.status === 'ready' ? 'Installieren' : 'Jetzt aktualisieren'}
           </button>
+          {u.status === 'error' && (
+            <button type="button" className="btn ghost sm" onClick={() => void downloadApkInBrowser()} title="Lädt die neue Version im Browser – danach die Datei antippen">
+              Im Browser laden
+            </button>
+          )}
           <button type="button" className="icon-btn" aria-label="Später" title="Später" onClick={hideApkNotice}>
             <IconClose size={16} />
           </button>
@@ -73,7 +85,7 @@ export function ApkUpdatePanel() {
         Version {APP_VERSION}. Merkora sucht beim Start nach neuen Versionen und installiert sie auf Wunsch – dein Lernstand bleibt erhalten.
       </p>
       <div className="row-gap">
-        {u.status === 'available' || u.status === 'permission' || (u.status === 'error' && u.version) ? (
+        {u.status === 'available' || u.status === 'ready' || u.status === 'installing' || u.status === 'permission' || (u.status === 'error' && u.version) ? (
           <button type="button" className="btn primary" onClick={() => void installApkUpdate()}>
             Version {u.version} installieren
           </button>

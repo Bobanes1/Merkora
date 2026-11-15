@@ -21,7 +21,7 @@ export function isNewerVersion(a: string, b: string): boolean {
 }
 
 export type ApkState = {
-  status: 'idle' | 'checking' | 'none' | 'available' | 'downloading' | 'installing' | 'permission' | 'error';
+  status: 'idle' | 'checking' | 'none' | 'available' | 'downloading' | 'installing' | 'ready' | 'permission' | 'error';
   version?: string;
   notes?: string;
   progress?: number;
@@ -47,7 +47,6 @@ export async function checkApkUpdate(manual = false): Promise<void> {
     try {
       const last = Number(localStorage.getItem(LAST_CHECK) || 0);
       if (Date.now() - last < CHECK_EVERY) return;
-      localStorage.setItem(LAST_CHECK, String(Date.now()));
     } catch {
       /* no storage: check anyway */
     }
@@ -59,28 +58,82 @@ export async function checkApkUpdate(manual = false): Promise<void> {
     if (!res.ok) throw new Error(`GitHub antwortet nicht (${res.status}).`);
     const j = (await res.json()) as { version?: string; notes?: string };
     const v = String(j.version ?? '').replace(/^v/i, '');
-    if (v && isNewerVersion(v, APP_VERSION)) set({ status: 'available', version: v, notes: j.notes, hidden: false });
+    try {
+      localStorage.setItem(LAST_CHECK, String(Date.now()));
+    } catch {
+      /* no storage */
+    }
+    if (v && isNewerVersion(v, APP_VERSION)) set({ status: downloadedFor(v) ? 'ready' : 'available', version: v, notes: j.notes, hidden: false });
     else set({ status: 'none' });
   } catch (e) {
     set({ status: manual ? 'error' : 'idle', error: `Suche nach Updates fehlgeschlagen: ${(e as Error).message}` });
   }
 }
 
-type Bridge = { installApk: (path: string) => string };
+type Bridge = { installApk: (path: string) => string; installDownloaded?: () => string; hasDownloaded?: () => boolean };
+const bridge = () => (window as unknown as { MerkoraAndroid?: Bridge }).MerkoraAndroid;
+/** Which version's APK is already downloaded (so "Installieren" does not download it again). */
+const DOWNLOADED = 'merkora.apkDownloaded';
+function downloadedFor(v: string): boolean {
+  try {
+    return localStorage.getItem(DOWNLOADED) === v && !!bridge()?.hasDownloaded?.();
+  } catch {
+    return false;
+  }
+}
+
+/** The answer of MainActivity after trying to open Android's installer ("ok" or "error: …"). */
+function waitForInstaller(ms = 5000): Promise<string> {
+  return new Promise((resolve) => {
+    const w = window as unknown as { __merkoraInstallResult?: (r: string) => void };
+    const t = setTimeout(() => {
+      w.__merkoraInstallResult = laterAnswer;
+      resolve('timeout');
+    }, ms);
+    w.__merkoraInstallResult = (r) => {
+      clearTimeout(t);
+      w.__merkoraInstallResult = laterAnswer;
+      resolve(r);
+    };
+  });
+}
+/** Answers that come later – e.g. after "Aus dieser Quelle zulassen" MainActivity starts the installer by itself. */
+const laterAnswer = (r: string) => set(afterInstallAnswer(r));
+if (typeof window !== 'undefined') (window as unknown as { __merkoraInstallResult?: (r: string) => void }).__merkoraInstallResult = laterAnswer;
+
+/** What the bridge answered → the next state of the banner. Pure – tested. */
+export function afterInstallAnswer(r: string): Partial<ApkState> {
+  if (r === 'ok' || r === 'timeout') return { status: 'installing' };
+  if (r === 'permission') return { status: 'permission' };
+  return { status: 'error', error: 'Android konnte den Installer nicht öffnen: ' + r.replace(/^error:\s*/, '') };
+}
+
+async function startInstaller(run: () => string) {
+  const answer = waitForInstaller();
+  const r = run();
+  if (r === 'started') set(afterInstallAnswer(await answer));
+  else set(afterInstallAnswer(r));
+}
 
 export async function installApkUpdate(): Promise<void> {
   if (!state.version) return;
-  const url = apkUrl(state.version);
-  const bridge = (window as unknown as { MerkoraAndroid?: Bridge }).MerkoraAndroid;
+  const v = state.version;
+  const url = apkUrl(v);
+  const b = bridge();
   const { invoke } = await import('@tauri-apps/api/core');
   const { openExternal } = await import('./desktop');
-  if (!bridge) {
+  if (!b) {
     // older app without the bridge: download in the browser
     openExternal(url);
     return;
   }
-  set({ status: 'downloading', progress: 0, error: undefined });
+  set({ error: undefined });
   try {
+    if (b.installDownloaded && downloadedFor(v)) {
+      await startInstaller(() => b.installDownloaded!());
+      return;
+    }
+    set({ status: 'downloading', progress: 0 });
     const { listen } = await import('@tauri-apps/api/event');
     const off = await listen<number>('apk-progress', (e) => set({ progress: e.payload }));
     let path: string;
@@ -90,13 +143,29 @@ export async function installApkUpdate(): Promise<void> {
       off();
     }
     set({ status: 'installing', progress: 1 });
-    const r = bridge.installApk(path);
-    if (r === 'permission') set({ status: 'permission' });
-    else if (r !== 'ok') throw new Error(r.replace(/^error:\s*/, ''));
+    await startInstaller(() => b.installApk(path));
+    try {
+      localStorage.setItem(DOWNLOADED, v);
+    } catch {
+      /* no storage */
+    }
   } catch (e) {
     set({ status: 'error', error: String((e as Error)?.message ?? e) });
   }
 }
+
+/** The APK in the browser – when Android's installer cannot be opened from the app. */
+export async function downloadApkInBrowser() {
+  if (!state.version) return;
+  const { openExternal } = await import('./desktop');
+  openExternal(apkUrl(state.version));
+}
+
+// back in Merkora without the update installed (installer closed, or "Später"): offer installing again
+if (typeof document !== 'undefined')
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && state.status === 'installing') setTimeout(() => state.status === 'installing' && set({ status: 'ready' }), 1500);
+  });
 
 export function startApkUpdateChecks() {
   setTimeout(() => void checkApkUpdate(), 4000);

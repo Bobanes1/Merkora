@@ -25,6 +25,8 @@ import {
   type RemoteMode,
 } from './ai';
 import { withGraphics } from './graphics';
+import { renderSlides, slidesInPart } from './slideImages';
+import { deckFileBlob } from './deckFiles';
 import { avoidList } from './chunks';
 import { cardFrontText } from './content';
 import { addCards, addJob, getState, patchJob, subscribe, updateDeck, type Deck, type Job, type JobKind } from './store';
@@ -72,7 +74,7 @@ function notifyBrowser(title: string, body: string) {
 }
 
 // ---------- prompts ----------
-function promptFor(job: Job, deck: Deck): Prompt {
+function promptFor(job: Job, deck: Deck, slides: string[] = []): Prompt {
   const p = job.params as { count?: number; minutes?: number; focus?: string; text?: string; graphics?: boolean };
   switch (job.kind) {
     case 'summary':
@@ -88,6 +90,7 @@ function promptFor(job: Job, deck: Deck): Prompt {
         !!p.graphics,
         part && part.n > 1 ? { i: part.i, n: part.n, avoid: part.i > 1 ? avoidList(deck.cards.map(cardFrontText)) : [] } : undefined,
         !!(job.params as CardParams).figureSet,
+        slides,
       );
     }
   }
@@ -104,13 +107,15 @@ type CardParams = {
   graphics?: boolean;
   /** PDF slides with figures of this run (lib/figureFiles.ts) – the AI may name one per card. */
   figureSet?: string;
+  /** Send pictures of the marked slides of this part (the PDFs are stored with the deck). */
+  slideImages?: boolean;
   part?: { i: number; n: number };
   rest?: string[];
   counts?: number[];
 };
 
 /** Starts card creation for one or several parts (several = one after another, without repeating cards). */
-export function startCardJobs(deck: Deck, parts: string[], o: { counts: number[]; focus: string; graphics: boolean; figureSet?: string }) {
+export function startCardJobs(deck: Deck, parts: string[], o: { counts: number[]; focus: string; graphics: boolean; figureSet?: string; slideImages?: boolean }) {
   if (!parts.length) return;
   const n = parts.length;
   const params: CardParams = {
@@ -119,6 +124,7 @@ export function startCardJobs(deck: Deck, parts: string[], o: { counts: number[]
     focus: o.focus,
     graphics: o.graphics,
     ...(o.figureSet ? { figureSet: o.figureSet } : {}),
+    ...(o.slideImages ? { slideImages: true } : {}),
     ...(n > 1 ? { part: { i: 1, n }, rest: parts.slice(1), counts: o.counts.slice(1) } : {}),
   };
   return addJob({ kind: 'cards', deckId: deck.id, title: partTitle(deck, params), params });
@@ -142,6 +148,11 @@ function nextPart(job: Job, deck: Deck) {
   return true;
 }
 
+/** How many of the cards just added carry a graphic (shown in the "fertig" message). */
+let lastGraphics = 0;
+/** "12 Karten, davon 4 mit Grafik" */
+export const madeText = (n: number, g: number) => `${n} ${n === 1 ? 'Karte' : 'Karten'}${g ? `, davon ${g} mit Grafik` : ''}`;
+
 async function applyResult(job: Job, text: string) {
   switch (job.kind) {
     case 'summary':
@@ -155,6 +166,7 @@ async function applyResult(job: Job, text: string) {
       const part = (job.params as CardParams).part;
       const cards = await withGraphics(parseCards(text, !!part && part.n > 1), (job.params as CardParams).figureSet);
       addCards(job.deckId, cards);
+      lastGraphics = cards.filter((c) => /data-diagram=|slide-figure|<svg/.test(c.back)).length;
       return cards.length;
     }
   }
@@ -182,10 +194,10 @@ async function finish(job: Job, text: string) {
     const part = (job.params as CardParams).part;
     const nothing = made === 0 && part ? ` Teil ${part.i} enthielt nichts Prüfungsrelevantes (z. B. nur Literatur) – dafür keine Karten.` : '';
     if (nextPart(job, deck)) {
-      pushToast({ text: `Teil ${part!.i} von ${part!.n} für „${deck.name}“ ist fertig – Teil ${part!.i + 1} läuft.${nothing}`, jobId: job.id, ok: true });
+      pushToast({ text: `Teil ${part!.i} von ${part!.n} für „${deck.name}“ ist fertig (${madeText(made ?? 0, lastGraphics)}) – Teil ${part!.i + 1} läuft.${nothing}`, jobId: job.id, ok: true });
       return;
     }
-    const msg = `${JOB_LABEL[job.kind]} für „${deck.name}“ ${part && part.n > 1 ? `(alle ${part.n} Teile) ` : ''}${job.kind === 'cards' ? 'sind' : 'ist'} fertig.${nothing}`;
+    const msg = `${JOB_LABEL[job.kind]} für „${deck.name}“ ${part && part.n > 1 ? `(alle ${part.n} Teile) ` : ''}${job.kind === 'cards' ? 'sind' : 'ist'} fertig${job.kind === 'cards' && made !== undefined ? ` (${part && part.n > 1 ? 'letzter Teil: ' : ''}${madeText(made, lastGraphics)})` : ''}.${nothing}`;
     pushToast({ text: msg, jobId: job.id, ok: true });
     notifyBrowser('Fertig!', msg);
   } catch (e) {
@@ -214,12 +226,38 @@ export function retryJob(id: string) {
   patchJob(id, { status: 'queued', error: undefined, finishedAt: undefined, remoteId: undefined, mode: undefined, attempts: 0 });
 }
 
+/** The slides of this part that are sent as pictures (empty when switched off or nothing is marked). */
+function slidesOf(job: Job, deck: Deck) {
+  const p = job.params as CardParams;
+  return job.kind === 'cards' && p.slideImages ? slidesInPart(p.text || deck.source) : [];
+}
+
+/** The prompt, with pictures of the part's slides from the PDFs stored with the deck. */
+async function promptWithSlides(job: Job, deck: Deck): Promise<Prompt> {
+  const wanted = slidesOf(job, deck);
+  if (!wanted.length) return promptFor(job, deck);
+  const byName = async (name: string) => {
+    const f = (deckOf(job) ?? deck).files?.find((x) => x.name === name);
+    return f ? deckFileBlob(f.id) : null;
+  };
+  const slides = await renderSlides(wanted, byName);
+  const p = promptFor(job, deck, slides.map((x) => x.label));
+  return slides.length ? { ...p, images: slides.map((x) => x.url) } : p;
+}
+
+let droppedToast = false;
+const imagesDropped = () => {
+  if (droppedToast) return;
+  droppedToast = true;
+  pushToast({ text: 'Dieses KI-Modell kann keine Bilder lesen – für die Folien wurde nur ihr Text verwendet.', ok: true });
+};
+
 async function runInTab(job: Job, deck: Deck) {
   if (localRunning.has(job.id)) return;
   localRunning.add(job.id);
   patchJob(job.id, { status: 'running', mode: 'tab', attempts: (job.attempts ?? 0) + 1 });
   try {
-    const text = await runPrompt(promptFor(job, deck));
+    const text = await runPrompt(await promptWithSlides(job, deck), undefined, imagesDropped);
     await finish(job, text);
   } catch (e) {
     fail(job, e);
@@ -256,7 +294,8 @@ async function poll(id: string) {
 async function start(job: Job) {
   const deck = deckOf(job);
   if (!deck) return fail(job, new Error('Das Deck gibt es nicht mehr.'));
-  const mode = remoteModeFor();
+  // with slide pictures the job runs here (background modes at the provider would need the pictures stored there)
+  const mode = slidesOf(job, deck).length ? null : remoteModeFor();
   if (mode) {
     localRunning.add(job.id);
     patchJob(job.id, { status: 'running', mode });

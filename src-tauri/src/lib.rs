@@ -68,10 +68,28 @@ fn header(req: &Request<'_>, name: &str) -> String {
     percent_encoding::percent_decode_str(raw).decode_utf8_lossy().into_owned()
 }
 
+/// The bytes of a file sent from the page. On the PC they arrive raw; on Android Tauri sends every call as JSON,
+/// so Merkora sends {"b64": "…"} there (a plain number list is accepted too).
+fn body_bytes(body: &InvokeBody) -> Result<Vec<u8>, String> {
+    match body {
+        InvokeBody::Raw(bytes) => Ok(bytes.clone()),
+        InvokeBody::Json(serde_json::Value::Object(o)) => match o.get("b64").and_then(|v| v.as_str()) {
+            Some(b) => base64::engine::general_purpose::STANDARD.decode(b).map_err(|_| "Daten beschädigt.".to_string()),
+            None => Err("Keine Daten erhalten.".into()),
+        },
+        InvokeBody::Json(serde_json::Value::Array(a)) => a
+            .iter()
+            .map(|v| v.as_u64().filter(|n| *n <= 255).map(|n| n as u8))
+            .collect::<Option<Vec<u8>>>()
+            .ok_or_else(|| "Daten beschädigt.".to_string()),
+        _ => Err("Keine Daten erhalten.".into()),
+    }
+}
+
 #[tauri::command]
 async fn media_put(request: Request<'_>) -> Result<(), String> {
-    let InvokeBody::Raw(bytes) = request.body() else { return Err("Keine Daten erhalten.".into()) };
-    storage::media_put(&header(&request, "x-id"), &header(&request, "x-name"), &header(&request, "x-type"), bytes)
+    let bytes = body_bytes(request.body())?;
+    storage::media_put(&header(&request, "x-id"), &header(&request, "x-name"), &header(&request, "x-type"), &bytes)
 }
 
 #[tauri::command]
@@ -127,8 +145,7 @@ fn do_import(bytes: &[u8]) -> Result<ImportResult, String> {
 
 #[tauri::command]
 async fn import_apkg(request: Request<'_>) -> Result<ImportResult, String> {
-    let InvokeBody::Raw(bytes) = request.body() else { return Err("Keine Datei erhalten.".into()) };
-    let bytes = bytes.clone();
+    let bytes = body_bytes(request.body()).map_err(|_| "Keine Datei erhalten.".to_string())?;
     tauri::async_runtime::spawn_blocking(move || do_import(&bytes)).await.map_err(|e| e.to_string())?
 }
 
@@ -174,8 +191,8 @@ fn reveal(path: &std::path::Path) {
 
 #[tauri::command]
 async fn save_download(request: Request<'_>) -> Result<String, String> {
-    let InvokeBody::Raw(bytes) = request.body() else { return Err("Keine Daten erhalten.".into()) };
-    save_to_downloads(&header(&request, "x-name"), bytes)
+    let bytes = body_bytes(request.body())?;
+    save_to_downloads(&header(&request, "x-name"), &bytes)
 }
 
 #[tauri::command]
@@ -324,6 +341,21 @@ fn open_media_file(id: String, name: String) -> Result<(), String> {
     {
         let _ = (id, name);
         Err("Auf dem Handy bitte „Herunterladen“ nutzen.".into())
+    }
+}
+
+#[cfg(test)]
+mod body_tests {
+    use super::body_bytes;
+    use tauri::ipc::InvokeBody;
+    #[test]
+    fn bytes_from_pc_and_android() {
+        assert_eq!(body_bytes(&InvokeBody::Raw(vec![1, 2, 255])).unwrap(), vec![1, 2, 255]);
+        assert_eq!(body_bytes(&InvokeBody::Json(serde_json::json!({ "b64": "AQL/" }))).unwrap(), vec![1, 2, 255]);
+        assert_eq!(body_bytes(&InvokeBody::Json(serde_json::json!([1, 2, 255]))).unwrap(), vec![1, 2, 255]);
+        assert!(body_bytes(&InvokeBody::Json(serde_json::json!([1, 256]))).is_err());
+        assert!(body_bytes(&InvokeBody::Json(serde_json::json!({ "b64": "%%" }))).is_err());
+        assert!(body_bytes(&InvokeBody::Json(serde_json::json!({}))).is_err());
     }
 }
 

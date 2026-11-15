@@ -1196,6 +1196,69 @@ console.log('Grafik beim Lernen abfragen');
   ok(r && r.back === '\\( a \\) und **b**', 'JSON-Reparatur behält LaTeX-Backslashes');
 }
 
+console.log('Folien-Bilder für die KI');
+{
+  // the app's store reads browser storage when loaded: a small stand-in for these tests
+  if (typeof (globalThis as any).localStorage === 'undefined') {
+    const mem = new Map<string, string>();
+    (globalThis as any).localStorage = { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, String(v)), removeItem: (k: string) => void mem.delete(k), clear: () => mem.clear(), key: (i: number) => [...mem.keys()][i] ?? null, get length() { return mem.size; } };
+    (globalThis as any).sessionStorage = (globalThis as any).localStorage;
+  }
+  const { providerMessages, supportsImages, imagesRejected, cardsPrompt, AiError, rememberVision } = await import('../src/lib/ai');
+  const img = 'data:image/jpeg;base64,QUJD';
+  const msgs = [{ role: 'user' as const, content: 'Text', images: [img] }, { role: 'assistant' as const, content: 'ok', images: [img] }];
+  const oa = providerMessages('openai', msgs) as any[];
+  ok(Array.isArray(oa[0].content) && oa[0].content[0].type === 'text' && oa[0].content[1].image_url.url === img && oa[1].content === 'ok', 'OpenAI/OpenRouter: Bild als image_url, nur bei Nutzer-Nachrichten');
+  const an = providerMessages('anthropic', msgs) as any[];
+  ok(an[0].content[0].type === 'image' && an[0].content[0].source.data === 'QUJD' && an[0].content[0].source.media_type === 'image/jpeg' && an[0].content[1].text === 'Text', 'Claude: Bild als base64-Block vor dem Text');
+  const ge = providerMessages('gemini', msgs) as any[];
+  ok(ge[0].parts[0].inline_data.data === 'QUJD' && ge[0].parts[1].text === 'Text' && ge[1].role === 'model' && ge[1].parts.length === 1, 'Gemini: inline_data');
+  ok((providerMessages('openai', [{ role: 'user', content: 'nur Text' }]) as any[])[0].content === 'nur Text', 'ohne Bilder bleibt die Nachricht reiner Text');
+  ok(supportsImages({ provider: 'anthropic', model: 'x' }) && supportsImages({ provider: 'gemini', model: 'y' }), 'Claude und Gemini lesen Bilder');
+  ok(supportsImages({ provider: 'openai', model: 'gpt-4o-mini' }) && supportsImages({ provider: 'openai', model: 'gpt-5' }) && !supportsImages({ provider: 'openai', model: 'gpt-3.5-turbo' }), 'OpenAI je nach Modell');
+  ok(!supportsImages({ provider: 'custom', model: 'llama' }, false) && supportsImages({ provider: 'custom', model: 'llama' }, true), 'eigener Server nur mit Haken');
+  ok(supportsImages({ provider: 'openrouter', model: 'nvidia/nemotron-3.5-super-vl:free' }) && !supportsImages({ provider: 'openrouter', model: 'deepseek/deepseek-chat' }), 'OpenRouter ohne Liste: nach dem Namen');
+  rememberVision([{ id: 'deepseek/deepseek-chat', architecture: { input_modalities: ['text'] } }, { id: 'foo/bar', architecture: { input_modalities: ['text', 'image'] } }]);
+  ok(supportsImages({ provider: 'openrouter', model: 'foo/bar' }) && !supportsImages({ provider: 'openrouter', model: 'deepseek/deepseek-chat' }), 'OpenRouter: Angaben aus der Modellliste zählen');
+  ok(imagesRejected(new AiError('No endpoints found that support image input')) && !imagesRejected(new AiError('Der API-Key wurde abgelehnt (invalid image key).')) && !imagesRejected(new Error('image')), 'abgelehnte Bilder werden erkannt');
+  const withSlides = cardsPrompt('Material', 5, '', true, undefined, false, ['Folie 3 aus a.pdf', 'Folie 9 aus a.pdf']);
+  ok(withSlides.system.includes('Angehängt sind Bilder') && withSlides.user.includes('Bild 1 = Folie 3 aus a.pdf; Bild 2 = Folie 9 aus a.pdf'), 'Prompt nennt die angehängten Folien');
+  const plain = cardsPrompt('Material', 5, '', true);
+  ok(!plain.system.includes('Angehängt sind Bilder') && plain.system.includes('etwa jeder dritten Karte') && plain.system.includes('"diagram":{"type":"flow"') && !plain.system.includes('(optional)'), 'Grafik-Ziel im Prompt, Bilder-Hinweis nur mit Bildern');
+  ok(plain.maxTokens === 400 + 5 * 500, 'mehr Platz pro Karte mit Grafik');
+
+  const { slidesInPart } = await import('../src/lib/slideImages');
+  const part = 'x\n[Abbildung 1 – Folie 3 aus V1.pdf]\nText\n[Abbildung 2 – Folie 7 aus V 2.pdf]\n[Abbildung 1 – Folie 3 aus V1.pdf]\n' + Array.from({ length: 12 }, (_, i) => `[Abbildung ${i + 3} – Folie ${i + 10} aus V1.pdf]`).join('\n');
+  const sl = slidesInPart(part);
+  ok(sl.length === 8 && sl[0].file === 'V1.pdf' && sl[0].page === 3 && sl[1].file === 'V 2.pdf' && sl[1].page === 7 && sl.filter((x) => x.page === 3).length === 1, 'Folien eines Teils: in Reihenfolge, ohne Doppelte, höchstens 8');
+  ok(slidesInPart('kein Marker').length === 0, 'ohne markierte Folien keine Bilder');
+}
+
+console.log('Grafiken: tolerantes Lesen');
+{
+  const { parseDiagram, normalizeDiagram } = await import('../src/lib/diagram');
+  const { parseCards } = await import('../src/lib/ai');
+  ok(parseDiagram('{"type":"flow","steps":["A","B","C"]}')?.type === 'flow', 'Grafik als JSON-Text');
+  ok(parseDiagram({ diagram: { type: 'cycle', steps: ['A', 'B', 'C'] } })?.type === 'cycle', 'doppelt verpackte Grafik');
+  ok(parseDiagram({ type: 'Ablauf', steps: ['A', 'B'] })?.type === 'flow' && parseDiagram({ type: 'Kreisdiagramm', slices: [{ label: 'a', value: 1 }, { label: 'b', value: 2 }] })?.type === 'pie' && parseDiagram({ type: 'ishikawa', effect: 'X', causes: [{ label: 'a', items: [] }, { label: 'b', items: [] }] })?.type === 'fishbone', 'andere Namen für die Formen');
+  ok((normalizeDiagram({ type: 'kurve', x: 'Zeit', y: 'Wert', shape: 'steigend' }) as any).type === 'axes', 'Kurve ohne Formel bleibt eine Skizze');
+  ok(normalizeDiagram('kein json') === null && parseDiagram({ type: 'unbekannt' }) === null, 'Unlesbares → keine Grafik');
+  const cards = parseCards('{"cards":[{"front":"F","back":"A","diagram":"{\\"type\\":\\"flow\\",\\"steps\\":[\\"a\\",\\"b\\"]}"}]}');
+  ok(typeof cards[0].diagram === 'string' && parseDiagram(cards[0].diagram)?.type === 'flow', 'Karte mit Grafik als Text behält die Grafik');
+  const { madeText } = await import('../src/lib/jobs');
+  ok(madeText(12, 4) === '12 Karten, davon 4 mit Grafik' && madeText(1, 0) === '1 Karte', 'Meldung zählt die Grafiken');
+}
+
+console.log('Handy: Update und Synchronisieren');
+{
+  const { afterInstallAnswer } = await import('../src/lib/androidUpdate');
+  ok(afterInstallAnswer('ok').status === 'installing' && afterInstallAnswer('timeout').status === 'installing' && afterInstallAnswer('permission').status === 'permission', 'Installer gestartet / Erlaubnis nötig');
+  const e = afterInstallAnswer('error: No Activity found');
+  ok(e.status === 'error' && e.error === 'Android konnte den Installer nicht öffnen: No Activity found', 'Fehler beim Öffnen wird angezeigt');
+  const { errorText } = await import('../src/lib/sync');
+  ok(errorText('Keine Daten erhalten.') === 'Keine Daten erhalten.' && errorText(new Error('x')) === 'x' && errorText(undefined) === '', 'Fehler als Text (auch wenn Tauri nur Text liefert)');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

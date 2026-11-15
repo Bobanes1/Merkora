@@ -170,7 +170,52 @@ const iconKey = (v: unknown) =>
     .replace(/ß/g, 'ss')
     .replace(/[^a-z]/g, '');
 
-export function parseDiagram(raw: unknown): Diagram | null {
+/** Other names the AI uses for the forms (German or English). */
+const TYPE_ALIASES: Record<string, string> = {
+  process: 'flow', ablauf: 'flow', prozess: 'flow', steps: 'flow', sequence: 'flow', flowchart: 'flow',
+  kreislauf: 'cycle', zyklus: 'cycle', loop: 'cycle',
+  tree: 'hierarchy', gliederung: 'hierarchy', baum: 'hierarchy',
+  comparison: 'compare', vergleich: 'compare', table: 'compare', tabelle: 'compare',
+  zeitstrahl: 'timeline', zeitleiste: 'timeline',
+  begriff: 'concept', merkmale: 'concept',
+  quadrant: 'matrix', vierfeldertafel: 'matrix', swot: 'matrix',
+  modell: 'model', causal: 'model',
+  stufen: 'pyramid', stufenmodell: 'pyramid',
+  bar: 'bars', balken: 'bars', 'bar-chart': 'bars', barchart: 'bars', balkendiagramm: 'bars',
+  entscheidungsbaum: 'decision', 'decision-tree': 'decision',
+  function: 'plot', graph: 'plot', kurve: 'plot', funktion: 'plot',
+  kreisdiagramm: 'pie', 'pie-chart': 'pie', piechart: 'pie', tortendiagramm: 'pie',
+  ishikawa: 'fishbone', 'ursache-wirkung': 'fishbone', 'cause-effect': 'fishbone',
+  zahlenstrahl: 'numberline', 'number-line': 'numberline', skala: 'numberline', scale: 'numberline',
+  netz: 'network', netzwerk: 'network', begriffsnetz: 'network', 'concept-map': 'network', graphnetwork: 'network',
+};
+
+/**
+ * Small mistakes of the AI are forgiven: the diagram as a JSON text, wrapped once more ({"diagram": {…}}),
+ * or with another name for the form ("ablauf", "kreisdiagramm" …). A curve without formula stays a sketch ("axes").
+ */
+export function normalizeDiagram(raw: unknown): unknown {
+  let r = raw;
+  if (typeof r === 'string') {
+    try {
+      r = JSON.parse(r);
+    } catch {
+      return null;
+    }
+  }
+  if (r && typeof r === 'object' && !Array.isArray(r)) {
+    const o = r as Record<string, unknown>;
+    if (!o.type && o.diagram && typeof o.diagram === 'object') return normalizeDiagram(o.diagram);
+    const t = String(o.type ?? '').toLowerCase().trim().replace(/[\s_]+/g, '-');
+    let type = TYPE_ALIASES[t] ?? TYPE_ALIASES[t.replace(/-/g, '')] ?? t;
+    if (type === 'plot' && !Array.isArray(o.functions)) type = 'axes';
+    if (type !== o.type) return { ...o, type };
+  }
+  return r;
+}
+
+export function parseDiagram(input: unknown): Diagram | null {
+  const raw = normalizeDiagram(input);
   const d = parseBase(raw);
   if (!d) return null;
   const given = (raw as { icons?: unknown }).icons;
@@ -1532,7 +1577,7 @@ export function diagramsToSvg(html: string): string {
 
 // ---------- instruction for the AI ----------
 /** What the AI is told when cards may get a graphic: describe it, never draw it. */
-export const DIAGRAM_RULE = `Wo eine Grafik das Verständnis wirklich verbessert (Abläufe, Gliederungen, Vergleiche, Modelle, Kurven), ergänze das Feld "diagram" mit einer kurzen Beschreibung – kein SVG, keine Koordinaten, Merkora zeichnet sie selbst. Sonst lass "diagram" weg.
+export const DIAGRAM_RULE = `Grafiken: Gib etwa jeder dritten Karte das Feld "diagram" mit – überall, wo das Material Abläufe, Modelle, Gliederungen, Vergleiche, Zahlen, Formeln, Kurven oder Zusammenhänge enthält, besonders bei Karten zu Modellen, Prozessen und Theorien. Wähle die Form, die den Inhalt am klarsten zeigt. Nur eine kurze Beschreibung – kein SVG, keine Koordinaten, Merkora zeichnet sie selbst. Karten zu einzelnen Begriffen oder reinen Fakten brauchen keine Grafik.
 Beschriftungen sind kurze Stichworte (höchstens 6 Wörter). Erlaubte Formen (genau eine wählen):
 {"type":"flow","title":"…","steps":["Planung","Erhebung"],"icons":{"Planung":"kalender","Erhebung":"liste"}} – Ablauf, 2–8 Schritte
 {"type":"cycle","title":"…","steps":["…","…","…"]} – Kreislauf, 3–8 Schritte

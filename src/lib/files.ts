@@ -113,12 +113,13 @@ export async function renderPdfPage(file: Blob, pageNo: number, width = 1400): P
 }
 
 /** An opened PDF for leafing through its slides (loaded once, every slide rendered on demand). */
-export async function openPdf(file: Blob): Promise<{ pages: number; render: (pageNo: number, width?: number) => Promise<Blob>; close: () => void }> {
+export async function openPdf(file: Blob): Promise<{ pages: number; render: (pageNo: number, width?: number, background?: boolean) => Promise<Blob>; close: () => void }> {
   const { doc } = await loadPdf(file);
-  return { pages: doc.numPages, render: (n, w = 1400) => renderPage(doc, n, w), close: () => void doc.destroy() };
+  return { pages: doc.numPages, render: (n, w = 1400, bg = false) => renderPage(doc, n, w, bg), close: () => void doc.destroy() };
 }
 
-async function renderPage(doc: Awaited<ReturnType<typeof loadPdf>>['doc'], pageNo: number, width: number): Promise<Blob> {
+/** `background`: drawn without waiting for screen frames (they stop while the app is hidden) – for pictures sent to the AI. */
+async function renderPage(doc: Awaited<ReturnType<typeof loadPdf>>['doc'], pageNo: number, width: number, background = false): Promise<Blob> {
   const page = await doc.getPage(pageNo);
   const base = page.getViewport({ scale: 1 });
   const viewport = page.getViewport({ scale: width / base.width });
@@ -128,7 +129,7 @@ async function renderPage(doc: Awaited<ReturnType<typeof loadPdf>>['doc'], pageN
   const ctx = canvas.getContext('2d')!;
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  await page.render({ canvasContext: ctx, viewport, canvas } as never).promise;
+  await page.render({ canvasContext: ctx, viewport, canvas, ...(background ? { intent: 'print' } : {}) } as never).promise;
   page.cleanup();
   return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Folie konnte nicht als Bild gespeichert werden.'))), 'image/jpeg', 0.85));
 }
