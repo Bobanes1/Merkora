@@ -7767,3 +7767,45 @@ a.deck-row:hover {
   flex: 1;
   min-width: 160px;
 }
+
+/* start page: weekly review compact, with room below the banner, without its own Pip */
+.home-main > .week-review {
+  margin-top: 16px;
+}
+.week-review.compact {
+  gap: 10px;
+  padding: 16px 18px;
+}
+.week-review.compact .panel-head {
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.week-review.compact .panel-head h2 {
+  font-size: 17px;
+}
+.week-say {
+  flex: 1;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.week-review.compact .week-tiles {
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 6px;
+}
+.week-review.compact .week-tiles > div {
+  padding: 7px 10px;
+  border-radius: var(--r-md);
+}
+.week-review.compact .week-tiles b {
+  font-size: 16px;
+}
+.week-review.compact .week-tiles small {
+  font-size: 11px;
+}
+.week-review.compact h3 {
+  font-size: 13px;
+}
+.week-review.compact .week-decks li {
+  font-size: 13px;
+}

@@ -285,7 +285,6 @@ export default function Dashboard() {
             )}
             {!exams.length && !dueDecks.length && (
               <div className="home-empty">
-                <Mascot who="pip" mood="think" size={120} />
                 <b>Keine anstehenden Aufgaben</b>
                 <p className="muted">Alles erledigt – oder hast du vergessen, deine Prüfungstermine einzutragen?</p>
                 <button type="button" className="btn primary" onClick={() => setExam(true)}>

@@ -38,18 +38,22 @@ export function WeekReview({ always = false }: { always?: boolean }) {
           : 'Schön, dass du drangeblieben bist.';
 
   return (
-    <section className="panel week-review" aria-label="Wochenrückblick">
+    <section className={'panel week-review' + (always ? '' : ' compact')} aria-label="Wochenrückblick">
       <div className="panel-head">
         <h2>Deine Woche</h2>
+        {/* on the start page Pip is already in the banner: only his line, no second Pip */}
+        {!always && <span className="week-say">{say}</span>}
         {!always && week && (
           <button type="button" className="icon-btn" aria-label="Wochenrückblick schließen" onClick={() => closeWeekReview(week)}>
             <IconClose size={16} />
           </button>
         )}
       </div>
-      <div className="week-top">
-        <Mascot who="pip" mood={w.reviews ? 'cheer' : 'wave'} size={72} say={say} />
-      </div>
+      {always && (
+        <div className="week-top">
+          <Mascot who="pip" mood={w.reviews ? 'cheer' : 'wave'} size={72} say={say} />
+        </div>
+      )}
       <div className="week-tiles">
         <div>
           <b>{w.reviews}</b>
