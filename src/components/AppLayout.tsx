@@ -20,7 +20,9 @@ import {
   IconChart,
   IconFolder,
   IconPlus,
+  IconSearch,
 } from './Icons';
+import { SearchPalette } from './SearchPalette';
 import { InstallButton } from './InstallButton';
 import { JobsIndicator } from './Jobs';
 import { Logo } from './Logo';
@@ -133,6 +135,23 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [newDeck, setNewDeck] = useState(false);
   const [aiCourse, setAiCourse] = useState<string | null>(null);
+  // Strg+K / ⌘K or "/" (outside text fields): search everything
+  const [search, setSearch] = useState(false);
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      const typing = tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable;
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        setSearch(true);
+      } else if (e.key === '/' && !typing && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        setSearch(true);
+      }
+    };
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  }, []);
   const apiKey = useStore((s) => s.apiKey);
   const provider = useStore((s) => s.data.settings.provider);
   const { pathname } = useLocation();
@@ -167,6 +186,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
             <IconPlus size={16} />
           </span>
           Neues Deck
+        </button>
+        <button type="button" className="search-btn" onClick={() => setSearch(true)} title="Karten, Decks und Kurse durchsuchen">
+          <IconSearch size={16} />
+          <span>Suchen …</span>
+          <kbd>Strg K</kbd>
         </button>
         <div className="nav-main">
           <NavLink to="/dashboard" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
@@ -204,6 +228,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       {open && <div className="sidebar-backdrop" onClick={close} />}
       {newDeck && <NewDeckModal onClose={() => setNewDeck(false)} onAi={(courseId) => setAiCourse(courseId)} />}
       {aiCourse && <CreateWithAI courseId={aiCourse} onClose={() => setAiCourse(null)} onBack={() => (setAiCourse(null), setNewDeck(true))} />}
+      {search && <SearchPalette onClose={() => setSearch(false)} />}
       <main className="app-main">
         <FocusBar />
         <UpdateNotice />

@@ -6,7 +6,7 @@ import { SpeakButton } from './SpeakButton';
 import { MarkButton } from './MarkButton';
 import { capForExam, nextExamAt } from '../lib/exams';
 import { RATINGS, formatDelay, schedule, type Rating } from '../lib/srs';
-import { addXp, logReview, reviewCard, useStore } from '../lib/store';
+import { addXp, logReview, reviewCard, undoReview, useStore, type Card } from '../lib/store';
 import { CardContent, lookOf } from './CardContent';
 import { IconClose } from './Icons';
 import { FocusButton } from './Pomodoro';
@@ -23,6 +23,8 @@ export function StudySession({ title, items, onExit }: { title: string; items: S
   const [queue, setQueue] = useState(items);
   const [flipped, setFlipped] = useState(false);
   const [done, setDone] = useState(0);
+  // "Rückgängig" for the last rating (one step)
+  const [undo, setUndo] = useState<{ deckId: string; cardId: string; prevSrs: Card['srs']; at: number; xp: number; queue: SessionItem[]; done: number } | null>(null);
   // which side is asked in this round (term, definition or mixed)
   const [side, setSide] = useState<AskSide>('front');
   const [seed] = useState(() => Date.now());
@@ -35,16 +37,30 @@ export function StudySession({ title, items, onExit }: { title: string; items: S
     (r: Rating) => {
       if (!card || !deck) return;
       const due = card.srs.due <= Date.now();
-      if (due) reviewCard(deck.id, card.id, r);
-      else logReview(deck.id, card.id, r);
-      addXp(r === 1 ? 2 : r === 2 ? 5 : r === 3 ? 8 : 10);
+      const at = due ? reviewCard(deck.id, card.id, r) : logReview(deck.id, card.id, r);
+      const xp = r === 1 ? 2 : r === 2 ? 5 : r === 3 ? 8 : 10;
+      addXp(xp);
+      setUndo({ deckId: deck.id, cardId: card.id, prevSrs: card.srs, at, xp, queue, done });
       countAnswerTime();
       const back = r === 1;
       setQueue((q) => (back ? [...q.slice(1), q[0]] : q.slice(1)));
       if (!back) setDone((n) => n + 1);
       setFlipped(false);
     },
-    [card, deck],
+    [card, deck, queue, done],
+  );
+  const takeBack = useCallback(() => {
+    if (!undo) return;
+    undoReview(undo.deckId, undo.cardId, undo.prevSrs, undo.at, undo.xp);
+    setQueue(undo.queue);
+    setDone(undo.done);
+    setFlipped(false);
+    setUndo(null);
+  }, [undo]);
+  const undoBtn = undo && (
+    <button type="button" className="btn ghost sm undo-btn" onClick={takeBack} title="Letzte Bewertung zurücknehmen (Taste Z)">
+      ↶ Rückgängig
+    </button>
   );
 
   useEffect(() => {
@@ -55,12 +71,13 @@ export function StudySession({ title, items, onExit }: { title: string; items: S
         e.preventDefault();
         setFlipped(true);
       } else if (flipped && ['1', '2', '3', '4'].includes(e.key)) rate(Number(e.key) as Rating);
+      else if ((e.key === 'z' || e.key === 'Z') && !e.ctrlKey && !e.metaKey && !e.altKey) takeBack();
     };
     window.addEventListener('keydown', k);
     return () => {
       window.removeEventListener('keydown', k);
     };
-  }, [card, flipped, rate]);
+  }, [card, flipped, rate, takeBack]);
 
   const head = (
     <div className="session-head">
@@ -69,6 +86,7 @@ export function StudySession({ title, items, onExit }: { title: string; items: S
         {done} / {done + queue.length}
       </span>
       <span className="grow" />
+      {undoBtn}
       <div className="seg ask-side compact" role="radiogroup" aria-label="Was wird gefragt?">
         {ASK_SIDES.map((o) => (
           <button key={o.id} type="button" role="radio" aria-checked={side === o.id} className={side === o.id ? 'on' : ''} title={o.hint} onClick={() => setSide(o.id)}>

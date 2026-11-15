@@ -3,7 +3,7 @@ import { kvDel, kvGet, kvSet, mediaDeleteMany, mediaKeys } from './db';
 import { desktop, isDesktop } from './desktop';
 import { capForExam, nextExamAt } from './exams';
 import { masterySnapshot, withSnapshot } from './weekly';
-import { DEFAULT_NEW_PER_DAY, pickDue, planNewForCourse } from './newCards';
+import { DEFAULT_NEW_PER_DAY, pickDue, planNewForCourse, withoutReview } from './newCards';
 import { newSrs, schedule, setSchedulerOptions, type Rating, type Srs } from './srs';
 import { dayKey, uid, uniqueSlug } from './util';
 import type { Diagram } from './diagram';
@@ -753,7 +753,8 @@ export function resetProgress(deckId: string) {
     reviews: d.reviews.filter((r) => r.deckId !== deckId),
   }));
 }
-export function reviewCard(deckId: string, cardId: string, rating: Rating) {
+/** Rates a due card (moves its schedule); returns the time of the review (for "Rückgängig"). */
+export function reviewCard(deckId: string, cardId: string, rating: Rating): number {
   const now = Date.now();
   update((d) => ({
     ...d,
@@ -778,10 +779,25 @@ export function reviewCard(deckId: string, cardId: string, rating: Rating) {
     ),
     reviews: [...d.reviews, { deckId, cardId, at: now, rating }],
   }));
+  return now;
 }
 
-export function logReview(deckId: string, cardId: string, rating: Rating) {
-  update((d) => ({ ...d, reviews: [...d.reviews, { deckId, cardId, at: Date.now(), rating }] }));
+/** Logs a practice answer without moving the schedule; returns its time. */
+export function logReview(deckId: string, cardId: string, rating: Rating): number {
+  const at = Date.now();
+  update((d) => ({ ...d, reviews: [...d.reviews, { deckId, cardId, at, rating }] }));
+  return at;
+}
+
+/** "Rückgängig": the card gets its learning state back, the review and its XP are taken away again. */
+export function undoReview(deckId: string, cardId: string, prevSrs: Card['srs'], at: number, xp: number) {
+  const k = dayKey(at);
+  update((d) => ({
+    ...d,
+    decks: d.decks.map((x) => (x.id === deckId ? { ...x, cards: x.cards.map((c) => (c.id === cardId ? { ...c, srs: prevSrs } : c)) } : x)),
+    reviews: withoutReview(d.reviews, deckId, cardId, at),
+    game: { ...d.game, xpByDay: { ...d.game.xpByDay, [k]: Math.max(0, (d.game.xpByDay[k] ?? 0) - xp) } },
+  }));
 }
 
 // ---------- exams ----------

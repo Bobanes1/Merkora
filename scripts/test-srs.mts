@@ -967,6 +967,65 @@ console.log('Mindmap: Ast-Karten und Erklärungs-Kontext');
   ok(long.length <= 1000, 'Längengrenze wird eingehalten');
 }
 
+console.log('Globale Suche');
+{
+  const { searchAll } = await import('../src/lib/search');
+  const data = {
+    courses: [{ id: 'c1', name: 'Biologie', workspaceId: 'w' }, { id: 'c2', name: 'Chemie', workspaceId: 'w' }],
+    decks: [
+      { id: 'd1', name: 'Die Zelle', courseId: 'c1', cards: [
+        { id: 'k1', front: 'Was ist <b>Osmose</b>?', back: 'Wanderung von Wasser' },
+        { id: 'k2', front: 'Zellmembran', back: 'regelt die Osmose und Diffusion' },
+        { id: 'k3', front: 'Mitose', back: 'Kernteilung' },
+      ] },
+      { id: 'd2', name: 'Osmose kompakt', courseId: 'c1', cards: Array.from({ length: 30 }, (_, i) => ({ id: 'x' + i, front: 'Osmose ' + i, back: '' })) },
+    ],
+  };
+  const r = searchAll(data, 'OSMOSE', { cards: 5, other: 6 });
+  ok(r.some((h) => h.kind === 'deck' && h.id === 'd2'), 'findet Decks nach Namen (ohne Groß-/Kleinschreibung)');
+  const cards = r.filter((h) => h.kind === 'card');
+  ok(cards.length === 5, 'hält die Höchstzahl für Karten ein');
+  ok(cards[0].id === 'k1' && cards[0].title === 'Was ist Osmose?', 'Treffer in der Frage zuerst, HTML entfernt');
+  ok(searchAll(data, 'biologie').some((h) => h.kind === 'course' && h.id === 'c1'), 'findet Kurse');
+  const both = searchAll(data, 'osmose diffusion');
+  ok(both.length === 1 && both[0].id === 'k2', 'alle Wörter müssen vorkommen (auch in der Antwort)');
+  ok(searchAll(data, '   ').length === 0, 'leere Suche liefert nichts');
+}
+
+console.log('Prüfungs-Prognose');
+{
+  const { examForecast, forecastText } = await import('../src/lib/exams');
+  const D = 86_400_000;
+  const now = new Date(2026, 10, 15, 12).getTime();
+  const fresh = (id: string) => ({ id, srs: { ...newSrs(0) } });
+  const mastered = (id: string) => ({ id, srs: { ...newSrs(0), reps: 8, interval: 60, last: now - D, due: now + 60 * D } });
+  const cards = Array.from({ length: 10 }, (_, i) => fresh('c' + i)); // 10 × 4 = 40 reviews of work
+  const revs = (perDay: number, days: number) =>
+    Array.from({ length: days }, (_, d) => Array.from({ length: perDay }, () => ({ cardId: 'c0', at: now - d * D }))).flat();
+  const ok1 = examForecast(cards, revs(10, 14), now + 10 * D, now);
+  ok(ok1.kind === 'ok' && Math.round((ok1.at - new Date(2026, 10, 15).getTime()) / D) === 4, 'normales Tempo: 40 Wiederholungen bei 10 pro Tag → in 4 Tagen');
+  const late = examForecast(cards, revs(2, 14), now + 5 * D, now);
+  ok(late.kind === 'late' && late.perDay === 2 && late.needPerDay === 8, 'zu langsam: „nach der Prüfung“ mit nötigem Pensum (8 statt 2)');
+  ok(forecastText(late).includes('8 statt 2'), 'Text nennt das Pensum');
+  ok(examForecast(cards, [], now + 5 * D, now).kind === 'none', 'ohne Lernaktivität keine Prognose');
+  ok(examForecast([mastered('m')], revs(5, 3), now + 5 * D, now).kind === 'done', 'alles gemeistert: fertig');
+  const recent = examForecast(cards, revs(10, 2), now + 10 * D, now);
+  ok(recent.kind === 'ok' && recent.perDay === 10, 'Tempo zählt erst ab dem ersten Lerntag');
+}
+
+console.log('Rückgängig');
+{
+  const { withoutReview } = await import('../src/lib/newCards');
+  const r = [
+    { deckId: 'A', cardId: '1', at: 5 },
+    { deckId: 'A', cardId: '1', at: 9 },
+    { deckId: 'B', cardId: '1', at: 9 },
+  ];
+  const out = withoutReview(r, 'A', '1', 9);
+  ok(out.length === 2 && out[0].at === 5 && out[1].deckId === 'B', 'entfernt genau den einen Eintrag');
+  ok(withoutReview(r, 'A', '1', 7) === r, 'unbekannter Eintrag: nichts ändert sich');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

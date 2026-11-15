@@ -61,3 +61,10 @@ export function planNewForCourse(
   }
   return plan;
 }
+
+/** The review list without exactly one entry (deck, card and time) – for "Rückgängig". */
+export function withoutReview<T extends { deckId: string; cardId: string; at: number }>(reviews: T[], deckId: string, cardId: string, at: number): T[] {
+  let i = reviews.length - 1;
+  while (i >= 0 && !(reviews[i].deckId === deckId && reviews[i].cardId === cardId && reviews[i].at === at)) i--;
+  return i < 0 ? reviews : [...reviews.slice(0, i), ...reviews.slice(i + 1)];
+}

@@ -4,7 +4,7 @@ import { ExamDialog } from '../components/ExamDialog';
 import { IconCalendar, IconChevron, IconDownload, IconEdit, IconPlay, IconPlus, IconTrash } from '../components/Icons';
 import { ConfirmModal } from '../components/Modal';
 import { StudySession, weakestFirst, type SessionItem } from '../components/StudySession';
-import { countdownText, dailyPlan, examAt, examCards, examDecks, pastExams, readiness, toIcs, upcomingExams } from '../lib/exams';
+import { countdownText, dailyPlan, examAt, examCards, examDecks, pastExams, readiness, toIcs, upcomingExams, examForecast, forecastText } from '../lib/exams';
 import { levelOf } from '../lib/srs';
 import { deckUrl, deleteExam, useData, type Exam } from '../lib/store';
 import { dayKey, download } from '../lib/util';
@@ -16,6 +16,7 @@ function ExamCard({ exam, onEdit, onDelete, onPractice }: { exam: Exam; onEdit: 
   const [open, setOpen] = useState(false);
   const r = readiness(data, exam);
   const plan = dailyPlan(data, exam);
+  const forecast = examForecast(examCards(data, exam), data.reviews, examAt(exam));
   const decks = examDecks(data, exam);
   const when = new Date(examAt(exam)).toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const whole = (exam.courseIds?.length ?? 0) + (exam.folderIds?.length ?? 0) > 0;
@@ -59,6 +60,7 @@ function ExamCard({ exam, onEdit, onDelete, onPractice }: { exam: Exam; onEdit: 
                   )}{' '}
                   · {r.open} von {r.total} Karten noch nicht sicher
                 </p>
+                <p className={'small forecast ' + forecast.kind}>{forecastText(forecast)}</p>
                 {whole && <p className="muted small">Ganze Kurse oder Ordner – neue Decks darin zählen automatisch mit.</p>}
                 <div className="exam-deck-links">
                   {decks.map((d) => (

@@ -8,7 +8,7 @@ import { countAnswerTime } from '../../lib/pomodoro';
 import { explainCard, gradeAnswer, hasKey } from '../../lib/ai';
 import { cardBackText, cardFrontText } from '../../lib/content';
 import { RATINGS, formatDelay, schedule, type Rating, type Srs } from '../../lib/srs';
-import { addXp, toggleMark, boostNewCards, dueCards, logReview, newCardsLeft, reviewCard, updateDeck, useStore, type Deck } from '../../lib/store';
+import { addXp, toggleMark, boostNewCards, dueCards, logReview, newCardsLeft, reviewCard, undoReview, updateDeck, useStore, type Card, type Deck } from '../../lib/store';
 import { capForExam, countdownText, nextExamAt, nextExamForDeck } from '../../lib/exams';
 import { pipGreeting, pipReaction, pipSummary } from '../../lib/pipLines';
 import { answerOnly } from '../../lib/backSide';
@@ -53,6 +53,20 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
   // Pip's reactions: streaks, cards that finally sit, half time, last cards …
   const [run, setRun] = useState({ streak: 0, misses: 0, firstTry: 0, seen: new Set<string>() });
   const [say, setSay] = useState<{ text?: string; big: boolean }>({ big: false });
+  // "Rückgängig": everything needed to take the last rating back (one step)
+  type Undo = {
+    cardId: string;
+    prevSrs: Card['srs'];
+    at: number;
+    xp: number;
+    queue: string[];
+    done: number;
+    run: typeof run;
+    say: typeof say;
+    lastRating: Rating | null;
+    leech: string | null;
+  };
+  const [undo, setUndo] = useState<Undo | null>(null);
   const reviews = useStore((s) => s.data.reviews);
   const mood: Mood = busy
     ? 'think'
@@ -96,6 +110,7 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
     setDone(0);
     setRun({ streak: 0, misses: 0, firstTry: 0, seen: new Set() });
     setLastRating(null);
+    setUndo(null);
     setSay({ text: pipGreeting(new Date().getHours(), ids.length), big: false });
     reset();
   };
@@ -132,12 +147,14 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
       if (!card) return;
       // Practice mode only moves the schedule for cards that are actually due.
       const scheduled = mode === 'due' || card.srs.due <= Date.now();
+      let at: number;
       if (scheduled) {
-        reviewCard(deck.id, card.id, r);
+        at = reviewCard(deck.id, card.id, r);
         if (becomesLeech(card, { srs: schedule(card.srs, r) })) setLeech(card.id);
-      }
-      else logReview(deck.id, card.id, r);
-      addXp(r === 1 ? 2 : r === 2 ? 5 : r === 3 ? 8 : 10);
+      } else at = logReview(deck.id, card.id, r);
+      const xp = r === 1 ? 2 : r === 2 ? 5 : r === 3 ? 8 : 10;
+      addXp(xp);
+      setUndo({ cardId: card.id, prevSrs: card.srs, at, xp, queue, done, run, say, lastRating, leech });
       countAnswerTime();
       setLastRating(r);
       // Cards that are still in a short learning step (minutes) come back later in this round.
@@ -165,7 +182,25 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
       );
       reset();
     },
-    [card, deck.id, mode, run, done, queue.length],
+    [card, deck.id, mode, run, done, queue, say, lastRating, leech],
+  );
+  const takeBack = useCallback(() => {
+    if (!undo) return;
+    undoReview(deck.id, undo.cardId, undo.prevSrs, undo.at, undo.xp);
+    setQueue(undo.queue);
+    setDone(undo.done);
+    setRun(undo.run);
+    setSay(undo.say);
+    setLastRating(undo.lastRating);
+    setLeech(undo.leech);
+    setUndo(null);
+    reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [undo, deck.id]);
+  const undoBtn = undo && (
+    <button type="button" className="btn ghost sm undo-btn" onClick={takeBack} title="Letzte Bewertung zurücknehmen (Taste Z)">
+      ↶ Rückgängig
+    </button>
   );
 
   useEffect(() => {
@@ -177,10 +212,11 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
         setFlipped(true);
       } else if (flipped && ['1', '2', '3', '4'].includes(e.key)) rate(Number(e.key) as Rating);
       else if (card && (e.key === 'm' || e.key === 'M') && !e.ctrlKey && !e.metaKey && !e.altKey) toggleMark(deck.id, card.id);
+      else if ((e.key === 'z' || e.key === 'Z') && !e.ctrlKey && !e.metaKey && !e.altKey) takeBack();
     };
     window.addEventListener('keydown', k);
     return () => window.removeEventListener('keydown', k);
-  }, [card, flipped, rate, deck.id]);
+  }, [card, flipped, rate, deck.id, takeBack]);
 
   const check = async () => {
     if (!card) return;
@@ -285,6 +321,7 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
               Fortschritt ansehen
             </button>
           )}
+          {mode !== null && undoBtn}
         </div>
         <AskSidePicker deck={deck} />
       </div>
@@ -306,6 +343,7 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
           <i style={{ width: `${(done / Math.max(1, total)) * 100}%` }} />
         </span>
         <span className="muted small">{mode === 'due' ? 'Fällige Karten' : 'Freies Üben'}</span>
+        {undoBtn}
         <AskSidePicker deck={deck} compact />
         <FocusButton />
       </div>

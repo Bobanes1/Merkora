@@ -11,7 +11,7 @@ import { pokeMove, type PokeMove } from '../lib/pipLines';
 import { todoGroups } from '../lib/todos';
 import { NoKeyHint } from '../components/NoKey';
 import { Pomodoro } from '../components/Pomodoro';
-import { countdownText, dailyPlan, readiness, upcomingExams } from '../lib/exams';
+import { countdownText, dailyPlan, examAt, examCards, examForecast, forecastText, readiness, upcomingExams } from '../lib/exams';
 import { pathProgress, playerLevel, totalXp, xpStreak, xpToday } from '../lib/path';
 import { masteryPercent, sortDecks, streak, studyDays, type DeckSort } from '../lib/stats';
 import { deckUrl, dueCards, setSettings, useStore, type Deck } from '../lib/store';
@@ -244,6 +244,7 @@ export default function Dashboard() {
                 {exams.slice(0, 4).map((e) => {
                   const r = readiness(data, e);
                   const p = dailyPlan(data, e);
+                  const f = examForecast(examCards(data, e), data.reviews, examAt(e));
                   return (
                     <Link key={e.id} to="/calendar" className="dash-exam">
                       <b>{e.title}</b>
@@ -252,6 +253,7 @@ export default function Dashboard() {
                         <i style={{ width: `${r.percent}%` }} />
                       </span>
                       <small>{r.total ? (p.left ? `heute ${p.left} Karten` : 'Tagesziel erreicht') : 'keine Decks'}</small>
+                      {r.total > 0 && (f.kind === 'ok' || f.kind === 'late') && <small className={'dash-forecast forecast ' + f.kind}>{forecastText(f)}</small>}
                     </Link>
                   );
                 })}

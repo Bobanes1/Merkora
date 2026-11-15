@@ -111,3 +111,41 @@ export function toIcs(exams: Exam[], decks: Deck[]): string {
   lines.push('END:VCALENDAR');
   return lines.join('\r\n') + '\r\n';
 }
+
+// ---------- forecast: when will all cards of an exam sit? ----------
+/** Reviews a card still needs, by level (rough values from the scheduler's steps). */
+const WORK = { new: 4, learning: 3, familiar: 2, mastered: 0 } as const;
+const WINDOW = 14;
+
+export type Forecast =
+  | { kind: 'done' }
+  | { kind: 'none' }
+  | { kind: 'ok' | 'late'; at: number; perDay: number; needPerDay: number };
+
+/**
+ * Rough forecast from the recent pace: reviews of the exam's cards per day (last 14 days, or since the first
+ * study day if that is more recent) against the reviews still needed. "late" when it ends after the exam.
+ */
+export function examForecast(cards: Pick<Card, 'id' | 'srs'>[], reviews: { cardId: string; at: number }[], examTime: number, now = Date.now()): Forecast {
+  const work = cards.reduce((a, c) => a + WORK[levelOf(c.srs)], 0);
+  if (!work) return { kind: 'done' };
+  const ids = new Set(cards.map((c) => c.id));
+  const from = startOfDay(now) - (WINDOW - 1) * DAY;
+  const recent = reviews.filter((r) => ids.has(r.cardId) && r.at >= from && r.at <= now);
+  if (!recent.length) return { kind: 'none' };
+  const first = startOfDay(Math.min(...recent.map((r) => r.at)));
+  const days = Math.max(1, Math.round((startOfDay(now) - first) / DAY) + 1);
+  const perDay = recent.length / days;
+  const at = startOfDay(now) + Math.ceil(work / perDay) * DAY;
+  const left = Math.max(1, Math.round((startOfDay(examTime) - startOfDay(now)) / DAY));
+  return { kind: at <= startOfDay(examTime) ? 'ok' : 'late', at, perDay: Math.round(perDay), needPerDay: Math.ceil(work / left) };
+}
+
+/** The forecast as one sentence. */
+export function forecastText(f: Forecast): string {
+  const date = (t: number) => new Date(t).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' });
+  if (f.kind === 'done') return 'Alle Karten sitzen schon.';
+  if (f.kind === 'none') return 'Lerne ein paar Tage, dann zeigt Merkora hier eine Prognose.';
+  if (f.kind === 'ok') return `Bei deinem Tempo sitzen alle Karten etwa am ${date(f.at)}.`;
+  return `Erst nach der Prüfung (ca. ${date(f.at)}) – lerne täglich etwa ${f.needPerDay} statt ${f.perDay} Wiederholungen.`;
+}
