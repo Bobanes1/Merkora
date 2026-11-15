@@ -179,6 +179,7 @@ jobs:
           BT="$ANDROID_HOME/build-tools/34.0.0"
           "$BT/zipalign" -f -p 4 "$UNSIGNED" aligned.apk
           if [ -n "$KS" ]; then
+            KS_ALIAS="${KS_ALIAS:-merkora}"
             echo "$KS" | base64 -d > merkora.p12
             "$BT/apksigner" sign --ks merkora.p12 --ks-type PKCS12 --ks-pass env:KS_PASS --ks-key-alias "$KS_ALIAS" --out "Merkora_${VERSION}_android.apk" aligned.apk
             rm merkora.p12
