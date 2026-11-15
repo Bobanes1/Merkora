@@ -8154,10 +8154,53 @@ html.phone .learn-progress {
   flex-wrap: nowrap;
   gap: 8px;
 }
+/* the round fills exactly one screen: progress on top, the card takes the free space, buttons at the bottom.
+   Only a really long card makes the page scroll. */
+html.phone.learning .deck-layout {
+  min-height: 0;
+}
+html.phone.learning .deck-main,
+html.phone.learning .page {
+  padding: 8px 12px !important;
+}
+html.phone.learning .tab-body {
+  margin: 0;
+}
+html.phone.learning .learn,
+html.phone.learning .session {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: calc(100dvh - 16px);
+  margin: 0;
+}
+html.phone.learning .session {
+  padding: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+}
+html.phone.learning .learn-progress {
+  margin: 0;
+}
 html.phone.learning .flashcard {
-  min-height: calc(100vh - 260px);
+  flex: 1 0 auto;
+  min-height: 150px;
+  margin: 0;
+  padding: 18px;
   justify-content: center;
   touch-action: pan-y;
+}
+html.phone.learning .fc-front {
+  font-size: 20px;
+}
+html.phone.learning .rate-row,
+html.phone.learning .learn .row-gap.center {
+  margin: 0;
+}
+html.phone.learning .type-answer textarea {
+  min-height: 0;
+  height: 64px;
 }
 html.phone .rate-row {
   grid-template-columns: repeat(2, 1fr);
