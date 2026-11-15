@@ -9,6 +9,7 @@ const COMMANDS: &[&str] = &[
     "open_external",
     "media_put",
     "media_get",
+    "media_get_b64",
     "media_type",
     "media_keys",
     "media_delete",

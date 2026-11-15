@@ -1304,6 +1304,14 @@ console.log('Abgeschnittene Antworten und Fortsetzung');
   ok(helpfulSlides(['Titel', 'x'.repeat(400), 'Modell', ''], [1, 2, 3, 4]).join() === '1,3,4', 'Bilder nur für Grafik-Folien mit wenig Text');
 }
 
+console.log('Handy: Dateien als Text übertragen');
+{
+  const { toBase64, fromBase64 } = await import('../src/lib/desktop');
+  const bytes = new Uint8Array(70000).map((_, i) => (i * 37) % 256);
+  const back = fromBase64(toBase64(bytes));
+  ok(back.length === bytes.length && back.every((b, i) => b === bytes[i]), 'Datei kommt als Text hin und zurück unverändert an (auch große Dateien)');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

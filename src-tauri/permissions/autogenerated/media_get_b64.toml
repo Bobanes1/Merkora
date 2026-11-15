@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-media-get-b64"
+description = "Enables the media_get_b64 command without any pre-configured scope."
+commands.allow = ["media_get_b64"]
+
+[[permission]]
+identifier = "deny-media-get-b64"
+description = "Denies the media_get_b64 command without any pre-configured scope."
+commands.deny = ["media_get_b64"]

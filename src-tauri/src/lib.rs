@@ -98,6 +98,21 @@ async fn media_get(id: String) -> Result<Response, String> {
     Ok(Response::new(bytes))
 }
 
+/// A stored file as base64 text with its type. Android cannot receive raw bytes from the core
+/// (the call fails with "Failed to fetch"), so the phone reads files this way.
+#[derive(serde::Serialize)]
+struct MediaB64 {
+    b64: String,
+    #[serde(rename = "type")]
+    kind: String,
+}
+
+#[tauri::command]
+async fn media_get_b64(id: String) -> Result<MediaB64, String> {
+    let (bytes, kind) = storage::media_get(&id).ok_or("Datei nicht gefunden")?;
+    Ok(MediaB64 { b64: base64::engine::general_purpose::STANDARD.encode(&bytes), kind })
+}
+
 #[tauri::command]
 fn media_type(id: String) -> Option<String> {
     storage::media_get(&id).map(|(_, t)| t)
@@ -571,6 +586,7 @@ pub fn run() {
             open_external,
             media_put,
             media_get,
+            media_get_b64,
             media_type,
             media_keys,
             media_delete,

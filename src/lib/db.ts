@@ -1,5 +1,5 @@
 /** Tiny IndexedDB wrapper: a key/value store for the learning data and a store for card media (images, audio). */
-import { inTauri, mediaFileDelete, mediaFileKeys, mediaFileUrl, mediaGetFile, mediaPutFile } from './desktop';
+import { inTauri, isAndroid, mediaFileDelete, mediaFileKeys, mediaFileUrl, mediaGetFile, mediaPutFile } from './desktop';
 
 const DB_NAME = 'merkora';
 const DB_VERSION = 1;
@@ -72,7 +72,8 @@ export const mediaClear = async () => {
 const urls = new Map<string, Promise<string | null>>();
 
 export function mediaUrl(id: string): Promise<string | null> {
-  if (inTauri) return Promise.resolve(mediaFileUrl(id));
+  // Android: pictures are read as files and shown from memory (the media address is not reachable there)
+  if (inTauri && !isAndroid) return Promise.resolve(mediaFileUrl(id));
   let p = urls.get(id);
   if (!p) {
     p = mediaGet(id)

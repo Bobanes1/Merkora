@@ -83,6 +83,12 @@ export async function bytesBody(data: Blob | Uint8Array): Promise<Uint8Array | {
   const bytes = data instanceof Uint8Array ? data : new Uint8Array(await data.arrayBuffer());
   return isAndroid ? { b64: toBase64(bytes) } : bytes;
 }
+export function fromBase64(b64: string): Uint8Array<ArrayBuffer> {
+  const bin = atob(b64);
+  const out = new Uint8Array(new ArrayBuffer(bin.length));
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
 export function toBase64(bytes: Uint8Array): string {
   let bin = '';
   for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
@@ -93,6 +99,16 @@ export async function mediaPutFile(id: string, name: string, type: string, blob:
   await invoke('media_put', await bytesBody(blob), { headers: { 'x-id': id, 'x-name': encodeURIComponent(name), 'x-type': type || '' } });
 }
 export async function mediaGetFile(id: string): Promise<{ blob: Blob; name: string; type: string } | undefined> {
+  if (isAndroid) {
+    // Android: raw bytes from the core do not arrive – the file comes as base64 text
+    try {
+      const r = await invoke<{ b64: string; type: string }>('media_get_b64', { id });
+      const t = r.type || 'application/octet-stream';
+      return { blob: new Blob([fromBase64(r.b64)], { type: t }), name: id, type: t };
+    } catch {
+      return undefined;
+    }
+  }
   try {
     const [buf, type] = await Promise.all([invoke<ArrayBuffer>('media_get', { id }), invoke<string | null>('media_type', { id })]);
     const t = type ?? 'application/octet-stream';
@@ -129,7 +145,7 @@ type FetchRes = { status: number; statusText: string; contentType: string; body:
 
 function b64ToBytes(b64: string) {
   const bin = atob(b64);
-  const out = new Uint8Array(bin.length);
+  const out = new Uint8Array(new ArrayBuffer(bin.length));
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
 }

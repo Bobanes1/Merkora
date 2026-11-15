@@ -23,6 +23,7 @@
     "allow-open-external",
     "allow-media-put",
     "allow-media-get",
+    "allow-media-get-b64",
     "allow-media-type",
     "allow-media-keys",
     "allow-media-delete",
