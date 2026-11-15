@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { disconnect, dropboxConnect, dropboxConnectCode, dropboxFinishCode, googleConnect, redirectUri, setConf, syncNow, useSync, type SyncProvider } from '../lib/sync';
-import { isAndroid } from '../lib/desktop';
+import { inTauri, isAndroid } from '../lib/desktop';
 import { IconRefresh } from './Icons';
 
 const fmt = (t?: number) => (t ? new Date(t).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) : 'noch nie');
@@ -12,7 +12,8 @@ export function SyncPanel() {
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
   // sign-in "mit Code" (phone, or when the return to Merkora does not work)
-  const [codeStep, setCodeStep] = useState(isAndroid);
+  const [codeStep, setCodeStep] = useState(false);
+  const [waitHidden, setWaitHidden] = useState(false);
   const [code, setCode] = useState('');
   const [keyCopied, setKeyCopied] = useState(false);
   const codeLogin = (
@@ -153,11 +154,26 @@ export function SyncPanel() {
               onChange={(e) => setConf({ dropboxAppKey: e.target.value.trim() })}
               aria-label="Dropbox App key"
             />
-            <button type="button" className="btn primary" disabled={!conf.dropboxAppKey} onClick={() => run(dropboxConnect)}>
+            <button type="button" className="btn primary" disabled={!conf.dropboxAppKey} onClick={() => (setWaitHidden(false), run(dropboxConnect))}>
               Mit Dropbox verbinden
             </button>
           </div>
-          <p className="muted small">Einmalig, dauert etwa 2 Minuten. Danach bleibt die Verbindung bestehen, bis du sie trennst.</p>
+          <p className="muted small">
+            Einmalig, dauert etwa 2 Minuten. Danach bleibt die Verbindung bestehen, bis du sie trennst.
+            {inTauri && ' Die Anmeldung öffnet sich in deinem Browser – dort geht auch „Mit Google anmelden“.'}
+          </p>
+          {inTauri && !waitHidden && (status.state === 'login' || status.state === 'error') && (
+            <div className={'sync-wait ' + status.state} role="status">
+              <span>
+                {status.state === 'login'
+                  ? 'Melde dich im Browser bei Dropbox an (auch mit Google) und tippe auf „Zulassen“ – Merkora verbindet sich danach von selbst.'
+                  : status.text}
+              </span>
+              <button type="button" className="btn ghost sm" onClick={() => setWaitHidden(true)}>
+                Abbrechen
+              </button>
+            </div>
+          )}
           {codeStep ? (
             codeLogin
           ) : (

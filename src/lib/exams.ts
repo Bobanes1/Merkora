@@ -138,7 +138,7 @@ export function examForecast(cards: Pick<Card, 'id' | 'srs'>[], reviews: { cardI
   const perDay = recent.length / days;
   const at = startOfDay(now) + Math.ceil(work / perDay) * DAY;
   const left = Math.max(1, Math.round((startOfDay(examTime) - startOfDay(now)) / DAY));
-  return { kind: at <= startOfDay(examTime) ? 'ok' : 'late', at, perDay: Math.round(perDay), needPerDay: Math.ceil(work / left) };
+  return { kind: at <= startOfDay(examTime) ? 'ok' : 'late', at, perDay: Math.round(perDay * 10) / 10, needPerDay: Math.ceil(work / left) };
 }
 
 /** The forecast as one sentence. */
@@ -147,5 +147,5 @@ export function forecastText(f: Forecast): string {
   if (f.kind === 'done') return 'Alle Karten sitzen schon.';
   if (f.kind === 'none') return 'Lerne ein paar Tage, dann zeigt Merkora hier eine Prognose.';
   if (f.kind === 'ok') return `Bei deinem Tempo sitzen alle Karten etwa am ${date(f.at)}.`;
-  return `Erst nach der Prüfung (ca. ${date(f.at)}) – lerne täglich etwa ${f.needPerDay} statt ${f.perDay} Wiederholungen.`;
+  return `Erst nach der Prüfung (ca. ${date(f.at)}) – dafür bräuchtest du täglich etwa ${f.needPerDay} ${f.needPerDay === 1 ? 'Wiederholung' : 'Wiederholungen'} (bisher ${f.perDay < 1 ? 'weniger als 1' : Math.round(f.perDay)} pro Tag).`;
 }

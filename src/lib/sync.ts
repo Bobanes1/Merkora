@@ -102,7 +102,9 @@ export async function dropboxConnect() {
   const verifier = randomString(64);
   const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
   const state = randomString(16);
-  sessionStorage.setItem('merkora.pkce', JSON.stringify({ verifier, state }));
+  const pkce = JSON.stringify({ verifier, state });
+  sessionStorage.setItem('merkora.pkce', pkce);
+  localStorage.setItem('merkora.pkce', pkce);
   const u = new URL('https://www.dropbox.com/oauth2/authorize');
   u.search = new URLSearchParams({
     client_id: conf.dropboxAppKey.trim(),
@@ -113,12 +115,33 @@ export async function dropboxConnect() {
     redirect_uri: redirectUri(),
     state,
   }).toString();
+  // In the app the sign-in opens in the normal browser (Google refuses sign-ins inside app windows);
+  // Merkora's local server catches the return and hands it over (event "oauth-callback").
+  const { inTauri, openExternal } = await import('./desktop');
+  if (inTauri) {
+    await listenForBrowserSignIn();
+    await openExternal(u.toString());
+    setStatus({ state: 'login', text: 'Warte auf die Anmeldung im Browser …' });
+    return;
+  }
   location.assign(u.toString());
+}
+
+let browserSignIn = false;
+async function listenForBrowserSignIn() {
+  if (browserSignIn) return;
+  browserSignIn = true;
+  const { listen } = await import('@tauri-apps/api/event');
+  await listen<string>('oauth-callback', (e) => {
+    void dropboxFinish(new URLSearchParams(e.payload))
+      .then(() => syncNow())
+      .catch((err: Error) => setStatus({ state: 'error', text: err.message }));
+  });
 }
 
 /** Finishes the Dropbox sign-in on /sync-callback. */
 export async function dropboxFinish(params: URLSearchParams) {
-  const saved = JSON.parse(sessionStorage.getItem('merkora.pkce') || 'null') as { verifier: string; state: string } | null;
+  const saved = JSON.parse(sessionStorage.getItem('merkora.pkce') || localStorage.getItem('merkora.pkce') || 'null') as { verifier: string; state: string } | null;
   if (params.get('error')) throw new SyncError(params.get('error_description') || 'Anmeldung abgebrochen.');
   if (!saved || saved.state !== params.get('state')) throw new SyncError('Die Anmeldung passt nicht zu dieser Sitzung. Bitte noch einmal verbinden.');
   const res = await fetch(DROPBOX_TOKEN, {
@@ -134,6 +157,7 @@ export async function dropboxFinish(params: URLSearchParams) {
   await check(res, 'Dropbox-Anmeldung');
   const j = await res.json();
   sessionStorage.removeItem('merkora.pkce');
+  localStorage.removeItem('merkora.pkce');
   setConf({ provider: 'dropbox', dropboxAccess: j.access_token, dropboxRefresh: j.refresh_token, dropboxExp: Date.now() + (j.expires_in - 60) * 1000 });
   setStatus({ state: 'idle', text: 'Mit Dropbox verbunden' });
 }

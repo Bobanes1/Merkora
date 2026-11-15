@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AnkiImport } from '../components/AnkiImport';
 import { CreateWithAI } from '../components/CreateWithAI';
@@ -265,15 +265,17 @@ export default function Dashboard() {
                   const p = dailyPlan(data, e);
                   const f = examForecast(examCards(data, e), data.reviews, examAt(e));
                   return (
-                    <Link key={e.id} to="/calendar" className="dash-exam">
+                    <Fragment key={e.id}>
+                    <Link to="/calendar" className="dash-exam">
                       <b>{e.title}</b>
                       <span className="pill-count">{countdownText(e)}</span>
                       <span className="bar">
                         <i style={{ width: `${r.percent}%` }} />
                       </span>
                       <small>{r.total ? (p.left ? `heute ${p.left} Karten` : 'Tagesziel erreicht') : 'keine Decks'}</small>
-                      {r.total > 0 && (f.kind === 'ok' || f.kind === 'late') && <small className={'dash-forecast forecast ' + f.kind}>{forecastText(f)}</small>}
                     </Link>
+                    {r.total > 0 && (f.kind === 'ok' || f.kind === 'late') && <p className={'dash-forecast forecast ' + f.kind}>{forecastText(f)}</p>}
+                    </Fragment>
                   );
                 })}
               </section>

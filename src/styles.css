@@ -7721,9 +7721,10 @@ a.deck-row:hover {
   color: var(--warn-ink);
   font-weight: 600;
 }
-.dash-exam .dash-forecast {
-  grid-column: 1 / -1;
-  margin-top: -6px;
+.dash-forecast {
+  margin: -2px 0 8px;
+  font-size: 12px;
+  line-height: 1.4;
 }
 /* phones: the card's slide-in (40px, slightly tilted) must not stick out sideways */
 @media (max-width: 640px) {
@@ -8203,4 +8204,22 @@ html.phone .course-title h1 {
 }
 html.phone .course-title .grow {
   display: none;
+}
+.sync-wait {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--primary-soft);
+  color: var(--text);
+  font-size: 13px;
+}
+.sync-wait.error {
+  background: var(--bad-soft);
+  color: var(--bad-ink);
+}
+.sync-wait span {
+  flex: 1;
 }
