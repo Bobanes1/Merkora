@@ -49,5 +49,10 @@
     "allow-list-backups",
     "allow-read-backup",
     "allow-backup-now"
+  ],
+  "platforms": [
+    "windows",
+    "macOS",
+    "linux"
   ]
 }

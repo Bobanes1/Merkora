@@ -4,10 +4,11 @@ import { ManagePrivacy, PrivacyText } from '../components/Consent';
 import { IconDownload, IconEye, IconEyeOff, IconUpload } from '../components/Icons';
 import { ConfirmModal } from '../components/Modal';
 import { PROVIDERS, listModels, testConnection } from '../lib/ai';
-import { desktop, getState, isDesktop, replaceAll, resetAll, setApiKey, setChatKey, setPrivacy, setSettings, useStore, type Data, type Provider } from '../lib/store';
+import { desktop, getState, isAndroid, isDesktop, replaceAll, resetAll, setApiKey, setChatKey, setPrivacy, setSettings, useStore, type Data, type Provider } from '../lib/store';
 import { download } from '../lib/util';
 import { APP_VERSION, SECOND_MODEL, SLIDE_FIGURES } from '../config';
 import { SyncPanel } from '../components/SyncPanel';
+import { ANDROID_DOWNLOAD } from '../lib/desktop';
 import { BackupsPanel, BoldSettings, CostSettings, GoalSettings, LearningPanel, RemindersPanel, SlideFigureSettings } from '../components/SettingsExtras';
 
 const AREAS = [
@@ -324,7 +325,7 @@ export default function Settings() {
           Dein Lernstand wird automatisch gespeichert – kurz nach jeder Änderung und spätestens alle 30 Sekunden.
           {isDesktop && ' Zusätzlich legt die App eine Speicherdatei und jeden Tag eine Sicherungskopie (die letzten 14 Tage) an.'}
         </p>
-        {isDesktop && (
+        {isDesktop && !isAndroid && (
           <button type="button" className="btn ghost sm" onClick={() => desktop?.openDataFolder()}>
             Speicherordner öffnen
           </button>
@@ -354,7 +355,17 @@ export default function Settings() {
 
       <div id="app" className="settings-area">
       <h2 className="settings-area-title">Über die App</h2>
-      {isDesktop && <UpdatePanel />}
+      {isAndroid ? (
+        <section className="panel">
+          <h2>Updates</h2>
+          <p className="muted">Auf dem Handy aktualisierst du Merkora, indem du die neueste APK herunterlädst und installierst – dein Lernstand bleibt erhalten.</p>
+          <a className="btn outline" href={ANDROID_DOWNLOAD} target="_blank" rel="noreferrer">
+            Neueste Version auf GitHub
+          </a>
+        </section>
+      ) : (
+        isDesktop && <UpdatePanel />
+      )}
       <p className="muted small version-line">Merkora Version {APP_VERSION}</p>
       </div>
       </div>

@@ -1,4 +1,4 @@
-//! Merkora desktop app: Rust core (save file, media, Anki import, AI requests) with the Merkora interface in its window.
+//! Merkora app (desktop and Android): Rust core (save file, media, Anki import, AI requests) with the Merkora interface in its window.
 
 mod anki;
 mod export;
@@ -44,12 +44,22 @@ fn open_data_folder() {
 }
 
 #[tauri::command]
-fn open_external(url: String) -> Result<(), String> {
+fn open_external(app: AppHandle, url: String) -> Result<(), String> {
     let lower = url.to_lowercase();
     if !(lower.starts_with("https://") || lower.starts_with("http://") || lower.starts_with("mailto:")) {
         return Err("Nur Web-Adressen können geöffnet werden.".into());
     }
-    open::that_detached(url).map_err(|e| e.to_string())
+    #[cfg(desktop)]
+    {
+        let _ = &app;
+        open::that_detached(url).map_err(|e| e.to_string())
+    }
+    // Android: hand the link to the phone's browser
+    #[cfg(mobile)]
+    {
+        use tauri_plugin_opener::OpenerExt;
+        app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
+    }
 }
 
 // ---------- media ----------
@@ -191,6 +201,7 @@ struct CloseState {
     quit: AtomicBool,
 }
 
+#[cfg(desktop)]
 fn show_main(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.show();
@@ -218,6 +229,7 @@ fn finish(app: &AppHandle) {
     let state = app.state::<CloseState>();
     state.closing.store(false, Ordering::SeqCst);
     if state.tray.load(Ordering::SeqCst) && !state.quit.load(Ordering::SeqCst) {
+        #[cfg(desktop)]
         if let Some(w) = app.get_webview_window("main") {
             let _ = w.hide();
         }
@@ -393,8 +405,10 @@ fn media_response(path: &str) -> tauri::http::Response<Vec<u8>> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[allow(unused_mut)]
     let mut builder = tauri::Builder::default();
     // The self-test runs next to an open Merkora without handing over to it.
+    #[cfg(desktop)]
     if std::env::var("MERKORA_SMOKE").is_err() {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             hand_over(app, anki_paths(&argv));
@@ -405,13 +419,18 @@ pub fn run() {
             }
         }));
     }
+    #[cfg(desktop)]
+    {
+        builder = builder
+            .plugin(tauri_plugin_window_state::Builder::default().build())
+            .plugin(tauri_plugin_updater::Builder::new().build())
+            .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--minimized"])));
+    }
     let app = builder
-        .plugin(tauri_plugin_window_state::Builder::default().build())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--minimized"])))
+        .plugin(tauri_plugin_opener::init())
         .manage(CloseState::default())
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -455,6 +474,13 @@ pub fn run() {
             backup_now,
         ])
         .setup(|app| {
+            // Android: learning data and pictures live in the app's own private folder
+            #[cfg(mobile)]
+            if std::env::var("MERKORA_DATA_DIR").is_err() {
+                if let Ok(dir) = app.path().app_data_dir() {
+                    std::env::set_var("MERKORA_DATA_DIR", dir);
+                }
+            }
             let handle = app.handle().clone();
             let url = if cfg!(debug_assertions) {
                 WebviewUrl::App("dashboard".into())
@@ -464,7 +490,16 @@ pub fn run() {
                     None => WebviewUrl::App("dashboard".into()),
                 }
             };
+            #[allow(unused_mut)]
             let mut win = WebviewWindowBuilder::new(app, "main", url);
+            // Android: one full-screen window, nothing more to set up
+            #[cfg(mobile)]
+            {
+                win.build()?;
+                Ok(())
+            }
+            #[cfg(desktop)]
+            {
             // The self-test gets its own browser storage, so it never touches the real app's data.
             if std::env::var("MERKORA_SMOKE").is_ok() {
                 win = win.data_directory(storage::data_dir().join("webview-test"));
@@ -507,6 +542,7 @@ pub fn run() {
             })
             .build(app)?;
             Ok(())
+            }
         })
         .build(tauri::generate_context!())
         .expect("Merkora konnte nicht gestartet werden");

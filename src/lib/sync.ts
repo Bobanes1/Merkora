@@ -7,6 +7,7 @@ import { useSyncExternalStore } from 'react';
 import { mediaGet, mediaKeys, mediaPutMany } from './db';
 import { applySynced, getState, subscribe, type Card, type Data, type Deck } from './store';
 import { mergeTodos } from './todos';
+import { dropboxCodeBody, dropboxCodeUrl } from './dropboxAuth';
 
 export type SyncProvider = 'dropbox' | 'gdrive';
 export type SyncConf = {
@@ -133,6 +134,34 @@ export async function dropboxFinish(params: URLSearchParams) {
   await check(res, 'Dropbox-Anmeldung');
   const j = await res.json();
   sessionStorage.removeItem('merkora.pkce');
+  setConf({ provider: 'dropbox', dropboxAccess: j.access_token, dropboxRefresh: j.refresh_token, dropboxExp: Date.now() + (j.expires_in - 60) * 1000 });
+  setStatus({ state: 'idle', text: 'Mit Dropbox verbunden' });
+}
+
+/**
+ * Sign-in "mit Code" (phone, or when returning to Merkora fails): opens the Dropbox page in the browser;
+ * after allowing access Dropbox shows a code that is pasted into Merkora (dropboxFinishCode).
+ */
+export async function dropboxConnectCode(): Promise<void> {
+  if (!conf.dropboxAppKey.trim()) throw new SyncError('Bitte zuerst den App-Key eintragen.');
+  const verifier = randomString(64);
+  const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
+  localStorage.setItem('merkora.pkce.code', verifier);
+  const url = dropboxCodeUrl(conf.dropboxAppKey, challenge);
+  const { inTauri, openExternal } = await import('./desktop');
+  if (inTauri) await openExternal(url);
+  else window.open(url, '_blank', 'noopener');
+}
+
+export async function dropboxFinishCode(code: string): Promise<void> {
+  const verifier = localStorage.getItem('merkora.pkce.code');
+  if (!verifier) throw new SyncError('Starte zuerst „Mit Code anmelden“.');
+  if (!code.trim()) throw new SyncError('Bitte den Code von Dropbox einfügen.');
+  const res = await fetch(DROPBOX_TOKEN, { method: 'POST', body: dropboxCodeBody(conf.dropboxAppKey, code, verifier) });
+  if (res.status === 400) throw new SyncError('Der Code passt nicht (oder ist abgelaufen). Bitte „Mit Code anmelden“ noch einmal starten.');
+  await check(res, 'Dropbox-Anmeldung');
+  const j = await res.json();
+  localStorage.removeItem('merkora.pkce.code');
   setConf({ provider: 'dropbox', dropboxAccess: j.access_token, dropboxRefresh: j.refresh_token, dropboxExp: Date.now() + (j.expires_in - 60) * 1000 });
   setStatus({ state: 'idle', text: 'Mit Dropbox verbunden' });
 }

@@ -126,3 +126,73 @@ jobs:
             src-tauri/target/**/release/bundle/appimage/*.AppImage
             src-tauri/target/**/release/bundle/dmg/*.dmg
           if-no-files-found: warn
+
+  # Android app (APK). Signed with the key from the secrets ANDROID_KEYSTORE (base64 of the .p12 file),
+  # ANDROID_KEYSTORE_PASSWORD and ANDROID_KEY_ALIAS – the same key every time, so a new APK installs over the old one.
+  android:
+    needs: [test, release]
+    if: ${{ !failure() && !cancelled() }}
+    runs-on: ubuntu-22.04
+    env:
+      NDK_VERSION: 27.2.12479018
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - name: Android SDK parts
+        run: |
+          sdkmanager "platforms;android-34" "build-tools;34.0.0" "ndk;${NDK_VERSION}"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: android
+      - run: npm ci
+      - name: Android project
+        run: |
+          npx tauri android init --ci
+          npx tauri icon src-tauri/icons/icon.png
+          node scripts/android-patch.cjs
+      - name: Build APK
+        run: npx tauri android build --apk --target aarch64 armv7
+      - name: Sign APK
+        env:
+          KS: ${{ secrets.ANDROID_KEYSTORE }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KS_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          UNSIGNED=$(find src-tauri/gen/android/app/build/outputs/apk -name '*release-unsigned.apk' | head -n 1)
+          BT="$ANDROID_HOME/build-tools/34.0.0"
+          "$BT/zipalign" -f -p 4 "$UNSIGNED" aligned.apk
+          if [ -n "$KS" ]; then
+            echo "$KS" | base64 -d > merkora.p12
+            "$BT/apksigner" sign --ks merkora.p12 --ks-type PKCS12 --ks-pass env:KS_PASS --ks-key-alias "$KS_ALIAS" --out "Merkora_${VERSION}_android.apk" aligned.apk
+            rm merkora.p12
+            echo "SIGNED=1" >> "$GITHUB_ENV"
+          else
+            # no key yet: a test build with a throw-away key (installs, but later versions cannot be installed over it)
+            keytool -genkeypair -keystore test.p12 -storetype PKCS12 -storepass testtest -alias test -keyalg RSA -keysize 2048 -validity 30 -dname "CN=Merkora Test"
+            "$BT/apksigner" sign --ks test.p12 --ks-pass pass:testtest --out "Merkora_${VERSION}_android-test.apk" aligned.apk
+            echo "::warning::ANDROID_KEYSTORE fehlt – nur ein Test-APK mit Wegwerf-Schlüssel gebaut."
+          fi
+          "$BT/apksigner" verify Merkora_*_android*.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: merkora-android
+          path: Merkora_*_android*.apk
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/') && env.SIGNED == '1'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.ref_name }}" Merkora_*_android.apk --clobber --repo "${{ github.repository }}"

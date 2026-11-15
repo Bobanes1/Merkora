@@ -7,6 +7,10 @@ import { convertFileSrc, invoke, isTauri } from '@tauri-apps/api/core';
 import type { AnkiProgress } from './srs';
 
 export const inTauri = typeof window !== 'undefined' && isTauri();
+/** The Merkora app on an Android phone (same core, no tray, autostart or in-app updates). */
+export const isAndroid = inTauri && typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
+/** Where a new Android version is downloaded (the APK is attached to every release). */
+export const ANDROID_DOWNLOAD = 'https://github.com/Bobanes1/Merkora/releases/latest';
 
 export type DesktopBridge = {
   loadData: () => Promise<string | null>;

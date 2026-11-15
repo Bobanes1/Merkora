@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { disconnect, dropboxConnect, googleConnect, redirectUri, setConf, syncNow, useSync, type SyncProvider } from '../lib/sync';
+import { disconnect, dropboxConnect, dropboxConnectCode, dropboxFinishCode, googleConnect, redirectUri, setConf, syncNow, useSync, type SyncProvider } from '../lib/sync';
+import { isAndroid } from '../lib/desktop';
 import { IconRefresh } from './Icons';
 
 const fmt = (t?: number) => (t ? new Date(t).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) : 'noch nie');
@@ -10,7 +11,28 @@ export function SyncPanel() {
   const [pick, setPick] = useState<SyncProvider>(conf.provider ?? 'dropbox');
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
-  const run = async (fn: () => Promise<void>) => {
+  // sign-in "mit Code" (phone, or when the return to Merkora does not work)
+  const [codeStep, setCodeStep] = useState(isAndroid);
+  const [code, setCode] = useState('');
+  const [keyCopied, setKeyCopied] = useState(false);
+  const codeLogin = (
+    <div className="sync-code">
+      <p className="muted small">
+        {isAndroid
+          ? 'Am Handy: „Dropbox öffnen“ → anmelden und „Zulassen“ → den angezeigten Code kopieren und hier einfügen.'
+          : 'Falls die Rückkehr zu Merkora nicht klappt: Dropbox im Browser öffnen, „Zulassen“ und den angezeigten Code hier einfügen.'}
+      </p>
+      <div className="input-row">
+        <button type="button" className="btn outline" disabled={!conf.dropboxAppKey} onClick={() => run(dropboxConnectCode)}>
+          Dropbox öffnen
+        </button>
+        <input className="input" placeholder="Code von Dropbox einfügen" value={code} onChange={(e) => setCode(e.target.value)} aria-label="Code von Dropbox" />
+        <button type="button" className="btn primary" disabled={!code.trim()} onClick={() => run(async () => (await dropboxFinishCode(code), setCode(''), void syncNow()))}>
+          Verbinden
+        </button>
+      </div>
+    </div>
+  );  const run = async (fn: () => Promise<void>) => {
     setError('');
     try {
       await fn();
@@ -56,6 +78,27 @@ export function SyncPanel() {
             Trennen
           </button>
         </div>
+        {status.state === 'login' && conf.provider === 'dropbox' && codeLogin}
+        {conf.provider === 'dropbox' && conf.dropboxAppKey && (
+          <div className="sync-other">
+            <b>Weiteres Gerät (z. B. Handy) verbinden</b>
+            <p className="muted small">
+              Merkora dort öffnen › Einstellungen › Daten & Sync › Dropbox: denselben App-Key eintragen und verbinden. Danach werden beide Stände
+              automatisch zusammengeführt. Den KI-API-Key trägst du auf dem anderen Gerät einmal neu ein – er wird bewusst nicht übertragen.
+            </p>
+            <button
+              type="button"
+              className="btn outline sm"
+              onClick={() => {
+                void navigator.clipboard?.writeText(conf.dropboxAppKey);
+                setKeyCopied(true);
+                setTimeout(() => setKeyCopied(false), 1500);
+              }}
+            >
+              {keyCopied ? 'Kopiert ✓' : 'App-Key kopieren'}
+            </button>
+          </div>
+        )}
         <label className="check-row">
           <input type="checkbox" checked={conf.auto} onChange={(e) => setConf({ auto: e.target.checked })} />
           <span>Automatisch synchronisieren (beim Öffnen und kurz nach jeder Änderung)</span>
@@ -80,6 +123,9 @@ export function SyncPanel() {
           Google Drive
         </button>
       </div>
+      {isAndroid && pick === 'gdrive' && (
+        <p className="muted small">Google erlaubt die Anmeldung nicht im App-Fenster – am Handy bitte Dropbox verwenden.</p>
+      )}
       {pick === 'dropbox' ? (
         <>
           <ol className="steps">
@@ -112,6 +158,13 @@ export function SyncPanel() {
             </button>
           </div>
           <p className="muted small">Einmalig, dauert etwa 2 Minuten. Danach bleibt die Verbindung bestehen, bis du sie trennst.</p>
+          {codeStep ? (
+            codeLogin
+          ) : (
+            <button type="button" className="link-btn" onClick={() => setCodeStep(true)}>
+              Am Handy oder wenn die Rückkehr nicht klappt: mit Code anmelden
+            </button>
+          )}
         </>
       ) : (
         <>

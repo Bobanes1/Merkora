@@ -407,7 +407,7 @@ function normalize(raw: unknown): Data | null {
 }
 
 // Desktop app (Tauri/Rust): learning data is also written to a save file with daily backups.
-export { desktop, isDesktop } from './desktop';
+export { desktop, isAndroid, isDesktop } from './desktop';
 
 function loadPrivacy(): Privacy {
   const raw = safeGet(localStorage, PRIVACY_KEY) ?? safeGet(localStorage, OLD.privacy);

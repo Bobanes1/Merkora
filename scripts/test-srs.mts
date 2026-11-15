@@ -1026,6 +1026,18 @@ console.log('Rückgängig');
   ok(withoutReview(r, 'A', '1', 7) === r, 'unbekannter Eintrag: nichts ändert sich');
 }
 
+console.log('Dropbox: Anmeldung mit Code');
+{
+  const { dropboxCodeUrl, dropboxCodeBody } = await import('../src/lib/dropboxAuth');
+  const u = new URL(dropboxCodeUrl(' abc123 ', 'CHAL'));
+  ok(u.origin + u.pathname === 'https://www.dropbox.com/oauth2/authorize', 'Dropbox-Anmeldeseite');
+  ok(!u.searchParams.has('redirect_uri'), 'ohne Rücksprung-Adresse (Dropbox zeigt einen Code)');
+  ok(u.searchParams.get('code_challenge') === 'CHAL' && u.searchParams.get('code_challenge_method') === 'S256', 'PKCE mit S256');
+  ok(u.searchParams.get('token_access_type') === 'offline' && u.searchParams.get('client_id') === 'abc123', 'dauerhafte Anmeldung, App-Key ohne Leerzeichen');
+  const b = dropboxCodeBody('abc123', '  xyz ', 'VER');
+  ok(b.get('code') === 'xyz' && b.get('code_verifier') === 'VER' && !b.has('redirect_uri') && b.get('grant_type') === 'authorization_code', 'Code-Tausch ohne Rücksprung-Adresse');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

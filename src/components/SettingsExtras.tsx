@@ -4,6 +4,7 @@ import {
   autostartEnabled,
   backupNow,
   getBackupDir,
+  isAndroid,
   isDesktop,
   listBackups,
   notify,
@@ -65,7 +66,7 @@ export function RemindersPanel() {
           </button>
         </div>
       )}
-      {isDesktop && (
+      {isDesktop && !isAndroid && (
         <>
           <label className="check-row">
             <input type="checkbox" checked={s.trayOnClose} onChange={(e) => setSettings({ trayOnClose: e.target.checked })} />
@@ -158,6 +159,7 @@ export function BackupsPanel() {
         )}
       </p>
       <div className="row-gap">
+        {!isAndroid && (
         <button
           type="button"
           className="btn outline sm"
@@ -174,6 +176,7 @@ export function BackupsPanel() {
         >
           {dir ? 'Anderen Ordner wählen' : 'Eigenen Sicherungsordner wählen'}
         </button>
+        )}
         {dir && (
           <button type="button" className="btn ghost sm" onClick={() => void run(async () => (await setBackupDir(null), 'Eigener Ordner wird nicht mehr benutzt.'))}>
             Eigenen Ordner entfernen

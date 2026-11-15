@@ -7742,3 +7742,28 @@ a.deck-row:hover {
     opacity: 0;
   }
 }
+
+/* ---------- sync: code sign-in, other device ---------- */
+.sync-code,
+.sync-other {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-md);
+}
+.sync-other {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.sync-other p {
+  margin: 0;
+}
+.sync-code .input-row {
+  flex-wrap: wrap;
+}
+.sync-code .input {
+  flex: 1;
+  min-width: 160px;
+}

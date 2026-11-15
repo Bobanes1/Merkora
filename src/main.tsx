@@ -13,7 +13,7 @@ import '@fontsource/outfit/800.css';
 import './styles.css';
 import App from './App';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { initStore, isDesktop } from './lib/store';
+import { initStore, isAndroid, isDesktop } from './lib/store';
 import { openExternal } from './lib/desktop';
 import { startJobRunner } from './lib/jobs';
 import { startAutoSync } from './lib/sync';
@@ -46,7 +46,7 @@ initStore()
     void import('./lib/examReminders').then((m) => m.startExamReminders());
     void import('./lib/reminders').then((m) => m.startReminders());
     if (isDesktop) void import('./lib/smoke').then((m) => m.runSmokeTest());
-    if (isDesktop) void import('./lib/update').then((m) => m.startUpdateChecks());
+    if (isDesktop && !isAndroid) void import('./lib/update').then((m) => m.startUpdateChecks());
   });
 
 // Desktop app: links that would open a new window go to the normal browser instead.
