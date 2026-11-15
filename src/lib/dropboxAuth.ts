@@ -15,6 +15,11 @@ export function dropboxCodeUrl(appKey: string, challenge: string): string {
   return u.toString();
 }
 
+/** Does pasted text look like a complete Dropbox code? (then Merkora connects without another tap) */
+export function looksLikeDropboxCode(s: string): boolean {
+  return /^[A-Za-z0-9_-]{20,}$/.test(s.trim());
+}
+
 /** The body for exchanging the shown code (no redirect address, as in the request). */
 export function dropboxCodeBody(appKey: string, code: string, verifier: string): URLSearchParams {
   return new URLSearchParams({ code: code.trim(), grant_type: 'authorization_code', client_id: appKey.trim(), code_verifier: verifier });

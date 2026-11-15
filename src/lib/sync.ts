@@ -182,7 +182,7 @@ export async function dropboxFinishCode(code: string): Promise<void> {
   if (!verifier) throw new SyncError('Starte zuerst „Mit Code anmelden“.');
   if (!code.trim()) throw new SyncError('Bitte den Code von Dropbox einfügen.');
   const res = await fetch(DROPBOX_TOKEN, { method: 'POST', body: dropboxCodeBody(conf.dropboxAppKey, code, verifier) });
-  if (res.status === 400) throw new SyncError('Der Code passt nicht (oder ist abgelaufen). Bitte „Mit Code anmelden“ noch einmal starten.');
+  if (res.status === 400) throw new SyncError('Der Code passt nicht oder ist abgelaufen – öffne Dropbox noch einmal und kopiere den neuen Code.');
   await check(res, 'Dropbox-Anmeldung');
   const j = await res.json();
   localStorage.removeItem('merkora.pkce.code');

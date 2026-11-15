@@ -1037,6 +1037,9 @@ console.log('Dropbox: Anmeldung mit Code');
   ok(u.searchParams.get('token_access_type') === 'offline' && u.searchParams.get('client_id') === 'abc123', 'dauerhafte Anmeldung, App-Key ohne Leerzeichen');
   const b = dropboxCodeBody('abc123', '  xyz ', 'VER');
   ok(b.get('code') === 'xyz' && b.get('code_verifier') === 'VER' && !b.has('redirect_uri') && b.get('grant_type') === 'authorization_code', 'Code-Tausch ohne Rücksprung-Adresse');
+  const { looksLikeDropboxCode } = await import('../src/lib/dropboxAuth');
+  ok(looksLikeDropboxCode('sDfG8hJkL0qWeRtYuIoP_a-bCdEfGh12') && looksLikeDropboxCode('\n  sDfG8hJkL0qWeRtYuIoP_a-bC \n'), 'eingefügter Code (auch mit Leerzeichen/Umbruch drumherum) wird erkannt');
+  ok(!looksLikeDropboxCode('abc123') && !looksLikeDropboxCode('https://www.dropbox.com/oauth2') && !looksLikeDropboxCode('zwei Wörter im Code hier drin'), 'zu kurz, Adresse oder Text → kein automatisches Verbinden');
 }
 
 console.log('Handy: Wischen beim Lernen');

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { disconnect, dropboxConnect, dropboxConnectCode, dropboxFinishCode, googleConnect, redirectUri, setConf, syncNow, useSync, type SyncProvider } from '../lib/sync';
 import { inTauri, isAndroid } from '../lib/desktop';
+import { looksLikeDropboxCode } from '../lib/dropboxAuth';
 import { IconRefresh } from './Icons';
 
 const fmt = (t?: number) => (t ? new Date(t).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) : 'noch nie');
@@ -15,25 +16,56 @@ export function SyncPanel() {
   const [codeStep, setCodeStep] = useState(false);
   const [waitHidden, setWaitHidden] = useState(false);
   const [code, setCode] = useState('');
+  const [pasteHint, setPasteHint] = useState(false);
   const [keyCopied, setKeyCopied] = useState(false);
+  const finishCode = (c: string) => run(async () => (await dropboxFinishCode(c), setCode(''), void syncNow()));
+  // pasted code that looks complete: connect right away (no second tap)
+  const onCode = (v: string) => {
+    setCode(v);
+    if (looksLikeDropboxCode(v) && !looksLikeDropboxCode(code)) void finishCode(v.trim());
+  };
+  const pasteCode = async () => {
+    setError('');
+    try {
+      const t = (await navigator.clipboard.readText()).trim();
+      if (!t) throw new Error('leer');
+      onCode(t);
+    } catch {
+      setPasteHint(true);
+    }
+  };
   const codeLogin = (
     <div className="sync-code">
-      <p className="muted small">
-        {isAndroid
-          ? 'Am Handy: „Dropbox öffnen“ → anmelden und „Zulassen“ → den angezeigten Code kopieren und hier einfügen.'
-          : 'Falls die Rückkehr zu Merkora nicht klappt: Dropbox im Browser öffnen, „Zulassen“ und den angezeigten Code hier einfügen.'}
-      </p>
+      {isAndroid ? (
+        <ol className="steps compact">
+          <li>Den Knopf oben tippen – Dropbox öffnet sich. Anmelden (auch mit Google) und „Zulassen“ tippen.</li>
+          <li>Den angezeigten Code kopieren.</li>
+          <li>Zurück zu Merkora und hier einfügen – Merkora verbindet sich dann von selbst.</li>
+        </ol>
+      ) : (
+        <p className="muted small">Falls die Rückkehr zu Merkora nicht klappt: Dropbox im Browser öffnen, „Zulassen“ und den angezeigten Code hier einfügen.</p>
+      )}
       <div className="input-row">
-        <button type="button" className="btn outline" disabled={!conf.dropboxAppKey} onClick={() => run(dropboxConnectCode)}>
-          Dropbox öffnen
-        </button>
-        <input className="input" placeholder="Code von Dropbox einfügen" value={code} onChange={(e) => setCode(e.target.value)} aria-label="Code von Dropbox" />
-        <button type="button" className="btn primary" disabled={!code.trim()} onClick={() => run(async () => (await dropboxFinishCode(code), setCode(''), void syncNow()))}>
-          Verbinden
-        </button>
+        {!isAndroid && (
+          <button type="button" className="btn outline" disabled={!conf.dropboxAppKey} onClick={() => run(dropboxConnectCode)}>
+            Dropbox öffnen
+          </button>
+        )}
+        <input className="input" placeholder="Code von Dropbox einfügen" value={code} onChange={(e) => onCode(e.target.value)} aria-label="Code von Dropbox" />
+        {isAndroid && !code.trim() ? (
+          <button type="button" className="btn outline" onClick={() => void pasteCode()}>
+            Einfügen
+          </button>
+        ) : (
+          <button type="button" className="btn primary" disabled={!code.trim()} onClick={() => void finishCode(code)}>
+            Verbinden
+          </button>
+        )}
       </div>
+      {pasteHint && !code && <p className="muted small">Einfügen: ins Feld lange tippen und „Einfügen“ wählen.</p>}
     </div>
-  );  const run = async (fn: () => Promise<void>) => {
+  );
+  const run = async (fn: () => Promise<void>) => {
     setError('');
     try {
       await fn();
@@ -66,7 +98,7 @@ export function SyncPanel() {
             <button
               type="button"
               className="btn primary"
-              onClick={() => run(async () => (conf.provider === 'dropbox' ? dropboxConnect() : (await googleConnect(''), void syncNow())))}
+              onClick={() => run(async () => (conf.provider === 'dropbox' ? (isAndroid ? dropboxConnectCode() : dropboxConnect()) : (await googleConnect(''), void syncNow())))}
             >
               Neu anmelden
             </button>
@@ -138,12 +170,14 @@ export function SyncPanel() {
               → „Scoped access“ → „App folder“ → beliebiger Name (z. B. „Merkora-Sync“) → „Create app“.
             </li>
             <li>Reiter „Permissions“: Haken bei <b>files.content.write</b> und <b>files.content.read</b> → „Submit“.</li>
-            <li>
-              Reiter „Settings“ → „OAuth 2 / Redirect URIs“: diese Adresse eintragen und „Add“:{' '}
-              <button type="button" className="code-copy" onClick={() => copy(redirectUri())}>
-                {redirectUri()} {copied ? '✓' : '⧉'}
-              </button>
-            </li>
+            {!isAndroid && (
+              <li>
+                Reiter „Settings“ → „OAuth 2 / Redirect URIs“: diese Adresse eintragen und „Add“:{' '}
+                <button type="button" className="code-copy" onClick={() => copy(redirectUri())}>
+                  {redirectUri()} {copied ? '✓' : '⧉'}
+                </button>
+              </li>
+            )}
             <li>Den „App key“ von dort kopieren und hier einfügen:</li>
           </ol>
           <div className="input-row">
@@ -154,15 +188,15 @@ export function SyncPanel() {
               onChange={(e) => setConf({ dropboxAppKey: e.target.value.trim() })}
               aria-label="Dropbox App key"
             />
-            <button type="button" className="btn primary" disabled={!conf.dropboxAppKey} onClick={() => (setWaitHidden(false), run(dropboxConnect))}>
+            <button type="button" className="btn primary" disabled={!conf.dropboxAppKey} onClick={() => (setWaitHidden(false), isAndroid ? (setCodeStep(true), run(dropboxConnectCode)) : run(dropboxConnect))}>
               Mit Dropbox verbinden
             </button>
           </div>
           <p className="muted small">
             Einmalig, dauert etwa 2 Minuten. Danach bleibt die Verbindung bestehen, bis du sie trennst.
-            {inTauri && ' Die Anmeldung öffnet sich in deinem Browser – dort geht auch „Mit Google anmelden“.'}
+            {inTauri && !isAndroid && ' Die Anmeldung öffnet sich in deinem Browser – dort geht auch „Mit Google anmelden“.'}
           </p>
-          {inTauri && !waitHidden && (status.state === 'login' || status.state === 'error') && (
+          {inTauri && !isAndroid && !waitHidden && (status.state === 'login' || status.state === 'error') && (
             <div className={'sync-wait ' + status.state} role="status">
               <span>
                 {status.state === 'login'
@@ -174,7 +208,7 @@ export function SyncPanel() {
               </button>
             </div>
           )}
-          {codeStep ? (
+          {codeStep || isAndroid ? (
             codeLogin
           ) : (
             <button type="button" className="link-btn" onClick={() => setCodeStep(true)}>
