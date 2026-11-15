@@ -1056,6 +1056,22 @@ console.log('Android-Update: Versionen vergleichen');
   ok(apkUrl('0.9.1') === 'https://github.com/Bobanes1/Merkora/releases/download/v0.9.1/Merkora_0.9.1_android.apk', 'APK-Adresse passt zum Release');
 }
 
+console.log('KI-Antworten reparieren');
+{
+  const { repairJson } = await import('../src/lib/jsonRepair');
+  const r = (t: string) => repairJson(t) as any;
+  ok(r('Hier ist das JSON:\n```json\n{"cards":[{"front":"A","back":"B"}]}\n```\nViel Erfolg!')?.cards?.length === 1, 'Text und Codeblock drumherum');
+  ok(r('{"cards":[{"front":"A","back":"Zeile 1\nZeile 2"}]}')?.cards?.[0]?.back === 'Zeile 1\nZeile 2', 'Zeilenumbruch in einem Text');
+  ok(r('{"cards":[{"front":"A","back":"B",},]}')?.cards?.length === 1, 'überzählige Kommas');
+  const cut = r('{"cards":[{"front":"A","back":"B"},{"front":"C","back":"D"},{"front":"E","ba');
+  ok(cut?.cards?.length === 3 && cut.cards[1].back === 'D' && cut.cards[2].front === 'E' && cut.cards[2].back === undefined, 'abgeschnittene Antwort: fertige Karten bleiben, halbe ohne Antwort');
+  const cut2 = r('{"cards":[{"front":"A","back":"B"},{"front":"C","back":"Hallo Wel');
+  ok(cut2?.cards?.length >= 1 && cut2.cards[0].back === 'B', 'mitten im Text abgeschnitten');
+  ok(r('{"title":"Prüfung","questions":[{"q":"1"},{"q":"2"}]} und noch etwas {x}')?.questions?.length === 2, 'Text nach dem JSON wird ignoriert');
+  ok(repairJson('Keine Ahnung.') === null, 'ohne JSON: nichts');
+  ok(r('{"a":"Er sagte \\"Hallo\\" und ging"}')?.a === 'Er sagte "Hallo" und ging', 'maskierte Anführungszeichen bleiben');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

@@ -8,6 +8,7 @@
  */
 import {
   AiError,
+  AiFormatError,
   cardsPrompt,
   materialFrom,
   parseCards,
@@ -193,6 +194,13 @@ async function finish(job: Job, text: string) {
 }
 
 function fail(job: Job, e: unknown) {
+  // an unreadable answer: start the job once more by itself before telling the person
+  if (e instanceof AiFormatError && (job.attempts ?? 0) < 2) {
+    patchJob(job.id, { status: 'queued', error: undefined, remoteId: undefined, mode: undefined });
+    // the run that just failed is still being cleaned up – start the new one a moment later
+    setTimeout(pump, 1500);
+    return;
+  }
   const msg = (e as Error).message || 'Unbekannter Fehler';
   patchJob(job.id, { status: 'error', error: msg, finishedAt: Date.now() });
   const deck = deckOf(job);

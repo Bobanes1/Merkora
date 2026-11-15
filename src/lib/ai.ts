@@ -7,6 +7,7 @@ import { FIGURE_RULE } from './slides';
 import { getState, type ChatMsg, type Provider } from './store';
 import { SECOND_MODEL } from '../config';
 import { autoCardInstruction, CARD_MATERIAL_LIMIT } from './cardCount';
+import { repairJson } from './jsonRepair';
 
 export const PROVIDERS: Record<
   Provider,
@@ -241,34 +242,36 @@ async function completeOnce(messages: ChatMsg[], opts: Opts = {}): Promise<strin
   }
 }
 
+/** The AI answered, but not in a readable form (Merkora tries once more by itself). */
+export class AiFormatError extends AiError {}
+
 export function parseJson<T>(text: string): T {
   const cleaned = text.replace(/```(?:json)?/gi, '').trim();
   try {
     return JSON.parse(cleaned) as T;
   } catch {
-    const start = cleaned.search(/[[{]/);
-    const endObj = cleaned.lastIndexOf('}');
-    const endArr = cleaned.lastIndexOf(']');
-    const end = Math.max(endObj, endArr);
-    if (start >= 0 && end > start) {
-      try {
-        return JSON.parse(cleaned.slice(start, end + 1)) as T;
-      } catch {
-        /* fall through */
-      }
-    }
-    throw new AiError('Die Antwort der KI war nicht im erwarteten Format. Bitte versuche es noch einmal.');
+    // small mistakes and answers cut off at the length limit are repaired (everything complete is kept)
+    const v = repairJson(cleaned);
+    if (v && typeof v === 'object') return v as T;
+    throw new AiFormatError('Die Antwort der KI war nicht im erwarteten Format. Bitte versuche es noch einmal.');
   }
 }
 
 export async function completeJson<T>(system: string, user: string, maxTokens = 6000, purpose: Purpose = 'gen'): Promise<T> {
-  const text = await complete([{ role: 'user', content: user }], {
-    purpose,
-    system: system + '\nAntworte ausschließlich mit gültigem JSON, ohne Erklärtext und ohne Markdown-Codeblock.',
-    json: true,
-    maxTokens,
-  });
-  return parseJson<T>(text);
+  const ask = (tokens: number, extra = '') =>
+    complete([{ role: 'user', content: user }], {
+      purpose,
+      system: system + '\nAntworte ausschließlich mit gültigem JSON, ohne Erklärtext und ohne Markdown-Codeblock.' + extra,
+      json: true,
+      maxTokens: tokens,
+    });
+  try {
+    return parseJson<T>(await ask(maxTokens));
+  } catch (e) {
+    if (!(e instanceof AiFormatError)) throw e;
+    // one more try with more room and a clear reminder
+    return parseJson<T>(await ask(Math.round(maxTokens * 1.5), '\nWICHTIG: Deine letzte Antwort war kein vollständiges, gültiges JSON. Antworte jetzt nur mit dem JSON-Objekt und halte dich kurz genug, damit es vollständig ist.'));
+  }
 }
 
 export const LANG_RULE =
