@@ -11,9 +11,25 @@ export const hasEmphasis = (s: string) => /\*\*[^*\n]+?\*\*/.test(s);
 /** Text without the ** marks (when bold words are switched off). */
 export const stripEmphasis = (s: string) => s.replace(/\*\*([^*\n]+?)\*\*/g, '$1');
 
+/**
+ * LaTeX in AI answers: in JSON "\frac" or "\theta" arrive as control characters (form feed + "rac", tab + "heta").
+ * Inside formulas \( … \), \[ … \] and $$ … $$ they get their backslash back.
+ */
+export function repairMath(s: string): string {
+  const fix = (m: string) =>
+    m
+      .replace(/\t(?=[a-z])/gi, '\\t')
+      .replace(/\r(?=[a-z])/gi, '\\r')
+      .replace(/\n(?=[a-z])/gi, '\\n');
+  return s
+    .replace(/\x0c/g, '\\f')
+    .replace(/\x08/g, '\\b')
+    .replace(/\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$/g, fix);
+}
+
 /** Plain AI text → card HTML: escaped, line breaks kept, **word** in bold (a lone ** stays as it is). */
 export function emphasisHtml(s: string): string {
-  return esc(s)
+  return esc(repairMath(s))
     .replace(/\*\*([^*\n]+?)\*\*/g, '<b>$1</b>')
     .replace(/\n/g, '<br>');
 }

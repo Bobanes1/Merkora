@@ -3,7 +3,7 @@ import { sanitize } from '../lib/content';
 import { mediaUrl } from '../lib/db';
 import type { Card, Deck } from '../lib/store';
 import { useResolvedTheme } from '../lib/theme';
-import { parseDiagram, PALETTES, renderDiagram } from '../lib/diagram';
+import { parseDiagram, PALETTES, renderDiagram, type DiagramView } from '../lib/diagram';
 
 /** How an imported Anki card looks: its note type CSS and the wrapping class (`card card1`). */
 export type CardLook = { css?: string; cls?: string };
@@ -69,8 +69,15 @@ export function hydrateDiagrams(root: ParentNode, dark: boolean) {
   for (const el of Array.from(root.querySelectorAll<HTMLElement>('[data-diagram]'))) {
     try {
       const d = parseDiagram(JSON.parse(el.getAttribute('data-diagram') ?? ''));
+      // while learning: a covered label or step-by-step build-up (data-view is only added for showing)
+      let view: DiagramView | undefined;
+      try {
+        view = el.dataset.view ? (JSON.parse(el.dataset.view) as DiagramView) : undefined;
+      } catch {
+        view = undefined;
+      }
       // our own SVG with escaped labels – safe to insert
-      if (d) el.innerHTML = renderDiagram(d, PALETTES[dark ? 'dark' : 'light']);
+      if (d) el.innerHTML = renderDiagram(d, PALETTES[dark ? 'dark' : 'light'], view);
     } catch {
       /* broken description: leave the card without a graphic */
     }

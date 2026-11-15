@@ -3,11 +3,12 @@
  * Pure – tested in scripts/test-srs.mts.
  */
 type SCourse = { id: string; name: string; workspaceId: string };
-type SDeck = { id: string; name: string; courseId: string; cards: { id: string; front: string; back: string }[] };
+type SDeck = { id: string; name: string; courseId: string; cards: { id: string; front: string; back: string }[]; files?: { id: string; name: string }[] };
 
 export type SearchHit =
   | { kind: 'course'; id: string; title: string; sub: string }
   | { kind: 'deck'; id: string; title: string; sub: string }
+  | { kind: 'file'; id: string; deckId: string; title: string; sub: string }
   | { kind: 'card'; id: string; deckId: string; title: string; sub: string; snippet: string; term: string };
 
 const plain = (s: string) =>
@@ -55,6 +56,9 @@ export function searchAll(
     .filter((d) => all(d.name))
     .slice(0, max.other)
     .map((d) => ({ kind: 'deck', id: d.id, title: d.name, sub: `${courseName.get(d.courseId) ?? ''} · ${d.cards.length} Karten` }));
+  const files: SearchHit[] = data.decks
+    .flatMap((d) => (d.files ?? []).filter((f) => all(f.name)).map((f) => ({ kind: 'file' as const, id: f.id, deckId: d.id, title: f.name, sub: d.name })))
+    .slice(0, max.other);
   const cards: { hit: SearchHit; rank: number; i: number }[] = [];
   let i = 0;
   for (const d of data.decks)
@@ -66,5 +70,5 @@ export function searchAll(
       cards.push({ hit: { kind: 'card', id: c.id, deckId: d.id, title: f, sub: d.name, snippet: snippetAround(b, term), term }, rank, i: i++ });
     }
   cards.sort((a, b) => a.rank - b.rank || a.i - b.i);
-  return [...courses, ...decks, ...cards.slice(0, max.cards).map((x) => x.hit)];
+  return [...courses, ...decks, ...files, ...cards.slice(0, max.cards).map((x) => x.hit)];
 }

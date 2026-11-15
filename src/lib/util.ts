@@ -52,8 +52,8 @@ export function truncate(s: string, n: number) {
   return s.length > n ? s.slice(0, n) + '…' : s;
 }
 
-export function download(filename: string, text: string, type = 'application/json') {
-  const blob = new Blob([text], { type });
+export function download(filename: string, text: string | Blob, type = 'application/json') {
+  const blob = typeof text === 'string' ? new Blob([text], { type }) : text;
   // Desktop app: straight into the Downloads folder (the window has no download bar).
   if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
     void import('./desktop').then(async ({ saveDownload }) => {

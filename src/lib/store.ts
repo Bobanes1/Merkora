@@ -125,7 +125,7 @@ export type Deck = {
   mockHistory?: MockHistory[];
 };
 /** A stored material file (media id = `id`). */
-export type DeckFile = { id: string; name: string; size: number; addedAt: number };
+export type DeckFile = { id: string; name: string; size: number; addedAt: number; /** MIME type (missing on older entries = PDF) */ type?: string };
 /** A folder inside a course that groups decks. */
 export type Folder = { id: string; name: string };
 export type Course = { id: string; workspaceId: string; name: string; slug: string; folders?: Folder[] };
@@ -223,6 +223,10 @@ export type Settings = {
   homeDeckSort?: 'due' | 'studied' | 'created';
   /** "Mit Grafiken" when creating cards with AI (default on). */
   cardGraphics?: boolean;
+  /** The one-time tip on the deck page was closed. */
+  seenDeckTip?: boolean;
+  /** While learning, sometimes ask a hidden label of a card's graphic (default on). */
+  quizGraphics?: boolean;
   /** Take models and figures from PDF slides onto AI cards (on by default). */
   slideFigures?: boolean;
   /** Own price in US-$ per 1M tokens (input/output) – overrides the price list. */

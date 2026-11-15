@@ -1072,6 +1072,127 @@ console.log('KI-Antworten reparieren');
   ok(r('{"a":"Er sagte \\"Hallo\\" und ging"}')?.a === 'Er sagte "Hallo" und ging', 'maskierte Anführungszeichen bleiben');
 }
 
+console.log('Formeln und neue Grafiken');
+{
+  const { compileExpr, sampleCurve } = await import('../src/lib/plotExpr');
+  const f = (s: string, x = 0) => compileExpr(s)?.(x);
+  ok(f('1 + 2*3') === 7 && f('2^3^2') === 512 && f('-2^2') === -4 && f('(1+2)*3') === 9, 'Formel: Punkt vor Strich, Potenz, Klammern');
+  ok(f('2x', 3) === 6 && f('3(x+1)', 1) === 6 && Math.abs(f('2pi')! - 2 * Math.PI) < 1e-12, 'Formel: 2x, 3(x+1), 2pi');
+  ok(Math.abs(f('exp(-x^2/2)/sqrt(2*pi)')! - 0.3989422804) < 1e-9 && f('ln(e)') === 1 && f('log(1000)') === 3 && f('max(1, x)', 4) === 4 && f('10 − 0,5·x', 2) === 9, 'Formel: Funktionen, pi, e, Komma und Sonderzeichen');
+  ok(compileExpr('alert(1)') === null && compileExpr('y + 1') === null && compileExpr('constructor') === null && compileExpr('(1+2') === null && compileExpr('') === null && compileExpr('x'.repeat(201)) === null, 'Formel: Ungültiges und Fremdes wird abgelehnt');
+  const pts = sampleCurve(compileExpr('ln(x)')!, -1, 1, 4);
+  ok(pts.length === 5 && pts[0] === null && pts[4]!.y === 0, 'Kurve: Lücken, wo die Formel keinen Wert hat');
+
+  const { parseDiagram, layoutDiagram, renderDiagram, PALETTES, DIAGRAM_KINDS, niceTicks } = await import('../src/lib/diagram');
+  ok(JSON.stringify(niceTicks(0, 10)) === '[0,2,4,6,8,10]' && JSON.stringify(niceTicks(0, 1)) === '[0,0.2,0.4,0.6,0.8,1]', 'Teilstriche auf runden Werten');
+  const hit = (a: any, b: any) => a.x < b.x + b.w - 0.5 && b.x < a.x + a.w - 0.5 && a.y < b.y + b.h - 0.5 && b.y < a.y + a.h - 0.5;
+  const long = 'Ein ziemlich langer Begriff zur Sache';
+  const news = [
+    { type: 'plot', title: 'Angebot und Nachfrage', x: { label: 'Menge', min: 0, max: 10 }, y: { label: 'Preis', min: 0, max: 10 }, functions: [{ label: 'Nachfrage', expr: '10 - x' }, { label: 'Angebot', expr: '1 + 0.8*x' }], points: [{ x: 5, label: 'Gleichgewicht' }] },
+    { type: 'plot', title: 'Normalverteilung', x: { label: 'z', min: -3, max: 3 }, y: { label: 'Dichte', min: 0, max: 0.45 }, functions: [{ label: '', expr: 'exp(-x^2/2)/sqrt(2*pi)' }] },
+    { type: 'plot', x: { label: 'x', min: 0.1, max: 5 }, y: { label: 'y', min: -2, max: 2 }, functions: [{ label: 'ln', expr: 'ln(x)' }, { label: '1/x', expr: '1/x' }, { label: 'sin', expr: 'sin(x)' }] },
+    { type: 'pie', title: 'Stimmanteile', slices: [{ label: 'Partei A', value: 32 }, { label: 'Partei B', value: 27 }, { label: long, value: 18 }, { label: 'Andere', value: 23 }] },
+    { type: 'fishbone', title: 'Warum sinkt die Motivation?', effect: 'Geringe Motivation', causes: [{ label: 'Umfeld', items: ['Lärm', 'keine Ruhe'] }, { label: 'Person', items: ['Müdigkeit', long, 'Stress'] }, { label: 'Aufgabe', items: ['zu schwer'] }, { label: 'Methode', items: ['kein Plan', 'monoton'] }, { label: 'Zeit', items: ['Termindruck'] }] },
+    { type: 'numberline', title: 'pH-Skala', min: 0, max: 14, marks: [{ value: 1, label: 'Magensäure' }, { value: 7, label: 'Wasser' }, { value: 8.3, label: 'Meerwasser' }, { value: 13, label: 'Natronlauge' }], ranges: [{ from: 0, to: 7, label: 'sauer' }, { from: 7, to: 14, label: 'basisch' }] },
+    { type: 'numberline', min: 1, max: 6, marks: [{ value: 4, label: 'genügend' }] },
+    { type: 'network', title: 'Lernen', nodes: ['Motivation', 'Aufmerksamkeit', 'Gedächtnis', 'Emotion', 'Schlaf'], links: [{ from: 'Motivation', to: 'Aufmerksamkeit', label: 'lenkt' }, { from: 'Emotion', to: 'Gedächtnis', label: 'verstärkt' }, { from: 'Schlaf', to: 'Gedächtnis', label: 'festigt' }, { from: 'aufmerksamkeit', to: 'Gedächtnis' }] },
+    { type: 'network', nodes: ['A', 'B', 'C'], links: [{ from: 'A', to: 'B' }, { from: 'B', to: 'C' }, { from: 'C', to: 'A' }] },
+  ];
+  for (const raw of news) {
+    const d = parseDiagram(raw)!;
+    if (!d) { ok(false, raw.type + ': wird erkannt'); continue; }
+    const L = layoutDiagram(d);
+    const real = L.boxes.filter((b) => b.lines.length);
+    const outside = real.filter((b) => b.x < 0 || b.y < 0 || b.x + b.w > L.width + 0.5 || b.y + b.h > L.height + 0.5);
+    const pairs: string[] = [];
+    real.forEach((a, k) => real.slice(k + 1).forEach((b) => { if (hit(a, b)) pairs.push(a.lines[0] + ' / ' + b.lines[0]); }));
+    const svg = renderDiagram(d, PALETTES.dark);
+    ok(outside.length === 0 && pairs.length === 0 && /^<svg/.test(svg) && !svg.includes('NaN'), d.type + (d.title ? ' „' + d.title + '“' : '') + ': nichts überlappt oder ragt hinaus' + (pairs.length ? ' [' + pairs.join('; ') + ']' : '') + (outside.length ? ' [außen: ' + outside.map((b) => b.lines[0]).join(', ') + ']' : ''));
+  }
+  const sd = layoutDiagram(parseDiagram(news[0])!);
+  ok(sd.lines.filter((l) => !l.muted && !l.arrow && l.pts.length > 50).length === 2 && sd.areas.some((a) => a.circle), 'Kurve: zwei exakte Linien und ein markierter Gleichgewichtspunkt');
+  const gw = sd.areas.find((a) => a.circle)!.circle!;
+  ok(Math.abs(gw[0] - (62 + (600 - 16 - 12 - 62) / 2)) < 0.5, 'Kurve: Punkt liegt genau bei x = 5');
+  ok(parseDiagram({ type: 'plot', x: { min: 0, max: 1 }, y: { min: 0, max: 1 }, functions: [{ expr: 'alert(1)' }] }) === null, 'Kurve mit fremdem Code → keine Grafik');
+  ok(parseDiagram({ type: 'plot', x: { min: 5, max: 1 }, y: { min: 0, max: 1 }, functions: [{ expr: 'x' }] }) === null, 'Kurve mit verkehrter Achse → keine Grafik');
+  ok(parseDiagram({ type: 'pie', slices: [{ label: 'nur', value: 1 }] }) === null && parseDiagram({ type: 'pie', slices: [{ label: 'a', value: '40' }, { label: 'b', value: '60,5' }] }) !== null, 'Kreisdiagramm braucht zwei Anteile; Zahlen als Text gehen');
+  ok(parseDiagram({ type: 'fishbone', effect: 'X', causes: ['nur eins'] }) === null, 'Ishikawa braucht zwei Ursachen');
+  ok(parseDiagram({ type: 'numberline', min: 0, max: 10, marks: [{ value: 20, label: 'außerhalb' }] }) === null, 'Zahlenstrahl ohne gültige Marke → keine Grafik');
+  const net = parseDiagram(news[7]) as any;
+  ok(net.links.length === 4 && net.links[3].from === 'Aufmerksamkeit' && !('label' in net.links[3]), 'Begriffsnetz: Namen werden zugeordnet, leere Beschriftung fällt weg');
+  ok(['plot', 'pie', 'fishbone', 'numberline', 'network'].every((t) => DIAGRAM_KINDS.some((k) => k.id === t)), 'neue Formen stehen in der Grafik-Auswahl');
+  const again = parseDiagram(JSON.parse(JSON.stringify(parseDiagram(news[0]))));
+  ok(JSON.stringify(again) === JSON.stringify(parseDiagram(news[0])), 'gespeicherte Kurve wird gleich gelesen');
+}
+
+console.log('Dateien ansehen');
+{
+  const { zipSync, strToU8 } = await import('fflate');
+  const { docxHtml, pptxSlides, csvRows } = await import('../src/lib/officeHtml');
+  const { fileKind } = await import('../src/lib/fileKind');
+  ok(fileKind('a.PDF') === 'pdf' && fileKind('b.docx') === 'word' && fileKind('c.pptx') === 'powerpoint' && fileKind('d.md') === 'markdown' && fileKind('e.csv') === 'csv' && fileKind('x', 'application/pdf') === 'pdf' && fileKind('f.exe') === 'other', 'Dateiart wird erkannt');
+  const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+  const doc = `<w:document ${W}><w:body>
+    <w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Kapitel 1</w:t></w:r></w:p>
+    <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>fett</w:t></w:r><w:r><w:t xml:space="preserve"> und </w:t></w:r><w:r><w:rPr><w:i/></w:rPr><w:t>kursiv &lt;script&gt;</w:t></w:r></w:p>
+    <w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Punkt A</w:t></w:r></w:p>
+    <w:tbl><w:tr><w:tc><w:p><w:r><w:t>Zelle 1</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Zelle 2</w:t></w:r></w:p></w:tc></w:tr></w:tbl>
+  </w:body></w:document>`;
+  const html = docxHtml({ 'word/document.xml': strToU8(doc) } as any);
+  ok(/<h\d[^>]*>Kapitel 1<\/h\d>/.test(html) && /<b>fett<\/b>/.test(html) && /<i>kursiv &lt;script&gt;<\/i>/.test(html), 'Word: Überschrift, fett, kursiv; Text bleibt escaped');
+  ok(/<li[^>]*>Punkt A<\/li>/.test(html) && /<td[^>]*>.*Zelle 1/.test(html.replace(/\n/g, '')) && !html.includes('<script>'), 'Word: Listen und Tabellen');
+  const A = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"';
+  const slide = (title: string, pts: string[]) => strToU8(`<p:sld ${A}><p:cSld><p:spTree>
+    ${title ? `<p:sp><p:nvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:txBody><a:p><a:r><a:t>${title}</a:t></a:r></a:p></p:txBody></p:sp>` : ''}
+    <p:sp><p:nvSpPr><p:nvPr><p:ph idx="1"/></p:nvPr></p:nvSpPr><p:txBody>${pts.map((t) => `<a:p><a:r><a:t>${t}</a:t></a:r></a:p>`).join('')}</p:txBody></p:sp>
+  </p:spTree></p:cSld></p:sld>`);
+  const slides = pptxSlides({ 'ppt/slides/slide10.xml': slide('Zehn', ['z']), 'ppt/slides/slide2.xml': slide('Zwei', ['a', 'b']), 'ppt/slides/slide1.xml': slide('', []) } as any);
+  ok(slides.length === 3 && slides[1].title === 'Zwei' && slides[2].title === 'Zehn' && slides[1].points.map((p) => p.text).join() === 'a,b', 'PowerPoint: Folien in richtiger Reihenfolge, Titel und Punkte getrennt');
+  ok(slides[0].n === 1 && !slides[0].title && slides[0].points.length === 0, 'PowerPoint: leere Folie zählt mit');
+  void zipSync;
+  const rows = csvRows('Name;Note\n"Meier, Anna";5,5\n"Zitat ""x""";4');
+  ok(rows.length === 3 && rows[1][0] === 'Meier, Anna' && rows[1][1] === '5,5' && rows[2][0] === 'Zitat "x"', 'CSV: Trennzeichen und Anführungszeichen');
+
+  const { searchAll } = await import('../src/lib/search');
+  const sdata = { courses: [{ id: 'c', name: 'Bio' }], decks: [{ id: 'd', name: 'Zelle', courseId: 'c', cards: [], files: [{ id: 'f1', name: 'Skript Zellbiologie.pdf', size: 1, addedAt: 0 }, { id: 'f2', name: 'Folien.pptx', size: 1, addedAt: 0 }] }] } as any;
+  const fh = searchAll(sdata, 'zellbio');
+  ok(fh.length === 1 && fh[0].kind === 'file' && fh[0].id === 'f1' && (fh[0] as any).deckId === 'd', 'Suche findet Dateien nach Namen');
+  const { courseDocs } = await import('../src/lib/courseDocs');
+  const cd = courseDocs({ id: 'c' }, [{ id: 'd', name: 'Zelle', courseId: 'c', files: [{ id: 'w', name: 'a.docx', size: 1, type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }, { id: 't', name: 'b.txt', size: 1, type: 'text/plain' }] }]);
+  ok(cd.files.length === 2 && cd.files[0].type!.includes('word'), 'Kurs-Dokumente zeigen auch Word- und Textdateien');
+}
+
+console.log('Grafik beim Lernen abfragen');
+{
+  const { parseDiagram, diagramLabels, hideLabel, renderDiagram, PALETTES, graphicQuiz, withDiagramView, diagramHtml } = await import('../src/lib/diagram');
+  const flow = parseDiagram({ type: 'flow', title: 'Ablauf', steps: ['Planung', 'Erhebung', 'Auswertung', 'Bericht'] })!;
+  const labels = diagramLabels(flow);
+  ok(labels.join('|') === 'Planung|Erhebung|Auswertung|Bericht', 'Beschriftungen einer Grafik (ohne Titel): ' + labels.join('|'));
+  const longWord = parseDiagram({ type: 'flow', steps: ['Operationalisierungsverfahrensbeschreibung', 'B c', 'D e'] })!;
+  ok(diagramLabels(longWord)[0] === 'Operationalisierungsverfahrensbeschreibung', 'umbrochene Wörter werden wieder zusammengesetzt');
+  const h = hideLabel(flow, 1)!;
+  ok(h.label === 'Erhebung' && hideLabel(flow, 9) === null, 'hideLabel: richtige Beschriftung, ungültige Nummer → nichts');
+  const svg = renderDiagram(flow, PALETTES.light, h.front);
+  ok((svg.match(/class="dg-hidden"/g) ?? []).length === 1 && !svg.includes('>Erhebung<') && svg.includes('>Planung<') && svg.includes('>?<'), 'genau ein Feld ist verdeckt, die anderen bleiben sichtbar');
+  const back = renderDiagram(flow, PALETTES.dark, h.back);
+  ok((back.match(/class="dg-reveal"/g) ?? []).length === 1 && back.includes('>Erhebung<'), 'beim Umdrehen ist die Lösung markiert');
+  const st = renderDiagram(flow, PALETTES.light, { steps: true });
+  ok((st.match(/class="dg-step"/g) ?? []).length >= 4 && st.includes('animation-delay:0.15s'), 'Ablauf baut sich Schritt für Schritt auf');
+  ok(!renderDiagram(parseDiagram({ type: 'bars', bars: [{ label: 'a', value: 1 }, { label: 'b', value: 2 }] })!, PALETTES.light, { steps: true }).includes('dg-step'), 'andere Formen erscheinen auf einmal');
+  const ans = 'Die Schritte<br>' + diagramHtml(flow);
+  const q = graphicQuiz(ans, 6)!;
+  ok(!!q && q.label === labels[6 % 4] && q.graphic.includes('data-view="{&quot;hide&quot;:2}"') && q.answer.includes('data-view="{&quot;reveal&quot;:2}"') && q.answer.startsWith('Die Schritte'), 'Abfrage: Frage mit verdecktem Feld, Antwort mit markierter Lösung');
+  ok(graphicQuiz('nur Text', 1) === null && graphicQuiz(diagramHtml(parseDiagram({ type: 'compare', columns: [{ title: 'A', items: [] }, { title: 'B', items: [] }] })!), 1) === null, 'ohne Grafik oder mit zu wenig Beschriftungen keine Abfrage');
+  ok(withDiagramView(ans + ans, { steps: true }).split('data-view=').length === 3 && withDiagramView(ans + ans, { steps: true }, true).split('data-view=').length === 2, 'Ansicht für alle oder nur die erste Grafik');
+  const { repairMath, emphasisHtml } = await import('../src/lib/emphasis');
+  const mangled = JSON.parse('"Varianz: \\\\( s^2 = \\frac{1}{n} \\\\) und \\\\( \\theta \\\\)"');
+  ok(repairMath(mangled) === 'Varianz: \\( s^2 = \\frac{1}{n} \\) und \\( \\theta \\)', 'Formel: im JSON verschluckte Backslashes kommen zurück');
+  ok(emphasisHtml('a\nb \\( x < 1 \\)') === 'a<br>b \\( x &lt; 1 \\)', 'Formel bleibt im Karten-HTML erhalten');
+  const { repairJson } = await import('../src/lib/jsonRepair');
+  const r = repairJson('{"back":"\\( a \\) und **b**",') as any;
+  ok(r && r.back === '\\( a \\) und **b**', 'JSON-Reparatur behält LaTeX-Backslashes');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { AnkiImport } from '../components/AnkiImport';
 import { CreateWithAI } from '../components/CreateWithAI';
 import { ExamDialog } from '../components/ExamDialog';
-import { IconCalendar, IconCards, IconChevron, IconFlame, IconPlay, IconPlus, IconSparkle, IconStar, IconTarget, IconUpload } from '../components/Icons';
+import { IconCalendar, IconCards, IconChevron, IconFlame, IconPlay, IconPlus, IconSparkle, IconStar, IconTarget, IconSearch, IconUpload } from '../components/Icons';
 import { FoldPanel } from '../components/FoldPanel';
 import { Mascot } from '../components/Mascot';
 import { TodoList } from '../components/TodoList';
@@ -12,7 +12,7 @@ import { pokeMove, type PokeMove } from '../lib/pipLines';
 import { todoGroups } from '../lib/todos';
 import { NoKeyHint } from '../components/NoKey';
 import { Pomodoro } from '../components/Pomodoro';
-import { countdownText, dailyPlan, examAt, examCards, examForecast, forecastText, readiness, upcomingExams } from '../lib/exams';
+import { countdownText, dailyPlan, examAt, examCards, examDecks, examForecast, forecastText, readiness, upcomingExams } from '../lib/exams';
 import { pathProgress, playerLevel, totalXp, xpStreak, xpToday } from '../lib/path';
 import { masteryPercent, sortDecks, streak, studyDays, type DeckSort } from '../lib/stats';
 import { deckUrl, dueCards, setSettings, useStore, type Deck } from '../lib/store';
@@ -196,6 +196,16 @@ export default function Dashboard() {
         </section>
 
 
+        {!phone && (
+          <button
+            type="button"
+            className="home-search"
+            onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))}
+          >
+            <IconSearch size={16} /> <span>Karten, Decks und Dateien suchen …</span> <kbd>Strg K</kbd>
+          </button>
+        )}
+
         {!apiKey && data.settings.provider !== 'custom' && !data.settings.noKeyHintClosed && <NoKeyHint />}
 
         {!phone && <WeekReview />}
@@ -274,7 +284,14 @@ export default function Dashboard() {
                       </span>
                       <small>{r.total ? (p.left ? `heute ${p.left} Karten` : 'Tagesziel erreicht') : 'keine Decks'}</small>
                     </Link>
-                    {r.total > 0 && (f.kind === 'ok' || f.kind === 'late') && <p className={'dash-forecast forecast ' + f.kind}>{forecastText(f)}</p>}
+                    <div className="dash-exam-more">
+                      {r.total > 0 && (f.kind === 'ok' || f.kind === 'late') && <p className={'dash-forecast forecast ' + f.kind}>{forecastText(f)}</p>}
+                      {examDecks(data, e)[0] && (
+                        <Link to={deckUrl(data, examDecks(data, e)[0], 'exam')} className="btn ghost sm dash-exam-practice" title="Probeprüfung mit Note und Musterlösung">
+                          <IconTarget size={14} /> Prüfung üben
+                        </Link>
+                      )}
+                    </div>
                     </Fragment>
                   );
                 })}

@@ -301,6 +301,41 @@ fn take_open_files(state: tauri::State<'_, OpenFiles>) -> Vec<String> {
     std::mem::take(&mut *state.0.lock().unwrap())
 }
 
+// ---------- material files: open with the computer's own program (Acrobat, Word …) ----------
+/// A file name that is safe to use in the temporary folder.
+fn safe_file_name(name: &str) -> String {
+    let clean: String = name.chars().map(|c| if r#"<>:"/\|?*"#.contains(c) || c.is_control() { '_' } else { c }).collect();
+    let clean = clean.trim().trim_matches('.').to_string();
+    if clean.is_empty() { "Datei".into() } else { clean }
+}
+
+#[tauri::command]
+fn open_media_file(id: String, name: String) -> Result<(), String> {
+    #[cfg(desktop)]
+    {
+        let (bytes, _) = storage::media_get(&id).ok_or("Die Datei ist auf diesem Gerät nicht gespeichert.")?;
+        let dir = std::env::temp_dir().join("Merkora-Dateien");
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let path = dir.join(safe_file_name(&name));
+        std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+        open::that_detached(&path).map_err(|e| e.to_string())
+    }
+    #[cfg(mobile)]
+    {
+        let _ = (id, name);
+        Err("Auf dem Handy bitte „Herunterladen“ nutzen.".into())
+    }
+}
+
+#[cfg(test)]
+mod file_name_tests {
+    #[test]
+    fn safe_names() {
+        assert_eq!(super::safe_file_name("Vorlesung 3: Teil/2.pdf"), "Vorlesung 3_ Teil_2.pdf");
+        assert_eq!(super::safe_file_name("..."), "Datei");
+    }
+}
+
 // ---------- Android: in-app update (download the new APK; the phone's installer does the rest) ----------
 const APK_BASE: &str = "https://github.com/Bobanes1/Merkora/releases/download/";
 
@@ -512,6 +547,7 @@ pub fn run() {
             take_open_files,
             http_fetch,
             download_apk,
+            open_media_file,
             smoke_info,
             smoke_done,
             save_download,

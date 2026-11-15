@@ -24,6 +24,8 @@ export function repairJson(text: string): unknown {
     const c = s[i];
     if (inStr) {
       if (esc) {
+        // "\(" or "\s" are no JSON escapes (LaTeX, regex …): the backslash stays a backslash
+        if (!'"\\/bfnrtu'.includes(c)) out += '\\';
         out += c;
         esc = false;
       } else if (c === '\\') {

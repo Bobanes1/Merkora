@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { CreateWithAI } from '../components/CreateWithAI';
+import { Mastery } from '../components/Mastery';
 import { ExamDialog } from '../components/ExamDialog';
 import {
   IconCalendar,
@@ -71,29 +72,6 @@ type Dialog =
   | { kind: 'exam' }
   | null;
 
-/** Small round progress for decks and courses. */
-function Mastery({ pct, size = 40 }: { pct: number; size?: number }) {
-  const r = size / 2 - 4;
-  const c = 2 * Math.PI * r;
-  return (
-    <span className="mastery-ring" style={{ width: size, height: size }} title={`${pct}% gemeistert`}>
-      <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size} aria-hidden="true">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--line)" strokeWidth="4" />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          fill="none"
-          stroke="var(--primary)"
-          strokeWidth="4"
-          strokeLinecap="round"
-          strokeDasharray={`${(c * pct) / 100} ${c}`}
-          transform={`rotate(-90 ${size / 2} ${size / 2})`}
-        />
-      </svg>
-    </span>
-  );
-}
 
 export default function Library() {
   const { ws, course } = useParams();
@@ -609,6 +587,11 @@ function CourseView({
             <IconEdit size={16} />
           </button>
           <span className="grow" />
+          {docCount > 0 && (
+            <button type="button" className={'btn sm ' + (view === 'docs' ? 'soft' : 'outline')} aria-pressed={view === 'docs'} onClick={() => setView(view === 'docs' ? 'deck' : 'docs')}>
+              <IconFolder size={14} /> Dokumente ({docCount})
+            </button>
+          )}
           {studyButton(`Kurs: ${course.name}`, decks, (n) => (n ? `Ganzen Kurs lernen (${n})` : 'Ganzen Kurs üben'), 'btn primary sm')}
         </div>
         <div className="course-stats">
@@ -643,6 +626,11 @@ function CourseView({
       </header>
 
       <div className="course-split">
+        {phone && view === 'docs' ? (
+          <section className="panel">
+            <CourseDocs course={course} />
+          </section>
+        ) : (
         <section className="panel course-decks">
           <div className="panel-head">
             <h2>
@@ -707,6 +695,7 @@ function CourseView({
             </div>
           )}
         </section>
+        )}
 
         {!phone && (
         <section className="panel course-preview">

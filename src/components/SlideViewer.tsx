@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { deckFileBlob, removeDeckFile } from '../lib/deckFiles';
+import { deckFileBlob, pdfFiles, removeDeckFile } from '../lib/deckFiles';
 import { openPdf } from '../lib/files';
 import type { Deck } from '../lib/store';
 import { openLightbox } from './CardContent';
@@ -9,7 +9,7 @@ type Pdf = Awaited<ReturnType<typeof openPdf>>;
 
 /** The deck's presentations to leaf through (arrow keys work too); a click on a slide shows it big. */
 export function SlideViewer({ deck, fileId }: { deck: Deck; fileId?: string }) {
-  const files = deck.files ?? [];
+  const files = pdfFiles(deck.files);
   const [cur, setCur] = useState(fileId ?? files[0]?.id);
   const file = files.find((f) => f.id === cur) ?? files[0];
   const [pdf, setPdf] = useState<Pdf | null>(null);

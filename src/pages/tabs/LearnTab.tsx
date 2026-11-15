@@ -8,7 +8,7 @@ import { countAnswerTime } from '../../lib/pomodoro';
 import { explainCard, gradeAnswer, hasKey } from '../../lib/ai';
 import { cardBackText, cardFrontText } from '../../lib/content';
 import { RATINGS, formatDelay, schedule, type Rating, type Srs } from '../../lib/srs';
-import { addXp, toggleMark, boostNewCards, dueCards, logReview, newCardsLeft, reviewCard, undoReview, updateDeck, useStore, type Card, type Deck } from '../../lib/store';
+import { addXp, toggleMark, boostNewCards, dueCards, logReview, newCardsLeft, reviewCard, setSettings, undoReview, updateDeck, useStore, type Card, type Deck } from '../../lib/store';
 import { capForExam, countdownText, nextExamAt, nextExamForDeck } from '../../lib/exams';
 import { pipGreeting, pipReaction, pipSummary } from '../../lib/pipLines';
 import { answerOnly } from '../../lib/backSide';
@@ -17,6 +17,10 @@ import { dayKey } from '../../lib/util';
 import { becomesLeech } from '../../lib/cardLinks';
 import { ASK_SIDES, asksBack, sidesFor, type AskSide } from '../../lib/askSide';
 import { htmlToText } from '../../lib/content';
+import { graphicQuiz, withDiagramView } from '../../lib/diagram';
+
+/** A stable number per card id (picks which label of a graphic is covered). */
+const seedOf = (id: string) => [...id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
 import { ImproveCardDialog } from '../../components/ImproveCardDialog';
 import { SpeakButton } from '../../components/SpeakButton';
 import { swipeRating, usePhone } from '../../lib/phone';
@@ -132,6 +136,18 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
   const card = deck.cards.find((c) => c.id === queue[0]);
   const fromBack = card ? asksBack(side, card.id, roundSeed) : false;
   const qa = card ? sidesFor(card, fromBack) : { question: '', answer: '' };
+  // "Grafiken abfragen": every 3rd review of a card with a graphic, one label of it is covered and asked for
+  const quizOn = useStore((s) => s.data.settings.quizGraphics !== false);
+  const animOn = useStore((s) => s.data.settings.animations !== false);
+  const gq = useMemo(() => {
+    if (!card?.html || !quizOn || (card.srs.reps + card.srs.lapses) % 3 !== 2 || qa.question.includes('data-diagram=')) return null;
+    return graphicQuiz(qa.answer, seedOf(card.id) + roundSeed);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [card?.id, card?.srs.reps, card?.srs.lapses, quizOn, qa.question, qa.answer, roundSeed]);
+  const shownQuestion = gq ? `${qa.question}<p class="gq-ask">Was gehört an die markierte Stelle?</p>${gq.graphic}` : qa.question;
+  // the answer: the covered label marked, or graphics that build up step by step (not with animations off)
+  const shownAnswer = gq ? gq.answer : card?.html && animOn ? withDiagramView(qa.answer, { steps: true }) : qa.answer;
+  const hasGraphics = deck.cards.some((c) => c.html && c.back.includes('data-diagram='));
   const plain = (s: string) => (card?.html ? htmlToText(s) : s);
   const frontSpeech = card ? (card.html ? htmlSpeech(qa.question) : qa.question) : '';
   const backSpeech = card ? (card.html ? htmlSpeech(qa.answer) : qa.answer) : '';
@@ -298,6 +314,12 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
         <div className="learn-settings">
           <span className="field-label">Was soll gefragt werden?</span>
           <AskSidePicker deck={deck} />
+          {hasGraphics && (
+            <label className="check-row learn-quiz-toggle" title="Bei jeder dritten Wiederholung einer Karte mit Grafik wird eine Beschriftung verdeckt und abgefragt">
+              <input type="checkbox" checked={quizOn} onChange={(e) => setSettings({ quizGraphics: e.target.checked })} />
+              Grafiken abfragen (eine Beschriftung verdecken)
+            </label>
+          )}
         </div>
         <div className="row-gap center">
           {dueIds.length > 0 && mode === null && (
@@ -397,14 +419,19 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
         <small className="fc-label">
           Frage <SpeakButton text={frontSpeech} label="Frage vorlesen" className="icon-btn fc-speak" />
         </small>
-        <CardContent text={qa.question} html={card.html} look={lookOf(deck, card)} className="fc-front" />
+        <CardContent text={shownQuestion} html={card.html} look={lookOf(deck, card)} className="fc-front" />
         {flipped && (
           <>
             <hr />
             <small className="fc-label">
               Antwort <SpeakButton text={backSpeech} label="Antwort vorlesen" className="icon-btn fc-speak" />
             </small>
-            <CardContent text={qa.answer} html={card.html} look={lookOf(deck, card)} className="fc-back" />
+            {gq && (
+              <p className="gq-solution">
+                Gesucht war: <b>{gq.label}</b>
+              </p>
+            )}
+            <CardContent text={shownAnswer} html={card.html} look={lookOf(deck, card)} className="fc-back" />
           </>
         )}
         {!flipped && !typeMode && <span className="fc-hint">{phone ? 'Tippen zum Umdrehen – danach wischen: ← Nochmal, Gut →' : 'Klicken oder Leertaste zum Umdrehen'}</span>}

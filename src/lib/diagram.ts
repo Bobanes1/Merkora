@@ -4,6 +4,7 @@
  * Pure (no DOM) – tested in scripts/test-srs.mts.
  */
 import { ICON_NAMES, ICONS } from './diagramIcons';
+import { compileExpr, sampleCurve } from './plotExpr';
 
 export type Diagram = DiagramBase & {
   /** Small symbol per box: box label → symbol name (see lib/diagramIcons.ts). */
@@ -23,7 +24,14 @@ type DiagramBase =
   | { type: 'pyramid'; title?: string; levels: string[] }
   | { type: 'bars'; title?: string; unit?: string; bars: { label: string; value: number }[] }
   | { type: 'decision'; title?: string; question: string; yes: DecisionBranch; no: DecisionBranch }
-  | { type: 'mindmap'; title?: string; center: string; branches: { label: string; children: string[] }[] };
+  | { type: 'mindmap'; title?: string; center: string; branches: { label: string; children: string[] }[] }
+  | { type: 'plot'; title?: string; x: PlotAxis; y: PlotAxis; functions: { label: string; expr: string }[]; points?: { x: number; label: string }[] }
+  | { type: 'pie'; title?: string; unit?: string; slices: { label: string; value: number }[] }
+  | { type: 'fishbone'; title?: string; effect: string; causes: { label: string; items: string[] }[] }
+  | { type: 'numberline'; title?: string; min: number; max: number; unit?: string; marks: { value: number; label: string }[]; ranges?: { from: number; to: number; label: string }[] }
+  | { type: 'network'; title?: string; nodes: string[]; links: { from: string; to: string; label?: string }[] };
+
+export type PlotAxis = { label: string; min: number; max: number };
 
 /** Arrow of a model. `to` is a box – or "A -> B": then the arrow points at the middle of the arrow A→B (moderator). */
 export type ModelLink = { from: string; to: string; label?: string; both?: boolean; dashed?: boolean };
@@ -141,6 +149,10 @@ function boxLabels(d: DiagramBase): string[] {
       return d.levels;
     case 'mindmap':
       return [d.center, ...d.branches.flatMap((b) => [b.label, ...b.children])];
+    case 'network':
+      return d.nodes;
+    case 'fishbone':
+      return [d.effect, ...d.causes.map((c) => c.label)];
     case 'decision': {
       const sub = (b: DecisionBranch) => (typeof b === 'string' ? [b] : [b.question, b.yes, b.no]);
       return [d.question, ...sub(d.yes), ...sub(d.no)];
@@ -266,6 +278,69 @@ function parseBase(raw: unknown): DiagramBase | null {
       if (cells.length !== 4 || !x || !y) return null;
       return { type: 'matrix', title, x, y, cells };
     }
+    case 'plot': {
+      const axis = (v: unknown): PlotAxis | null => {
+        const o = (v ?? {}) as Record<string, unknown>;
+        const min = num(o.min), max = num(o.max);
+        if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return null;
+        return { label: str(o.label, 40), min, max };
+      };
+      const x = axis(r.x), y = axis(r.y);
+      const functions = (Array.isArray(r.functions) ? r.functions : [])
+        .map((f) => ({ label: str((f as { label?: unknown })?.label, 30), expr: String((f as { expr?: unknown })?.expr ?? '').slice(0, 120) }))
+        .filter((f) => f.expr && compileExpr(f.expr))
+        .slice(0, 3);
+      if (!x || !y || !functions.length) return null;
+      const points = (Array.isArray(r.points) ? r.points : [])
+        .map((pt) => ({ x: num((pt as { x?: unknown })?.x), label: str((pt as { label?: unknown })?.label, 30) }))
+        .filter((pt) => Number.isFinite(pt.x) && pt.x >= x.min && pt.x <= x.max && pt.label)
+        .slice(0, 3);
+      return { type: 'plot', title, x, y, functions, ...(points.length ? { points } : {}) };
+    }
+    case 'pie': {
+      const slices = (Array.isArray(r.slices) ? r.slices : [])
+        .map((b) => ({ label: str((b as { label?: unknown })?.label, 40), value: num((b as { value?: unknown })?.value) }))
+        .filter((b) => b.label && Number.isFinite(b.value) && b.value > 0)
+        .slice(0, 6);
+      if (slices.length < 2) return null;
+      const unit = str(r.unit, 12);
+      return { type: 'pie', title, ...(unit ? { unit } : {}), slices };
+    }
+    case 'fishbone': {
+      const effect = str(r.effect ?? r.problem);
+      const causes = (Array.isArray(r.causes) ? r.causes : [])
+        .map((c) => ({ label: str((c as { label?: unknown })?.label ?? c, 30), items: list((c as { items?: unknown })?.items, 3) }))
+        .filter((c) => c.label)
+        .slice(0, 6);
+      if (!effect || causes.length < 2) return null;
+      return { type: 'fishbone', title, effect, causes };
+    }
+    case 'numberline': {
+      const min = num(r.min), max = num(r.max);
+      if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return null;
+      const marks = (Array.isArray(r.marks) ? r.marks : [])
+        .map((m) => ({ value: num((m as { value?: unknown })?.value), label: str((m as { label?: unknown })?.label, 30) }))
+        .filter((m) => Number.isFinite(m.value) && m.value >= min && m.value <= max && m.label)
+        .slice(0, 6);
+      const ranges = (Array.isArray(r.ranges) ? r.ranges : [])
+        .map((m) => ({ from: num((m as { from?: unknown })?.from), to: num((m as { to?: unknown })?.to), label: str((m as { label?: unknown })?.label, 30) }))
+        .filter((m) => Number.isFinite(m.from) && Number.isFinite(m.to) && m.to > m.from && m.label)
+        .map((m) => ({ ...m, from: Math.max(min, m.from), to: Math.min(max, m.to) }))
+        .slice(0, 3);
+      if (!marks.length && !ranges.length) return null;
+      const unit = str(r.unit, 12);
+      return { type: 'numberline', title, min, max, ...(unit ? { unit } : {}), marks, ...(ranges.length ? { ranges } : {}) };
+    }
+    case 'network': {
+      const nodes = list(r.nodes, 8);
+      const links = (Array.isArray(r.links) ? r.links : [])
+        .map((l) => ({ from: pick((l as { from?: unknown })?.from, nodes), to: pick((l as { to?: unknown })?.to, nodes), label: str((l as { label?: unknown })?.label, 24) }))
+        .filter((l): l is { from: string; to: string; label: string } => !!l.from && !!l.to && l.from !== l.to)
+        .slice(0, 12)
+        .map((l) => (l.label ? l : { from: l.from, to: l.to }));
+      if (nodes.length < 3 || !links.length) return null;
+      return { type: 'network', title, nodes, links };
+    }
     case 'axes': {
       const x = str(r.x, 40), y = str(r.y, 40);
       const shape = shapeOf(r.shape);
@@ -285,6 +360,21 @@ function parseBase(raw: unknown): DiagramBase | null {
 }
 
 // ---------- layout ----------
+/** Round tick values for an axis (about `count` of them). */
+export function niceTicks(min: number, max: number, count = 5): number[] {
+  const span = max - min;
+  if (!(span > 0)) return [min];
+  const raw = span / count;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw) ?? 10 * mag;
+  const out: number[] = [];
+  for (let v = Math.ceil(min / step) * step; v <= max + step * 1e-9; v += step) out.push(Math.round(v / step) * step);
+  return out.map((v) => Number(v.toPrecision(12)));
+}
+const fmtNum = (v: number) => (Math.abs(v) >= 1e5 || (Math.abs(v) > 0 && Math.abs(v) < 1e-3) ? v.toExponential(1) : String(Number(v.toPrecision(6))).replace('.', ','));
+const tickX = (tx: number) => Math.min(W - 2 - 44, Math.max(2, tx - 22));
+const num = (v: unknown) => Number(String(v ?? '').replace(',', '.'));
+
 export const W = 600;
 const PAD = 16;
 const FS = 15; // label font size
@@ -866,6 +956,178 @@ export function layoutDiagram(d: Diagram): Layout {
       }
       y += 26;
     }
+  } else if (d.type === 'plot') {
+    const plotH = 240;
+    const x0 = PAD + 46, y0 = y + 28 + plotH, x1 = W - PAD - 12, y1 = y + 28;
+    const sx = (v: number) => x0 + ((v - d.x.min) / (d.x.max - d.x.min)) * (x1 - x0);
+    const sy = (v: number) => y0 - ((v - d.y.min) / (d.y.max - d.y.min)) * (y0 - y1);
+    lines.push({ pts: [[x0, y0], [x0, y1 - 8]], arrow: true });
+    lines.push({ pts: [[x0, y0], [x1 + 6, y0]], arrow: true });
+    if (d.y.label) boxes.push({ x: x0 + 6, y, w: 400, h: 20, lines: [d.y.label], kind: 'bold', align: 'start' });
+    if (d.x.label) boxes.push({ x: x1 - 400, y: y0 + 28, w: 400, h: 20, lines: [d.x.label], kind: 'bold', align: 'end' });
+    for (const t of niceTicks(d.x.min, d.x.max)) {
+      const tx = sx(t);
+      lines.push({ pts: [[tx, y0], [tx, y0 + 5]], muted: true });
+      boxes.push({ x: tickX(tx), y: y0 + 9, w: 44, h: 16, lines: [fmtNum(t)], kind: 'label', fs: 11 });
+    }
+    for (const t of niceTicks(d.y.min, d.y.max)) {
+      const ty = sy(t);
+      lines.push({ pts: [[x0 - 5, ty], [x0, ty]], muted: true });
+      boxes.push({ x: x0 - 50, y: ty - 8, w: 43, h: 16, lines: [fmtNum(t)], kind: 'label', fs: 11, align: 'end' });
+    }
+    const fns = d.functions.map((f) => compileExpr(f.expr)!);
+    fns.forEach((f, i) => {
+      let seg: [number, number][] = [];
+      const flush = () => {
+        if (seg.length > 1) lines.push({ pts: seg, ...(i ? { tone: i + 1 } : {}) });
+        seg = [];
+      };
+      for (const pt of sampleCurve(f, d.x.min, d.x.max, 160)) {
+        if (!pt || pt.y < d.y.min - 1e-9 || pt.y > d.y.max + 1e-9) flush();
+        else seg.push([sx(pt.x), sy(pt.y)]);
+      }
+      flush();
+    });
+    for (const pt of d.points ?? []) {
+      const v = fns[0](pt.x);
+      if (!Number.isFinite(v) || v < d.y.min || v > d.y.max) continue;
+      const px = sx(pt.x), py = sy(v);
+      lines.push({ pts: [[px, y0], [px, py]], dashed: true, muted: true });
+      areas.push({ circle: [px, py, 5], fill: 'accent', hue: 1 });
+      const lw = 140;
+      const ml = wrap(pt.label, lw - 8, 13);
+      const mh = ml.length * 17 + 4;
+      boxes.push({ x: Math.min(x1 - lw, Math.max(x0 + 4, px - lw / 2)), y: Math.max(y1, py - 14 - mh), w: lw, h: mh, lines: ml, kind: 'label' });
+    }
+    y = y0 + 54;
+    if (d.functions.length > 1 || d.functions[0].label) {
+      let lx = x0;
+      d.functions.forEach((f, i) => {
+        const text = f.label || f.expr;
+        lines.push({ pts: [[lx, y + 10], [lx + 26, y + 10]], ...(i ? { tone: i + 1 } : {}) });
+        const w = Math.min(200, text.length * charW(13) + 12);
+        boxes.push({ x: lx + 32, y, w, h: 20, lines: [text], kind: 'label', align: 'start', fs: 13 });
+        lx += 32 + w + 24;
+      });
+      y += 26;
+    }
+  } else if (d.type === 'pie') {
+    const R = 115, cx = PAD + R + 6, cy = y + R + 4;
+    const total = d.slices.reduce((a, b) => a + b.value, 0);
+    let a0 = -Math.PI / 2;
+    const legendX = cx + R + 30;
+    const legendW = W - PAD - legendX;
+    let ly = cy - (d.slices.length * 30) / 2;
+    d.slices.forEach((sl, i) => {
+      const a1 = a0 + (sl.value / total) * Math.PI * 2;
+      const poly: [number, number][] = [[cx, cy]];
+      const steps = Math.max(2, Math.ceil(((a1 - a0) * 180) / Math.PI / 4));
+      for (let k = 0; k <= steps; k++) {
+        const a = a0 + ((a1 - a0) * k) / steps;
+        poly.push([cx + R * Math.cos(a), cy + R * Math.sin(a)]);
+      }
+      areas.push({ poly, fill: 'node', hue: hueOf(i) });
+      const pct = Math.round((sl.value / total) * 100);
+      areas.push({ poly: [[legendX, ly + 4], [legendX + 14, ly + 4], [legendX + 14, ly + 18], [legendX, ly + 18]], fill: 'node', hue: hueOf(i) });
+      const text = `${sl.label} – ${pct} %`;
+      const tl = wrap(text, legendW - 24, 13);
+      boxes.push({ x: legendX + 22, y: ly, w: legendW - 22, h: tl.length * 17 + 4, lines: tl, kind: 'label', align: 'start', fs: 13 });
+      ly += Math.max(30, tl.length * 17 + 10);
+      a0 = a1;
+    });
+    y = Math.max(cy + R, ly) + 8;
+  } else if (d.type === 'fishbone') {
+    const effW = 130;
+    const n = d.causes.length;
+    const top = d.causes.filter((_, i) => i % 2 === 0), bottom = d.causes.filter((_, i) => i % 2 === 1);
+    const perSide = Math.max(top.length, bottom.length);
+    const spineX0 = PAD, spineX1 = W - PAD - effW - 8;
+    const slot = (spineX1 - spineX0) / perSide;
+    const itemH = (c: { items: string[] }) => c.items.reduce((h, t) => h + wrap(t, slot - 26, 12).length * 15, 0);
+    const side = Math.max(...d.causes.map((c) => 34 + 8 + itemH(c))) + 14;
+    const spineY = y + side;
+    const effL = wrap(d.effect, effW - 16, 14);
+    const effH = Math.max(46, effL.length * 19 + 14);
+    boxes.push({ x: W - PAD - effW, y: spineY - effH / 2, w: effW, h: effH, lines: effL, kind: 'accent', fs: 14 });
+    lines.push({ pts: [[spineX0, spineY], [spineX1, spineY]], arrow: true });
+    const draw = (cs: typeof d.causes, up: boolean) =>
+      cs.forEach((c, k) => {
+        const bx = spineX0 + slot * k + 8;
+        const lw = slot - 18;
+        const cl = wrap(c.label, lw - 12, 13);
+        const ch = cl.length * 17 + 10;
+        const by = up ? y : spineY + side - ch;
+        boxes.push({ x: bx, y: by, w: lw, h: ch, lines: cl, kind: 'node', fs: 13, tone: hueOf(d.causes.indexOf(c)) });
+        const meet = bx + lw * 0.85;
+        lines.push({ pts: [[bx + lw / 2, up ? by + ch : by], [meet, spineY]], muted: true });
+        let iy = up ? by + ch + 6 : spineY + 8;
+        for (const it of c.items) {
+          const il = wrap(it, lw - 30, 12);
+          boxes.push({ x: bx + 4, y: iy, w: lw - 30, h: il.length * 15, lines: il, kind: 'label', align: 'start', fs: 12 });
+          iy += il.length * 15;
+        }
+      });
+    draw(top, true);
+    draw(bottom, false);
+    y = spineY + (bottom.length ? side : effH / 2) + (n ? 0 : 0);
+  } else if (d.type === 'numberline') {
+    const x0 = PAD + 10, x1 = W - PAD - 14;
+    const sx = (v: number) => x0 + ((v - d.min) / (d.max - d.min)) * (x1 - x0);
+    const markRows = d.marks.length > 3 ? 2 : 1;
+    const lineY = y + markRows * 40 + 16;
+    for (const [i, r] of (d.ranges ?? []).entries()) {
+      const a = sx(r.from), b = sx(r.to);
+      areas.push({ poly: [[a, lineY + 8], [b, lineY + 8], [b, lineY + 22], [a, lineY + 22]], fill: 'node', hue: hueOf(i + 1) });
+      const rl = wrap(r.label, Math.max(60, b - a), 12);
+      boxes.push({ x: (a + b) / 2 - Math.max(60, b - a) / 2, y: lineY + 26 + (i > 0 && r.from < (d.ranges![i - 1].to + 0.01 * (d.max - d.min)) && b - a < 80 ? 18 : 0), w: Math.max(60, b - a), h: rl.length * 15, lines: rl, kind: 'label', fs: 12 });
+    }
+    lines.push({ pts: [[x0 - 4, lineY], [x1 + 8, lineY]], arrow: true });
+    for (const t of niceTicks(d.min, d.max, 8)) {
+      const tx = sx(t);
+      lines.push({ pts: [[tx, lineY - 5], [tx, lineY + 5]], muted: true });
+      boxes.push({ x: tickX(tx), y: lineY + (d.ranges?.length ? 60 : 8), w: 44, h: 16, lines: [fmtNum(t) + (d.unit && t === d.max ? ' ' + d.unit : '')], kind: 'label', fs: 11 });
+    }
+    d.marks.forEach((m, i) => {
+      const mx = sx(m.value);
+      const row = markRows === 2 ? i % 2 : 0;
+      const ly = y + row * 40;
+      areas.push({ circle: [mx, lineY, 5], fill: 'accent', hue: 1 });
+      lines.push({ pts: [[mx, ly + 30], [mx, lineY - 6]], muted: true });
+      const lw = 120;
+      const ml = wrap(`${m.label} (${fmtNum(m.value)})`, lw - 6, 12);
+      boxes.push({ x: Math.min(x1 - lw, Math.max(x0 - 4, mx - lw / 2)), y: ly, w: lw, h: Math.max(30, ml.length * 15), lines: ml, kind: 'label', fs: 12 });
+    });
+    y = lineY + (d.ranges?.length ? 82 : 30);
+  } else if (d.type === 'network') {
+    const n = d.nodes.length;
+    const bw = 130;
+    NF = nodeFont(d.nodes.map((t) => ({ text: t, w: bw - 16 - iw(t) })));
+    const ls = d.nodes.map((t) => wrap(t, bw - 16 - iw(t), NF, 3));
+    const bh = Math.max(...ls.map((l) => boxH(l, 8)));
+    const rx = (inner - bw) / 2, ry = n <= 4 ? 90 : 120;
+    const cx = W / 2, cy = y + ry + bh / 2;
+    const pos = d.nodes.map((_, i) => {
+      const a = -Math.PI / 2 + (i * 2 * Math.PI) / n;
+      return { x: cx + rx * Math.cos(a) - bw / 2, y: cy + ry * Math.sin(a) - bh / 2 };
+    });
+    d.nodes.forEach((_, i) => boxes.push({ x: pos[i].x, y: pos[i].y, w: bw, h: bh, lines: ls[i], kind: 'node', tone: hueOf(i) }));
+    const edge = (i: number, tx: number, ty: number): [number, number] => {
+      const c = [pos[i].x + bw / 2, pos[i].y + bh / 2];
+      const dx = tx - c[0], dy = ty - c[1];
+      const t = Math.min((bw / 2 + 4) / Math.abs(dx || 1e-6), (bh / 2 + 4) / Math.abs(dy || 1e-6));
+      return [c[0] + dx * t, c[1] + dy * t];
+    };
+    for (const l of d.links) {
+      const a = d.nodes.indexOf(l.from), b = d.nodes.indexOf(l.to);
+      const ca = [pos[a].x + bw / 2, pos[a].y + bh / 2], cb = [pos[b].x + bw / 2, pos[b].y + bh / 2];
+      const p1 = edge(a, cb[0], cb[1]), p2 = edge(b, ca[0], ca[1]);
+      lines.push({ pts: [p1, p2], arrow: true });
+      if (l.label) {
+        const tw = Math.min(140, l.label.length * charW(12) + 14);
+        boxes.push({ x: (p1[0] + p2[0]) / 2 - tw / 2, y: (p1[1] + p2[1]) / 2 - 10, w: tw, h: 20, lines: [l.label], kind: 'tag', fs: 12 });
+      }
+    }
+    y = cy + ry + bh / 2;
   } else if (d.type === 'model') {
     y = layoutModel(d, y, boxes, lines);
   } else if (d.type === 'venn') {
@@ -1088,8 +1350,46 @@ export const PALETTES: Record<'light' | 'dark', Palette> = {
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const r1 = (n: number) => Math.round(n * 10) / 10;
 
-export function renderDiagram(d: Diagram, p: Palette = PALETTES.light): string {
+/** How a graphic is shown while learning: one label covered ("?") or shown as the answer, or built up step by step. */
+export type DiagramView = { hide?: number; reveal?: number; steps?: boolean };
+
+/** Kinds of boxes that hold a label one can be asked about (not titles, axis labels or small notes). */
+const QUIZ_KINDS = new Set<Box['kind']>(['node', 'node2', 'accent', 'accent2', 'soft']);
+/** Text of a box as one string (words broken by wrap() are joined again). */
+const boxText = (b: Box) => b.lines.reduce((t, l, i) => (i === 0 ? l : /\p{L}-$/u.test(b.lines[i - 1]) ? t.slice(0, -1) + l : t + ' ' + l), '');
+function quizBoxes(L: Layout): number[] {
+  const seen = new Set<string>();
+  const out: number[] = [];
+  L.boxes.forEach((b, i) => {
+    const t = boxText(b).trim();
+    if (!b.lines.length || !QUIZ_KINDS.has(b.kind) || t.length < 2 || /^[\d\s.,%+-]+$/.test(t) || seen.has(t.toLowerCase())) return;
+    seen.add(t.toLowerCase());
+    out.push(i);
+  });
+  return out;
+}
+
+/** The labels of a graphic one can be asked about, in drawing order. */
+export function diagramLabels(d: Diagram): string[] {
   const L = layoutDiagram(d);
+  return quizBoxes(L).map((i) => boxText(L.boxes[i]));
+}
+
+/** Covers label i: the view for the question side, the one for the answer side and the hidden text. */
+export function hideLabel(d: Diagram, i: number): { label: string; front: DiagramView; back: DiagramView } | null {
+  const labels = diagramLabels(d);
+  if (i < 0 || i >= labels.length) return null;
+  return { label: labels[i], front: { hide: i }, back: { reveal: i } };
+}
+
+/** Graphics that read best when they appear box by box. */
+export const STEP_TYPES: Diagram['type'][] = ['flow', 'cycle', 'timeline', 'pyramid'];
+
+export function renderDiagram(d: Diagram, p: Palette = PALETTES.light, view?: DiagramView): string {
+  const L = layoutDiagram(d);
+  const quiz = view && (view.hide !== undefined || view.reveal !== undefined) ? quizBoxes(L) : [];
+  const steps = !!view?.steps && STEP_TYPES.includes(d.type);
+  let step = 0;
   // ids per colour scheme, so several diagrams on one page never borrow each other's arrow colours
   const id = 'dg' + (p.tones[0].line + p.tones[1].line + (p.bg ?? '')).replace(/[^0-9a-z]/gi, '');
   const tn = (h?: number) => p.tones[(Math.max(1, h ?? 1) - 1) % p.tones.length];
@@ -1120,7 +1420,17 @@ export function renderDiagram(d: Diagram, p: Palette = PALETTES.light): string {
     );
   }
   const isMatrixY = (b: Box) => d.type === 'matrix' && b.kind === 'label' && b.w < 40;
-  for (const b of L.boxes) {
+  const drawBox = (b: Box, bi: number) => {
+    const qi = quiz.indexOf(bi);
+    if (qi >= 0 && qi === view?.hide) {
+      // the covered label: dashed frame with a question mark
+      const t1 = tn(1);
+      out.push(
+        `<rect class="dg-hidden" x="${r1(b.x)}" y="${r1(b.y)}" width="${r1(b.w)}" height="${r1(b.h)}" rx="${r1(Math.min(12, b.h / 2))}" fill="${t1.soft}" stroke="${t1.line}" stroke-width="2.5" stroke-dasharray="7 5"/>`,
+        `<text x="${r1(b.x + b.w / 2)}" y="${r1(b.y + b.h / 2)}" font-size="22" font-weight="800" fill="${t1.line}" text-anchor="middle" dominant-baseline="middle">?</text>`,
+      );
+      return;
+    }
     const t = tn(b.tone ?? (b.kind === 'node2' || b.kind === 'accent2' ? 2 : 1));
     const fill = b.kind === 'accent' || b.kind === 'accent2' ? t.accent : b.kind === 'node' || b.kind === 'node2' ? t.node : b.kind === 'soft' || b.kind === 'tag' ? t.soft : null;
     if (fill) {
@@ -1131,7 +1441,7 @@ export function renderDiagram(d: Diagram, p: Palette = PALETTES.light): string {
         `<rect x="${r1(b.x)}" y="${r1(b.y)}" width="${r1(b.w)}" height="${r1(b.h)}" rx="${r1(Math.min(rx, b.h / 2))}" fill="${fill}"${stroke ? ` stroke="${stroke}" stroke-width="${b.kind === 'soft' || b.kind === 'tag' ? 1 : 1.5}"` : ''}${raised ? ` filter="url(#${id}-s)"` : ''}/>`,
       );
     }
-    if (!b.lines.length) continue;
+    if (!b.lines.length) return;
     const color = b.kind === 'accent' || b.kind === 'accent2' || b.kind === 'textOn' ? p.onAccent : b.kind === 'label' ? p.muted : p.text;
     const fs = b.fs ?? (b.kind === 'bold' ? (d.title && b.y === PAD ? 17 : 14) : b.kind === 'soft' ? (d.type === 'compare' ? 14 : 13) : b.kind === 'label' ? 13 : L.fs);
     const lh = b.kind === 'tag' ? fs + 3 : b.fs ? Math.round(b.fs * 1.3) : b.kind === 'soft' ? (d.type === 'compare' ? 19 : 17) : b.kind === 'label' ? 17 : b.kind === 'bold' ? 22 : Math.round(L.fs * 1.3);
@@ -1139,7 +1449,7 @@ export function renderDiagram(d: Diagram, p: Palette = PALETTES.light): string {
     if (isMatrixY(b)) {
       const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
       out.push(`<text x="${r1(cx)}" y="${r1(cy)}" font-size="13" fill="${p.muted}" font-weight="700" text-anchor="middle" dominant-baseline="middle" transform="rotate(-90 ${r1(cx)} ${r1(cy)})">${esc(b.lines[0])}</text>`);
-      continue;
+      return;
     }
     const start = b.align === 'start';
     let x = start ? b.x + (b.kind === 'label' ? 0 : 10) : b.align === 'end' ? b.x + b.w - 4 : b.x + b.w / 2;
@@ -1155,7 +1465,17 @@ export function renderDiagram(d: Diagram, p: Palette = PALETTES.light): string {
     const top = b.y + b.h / 2 - ((b.lines.length - 1) * lh) / 2;
     const spans = b.lines.map((t, i) => `<tspan x="${r1(x)}" y="${r1(top + i * lh)}">${esc(t)}</tspan>`).join('');
     out.push(`<text font-size="${fs}" font-weight="${weight}" fill="${color}" text-anchor="${start ? 'start' : b.align === 'end' ? 'end' : 'middle'}" dominant-baseline="middle">${spans}</text>`);
-  }
+    if (qi >= 0 && qi === view?.reveal)
+      out.push(`<rect class="dg-reveal" x="${r1(b.x - 3)}" y="${r1(b.y - 3)}" width="${r1(b.w + 6)}" height="${r1(b.h + 6)}" rx="${r1(Math.min(14, b.h / 2 + 3))}" fill="none" stroke="${tn(1).line}" stroke-width="3"/>`);
+  };
+  L.boxes.forEach((b, bi) => {
+    const mark = out.length;
+    drawBox(b, bi);
+    if (steps && out.length > mark && b.lines.length) {
+      out.splice(mark, 0, `<g class="dg-step" style="animation-delay:${(step++ * 0.15).toFixed(2)}s">`);
+      out.push('</g>');
+    }
+  });
   out.push('</svg>');
   return out.join('');
 }
@@ -1165,6 +1485,37 @@ const escAttr = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').
 
 /** Placeholder stored on the card; Merkora draws it when the card is shown (in the current colour scheme). */
 export const diagramHtml = (d: Diagram) => `<div class="diagram" data-diagram="${escAttr(JSON.stringify(d))}"></div>`;
+
+/** The graphics of card HTML shown with a view (covered label, step by step) – only for showing, never saved. */
+export function withDiagramView(html: string, view: DiagramView, onlyFirst = false): string {
+  let n = 0;
+  return html.replace(/<div class="diagram" data-diagram="/g, (m) => (onlyFirst && n++ ? m : `<div class="diagram" data-view="${escAttr(JSON.stringify(view))}" data-diagram="`));
+}
+
+/**
+ * "Grafik beschriften" while learning: covers one label of the first graphic of the answer.
+ * Returns that graphic for the question side (with "?"), the answer with the label marked, and the label;
+ * null when the answer has no graphic with at least 3 labels. `seed` picks the label (stable per card and round).
+ */
+export function graphicQuiz(answerHtml: string, seed: number): { graphic: string; answer: string; label: string } | null {
+  const m = DIAGRAM_RE.exec(answerHtml);
+  if (!m) return null;
+  let d: Diagram | null = null;
+  try {
+    d = parseDiagram(JSON.parse(unescAttr(m[1])));
+  } catch {
+    return null;
+  }
+  if (!d) return null;
+  const labels = diagramLabels(d);
+  if (labels.length < 3) return null;
+  const h = hideLabel(d, Math.abs(Math.floor(seed)) % labels.length)!;
+  return {
+    graphic: withDiagramView(m[0], h.front),
+    answer: withDiagramView(answerHtml, h.back, true),
+    label: h.label,
+  };
+}
 
 /** For exports (Anki): placeholders → finished SVG in the light colours on white. */
 export function diagramsToSvg(html: string): string {
@@ -1196,6 +1547,12 @@ Beschriftungen sind kurze Stichworte (höchstens 6 Wörter). Erlaubte Formen (ge
 {"type":"pyramid","title":"…","levels":["Spitze","…","Basis"]} – Stufenmodell, 3–6 Stufen von oben nach unten
 {"type":"bars","title":"…","unit":"%","bars":[{"label":"…","value":42}]} – Zahlenvergleich, 2–8 Balken, nur mit Zahlen aus dem Material
 {"type":"decision","title":"…","question":"…?","yes":"…","no":{"question":"…?","yes":"…","no":"…"}} – Entscheidungsbaum, höchstens zwei Fragen tief
+{"type":"plot","title":"…","x":{"label":"Menge","min":0,"max":10},"y":{"label":"Preis","min":0,"max":10},"functions":[{"label":"Nachfrage","expr":"10 - x"},{"label":"Angebot","expr":"1 + 0.8*x"}],"points":[{"x":5,"label":"Gleichgewicht"}]} – exakte Kurve aus einer Formel in x (+ - * / ^, Klammern, sqrt exp ln log abs sin cos tan, pi, e), bis 3 Kurven; für echte Zusammenhänge mit Zahlen/Formeln (Funktionen, Verteilungen, Wachstum, Angebot/Nachfrage). Nur qualitative Verläufe ohne Formel: "axes"
+{"type":"pie","title":"…","slices":[{"label":"…","value":40},{"label":"…","value":60}]} – Anteile eines Ganzen, 2–6 Stücke, nur mit Zahlen aus dem Material
+{"type":"fishbone","title":"…","effect":"Problem/Wirkung","causes":[{"label":"Ursache-Kategorie","items":["…","…"]}]} – Ursache-Wirkung (Ishikawa), 2–6 Kategorien mit je höchstens 3 Punkten
+{"type":"numberline","title":"…","min":0,"max":100,"unit":"…","marks":[{"value":50,"label":"…"}],"ranges":[{"from":0,"to":30,"label":"…"}]} – Zahlenstrahl/Skala mit markierten Werten und Bereichen (z. B. Grenzwerte, Notenskala, pH-Wert)
+{"type":"network","title":"…","nodes":["A","B","C"],"links":[{"from":"A","to":"B","label":"beeinflusst"}]} – Begriffsnetz mit beschrifteten Beziehungen, 3–8 Begriffe
+Für Vierfeldertafeln wie SWOT oder Vier-Felder-Schemata: "matrix".
 Bei flow, cycle, hierarchy, concept und model kann "highlight" einen Kasten hervorheben, der den Kern der Karte trifft.
 Symbole: Gib im diagram-Objekt "icons":{"Beschriftung":"symbol"} an – für die meisten Kästen ein passendes kleines Symbol (Schlüssel = genau die Beschriftung des Kastens), bei flow, cycle, hierarchy, concept, compare, matrix, model, pyramid und decision. Lass ein Symbol nur weg, wenn keines passt. Erlaubte Symbole: ${ICON_NAMES.join(", ")}.`;
 
@@ -1251,4 +1608,9 @@ export const DIAGRAM_KINDS: { id: Diagram['type']; label: string }[] = [
   { id: 'pyramid', label: 'Pyramide / Stufen' },
   { id: 'bars', label: 'Balkendiagramm' },
   { id: 'decision', label: 'Entscheidungsbaum' },
+  { id: 'plot', label: 'Exakte Kurve (Formel)' },
+  { id: 'pie', label: 'Kreisdiagramm' },
+  { id: 'fishbone', label: 'Ursache-Wirkung (Ishikawa)' },
+  { id: 'numberline', label: 'Zahlenstrahl / Skala' },
+  { id: 'network', label: 'Begriffsnetz mit Beziehungen' },
 ];

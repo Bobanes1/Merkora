@@ -9,8 +9,12 @@ import MatchTab from './tabs/MatchTab';
 import PathTab from './tabs/PathTab';
 import { addTodo, dueCards, findPath, useData } from '../lib/store';
 import { shortName } from '../lib/deckNames';
+import { masteryPercent } from '../lib/stats';
+import { Mastery } from '../components/Mastery';
+import { setSettings } from '../lib/store';
 import { usePhone } from '../lib/phone';
 import { Sheet } from '../components/Sheet';
+import { Mascot } from '../components/Mascot';
 import CardsTab from './tabs/CardsTab';
 import LearnTab from './tabs/LearnTab';
 import MasteryTab from './tabs/MasteryTab';
@@ -30,18 +34,18 @@ const TABS = [
   { id: 'exam', label: 'Prüfung üben', icon: IconTarget, group: 'Üben' },
   { id: 'summary', label: 'Zusammenfassung', icon: IconDoc, group: 'Verstehen' },
   { id: 'mindmap', label: 'Mindmap', icon: IconMindmap, group: 'Verstehen' },
+  { id: 'source', label: 'Material', icon: IconNote, group: 'Verstehen' },
 ] as const;
 const GROUPS = ['Lernen', 'Üben', 'Verstehen'] as const;
 /** Phone: "Übersicht" plus these two tabs stay visible, everything else is under "Mehr". */
 const PHONE_TABS = ['cards', 'learn'] as const;
-/** Progress and material live inside "Lernen" (switch on top) – their addresses stay valid. */
+/** Progress lives inside "Lernen" (switch on top) – and is reachable from the header ring. */
 const LEARN_VIEWS = [
   { id: 'learn', label: 'Lernen', icon: IconPlay },
   { id: 'mastery', label: 'Fortschritt', icon: IconChart },
-  { id: 'source', label: 'Material', icon: IconNote },
 ] as const;
-type TabId = (typeof TABS)[number]['id'] | 'mastery' | 'source' | 'overview';
-const VALID: string[] = [...TABS.map((t) => t.id), 'mastery', 'source', 'overview'];
+type TabId = (typeof TABS)[number]['id'] | 'mastery' | 'overview';
+const VALID: string[] = [...TABS.map((t) => t.id), 'mastery', 'overview'];
 
 export default function DeckPage() {
   const { ws, course, deck: deckSlug } = useParams();
@@ -53,7 +57,7 @@ export default function DeckPage() {
   // phone: a deck opens on its overview with all modes; on the PC on the card list
   const phone = usePhone();
   const tab: TabId = tabParam && VALID.includes(tabParam) && !(tabParam === 'overview' && !phone) ? tabParam : phone ? 'overview' : 'cards';
-  const barTab = tab === 'mastery' || tab === 'source' ? 'learn' : tab;
+  const barTab = tab === 'mastery' ? 'learn' : tab;
   const setTab = (t: TabId) => setParams({ tab: t });
   const [examDialog, setExamDialog] = useState(false);
   const [todoDialog, setTodoDialog] = useState(false);
@@ -106,6 +110,14 @@ export default function DeckPage() {
             </span>
           </nav>
           <div className="deck-actions">
+            <button type="button" className="mastery-chip" onClick={() => setTab('mastery')} title="Fortschritt ansehen">
+              <Mastery pct={masteryPercent(deck.cards)} size={20} /> {masteryPercent(deck.cards)} %
+            </button>
+            {(deck.files?.length ?? 0) > 0 && (
+              <button type="button" className="files-chip" onClick={() => setTab('source')} title="Deine Dateien ansehen">
+                <IconNote size={14} /> {deck.files!.length} {deck.files!.length === 1 ? 'Datei' : 'Dateien'}
+              </button>
+            )}
             {exam ? (
               <Link to="/calendar" className="exam-chip" title={`${exam.title} · zu den Prüfungen`}>
                 <IconCalendar size={14} /> {countdownText(exam)}
@@ -165,7 +177,10 @@ export default function DeckPage() {
                   onClick={() => setTab(t.id)}
                 >
                   <t.icon size={14} />
-                  <span>{t.label}</span>
+                  <span>
+                    {t.label}
+                    {t.id === 'source' && (deck.files?.length ?? 0) > 0 ? ` (${deck.files!.length})` : ''}
+                  </span>
                 </button>
               ))}
             </div>
@@ -179,6 +194,19 @@ export default function DeckPage() {
                 <v.icon size={13} /> {v.label}
               </button>
             ))}
+          </div>
+        )}
+        {!data.settings.seenDeckTip && (
+          <div className="deck-tip" role="status">
+            <Mascot who="pip" mood="wave" size={44} />
+            <span className="grow">
+              {phone
+                ? 'Hier findest du alle Modi: Lernen, Karten, Lernpfad, Quiz, Prüfung üben, Zusammenfassung, Mindmap und deine Dateien unter „Material“.'
+                : 'Oben findest du alle Modi: Lernen und Üben (Lernpfad, Zuordnen, Quiz, Prüfung üben) und Verstehen (Zusammenfassung, Mindmap, Material mit deinen Dateien).'}
+            </span>
+            <button type="button" className="btn ghost sm" onClick={() => setSettings({ seenDeckTip: true })}>
+              Verstanden
+            </button>
           </div>
         )}
         <div className="tab-body">

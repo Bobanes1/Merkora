@@ -309,6 +309,7 @@ export function cardsPrompt(text: string, count: number, focus = '', graphics = 
     system: `Du bist ein erfahrener Lerncoach und erstellst hochwertige Karteikarten. ${LANG_RULE}
 Regeln: Eine Idee pro Karte. Vorderseite = präzise Frage oder Begriff. Rückseite = kurze, vollständige Antwort (max. 2–3 Sätze).
 ${TERM_RULE}
+${FORMULA_RULE}
 Wähle prüfungsorientiert aus: Karten zu dem, was in einer Prüfung zu diesem Stoff gefragt werden kann – nicht zu Organisatorischem, Agenda oder Literaturlisten.${boldOn() ? '\n' + EMPHASIS_RULE : ''}
 ${graphics ? DIAGRAM_RULE + '\n' : ''}${figures ? FIGURE_RULE + '\n' : ''}Format: {"cards":[{"front":"...","back":"..."${graphics ? ',"diagram":{…} (optional)' : ''}${figures ? ',"figure":7 (optional)' : ''}}]}${JSON_RULE}`,
     user: `${
@@ -577,7 +578,8 @@ Schlage drei Wege vor:
 - "rewrite": dieselbe Karte klarer – eindeutige, konkrete Frage, kurze Antwort mit dem Kern zuerst.
 - "mnemonic": eine kurze, einprägsame Eselsbrücke oder ein Bild zum Merken (1–2 Sätze).
 - "split": 2–3 kleinere Karten, die zusammen dasselbe abfragen (je eine Sache pro Karte).
-${TERM_RULE}${boldOn() ? '\n' + EMPHASIS_RULE : ''}
+${TERM_RULE}
+${FORMULA_RULE}${boldOn() ? '\n' + EMPHASIS_RULE : ''}
 Format: {"rewrite":{"front":"...","back":"..."},"mnemonic":"...","split":[{"front":"...","back":"..."}]}`,
     `Frage: ${front}\nAntwort: ${back}`,
     1500,
@@ -622,7 +624,8 @@ export async function regenerateCard(
 ): Promise<{ front: string; back: string; diagram?: Diagram }> {
   const r = await completeJson<{ front?: unknown; back?: unknown; diagram?: unknown }>(
     `Du schreibst eine Lernkarte neu – zum selben Thema, aber besser: eine präzise Frage und eine kurze, vollständige Antwort (max. 2–3 Sätze). ${LANG_RULE}
-${TERM_RULE}${boldOn() ? '\n' + EMPHASIS_RULE : ''}${graphic ? '\n' + DIAGRAM_RULE : ''}
+${TERM_RULE}
+${FORMULA_RULE}${boldOn() ? '\n' + EMPHASIS_RULE : ''}${graphic ? '\n' + DIAGRAM_RULE : ''}
 Format: {"front":"...","back":"..."${graphic ? ',"diagram":{…} (optional)' : ''}}`,
     `Bisherige Karte:\nFrage: ${front}\nAntwort: ${back}${wish.trim() ? `\n\nWunsch (hat Vorrang): ${wish.trim()}` : ''}${material ? `\n\nPassendes Lernmaterial:\n${material}` : ''}`,
     graphic ? 1400 : 900,
@@ -633,6 +636,10 @@ Format: {"front":"...","back":"..."${graphic ? ',"diagram":{…} (optional)' : '
   const diagram = graphic && r.diagram ? (parseDiagram(r.diagram) ?? undefined) : undefined;
   return { front: f, back: b, diagram };
 }
+
+/** Real formulas as LaTeX – the card shows them typeset (KaTeX). In JSON the backslash is doubled. */
+export const FORMULA_RULE =
+  String.raw`Schreibe echte Formeln (Mathe, Statistik, Physik, Chemie, Ökonomie) in LaTeX zwischen \\( und \\), z. B. "\\( s^2 = \\frac{1}{n-1}\\sum (x_i-\\bar{x})^2 \\)" – im JSON mit doppeltem Backslash. Einfache Zahlen, Einheiten und Prozentwerte schreibst du normal, ohne LaTeX.`;
 
 /** Single terms: a short, still understandable definition – the 2–3 sentences are for explanations. */
 export const TERM_RULE =

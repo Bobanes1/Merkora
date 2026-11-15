@@ -44,6 +44,7 @@
     "allow-list-backups",
     "allow-read-backup",
     "allow-backup-now",
-    "allow-download-apk"
+    "allow-download-apk",
+    "allow-open-media-file"
   ]
 }

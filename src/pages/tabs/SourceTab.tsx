@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { CreateWithAI } from '../../components/CreateWithAI';
 import { IconSparkle, IconUpload } from '../../components/Icons';
-import { SlideViewer } from '../../components/SlideViewer';
-import { attachPdfs } from '../../lib/deckFiles';
-import { isPdf, MATERIAL_ACCEPT, readFileText } from '../../lib/files';
+import { DeckFileList } from '../../components/DeckFileList';
+import { attachFiles } from '../../lib/deckFiles';
+import { MATERIAL_ACCEPT, readFileText } from '../../lib/files';
 import { updateDeck, type Deck } from '../../lib/store';
 
 export default function SourceTab({ deck }: { deck: Deck }) {
@@ -29,19 +29,19 @@ export default function SourceTab({ deck }: { deck: Deck }) {
   const onFiles = (list?: FileList | null) => {
     const all = Array.from(list ?? []);
     if (!all.length) return;
-    // material that is already there (e.g. from these slides): ask before adding the same text twice
-    if (text.trim() && all.some(isPdf)) setPending(all);
+    // material that is already there (e.g. from these files): ask before adding the same text twice
+    if (text.trim()) setPending(all);
     else void addFiles(all, true);
   };
 
-  /** Keeps PDFs as slides and appends the text (of PDFs only if `pdfText`); a broken file does not stop the others. */
-  const addFiles = async (all: File[], pdfText: boolean) => {
+  /** Keeps the files and appends their text (only if `withText`); a broken file does not stop the others. */
+  const addFiles = async (all: File[], withText: boolean) => {
     setPending(null);
     setBusy(true);
     setError('');
     const failed: string[] = [];
     for (const f of all) {
-      if (isPdf(f) && !pdfText) continue;
+      if (!withText) continue;
       try {
         const t = await readFileText(f);
         setText((prev) => (prev.trim() ? prev + '\n\n' : '') + t);
@@ -51,9 +51,9 @@ export default function SourceTab({ deck }: { deck: Deck }) {
       }
     }
     try {
-      await attachPdfs(deck.id, all);
+      await attachFiles(deck.id, all);
     } catch (e) {
-      failed.push(`Präsentation konnte nicht gespeichert werden: ${(e as Error).message}`);
+      failed.push(`Datei konnte nicht gespeichert werden: ${(e as Error).message}`);
     }
     setBusy(false);
     if (failed.length) setError(failed.join('\n'));
@@ -103,10 +103,10 @@ export default function SourceTab({ deck }: { deck: Deck }) {
       </div>
       {pending && (
         <div className="form-warn source-ask">
-          Im Lernmaterial steht schon Text. Sollen die Folien nur angezeigt werden, oder soll ihr Text zusätzlich angehängt werden?
+          Im Lernmaterial steht schon Text. Sollen die Dateien nur gespeichert werden (zum Ansehen), oder soll ihr Text zusätzlich angehängt werden?
           <div className="source-ask-actions">
             <button type="button" className="btn primary sm" onClick={() => void addFiles(pending, false)}>
-              Nur Folien zeigen
+              Nur Dateien speichern
             </button>
             <button type="button" className="btn outline sm" onClick={() => void addFiles(pending, true)}>
               Text auch anhängen
@@ -117,7 +117,7 @@ export default function SourceTab({ deck }: { deck: Deck }) {
           </div>
         </div>
       )}
-      {hasFiles && <SlideViewer key={deck.id} deck={deck} />}
+      <DeckFileList deck={deck} />
       {hasFiles ? (
         <details className="source-details">
           <summary>

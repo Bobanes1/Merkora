@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { searchAll, type SearchHit } from '../lib/search';
-import { deckUrl, useData } from '../lib/store';
-import { IconCards, IconFolder, IconNote, IconSearch } from './Icons';
+import { deckUrl, useData, type Deck, type DeckFile } from '../lib/store';
+import { FileViewer } from './FileViewer';
+import { IconCards, IconDoc, IconFolder, IconNote, IconSearch } from './Icons';
 import { Modal } from './Modal';
 
-const GROUP: Record<SearchHit['kind'], string> = { course: 'Kurse', deck: 'Decks', card: 'Karten' };
+const GROUP: Record<SearchHit['kind'], string> = { course: 'Kurse', deck: 'Decks', file: 'Dateien', card: 'Karten' };
 
 /** The search word marked in a text. */
 function Mark({ text, term }: { text: string; term: string }) {
@@ -26,6 +27,7 @@ export function SearchPalette({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate();
   const [q, setQ] = useState('');
   const [active, setActive] = useState(0);
+  const [viewing, setViewing] = useState<{ deck: Deck; file: DeckFile } | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const hits = useMemo(() => searchAll(data, q), [data, q]);
   useEffect(() => input.current?.focus(), []);
@@ -35,12 +37,18 @@ export function SearchPalette({ onClose }: { onClose: () => void }) {
   }, [active]);
 
   const open = (h: SearchHit) => {
+    if (h.kind === 'file') {
+      const d = data.decks.find((x) => x.id === h.deckId);
+      const f = d?.files?.find((x) => x.id === h.id);
+      if (d && f) setViewing({ deck: d, file: f });
+      return;
+    }
     if (h.kind === 'course') {
       const c = data.courses.find((x) => x.id === h.id);
       const w = c && data.workspaces.find((x) => x.id === c.workspaceId);
       if (c && w) navigate(`/library/${w.slug}/${c.slug}`);
     } else {
-      const d = data.decks.find((x) => x.id === (h.kind === 'deck' ? h.id : h.deckId));
+      const d = data.decks.find((x) => x.id === (h.kind === 'deck' ? h.id : (h as { deckId: string }).deckId));
       if (d) navigate(h.kind === 'deck' ? deckUrl(data, d) : `${deckUrl(data, d, 'cards')}&q=${encodeURIComponent(h.term)}`);
     }
     onClose();
@@ -54,7 +62,7 @@ export function SearchPalette({ onClose }: { onClose: () => void }) {
           {GROUP[h.kind]}
         </li>,
       );
-    const Icon = h.kind === 'course' ? IconFolder : h.kind === 'deck' ? IconCards : IconNote;
+    const Icon = h.kind === 'course' ? IconFolder : h.kind === 'deck' ? IconCards : h.kind === 'file' ? IconDoc : IconNote;
     const term = q.trim().toLocaleLowerCase('de').split(/\s+/)[0] ?? '';
     rows.push(
       <li key={h.kind + h.id} role="option" aria-selected={i === active}>
@@ -75,6 +83,7 @@ export function SearchPalette({ onClose }: { onClose: () => void }) {
     );
   });
 
+  if (viewing) return <FileViewer file={viewing.file} deck={viewing.deck} onClose={onClose} />;
   return (
     <Modal title="Suchen" onClose={onClose} className="search-modal">
       <div className="search-field">

@@ -2,9 +2,9 @@
  * The uploaded documents of a whole course (course page, "Dokumente").
  * Pure – tested in scripts/test-srs.mts.
  */
-type DocDeck = { id: string; name: string; courseId: string; folderId?: string; source?: string; files?: { id: string; name: string; size: number }[] };
+type DocDeck = { id: string; name: string; courseId: string; folderId?: string; source?: string; files?: { id: string; name: string; size: number; type?: string }[] };
 
-export type CourseDoc = { fileId: string; name: string; size: number; deckId: string; deckName: string; folder?: string };
+export type CourseDoc = { fileId: string; name: string; size: number; type?: string; deckId: string; deckName: string; folder?: string };
 export type TextMaterial = { deckId: string; deckName: string; folder?: string; chars: number };
 
 /** PDFs of all decks in the course (folders first in their order, then decks without a folder), and decks with only text material. */
@@ -17,7 +17,7 @@ export function courseDocs(course: { id: string; folders?: { id: string; name: s
     ...mine.filter((d) => inFolder(d) < 0),
   ];
   const folderName = (d: DocDeck) => folders.find((f) => f.id === d.folderId)?.name;
-  const files = ordered.flatMap((d) => (d.files ?? []).map((f) => ({ fileId: f.id, name: f.name, size: f.size, deckId: d.id, deckName: d.name, folder: folderName(d) })));
+  const files = ordered.flatMap((d) => (d.files ?? []).map((f) => ({ fileId: f.id, name: f.name, size: f.size, type: f.type, deckId: d.id, deckName: d.name, folder: folderName(d) })));
   const texts = ordered
     .filter((d) => !(d.files ?? []).length && (d.source ?? '').trim())
     .map((d) => ({ deckId: d.id, deckName: d.name, folder: folderName(d), chars: (d.source ?? '').trim().length }));
