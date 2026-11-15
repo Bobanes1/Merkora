@@ -164,7 +164,9 @@ jobs:
       - name: Android project
         run: |
           npx tauri android init --ci
-          npx tauri icon src-tauri/icons/icon.png
+          # Android crops and zooms launcher icons: give the logo room (about 60 % of the area, as Android expects)
+          convert src-tauri/icons/icon.png -resize 620x620 -gravity center -background none -extent 1024x1024 android-icon.png
+          npx tauri icon android-icon.png
           node scripts/android-patch.cjs
       - name: Build APK
         run: npx tauri android build --apk --target aarch64 armv7

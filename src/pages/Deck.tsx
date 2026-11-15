@@ -19,6 +19,7 @@ import ExamTab from './tabs/ExamTab';
 import SourceTab from './tabs/SourceTab';
 import SummaryTab from './tabs/SummaryTab';
 import MindmapTab from './tabs/MindmapTab';
+import OverviewTab from './tabs/OverviewTab';
 
 const TABS = [
   { id: 'cards', label: 'Karten', icon: IconCards, group: 'Lernen' },
@@ -31,16 +32,16 @@ const TABS = [
   { id: 'mindmap', label: 'Mindmap', icon: IconMindmap, group: 'Verstehen' },
 ] as const;
 const GROUPS = ['Lernen', 'Üben', 'Verstehen'] as const;
-/** Phone: these three tabs stay visible, everything else is under "Mehr". */
-const PHONE_TABS = ['cards', 'learn', 'path'] as const;
+/** Phone: "Übersicht" plus these two tabs stay visible, everything else is under "Mehr". */
+const PHONE_TABS = ['cards', 'learn'] as const;
 /** Progress and material live inside "Lernen" (switch on top) – their addresses stay valid. */
 const LEARN_VIEWS = [
   { id: 'learn', label: 'Lernen', icon: IconPlay },
   { id: 'mastery', label: 'Fortschritt', icon: IconChart },
   { id: 'source', label: 'Material', icon: IconNote },
 ] as const;
-type TabId = (typeof TABS)[number]['id'] | 'mastery' | 'source';
-const VALID: string[] = [...TABS.map((t) => t.id), 'mastery', 'source'];
+type TabId = (typeof TABS)[number]['id'] | 'mastery' | 'source' | 'overview';
+const VALID: string[] = [...TABS.map((t) => t.id), 'mastery', 'source', 'overview'];
 
 export default function DeckPage() {
   const { ws, course, deck: deckSlug } = useParams();
@@ -49,12 +50,13 @@ export default function DeckPage() {
   const [chat, setChat] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 1280 && !document.documentElement.classList.contains('phone'));
   const { workspace, course: crs, deck } = findPath(data, ws, course, deckSlug);
   const tabParam = params.get('tab') as TabId | null;
-  const tab: TabId = tabParam && VALID.includes(tabParam) ? tabParam : 'cards';
+  // phone: a deck opens on its overview with all modes; on the PC on the card list
+  const phone = usePhone();
+  const tab: TabId = tabParam && VALID.includes(tabParam) && !(tabParam === 'overview' && !phone) ? tabParam : phone ? 'overview' : 'cards';
   const barTab = tab === 'mastery' || tab === 'source' ? 'learn' : tab;
   const setTab = (t: TabId) => setParams({ tab: t });
   const [examDialog, setExamDialog] = useState(false);
   const [todoDialog, setTodoDialog] = useState(false);
-  const phone = usePhone();
   const [moreTabs, setMoreTabs] = useState(false);
   const [menu, setMenu] = useState(false);
 
@@ -132,6 +134,9 @@ export default function DeckPage() {
         )}
         {phone ? (
           <div className="tabs phone-tabs" role="tablist">
+            <button type="button" role="tab" aria-selected={tab === 'overview'} className={`tab ${tab === 'overview' ? 'on' : ''}`} onClick={() => setTab('overview')}>
+              <span>Übersicht</span>
+            </button>
             {TABS.filter((t) => (PHONE_TABS as readonly string[]).includes(t.id)).map((t) => (
               <button key={t.id} type="button" role="tab" aria-selected={barTab === t.id} className={`tab ${barTab === t.id ? 'on' : ''}`} onClick={() => setTab(t.id)}>
                 <span>{t.label}</span>
@@ -177,6 +182,7 @@ export default function DeckPage() {
           </div>
         )}
         <div className="tab-body">
+          {tab === 'overview' && <OverviewTab deck={deck} onOpen={(t) => setTab(t as TabId)} />}
           {tab === 'cards' && <CardsTab deck={deck} onLearn={() => setTab('learn')} />}
           {tab === 'learn' && <LearnTab deck={deck} onDone={() => setTab('mastery')} />}
           {tab === 'path' && <PathTab key={deck.id} deck={deck} />}
@@ -189,7 +195,7 @@ export default function DeckPage() {
           {tab === 'source' && <SourceTab deck={deck} />}
         </div>
       </div>
-      {phone && tab !== 'learn' && (
+      {phone && tab !== 'learn' && tab !== 'overview' && (
         <button type="button" className="btn primary phone-learn" onClick={() => setTab('learn')}>
           <IconPlay size={14} /> Lernen{due > 0 ? ` (${due})` : ''}
         </button>

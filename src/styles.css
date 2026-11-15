@@ -8223,3 +8223,107 @@ html.phone .course-title .grow {
 .sync-wait span {
   flex: 1;
 }
+
+/* touch: no blue box when tapping buttons and links; keyboard users still see the focus ring */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+html.phone button:focus,
+html.phone a:focus,
+html.phone [role='tab']:focus {
+  outline: none;
+  box-shadow: none;
+}
+html.phone button:active,
+html.phone a:active {
+  opacity: 0.75;
+}
+
+/* phone: deck overview with all modes */
+.deck-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ov-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.ov-stats b {
+  color: var(--ink);
+}
+.ov-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+.ov-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-height: 92px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--white);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.ov-tile svg {
+  color: var(--primary);
+}
+.ov-tile b {
+  color: var(--ink);
+  font-size: 15px;
+}
+.ov-tile small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.ov-tile.main {
+  grid-column: 1 / -1;
+  min-height: 0;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #fff;
+}
+.ov-tile.main svg,
+.ov-tile.main b,
+.ov-tile.main small {
+  color: #fff;
+}
+.ov-tile.main small {
+  margin-left: auto;
+  opacity: 0.85;
+}
+.learn-settings {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin: 4px 0 8px;
+}
+.learn-settings .seg {
+  margin: 0;
+}
+html.phone .learn-start-btn {
+  width: 100%;
+  min-height: 52px;
+  font-size: 16px;
+}
+html.phone .learn-start .row-gap {
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+}

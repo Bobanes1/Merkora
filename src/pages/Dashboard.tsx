@@ -84,7 +84,7 @@ function DeckRow({ deck }: { deck: Deck }) {
   const pct = masteryPercent(deck.cards);
   const n = dueCards(deck).length;
   return (
-    <Link to={deckUrl(data, deck, n ? 'learn' : 'cards')} className="deck-row">
+    <Link to={document.documentElement.classList.contains('phone') ? deckUrl(data, deck) : deckUrl(data, deck, n ? 'learn' : 'cards')} className="deck-row">
       <span className="deck-icon">
         <IconCards />
       </span>

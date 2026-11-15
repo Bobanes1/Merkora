@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
-import { IconPlus, IconShuffle, IconSparkle } from '../../components/Icons';
+import { IconPlay, IconPlus, IconShuffle, IconSparkle } from '../../components/Icons';
 import { CardContent, lookOf } from '../../components/CardContent';
 import { Confetti, Mascot, praise, type Mood } from '../../components/Mascot';
 import { Markdown } from '../../components/Markdown';
@@ -119,10 +119,7 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
     reset();
   };
 
-  useEffect(() => {
-    if (mode === null && dueIds.length) start('due');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // no automatic start: the start screen shows the settings (which side is asked) first
 
   const reset = () => {
     setFlipped(false);
@@ -298,10 +295,14 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
             )}
           </p>
         )}
+        <div className="learn-settings">
+          <span className="field-label">Was soll gefragt werden?</span>
+          <AskSidePicker deck={deck} />
+        </div>
         <div className="row-gap center">
           {dueIds.length > 0 && mode === null && (
-            <button type="button" className="btn primary" onClick={() => start('due')}>
-              Fällige Karten lernen
+            <button type="button" className="btn primary learn-start-btn" onClick={() => start('due')}>
+              <IconPlay size={14} /> Starten · {dueIds.length} {dueIds.length === 1 ? 'Karte' : 'Karten'}
             </button>
           )}
           {waiting > 0 && (
@@ -327,7 +328,6 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
           )}
           {mode !== null && undoBtn}
         </div>
-        <AskSidePicker deck={deck} />
       </div>
     );
 
