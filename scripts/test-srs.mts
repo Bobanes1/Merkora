@@ -1230,7 +1230,7 @@ console.log('Folien-Bilder für die KI');
   const { slidesInPart } = await import('../src/lib/slideImages');
   const part = 'x\n[Abbildung 1 – Folie 3 aus V1.pdf]\nText\n[Abbildung 2 – Folie 7 aus V 2.pdf]\n[Abbildung 1 – Folie 3 aus V1.pdf]\n' + Array.from({ length: 12 }, (_, i) => `[Abbildung ${i + 3} – Folie ${i + 10} aus V1.pdf]`).join('\n');
   const sl = slidesInPart(part);
-  ok(sl.length === 8 && sl[0].file === 'V1.pdf' && sl[0].page === 3 && sl[1].file === 'V 2.pdf' && sl[1].page === 7 && sl.filter((x) => x.page === 3).length === 1, 'Folien eines Teils: in Reihenfolge, ohne Doppelte, höchstens 8');
+  ok(sl.length === 6 && sl[0].file === 'V1.pdf' && sl[0].page === 3 && sl[1].file === 'V 2.pdf' && sl[1].page === 7 && sl.filter((x) => x.page === 3).length === 1, 'Folien eines Teils: in Reihenfolge, ohne Doppelte, höchstens 6');
   ok(slidesInPart('kein Marker').length === 0, 'ohne markierte Folien keine Bilder');
 }
 
@@ -1257,6 +1257,51 @@ console.log('Handy: Update und Synchronisieren');
   ok(e.status === 'error' && e.error === 'Android konnte den Installer nicht öffnen: No Activity found', 'Fehler beim Öffnen wird angezeigt');
   const { errorText } = await import('../src/lib/sync');
   ok(errorText('Keine Daten erhalten.') === 'Keine Daten erhalten.' && errorText(new Error('x')) === 'x' && errorText(undefined) === '', 'Fehler als Text (auch wenn Tauri nur Text liefert)');
+}
+
+console.log('Abgeschnittene Antworten und Fortsetzung');
+{
+  const { repairJsonInfo, repairJson } = await import('../src/lib/jsonRepair');
+  const full = '{"cards":[{"front":"A","back":"a"},{"front":"B","back":"b"}]}';
+  ok(repairJsonInfo(full)?.cut === false && (repairJsonInfo(full)?.value as any).cards.length === 2, 'vollständige Antwort: nicht abgeschnitten');
+  const cutText = '{"cards":[{"front":"A","back":"a"},{"front":"B","back":"b"},{"front":"C","back":"c"},{"front":"D","ba';
+  const c = repairJsonInfo(cutText);
+  ok(c?.cut === true && (c.value as any).cards.filter((x: any) => x.back).length === 3, 'abgeschnittene Antwort: die 3 vollständigen Karten bleiben, als abgeschnitten erkannt');
+  const chatty = 'Auf [Bild 1] sieht man ein Modell, auf {Folie 3} eine Tabelle.\n\n```json\n' + full + '\n```';
+  ok(((repairJson(chatty, 'cards') as any)?.cards?.length ?? 0) === 2, 'JSON wird auch nach einer Beschreibung mit Klammern gefunden');
+  ok(((repairJson('{"note":"x"} und dann ' + full, 'cards') as any)?.cards?.length ?? 0) === 2, 'von zwei JSON-Blöcken zählt der mit "cards"');
+
+  const { parseCardsInfo, wasCut, cardsPrompt } = await import('../src/lib/ai');
+  ok(parseCardsInfo(chatty).cards.length === 2 && parseCardsInfo(chatty).cut === false, 'Karten aus einer Antwort mit Vortext');
+  const pc = parseCardsInfo(cutText, false);
+  ok(pc.cut && pc.cards.length === 3, 'Karten einer abgeschnittenen Antwort');
+  ok(parseCardsInfo('{"cards":[{"front":"A","ba', false).cards.length === 0, 'abgeschnitten vor der ersten Karte: keine Karte, aber kein Abbruch');
+  ok(wasCut('openai', { choices: [{ finish_reason: 'length' }] }) && !wasCut('openai', { choices: [{ finish_reason: 'stop' }] }), 'OpenAI/OpenRouter: Längenlimit erkannt');
+  ok(wasCut('anthropic', { stop_reason: 'max_tokens' }) && !wasCut('anthropic', { stop_reason: 'end_turn' }), 'Claude: Längenlimit erkannt');
+  ok(wasCut('gemini', { candidates: [{ finishReason: 'MAX_TOKENS' }] }) && !wasCut('gemini', { candidates: [{ finishReason: 'STOP' }] }), 'Gemini: Längenlimit erkannt');
+  const more = cardsPrompt('Material', 0, '', true, { i: 1, n: 1, more: true, avoid: ['Was ist A?', 'Was ist B?'] });
+  ok(more.user.includes('abgeschnitten') && more.user.includes('- Was ist A?') && !more.user.includes('Dies ist Teil'), 'Fortsetzung nennt die schon vorhandenen Fragen');
+  const few = cardsPrompt('Material', 0, '', true, { i: 2, n: 3, few: true, avoid: ['X?'] });
+  ok(few.user.includes('mehr prüfungsrelevante Inhalte') && few.user.split('- X?').length === 2, 'zweiter Versuch bei zu wenigen Karten, Fragen nur einmal genannt');
+
+  const { followUp } = await import('../src/lib/jobs');
+  const long = 'x'.repeat(16000);
+  ok(followUp({ text: 'kurz' }, 5, true) === 'more' && followUp({ text: 'kurz', more: 3 }, 5, true) === null, 'Fortsetzung bei abgeschnittener Antwort (höchstens 3-mal)');
+  ok(followUp({ text: long }, 1, false) === 'few' && followUp({ text: long, few: true }, 1, false) === null && followUp({ text: 'kurz' }, 1, false) === null && followUp({ text: long, count: 5 }, 1, false) === null, 'viel Material, kaum Karten: einmal nachfragen');
+
+  const { dropDuplicates } = await import('../src/lib/chunks');
+  const kept = dropDuplicates(
+    [{ front: 'Was ist Osmose?' }, { front: 'Was ist <b>Osmose</b>' }, { front: 'Was beschreibt das Modell von Lasswell genau?' }, { front: 'Was beschreibt das Modell von Lasswell genau' }, { front: 'Was ist Diffusion?' }],
+    ['Was ist Diffusion ?'],
+  );
+  ok(kept.map((c) => c.front).join('|') === 'Was ist Osmose?|Was beschreibt das Modell von Lasswell genau?', 'doppelte Karten aus gleichzeitig laufenden Teilen fallen weg');
+  ok(
+    dropDuplicates([{ front: 'Teil 2 Frage 1' }, { front: 'Teil 1 Frage 2' }, { front: 'Welche Rolle spielt die Agenda-Setting-Theorie für die Medienwirkung heute' }, { front: 'Welche Rolle spielt die Agenda-Setting-Theorie für die Medienwirkung heute noch?' }], []).length === 3,
+    'gleiche Wörter in anderer Reihenfolge sind verschiedene Fragen, ein Wort mehr am Ende bleibt doppelt',
+  );
+
+  const { helpfulSlides } = await import('../src/lib/slideImages');
+  ok(helpfulSlides(['Titel', 'x'.repeat(400), 'Modell', ''], [1, 2, 3, 4]).join() === '1,3,4', 'Bilder nur für Grafik-Folien mit wenig Text');
 }
 
 console.log('Kurze Decknamen');

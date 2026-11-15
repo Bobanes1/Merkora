@@ -87,6 +87,49 @@ export function shareCount(total: number, parts: { text: string }[]): number[] {
 }
 
 /** The questions of the cards made so far, short enough for the prompt (newest last). */
+/** A question reduced to its words (for finding the same card twice). */
+const questionKey = (s: string) =>
+  s
+    .replace(/<[^>]+>/g, ' ')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+
+/**
+ * Cards whose question is already there (in the deck or earlier in the list) are dropped – parts that ran
+ * side by side may both make "Was ist Osmose?". The same words, or a long question that shares nearly all
+ * its word pairs in the same order (one word more or less), count as the same.
+ * Pure – tested in scripts/test-srs.mts.
+ */
+export function dropDuplicates<T extends { front: string }>(cards: T[], existing: string[]): T[] {
+  const pairs = (k: string) => {
+    const w = k.split(' ');
+    return new Set(w.slice(1).map((x, i) => w[i] + ' ' + x));
+  };
+  const seen = existing.map(questionKey).filter(Boolean);
+  const sets = seen.map(pairs);
+  const same = (k: string) => {
+    if (seen.includes(k)) return true;
+    const p = pairs(k);
+    if (p.size < 5) return false;
+    return sets.some((o) => {
+      if (o.size < 5) return false;
+      let both = 0;
+      for (const x of p) if (o.has(x)) both++;
+      return both / (p.size + o.size - both) >= 0.75;
+    });
+  };
+  const out: T[] = [];
+  for (const c of cards) {
+    const k = questionKey(c.front);
+    if (!k || same(k)) continue;
+    seen.push(k);
+    sets.push(pairs(k));
+    out.push(c);
+  }
+  return out;
+}
+
 export function avoidList(fronts: string[], maxChars = 6000): string[] {
   const out: string[] = [];
   let len = 0;

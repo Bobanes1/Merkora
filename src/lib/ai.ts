@@ -8,7 +8,7 @@ import { FIGURE_RULE } from './slides';
 import { getState, type ChatMsg, type Provider } from './store';
 import { SECOND_MODEL } from '../config';
 import { autoCardInstruction, CARD_MATERIAL_LIMIT } from './cardCount';
-import { repairJson } from './jsonRepair';
+import { repairJsonInfo } from './jsonRepair';
 
 export const PROVIDERS: Record<
   Provider,
@@ -145,9 +145,15 @@ async function fail(res: Response): Promise<never> {
  * hidden "thinking" or word salad when overloaded) are retried twice before a clear error is shown.
  */
 export async function complete(messages: ChatMsg[], opts: Opts = {}): Promise<string> {
+  return (await completeInfo(messages, opts)).text;
+}
+
+/** Like complete, and tells whether the answer stopped at the length limit (`cut`). */
+export async function completeInfo(messages: ChatMsg[], opts: Opts = {}): Promise<{ text: string; cut: boolean }> {
   for (let attempt = 0; attempt < 3; attempt++) {
-    const text = cleanReply(await completeOnce(messages, opts));
-    if (text && !looksBroken(text, messages, opts.system)) return text;
+    const r = await completeOnce(messages, opts);
+    const text = cleanReply(r.text);
+    if (text && !looksBroken(text, messages, opts.system)) return { text, cut: r.cut };
     if (opts.signal?.aborted) break;
     await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
   }
@@ -245,7 +251,15 @@ export function supportsImages(c: { provider: string; model: string } = aiConfig
 export const imagesRejected = (e: unknown) =>
   e instanceof AiError && !/API-Key|Anfragen|Guthaben/.test(e.message) && /image|vision|multimodal|modalit|bild/i.test(e.message);
 
-async function completeOnce(messages: ChatMsg[], opts: Opts = {}): Promise<string> {
+/** Did the provider stop the answer at the length limit? Pure – tested. */
+export function wasCut(kind: ApiKind, j: unknown): boolean {
+  const o = (j ?? {}) as Record<string, any>;
+  if (kind === 'anthropic') return o.stop_reason === 'max_tokens';
+  if (kind === 'gemini') return o.candidates?.[0]?.finishReason === 'MAX_TOKENS';
+  return o.choices?.[0]?.finish_reason === 'length';
+}
+
+async function completeOnce(messages: ChatMsg[], opts: Opts = {}): Promise<{ text: string; cut: boolean }> {
   const purpose = opts.purpose ?? 'gen';
   const cfg = aiConfig(purpose);
   if (!cfg.key && cfg.provider !== 'custom') throw new AiError('Kein API-Key hinterlegt. Trage ihn in den Einstellungen ein.');
@@ -265,7 +279,7 @@ async function completeOnce(messages: ChatMsg[], opts: Opts = {}): Promise<strin
       });
       if (!res.ok) await fail(res);
       const j = await res.json();
-      return (j.content || []).map((b: { text?: string }) => b.text || '').join('');
+      return { text: (j.content || []).map((b: { text?: string }) => b.text || '').join(''), cut: wasCut('anthropic', j) };
     }
     if (cfg.provider === 'gemini') {
       const res = await netFetch(`${cfg.baseUrl}/models/${encodeURIComponent(cfg.model)}:generateContent`, {
@@ -280,7 +294,7 @@ async function completeOnce(messages: ChatMsg[], opts: Opts = {}): Promise<strin
       });
       if (!res.ok) await fail(res);
       const j = await res.json();
-      return (j.candidates?.[0]?.content?.parts || []).map((p: { text?: string }) => p.text || '').join('');
+      return { text: (j.candidates?.[0]?.content?.parts || []).map((p: { text?: string }) => p.text || '').join(''), cut: wasCut('gemini', j) };
     }
     // OpenAI and OpenAI-compatible servers
     const headers: Record<string, string> = { 'content-type': 'application/json' };
@@ -307,7 +321,10 @@ async function completeOnce(messages: ChatMsg[], opts: Opts = {}): Promise<strin
     });
     if (!res.ok) await fail(res);
     const j = await res.json();
-    return j.choices?.[0]?.message?.content ?? '';
+    const content = j.choices?.[0]?.message?.content;
+    // some servers answer with parts instead of plain text
+    const text = Array.isArray(content) ? content.map((c: { text?: string }) => c?.text ?? '').join('') : String(content ?? '');
+    return { text, cut: wasCut('openai', j) };
   } catch (e) {
     if (e instanceof AiError) throw e;
     if ((e as Error).name === 'AbortError') throw e;
@@ -320,16 +337,26 @@ async function completeOnce(messages: ChatMsg[], opts: Opts = {}): Promise<strin
 /** The AI answered, but not in a readable form (Merkora tries once more by itself). */
 export class AiFormatError extends AiError {}
 
-export function parseJson<T>(text: string): T {
+export function parseJson<T>(text: string, key?: string): T {
+  return parseJsonInfo<T>(text, key).value;
+}
+
+/**
+ * Reads the JSON of an AI answer. `cut`: it was cut off and repaired (only the complete part is kept).
+ * With `key`, the JSON holding that key is searched, also behind text the AI wrote first.
+ */
+export function parseJsonInfo<T>(text: string, key?: string): { value: T; cut: boolean } {
   const cleaned = text.replace(/```(?:json)?/gi, '').trim();
   try {
-    return JSON.parse(cleaned) as T;
+    const v = JSON.parse(cleaned) as T;
+    if (!key || (v && typeof v === 'object' && key in (v as object))) return { value: v, cut: false };
   } catch {
-    // small mistakes and answers cut off at the length limit are repaired (everything complete is kept)
-    const v = repairJson(cleaned);
-    if (v && typeof v === 'object') return v as T;
-    throw new AiFormatError('Die Antwort der KI war nicht im erwarteten Format. Bitte versuche es noch einmal.');
+    /* repaired below */
   }
+  // small mistakes and answers cut off at the length limit are repaired (everything complete is kept)
+  const r = repairJsonInfo(cleaned, key);
+  if (r && r.value && typeof r.value === 'object') return { value: r.value as T, cut: r.cut };
+  throw new AiFormatError('Die Antwort der KI war nicht im erwarteten Format. Bitte versuche es noch einmal.');
 }
 
 export async function completeJson<T>(system: string, user: string, maxTokens = 6000, purpose: Purpose = 'gen'): Promise<T> {
@@ -370,13 +397,27 @@ export type Prompt = { system: string; user: string; maxTokens: number; json: bo
 const JSON_RULE = '\nAntworte ausschließlich mit gültigem JSON, ohne Erklärtext und ohne Markdown-Codeblock.';
 
 /** For long material processed in steps: which part this is, and the questions of the cards made so far. */
-export type PartInfo = { i: number; n: number; avoid?: string[] };
+export type PartInfo = {
+  i: number;
+  n: number;
+  avoid?: string[];
+  /** A continuation: the previous answer was cut off. */
+  more?: boolean;
+  /** Second try: a lot of material gave very few cards. */
+  few?: boolean;
+};
 
 export function cardsPrompt(text: string, count: number, focus = '', graphics = false, part?: PartInfo, figures = false, slides: string[] = []): Prompt {
   const slideNote = slides.length ? `\n\nAngehängte Folienbilder (in dieser Reihenfolge): ${slides.map((l, i) => `Bild ${i + 1} = ${l}`).join('; ')}.` : '';
+  const known = part?.avoid?.length ? `:\n- ${part.avoid.join('\n- ')}` : '.';
+  const moreNote = part?.more
+    ? `\n\nDie vorige Antwort zu diesem Material war zu lang und wurde abgeschnitten. Erstelle jetzt die übrigen Karten – nicht die schon vorhandenen${known}`
+    : part?.few
+      ? `\n\nDas Material enthält mehr prüfungsrelevante Inhalte, als bisher Karten haben. Erstelle Karten zu allen prüfungsrelevanten Konzepten – nicht zu den schon vorhandenen${known}`
+      : '';
   const partNote = part && part.n > 1
     ? `\n\nDies ist Teil ${part.i} von ${part.n} des Lernmaterials. Erstelle Karten nur zu diesem Teil${count > 0 ? '' : ' und entscheide die Anzahl nur nach seinem Inhalt'}.${
-        part.avoid?.length
+        part.avoid?.length && !part.more && !part.few
           ? ` Zu diesen Fragen gibt es schon Karten – nicht wiederholen, auch nicht anders formuliert:\n- ${part.avoid.join('\n- ')}`
           : ''
       }`
@@ -392,7 +433,7 @@ ${graphics ? DIAGRAM_RULE + '\n' : ''}${figures ? FIGURE_RULE + '\n' : ''}${slid
       count > 0
         ? `Erstelle genau ${count} Karteikarten zu diesem Material.`
         : autoCardInstruction()
-    }${focus ? ` Schwerpunkt: ${focus}.` : ''}${partNote}\n\n${clip(text, CARD_MATERIAL_LIMIT)}${slideNote}`,
+    }${focus ? ` Schwerpunkt: ${focus}.` : ''}${partNote}${moreNote}\n\n${clip(text, CARD_MATERIAL_LIMIT)}${slideNote}`,
     // automatic: generous room so the limit never decides the number (only written tokens are billed)
     maxTokens: count > 0 ? Math.min(32000, 400 + count * (graphics ? 500 : 220)) : 16000,
     json: true,
@@ -403,11 +444,19 @@ ${graphics ? DIAGRAM_RULE + '\n' : ''}${figures ? FIGURE_RULE + '\n' : ''}${slid
  * then no cards is a valid answer, not an error.
  */
 export function parseCards(text: string, allowEmpty = false) {
-  const res = parseJson<{ cards: { front: string; back: string; svg?: string; diagram?: unknown; figure?: unknown; icons?: unknown }[] }>(text);
-  const cards = (res.cards || []).filter((c) => c && c.front && c.back);
-  if (!cards.length && !allowEmpty)
+  return parseCardsInfo(text, allowEmpty).cards;
+}
+
+export type AiCard = ReturnType<typeof parseCards>[number];
+
+/** The cards of an answer, and whether it was cut off (then a continuation makes the rest). */
+export function parseCardsInfo(text: string, allowEmpty = false) {
+  const { value: res, cut } = parseJsonInfo<{ cards: { front: string; back: string; svg?: string; diagram?: unknown; figure?: unknown; icons?: unknown }[] }>(text, 'cards');
+  const cards = (Array.isArray(res.cards) ? res.cards : []).filter((c) => c && c.front && c.back);
+  // cut off before the first complete card: nothing usable, but a continuation may still bring cards
+  if (!cards.length && !allowEmpty && !cut)
     throw new AiError('Die KI hat in diesem Material nichts Prüfungsrelevantes gefunden (z. B. nur Literaturliste oder Organisatorisches) und keine Karten erstellt.');
-  return cards.map((c) => ({
+  return { cut, cards: cards.map((c) => ({
     front: String(c.front).trim(),
     back: String(c.back).trim(),
     // symbols written next to the diagram instead of inside it still count
@@ -420,7 +469,7 @@ export function parseCards(text: string, allowEmpty = false) {
     ...(Number.isInteger(Number(c.figure)) && Number(c.figure) > 0 ? { figure: Number(c.figure) } : {}),
     // older answers may still carry raw SVG
     ...(c.svg ? { svg: String(c.svg) } : {}),
-  }));
+  })) };
 }
 
 export function summaryPrompt(material: string): Prompt {
@@ -476,6 +525,44 @@ export async function runPrompt(p: Prompt, signal?: AbortSignal, onImagesDropped
   }
 }
 
+/**
+ * Runs a card prompt and reads the cards. With slide pictures: if the model refuses pictures or answers
+ * unreadably with them, once more with text only (`onImagesDropped` tells why).
+ */
+export async function runCards(
+  p: Prompt,
+  allowEmpty: boolean,
+  onImagesDropped?: (why: 'rejected' | 'format') => void,
+  signal?: AbortSignal,
+): Promise<{ cards: AiCard[]; cut: boolean }> {
+  const opts = { system: p.system, maxTokens: p.maxTokens, json: p.json, signal };
+  const textOnly = async () => {
+    const r = await completeInfo([{ role: 'user', content: p.user }], { ...opts, maxTokens: p.images?.length ? p.maxTokens - IMAGE_TOKENS : p.maxTokens });
+    const c = parseCardsInfo(r.text, allowEmpty);
+    return { cards: c.cards, cut: r.cut || c.cut };
+  };
+  if (!p.images?.length) return textOnly();
+  let r: { text: string; cut: boolean };
+  try {
+    r = await completeInfo([{ role: 'user', content: p.user, images: p.images }], opts);
+  } catch (e) {
+    if (!imagesRejected(e)) throw e;
+    onImagesDropped?.('rejected');
+    return textOnly();
+  }
+  try {
+    const c = parseCardsInfo(r.text, allowEmpty);
+    return { cards: c.cards, cut: r.cut || c.cut };
+  } catch (e) {
+    if (!(e instanceof AiFormatError)) throw e;
+    onImagesDropped?.('format');
+    return textOnly();
+  }
+}
+
+/** Extra answer room when slide pictures go along (some models count picture tokens against the limit). */
+export const IMAGE_TOKENS = 2000;
+
 export async function generateCards(
   text: string,
   count: number,
@@ -486,10 +573,27 @@ export async function generateCards(
   slides?: { label: string; url: string }[],
   onImagesDropped?: () => void,
 ) {
-  // with several parts, a part without exam-relevant content may give no cards
-  const p = cardsPrompt(text, count, focus, graphics, part, figures, slides?.map((s) => s.label));
-  return parseCards(await runPrompt(slides?.length ? { ...p, images: slides.map((s) => s.url) } : p, undefined, onImagesDropped), !!part && part.n > 1);
+  return (await generateCardsInfo(text, count, focus, graphics, part, figures, slides, onImagesDropped)).cards;
 }
+
+export async function generateCardsInfo(
+  text: string,
+  count: number,
+  focus = '',
+  graphics = false,
+  part?: PartInfo,
+  figures = false,
+  slides?: { label: string; url: string }[],
+  onImagesDropped?: (why: 'rejected' | 'format') => void,
+) {
+  // with several parts (or a continuation), a part without exam-relevant content may give no cards
+  const p = cardsPrompt(text, count, focus, graphics, part, figures, slides?.map((s) => s.label));
+  return runCards(withSlideImages(p, slides), (!!part && part.n > 1) || !!part?.more, onImagesDropped);
+}
+
+/** The prompt with slide pictures attached (and room for them). */
+export const withSlideImages = (p: Prompt, slides?: { url: string }[]): Prompt =>
+  slides?.length ? { ...p, images: slides.map((s) => s.url), maxTokens: p.maxTokens + IMAGE_TOKENS } : p;
 
 // ---------- work that keeps running on the provider's servers ----------
 export type RemoteMode = 'openai-bg' | 'anthropic-batch';

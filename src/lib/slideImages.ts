@@ -7,7 +7,14 @@
  */
 
 /** At most this many slide pictures per request (cost and request size stay reasonable). */
-export const MAX_SLIDE_IMAGES = 8;
+export const MAX_SLIDE_IMAGES = 6;
+/** A figure slide with less text than this goes to the AI as a picture (otherwise the text says it all). */
+export const HELPFUL_TEXT_CHARS = 250;
+
+/** Figure slides (1-based) where a picture adds something: little text on the slide. Pure – tested. */
+export function helpfulSlides(pages: string[], figures: number[], maxChars = HELPFUL_TEXT_CHARS): number[] {
+  return figures.filter((n) => (pages[n - 1] ?? '').replace(/\s+/g, ' ').trim().length < maxChars);
+}
 
 export type SlideRef = { file: string; page: number };
 
@@ -30,7 +37,7 @@ export const slideLabel = (s: SlideRef) => `Folie ${s.page} aus ${s.file}`;
 
 /** What the AI is told when slide pictures are attached. */
 export const SLIDE_IMAGE_RULE =
-  'Angehängt sind Bilder von Folien aus dem Material (welche, steht am Ende der Anfrage). Nutze, was sie zeigen – Diagramme, Modelle, Abläufe, Tabellen, Kurven –, auch wenn es im Text nur bruchstückhaft steht. Zeigt eine Folie ein Modell, einen Ablauf, eine Gliederung oder Zahlen, mache dazu eine Karte und zeichne es als "diagram" nach (passende Form wählen, Beschriftungen von der Folie).';
+  'Angehängt sind Bilder von Folien aus dem Material (welche, steht am Ende der Anfrage). Beschreibe die Bilder nicht – antworte nur mit dem JSON. Nutze, was sie zeigen – Diagramme, Modelle, Abläufe, Tabellen, Kurven –, auch wenn es im Text nur bruchstückhaft steht. Zeigt eine Folie ein Modell, einen Ablauf, eine Gliederung oder Zahlen, mache dazu eine Karte und zeichne es als "diagram" nach (passende Form wählen, Beschriftungen von der Folie).';
 
 const toBase64 = (bytes: Uint8Array) => {
   let bin = '';
@@ -45,7 +52,7 @@ const toBase64 = (bytes: Uint8Array) => {
 export async function renderSlides(
   slides: SlideRef[],
   fileByName: (name: string) => Promise<Blob | null | undefined>,
-  width = 1024,
+  width = 800,
 ): Promise<{ label: string; url: string }[]> {
   if (!slides.length) return [];
   const { openPdf } = await import('./files');

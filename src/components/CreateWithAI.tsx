@@ -1,17 +1,17 @@
-import { avoidList, shareCount, splitMaterial } from '../lib/chunks';
+import { avoidList, dropDuplicates, shareCount, splitMaterial } from '../lib/chunks';
 import { cardFrontText } from '../lib/content';
 import { CostHint } from './CostHint';
 import { estimate } from '../lib/costs';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { aiConfig, generateCards, hasKey, boldOn, loadVisionInfo, supportsImages } from '../lib/ai';
-import { renderSlides, slidesInPart } from '../lib/slideImages';
+import { aiConfig, generateCardsInfo, hasKey, boldOn, loadVisionInfo, supportsImages } from '../lib/ai';
+import { helpfulSlides, MAX_SLIDE_IMAGES, renderSlides, slidesInPart } from '../lib/slideImages';
 import { isPdf, MATERIAL_ACCEPT, MATERIAL_LABEL, readFileText, readPdfDetailed } from '../lib/files';
 import { figureLabel, markFigures, pickFigurePages } from '../lib/slides';
 import { figureInfo, figurePreview, registerFigures } from '../lib/figureFiles';
 import { attachFiles } from '../lib/deckFiles';
 import { SLIDE_FIGURES } from '../config';
-import { canSurviveClose, startCardJobs } from '../lib/jobs';
+import { canSurviveClose, MAX_PARALLEL, startCardJobs } from '../lib/jobs';
 import { cleanSvg, withGraphics } from '../lib/graphics';
 import { parseDiagram, PALETTES, renderDiagram } from '../lib/diagram';
 import { useResolvedTheme } from '../lib/theme';
@@ -75,6 +75,9 @@ export function CreateWithAI({
   const slideOn = SLIDE_FIGURES && slideSetting;
   const [useFigures, setUseFigures] = useState(true);
   const figureCount = files.reduce((n, f) => n + (f.pdf?.figures.length ?? 0), 0);
+  // pictures help only where a slide shows a figure with little text (models, diagrams, charts as image)
+  const helpful = files.map((f) => (f.pdf ? helpfulSlides(f.pdf.pages, f.pdf.figures) : []));
+  const helpfulCount = helpful.reduce((n, h) => n + h.length, 0);
   const withFigures = slideOn && useFigures && figureCount > 0;
   // slide pictures for the AI: slides with figures go along as images (only models that read images)
   const [visionTick, setVisionTick] = useState(0);
@@ -84,9 +87,14 @@ export function CreateWithAI({
   const customVision = useStore((s) => !!s.data.settings.customVision);
   const visionOk = visionTick >= 0 && supportsImages(aiConfig('gen'), customVision);
   const slideImagesSetting = useStore((s) => s.data.settings.slideImages !== false);
-  const withSlideImages = visionOk && slideImagesSetting && figureCount > 0;
+  const withSlideImages = visionOk && slideImagesSetting && helpfulCount > 0;
   const [imagesDropped, setImagesDropped] = useState(false);
-  const marked = withFigures || withSlideImages ? markFigures(files.filter((f) => f.pdf).map((f) => ({ name: f.name, pages: f.pdf!.pages, figures: f.pdf!.figures }))) : null;
+  const marked =
+    withFigures || withSlideImages
+      ? markFigures(
+          files.flatMap((f, k) => (f.pdf ? [{ name: f.name, pages: f.pdf.pages, figures: withFigures ? f.pdf.figures : helpful[k] }] : [])),
+        )
+      : null;
   const [figSet, setFigSet] = useState<string | undefined>();
   /** Keeps the PDFs of this run so that the chosen slides can become pictures (also in background jobs). */
   const prepareFigures = () =>
@@ -184,16 +192,41 @@ export function CreateWithAI({
     setFigSet(set);
     try {
       const before = existing ? existing.cards.map(cardFrontText) : [];
-      for (const [i, p] of parts.entries()) {
-        if (parts.length > 1) setBusy(`Teil ${i + 1} von ${parts.length}: Die KI erstellt Karten … (${made.length} bisher)`);
-        const avoid = i > 0 ? avoidList([...before, ...made.map((c) => c.front)]) : [];
-        const slides = withSlideImages ? await renderSlides(slidesInPart(p.text), async (n) => files.find((x) => x.name === n)?.src) : undefined;
-        made.push(
-          ...(await generateCards(p.text, counts[i], focus, graphics, parts.length > 1 ? { i: i + 1, n: parts.length, avoid } : undefined, !!set, slides, () =>
+      const n = parts.length;
+      let done = 0;
+      if (n > 1) setBusy(`${n} Teile werden gleichzeitig bearbeitet …`);
+      /** One part: its cards, and more while the answer was cut off at the length limit. */
+      const onePart = async (i: number) => {
+        const p = parts[i];
+        const slides = withSlideImages ? await renderSlides(slidesInPart(p.text), async (name) => files.find((x) => x.name === name)?.src) : undefined;
+        const got: typeof made = [];
+        let r = await generateCardsInfo(p.text, counts[i], focus, graphics, n > 1 ? { i: i + 1, n, avoid: avoidList(before) } : undefined, !!set, slides, () => setImagesDropped(true));
+        got.push(...r.cards);
+        for (let more = 0; r.cut && more < 3; more++) {
+          const left = counts[i] > 0 ? Math.max(0, counts[i] - got.length) : 0;
+          if (counts[i] > 0 && !left) break;
+          r = await generateCardsInfo(p.text, left, focus, graphics, { i: i + 1, n, more: true, avoid: avoidList([...before, ...got.map((c) => c.front)]) }, !!set, slides, () =>
             setImagesDropped(true),
-          )),
-        );
-      }
+          );
+          got.push(...r.cards);
+        }
+        done++;
+        if (n > 1) setBusy(`${done} von ${n} Teilen fertig …`);
+        return got;
+      };
+      // up to 3 parts at the same time (much faster than one after another)
+      const results: (typeof made)[] = new Array(n);
+      let next = 0;
+      await Promise.all(
+        Array.from({ length: Math.min(MAX_PARALLEL, n) }, async () => {
+          while (next < n) {
+            const i = next++;
+            results[i] = await onePart(i);
+          }
+        }),
+      );
+      // parts side by side may make the same card: keep the first
+      made.push(...dropDuplicates(results.flat(), before));
       // review only once all parts are done
       if (made.length) setDrafts(made.map((c) => ({ ...c, keep: true })));
       else setError('Die KI hat in diesem Material nichts Prüfungsrelevantes gefunden und keine Karten erstellt.');
@@ -468,12 +501,12 @@ export function CreateWithAI({
           </span>
         </label>
       )}
-      {figureCount > 0 && (
+      {helpfulCount > 0 && (
         <label className={'check-row' + (visionOk ? '' : ' disabled')}>
           <input type="checkbox" checked={withSlideImages} disabled={!visionOk} onChange={(e) => setSettings({ slideImages: e.target.checked ? undefined : false })} />
           <span>
-            <b>Folien-Bilder mitschicken</b> – {figureCount} {figureCount === 1 ? 'Folie zeigt' : 'Folien zeigen'} Grafiken oder Modelle. Die KI sieht sie als Bild
-            (bis zu 8 pro Teil) und kann sie für Karten und Grafiken nutzen.
+            <b>Folien-Bilder mitschicken</b> – {helpfulCount} {helpfulCount === 1 ? 'Folie zeigt' : 'Folien zeigen'} eine Grafik mit wenig Text (Modell, Diagramm,
+            Tabelle als Bild). Die KI sieht diese Folien als Bild (bis zu {MAX_SLIDE_IMAGES} pro Teil) – bei Folien mit viel Text reicht der Text.
             {!visionOk && (
               <small className="muted">
                 {' '}
@@ -484,7 +517,7 @@ export function CreateWithAI({
           </span>
         </label>
       )}
-      {figureCount > 0 && aiConfig('gen').provider === 'custom' && (
+      {helpfulCount > 0 && aiConfig('gen').provider === 'custom' && (
         <label className="check-row">
           <input type="checkbox" checked={customVision} onChange={(e) => setSettings({ customVision: e.target.checked })} />
           <span>Mein Modell versteht Bilder</span>

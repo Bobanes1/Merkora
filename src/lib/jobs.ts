@@ -11,15 +11,18 @@ import {
   AiFormatError,
   cardsPrompt,
   materialFrom,
-  parseCards,
+  parseCardsInfo,
   parseQuiz,
   parseSummary,
   pollRemote,
   quizPrompt,
   remoteModeFor,
   RemoteUnsupported,
+  runCards,
   runPrompt,
   startRemote,
+  withSlideImages,
+  type AiCard,
   summaryPrompt,
   type Prompt,
   type RemoteMode,
@@ -27,7 +30,7 @@ import {
 import { withGraphics } from './graphics';
 import { renderSlides, slidesInPart } from './slideImages';
 import { deckFileBlob } from './deckFiles';
-import { avoidList } from './chunks';
+import { avoidList, dropDuplicates } from './chunks';
 import { cardFrontText } from './content';
 import { addCards, addJob, getState, patchJob, subscribe, updateDeck, type Deck, type Job, type JobKind } from './store';
 
@@ -82,23 +85,21 @@ function promptFor(job: Job, deck: Deck, slides: string[] = []): Prompt {
     case 'quiz':
       return quizPrompt(materialFrom(deck.source, deck.cards), p.count ?? 8);
     case 'cards': {
-      const part = (job.params as CardParams).part;
-      return cardsPrompt(
-        p.text || deck.source,
-        p.count ?? 0,
-        p.focus ?? '',
-        !!p.graphics,
-        part && part.n > 1 ? { i: part.i, n: part.n, avoid: part.i > 1 ? avoidList(deck.cards.map(cardFrontText)) : [] } : undefined,
-        !!(job.params as CardParams).figureSet,
-        slides,
-      );
+      const cp = job.params as CardParams;
+      const part = cp.part;
+      const n = part?.n ?? 1;
+      // a continuation, a second try or a later part: the questions already in the deck are not repeated
+      const avoid = cp.more || cp.few || (part && n > 1) ? avoidList(deck.cards.map(cardFrontText)) : [];
+      const info = n > 1 || cp.more || cp.few ? { i: part?.i ?? 1, n, avoid, ...(cp.more ? { more: true } : {}), ...(cp.few ? { few: true } : {}) } : undefined;
+      return cardsPrompt(p.text || deck.source, p.count ?? 0, p.focus ?? '', !!p.graphics, info, !!cp.figureSet, slides);
     }
   }
 }
 
 /**
- * Card jobs for long material run as a chain: each job makes the cards of one part; when it is done,
- * the next part starts with the remaining texts (`rest`) and the share of a fixed count (`counts`).
+ * Card jobs: long material is split into parts, each part is its own job. Up to MAX_PARALLEL parts run at
+ * the same time (much faster than one after another); cards that two parts both made are dropped when added.
+ * An answer cut off at the length limit gets a continuation for the rest of its part.
  */
 type CardParams = {
   text?: string;
@@ -110,50 +111,58 @@ type CardParams = {
   /** Send pictures of the marked slides of this part (the PDFs are stored with the deck). */
   slideImages?: boolean;
   part?: { i: number; n: number };
-  rest?: string[];
-  counts?: number[];
+  /** All jobs of one "Mit KI erstellen" (for the final message). */
+  run?: string;
+  /** Continuation number (the previous answer for this part was cut off). */
+  more?: number;
+  /** Second try because a long part gave very few cards. */
+  few?: boolean;
 };
 
-/** Starts card creation for one or several parts (several = one after another, without repeating cards). */
+/** Parts that run at the same time. */
+export const MAX_PARALLEL = 3;
+/** Continuations per part at most. */
+const MAX_MORE = 3;
+
+/** Starts card creation for one or several parts (several run side by side, without repeating cards). */
 export function startCardJobs(deck: Deck, parts: string[], o: { counts: number[]; focus: string; graphics: boolean; figureSet?: string; slideImages?: boolean }) {
   if (!parts.length) return;
   const n = parts.length;
-  const params: CardParams = {
-    text: parts[0],
-    count: o.counts[0] ?? 0,
-    focus: o.focus,
-    graphics: o.graphics,
-    ...(o.figureSet ? { figureSet: o.figureSet } : {}),
-    ...(o.slideImages ? { slideImages: true } : {}),
-    ...(n > 1 ? { part: { i: 1, n }, rest: parts.slice(1), counts: o.counts.slice(1) } : {}),
-  };
-  return addJob({ kind: 'cards', deckId: deck.id, title: partTitle(deck, params), params });
+  const run = Math.random().toString(36).slice(2, 10);
+  let first: Job | undefined;
+  parts.forEach((text, k) => {
+    const params: CardParams = {
+      text,
+      count: o.counts[k] ?? 0,
+      focus: o.focus,
+      graphics: o.graphics,
+      run,
+      ...(o.figureSet ? { figureSet: o.figureSet } : {}),
+      ...(o.slideImages ? { slideImages: true } : {}),
+      ...(n > 1 ? { part: { i: k + 1, n } } : {}),
+    };
+    const j = addJob({ kind: 'cards', deckId: deck.id, title: partTitle(deck, params), params });
+    first ??= j;
+  });
+  return first;
 }
 const partTitle = (deck: Deck, p: CardParams) =>
-  `${JOB_LABEL.cards}${p.part && p.part.n > 1 ? ` (Teil ${p.part.i}/${p.part.n})` : ''} · ${deck.name}`;
+  `${JOB_LABEL.cards}${p.part && p.part.n > 1 ? ` (Teil ${p.part.i}/${p.part.n}${p.more ? ', Fortsetzung' : ''})` : p.more ? ' (Fortsetzung)' : ''} · ${deck.name}`;
 
-/** After a part is done: start the next one. */
-function nextPart(job: Job, deck: Deck) {
-  const p = job.params as CardParams;
-  if (job.kind !== 'cards' || !p.part || !p.rest?.length) return false;
-  const params: CardParams = {
-    ...p,
-    text: p.rest[0],
-    count: p.counts?.[0] ?? 0,
-    part: { i: p.part.i + 1, n: p.part.n },
-    rest: p.rest.slice(1),
-    counts: p.counts?.slice(1),
-  };
-  addJob({ kind: 'cards', deckId: deck.id, title: partTitle(deck, params), params });
-  return true;
-}
-
-/** How many of the cards just added carry a graphic (shown in the "fertig" message). */
-let lastGraphics = 0;
 /** "12 Karten, davon 4 mit Grafik" */
 export const madeText = (n: number, g: number) => `${n} ${n === 1 ? 'Karte' : 'Karten'}${g ? `, davon ${g} mit Grafik` : ''}`;
+/** A long part (this many characters) that gives fewer than 3 cards is tried once more. */
+export const FEW_CARDS_CHARS = 15000;
+/** What happens after a card answer: continue a cut-off part, try a thin result again, or nothing. Pure – tested. */
+export function followUp(p: { more?: number; few?: boolean; text?: string; count?: number }, made: number, cut: boolean): 'more' | 'few' | null {
+  if (cut && (p.more ?? 0) < MAX_MORE) return 'more';
+  if (!cut && !p.more && !p.few && !(p.count ?? 0) && made < 3 && (p.text ?? '').length >= FEW_CARDS_CHARS) return 'few';
+  return null;
+}
 
-async function applyResult(job: Job, text: string) {
+type CardResult = { cards: AiCard[]; cut: boolean };
+
+async function applyResult(job: Job, text: string, pre?: CardResult): Promise<{ made: number; graphics: number; cut: boolean } | undefined> {
   switch (job.kind) {
     case 'summary':
       updateDeck(job.deckId, { summary: parseSummary(text) });
@@ -162,12 +171,15 @@ async function applyResult(job: Job, text: string) {
       updateDeck(job.deckId, { quiz: parseQuiz(text) });
       break;
     case 'cards': {
+      const cp = job.params as CardParams;
       // a part of long material may contain nothing exam-relevant (e.g. only the literature list)
-      const part = (job.params as CardParams).part;
-      const cards = await withGraphics(parseCards(text, !!part && part.n > 1), (job.params as CardParams).figureSet);
+      const r = pre ?? parseCardsInfo(text, (!!cp.part && cp.part.n > 1) || !!cp.more || !!cp.few);
+      const deck = deckOf(job);
+      // parts running side by side may make the same card: keep the first
+      const fresh = dropDuplicates(r.cards, deck ? deck.cards.map(cardFrontText) : []);
+      const cards = await withGraphics(fresh, cp.figureSet);
       addCards(job.deckId, cards);
-      lastGraphics = cards.filter((c) => /data-diagram=|slide-figure|<svg/.test(c.back)).length;
-      return cards.length;
+      return { made: cards.length, graphics: cards.filter((c) => /data-diagram=|slide-figure|<svg/.test(c.back)).length, cut: r.cut };
     }
   }
   return undefined;
@@ -182,22 +194,53 @@ function deckOf(job: Job) {
   return getState().data.decks.find((d) => d.id === job.deckId);
 }
 
-async function finish(job: Job, text: string) {
+async function finish(job: Job, text: string, pre?: CardResult) {
   const deck = deckOf(job);
   if (!deck) {
     patchJob(job.id, { status: 'error', error: 'Das Deck gibt es nicht mehr.', finishedAt: Date.now() });
     return;
   }
   try {
-    const made = await applyResult(job, text);
-    patchJob(job.id, { status: 'done', finishedAt: Date.now(), error: undefined });
-    const part = (job.params as CardParams).part;
-    const nothing = made === 0 && part ? ` Teil ${part.i} enthielt nichts Prüfungsrelevantes (z. B. nur Literatur) – dafür keine Karten.` : '';
-    if (nextPart(job, deck)) {
-      pushToast({ text: `Teil ${part!.i} von ${part!.n} für „${deck.name}“ ist fertig (${madeText(made ?? 0, lastGraphics)}) – Teil ${part!.i + 1} läuft.${nothing}`, jobId: job.id, ok: true });
+    const res = await applyResult(job, text, pre);
+    patchJob(job.id, { status: 'done', finishedAt: Date.now(), error: undefined, ...(res ? { made: res.made, graphics: res.graphics } : {}) });
+    if (job.kind !== 'cards' || !res) {
+      const msg = `${JOB_LABEL[job.kind]} für „${deck.name}“ ist fertig.`;
+      pushToast({ text: msg, jobId: job.id, ok: true });
+      notifyBrowser('Fertig!', msg);
       return;
     }
-    const msg = `${JOB_LABEL[job.kind]} für „${deck.name}“ ${part && part.n > 1 ? `(alle ${part.n} Teile) ` : ''}${job.kind === 'cards' ? 'sind' : 'ist'} fertig${job.kind === 'cards' && made !== undefined ? ` (${part && part.n > 1 ? 'letzter Teil: ' : ''}${madeText(made, lastGraphics)})` : ''}.${nothing}`;
+    const cp = job.params as CardParams;
+    const part = cp.part;
+    const label = part && part.n > 1 ? `Teil ${part.i} von ${part.n}` : '';
+    // the answer was cut off (length limit) or very thin: Merkora asks once more for the rest
+    const next = followUp(cp, res.made, res.cut);
+    if (next) {
+      const params: CardParams = { ...cp, ...(next === 'more' ? { more: (cp.more ?? 0) + 1 } : { few: true }) };
+      addJob({ kind: 'cards', deckId: deck.id, title: partTitle(deck, params), params });
+      pushToast({
+        text:
+          next === 'more'
+            ? `${label || 'Karteikarten'}: ${madeText(res.made, res.graphics)} – die Antwort der KI war zu lang, Merkora holt den Rest …`
+            : `${label || 'Karteikarten'}: nur ${madeText(res.made, res.graphics)} aus viel Material – Merkora fragt noch einmal nach …`,
+        jobId: job.id,
+        ok: true,
+      });
+      return;
+    }
+    // other jobs of the same run still working: a short note; the last one sums everything up
+    const run = getState().data.jobs.filter((j) => j.kind === 'cards' && (j.params as CardParams).run && (j.params as CardParams).run === cp.run);
+    const open = run.filter((j) => j.status === 'queued' || j.status === 'running').length;
+    if (cp.run && open > 0) {
+      pushToast({ text: `${label || 'Ein Teil'} für „${deck.name}“ ist fertig (${madeText(res.made, res.graphics)}) – noch ${open} ${open === 1 ? 'Teil läuft' : 'Teile laufen'}.`, jobId: job.id, ok: true });
+      return;
+    }
+    const all = cp.run ? run : [{ ...job, made: res.made, graphics: res.graphics }];
+    const total = all.reduce((s, j) => s + ((j as Job).made ?? 0), 0);
+    const g = all.reduce((s, j) => s + ((j as Job).graphics ?? 0), 0);
+    const failed = all.filter((j) => j.status === 'error').length;
+    const msg = `${JOB_LABEL.cards} für „${deck.name}“ ${part && part.n > 1 ? `(alle ${part.n} Teile) ` : ''}sind fertig: ${madeText(total, g)}.${
+      total === 0 ? ' Im Material wurde nichts Prüfungsrelevantes gefunden.' : ''
+    }${failed ? ` ${failed} ${failed === 1 ? 'Teil hat' : 'Teile haben'} nicht geklappt – unter „Aufträge“ nochmal versuchen.` : ''}`;
     pushToast({ text: msg, jobId: job.id, ok: true });
     notifyBrowser('Fertig!', msg);
   } catch (e) {
@@ -221,7 +264,7 @@ function fail(job: Job, e: unknown) {
   pushToast({ text: `${JOB_LABEL[job.kind]}${which}${deck ? ` für „${deck.name}“` : ''} konnte nicht erstellt werden: ${msg}`, jobId: job.id, ok: false });
 }
 
-/** Runs a failed job again (for a chain: from the failed part on). */
+/** Runs a failed job again. */
 export function retryJob(id: string) {
   patchJob(id, { status: 'queued', error: undefined, finishedAt: undefined, remoteId: undefined, mode: undefined, attempts: 0 });
 }
@@ -241,15 +284,20 @@ async function promptWithSlides(job: Job, deck: Deck): Promise<Prompt> {
     return f ? deckFileBlob(f.id) : null;
   };
   const slides = await renderSlides(wanted, byName);
-  const p = promptFor(job, deck, slides.map((x) => x.label));
-  return slides.length ? { ...p, images: slides.map((x) => x.url) } : p;
+  return withSlideImages(promptFor(job, deck, slides.map((x) => x.label)), slides);
 }
 
-let droppedToast = false;
-const imagesDropped = () => {
-  if (droppedToast) return;
-  droppedToast = true;
-  pushToast({ text: 'Dieses KI-Modell kann keine Bilder lesen – für die Folien wurde nur ihr Text verwendet.', ok: true });
+const droppedToasts = new Set<string>();
+const imagesDropped = (why: 'rejected' | 'format') => {
+  if (droppedToasts.has(why)) return;
+  droppedToasts.add(why);
+  pushToast({
+    text:
+      why === 'rejected'
+        ? 'Dieses KI-Modell kann keine Bilder lesen – für die Folien wurde nur ihr Text verwendet.'
+        : 'Mit Folien-Bildern kam keine lesbare Antwort – Merkora hat es mit dem Text der Folien wiederholt.',
+    ok: true,
+  });
 };
 
 async function runInTab(job: Job, deck: Deck) {
@@ -257,8 +305,14 @@ async function runInTab(job: Job, deck: Deck) {
   localRunning.add(job.id);
   patchJob(job.id, { status: 'running', mode: 'tab', attempts: (job.attempts ?? 0) + 1 });
   try {
-    const text = await runPrompt(await promptWithSlides(job, deck), undefined, imagesDropped);
-    await finish(job, text);
+    if (job.kind === 'cards') {
+      const cp = job.params as CardParams;
+      const r = await runCards(await promptWithSlides(job, deck), (!!cp.part && cp.part.n > 1) || !!cp.more || !!cp.few, imagesDropped);
+      await finish(job, '', r);
+    } else {
+      const text = await runPrompt(await promptWithSlides(job, deck));
+      await finish(job, text);
+    }
   } catch (e) {
     fail(job, e);
   } finally {
@@ -316,8 +370,16 @@ async function start(job: Job) {
 
 function pump() {
   const { data } = getState();
+  // card parts run side by side, but at most MAX_PARALLEL at once
+  let busy = data.jobs.filter((j) => j.kind === 'cards' && j.status === 'running').length;
   for (const job of data.jobs) {
-    if (job.status === 'queued' && !localRunning.has(job.id)) void start(job);
+    if (job.status === 'queued' && !localRunning.has(job.id)) {
+      if (job.kind === 'cards') {
+        if (busy >= MAX_PARALLEL) continue;
+        busy++;
+      }
+      void start(job);
+    }
     else if (job.status === 'running') {
       if (job.remoteId && job.mode !== 'tab') schedulePoll(job, 0);
       else if (!localRunning.has(job.id)) {

@@ -166,6 +166,9 @@ export type Job = {
   params: Record<string, unknown>;
   seen?: boolean;
   attempts?: number;
+  /** Card jobs: how many cards were added, and how many of them with a graphic. */
+  made?: number;
+  graphics?: number;
 };
 
 export type Game = {
