@@ -146,6 +146,8 @@ export function forecastText(f: Forecast): string {
   const date = (t: number) => new Date(t).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' });
   if (f.kind === 'done') return 'Alle Karten sitzen schon.';
   if (f.kind === 'none') return 'Lerne ein paar Tage, dann zeigt Merkora hier eine Prognose.';
-  if (f.kind === 'ok') return `Bei deinem Tempo sitzen alle Karten etwa am ${date(f.at)}.`;
-  return `Erst nach der Prüfung (ca. ${date(f.at)}) – dafür bräuchtest du täglich etwa ${f.needPerDay} ${f.needPerDay === 1 ? 'Wiederholung' : 'Wiederholungen'} (bisher ${f.perDay < 1 ? 'weniger als 1' : Math.round(f.perDay)} pro Tag).`;
+  if (f.kind === 'ok') return `Wenn du so weiterlernst wie bisher, kannst du alle Karten etwa am ${date(f.at)} – rechtzeitig vor der Prüfung.`;
+  const need = `${f.needPerDay} ${f.needPerDay === 1 ? 'Wiederholung' : 'Wiederholungen'}`;
+  const now = f.perDay < 1 ? 'weniger als 1' : String(Math.round(f.perDay));
+  return `Achtung: Wenn du so weiterlernst wie bisher, kannst du erst etwa am ${date(f.at)} alle Karten – das ist nach der Prüfung. Damit es reicht, lerne täglich etwa ${need} (bisher ${now} pro Tag).`;
 }
