@@ -6,6 +6,7 @@
 import { completeJson, LANG_RULE, materialFrom } from './ai';
 import { addCards, getState, setSettings, updateDeck, type Deck, type MockExam, type MockQuestion, type MockResult } from './store';
 import { uid } from './util';
+import { spreadClip } from './sample';
 import { cleanExamText, levelLabel, gradeFor, mcPoints, mistakeCards, parseExam, relatedCardIds, tasksFor, type GradeScale, type RawExam } from './mockExamCore';
 export * from './mockExamCore';
 
@@ -41,12 +42,24 @@ const patchExam = (deckId: string, patch: Partial<MockExam>) =>
 /** Length of the exam material (for the cost estimate). */
 export const examMaterialChars = (deck: Deck, scope: 'deck' | 'course') => examMaterial(deck, scope).length;
 
+/** All exam material of a course together stays within this many characters. */
+export const COURSE_BUDGET = 60000;
+
+/**
+ * Material of all decks of a course: the budget is shared by the decks' size (at least 1500 each);
+ * with very many decks the result is spread once more so it never exceeds the budget. Pure – tested.
+ */
+export function courseMaterial(decks: { name: string; size: number; make: (limit: number) => string }[], budget = COURSE_BUDGET): string {
+  const total = decks.reduce((n, d) => n + Math.max(1, d.size), 0) || 1;
+  const text = decks.map((d) => `## ${d.name}\n${d.make(Math.max(1500, Math.floor((budget * Math.max(1, d.size)) / total)))}`).join('\n\n');
+  return text.length > budget ? spreadClip(text, budget) : text;
+}
+
 /** Material for the exam: this deck, or all decks of its course. */
 function examMaterial(deck: Deck, scope: 'deck' | 'course') {
   if (scope === 'deck') return materialFrom(deck.source, deck.cards);
   const decks = getState().data.decks.filter((d) => d.courseId === deck.courseId);
-  const per = Math.max(3000, Math.floor(40000 / Math.max(1, decks.length)));
-  return decks.map((d) => `## ${d.name}\n${materialFrom(d.source, d.cards, per)}`).join('\n\n');
+  return courseMaterial(decks.map((d) => ({ name: d.name, size: d.source.length + d.cards.length * 150, make: (n: number) => materialFrom(d.source, d.cards, n) })));
 }
 
 export async function createMockExam(

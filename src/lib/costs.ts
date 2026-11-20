@@ -12,24 +12,31 @@ export type Price = { in: number; out: number; source: 'table' | 'live' | 'custo
 /** Characters → tokens (German ≈ 3.5 characters per token). */
 export const tokensOf = (chars: number) => Math.ceil(Math.max(0, chars) / 3.5);
 
+/** One slide picture (800 px JPEG) as input tokens, roughly. */
+export const IMAGE_INPUT = 800;
+
 /** Limits the prompts apply to the material (see ai.ts). */
 const MATERIAL_LIMIT = 36000; // materialFrom: 24k source + 12k cards
 
 export const estimate = {
   /** count 0 = the AI decides: output as a span (few to many cards). */
-  cards: (chars: number, count: number, graphics = false): Estimate => {
+  /**
+   * `rulesChars`: the instructions actually sent (measured from the prompt itself, graphics rule included);
+   * `images`: slide pictures sent along (≈ 800 tokens each).
+   */
+  cards: (chars: number, count: number, graphics = false, rulesChars = 1600, images = 0): Estimate => {
     const per = graphics ? 250 : 110; // a diagram is a short description, not SVG code
-    const input = 450 + tokensOf(Math.min(chars, CARD_MATERIAL_LIMIT));
+    const input = tokensOf(rulesChars) + 100 + tokensOf(Math.min(chars, CARD_MATERIAL_LIMIT)) + images * IMAGE_INPUT;
     if (count > 0) return { input, output: count * per };
     const r = cardRange(chars);
     return { input, output: r.low * per, outputHigh: r.high * per };
   },
   /** Several parts one after another; later parts also get the questions of the cards made before. */
-  cardsParts: (lengths: number[], counts: number[], graphics = false): Estimate => {
+  cardsParts: (lengths: number[], counts: number[], graphics = false, rulesChars = 1600, images: number[] = []): Estimate => {
     let made = 0;
     return lengths.reduce<Estimate>(
       (sum, len, i) => {
-        const e = estimate.cards(len, counts[i] ?? 0, graphics);
+        const e = estimate.cards(len, counts[i] ?? 0, graphics, rulesChars, images[i] ?? 0);
         const avoid = i > 0 ? Math.min(1700, made * 15) : 0; // ≈ 6000 characters of earlier questions at most
         made += counts[i] || Math.round((cardRange(len).low + cardRange(len).high) / 2);
         const high = sum.outputHigh !== undefined || e.outputHigh !== undefined ? (sum.outputHigh ?? sum.output) + (e.outputHigh ?? e.output) : undefined;
@@ -41,7 +48,7 @@ export const estimate = {
   summary: (materialChars: number): Estimate => ({ input: 150 + tokensOf(Math.min(materialChars, MATERIAL_LIMIT)), output: 1500 }),
   mindmap: (materialChars: number): Estimate => ({ input: 350 + tokensOf(Math.min(materialChars, MATERIAL_LIMIT)), output: 700 }),
   quiz: (materialChars: number, count: number): Estimate => ({ input: 200 + tokensOf(Math.min(materialChars, MATERIAL_LIMIT)), output: count * 150 }),
-  examCreate: (materialChars: number, tasks: number): Estimate => ({ input: 600 + tokensOf(Math.min(materialChars, 40000)), output: tasks * 250 }),
+  examCreate: (materialChars: number, tasks: number): Estimate => ({ input: 600 + tokensOf(Math.min(materialChars, 60000)), output: tasks * 250 }),
   /** Grading: questions, model answers and criteria in, feedback out (answers assumed ~400 characters each). */
   examGrade: (writtenTasks: number, answerChars = writtenTasks * 400): Estimate => ({
     input: 500 + writtenTasks * 220 + tokensOf(answerChars),

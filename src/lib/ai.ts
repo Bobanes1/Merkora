@@ -1,11 +1,13 @@
 import { netFetch } from './desktop';
 import { SLIDE_IMAGE_RULE } from './slideImages';
-import { sideText } from './content';
+import { cardBackText, sideText } from './content';
+import { sampleCards, spreadClip } from './sample';
+import { splitMaterial } from './chunks';
 import { DIAGRAM_KINDS, DIAGRAM_RULE, parseDiagram, type Diagram } from './diagram';
 import { ICON_NAMES } from './diagramIcons';
 import { EMPHASIS_RULE } from './emphasis';
 import { FIGURE_RULE } from './slides';
-import { getState, type ChatMsg, type Provider } from './store';
+import { getState, type Card, type ChatMsg, type Provider } from './store';
 import { SECOND_MODEL } from '../config';
 import { autoCardInstruction, CARD_MATERIAL_LIMIT } from './cardCount';
 import { repairJsonInfo } from './jsonRepair';
@@ -251,6 +253,58 @@ export function supportsImages(c: { provider: string; model: string } = aiConfig
 export const imagesRejected = (e: unknown) =>
   e instanceof AiError && !/API-Key|Anfragen|Guthaben/.test(e.message) && /image|vision|multimodal|modalit|bild/i.test(e.message);
 
+/** Models that think before answering: their thinking counts against the answer limit. Pure – tested. */
+export function thinkingModel(provider: string, model: string): boolean {
+  const m = model.toLowerCase();
+  if (provider === 'gemini') return /gemini-(2\.5|[3-9])/.test(m);
+  if (provider === 'openai') return /^(gpt-5|o\d)/.test(m);
+  if (provider === 'openrouter') return /gemini-(2\.5|[3-9])|gpt-5|\/o\d|deepseek-r1|-r1\b|qwq|thinking|reasoner|glm-(4\.[5-9]|[5-9])|kimi-k2/.test(m);
+  return false;
+}
+/** Small tasks (explaining, grading, one graphic): little thinking is enough – cheaper, faster, no empty answers. */
+export const SMALL_TASK = 2000;
+/** Extra answer room for a thinking model, so the thinking does not eat the answer. */
+export const THINKING_ROOM = 2000;
+
+/**
+ * Answer limit and thinking settings per provider (the request fields). Thinking models get extra room;
+ * for small tasks they think less. Pure – tested.
+ */
+export function tokenSettings(provider: string, model: string, maxTokens: number): Record<string, unknown> {
+  const thinks = thinkingModel(provider, model);
+  const small = maxTokens <= SMALL_TASK;
+  if (provider === 'gemini')
+    return {
+      maxOutputTokens: thinks ? maxTokens + THINKING_ROOM : maxTokens,
+      ...(thinks && small && /flash/i.test(model) ? { thinkingConfig: { thinkingBudget: 512 } } : {}),
+    };
+  if (provider === 'openai') return { max_completion_tokens: thinks ? maxTokens + THINKING_ROOM : maxTokens, ...(thinks && small ? { reasoning_effort: 'low' } : {}) };
+  if (provider === 'openrouter')
+    return model.endsWith(':free')
+      ? // free OpenRouter models answer reliably only without thinking (tested: otherwise often empty replies)
+        { max_tokens: maxTokens, reasoning: { effort: 'none' } }
+      : // thinking models need room and must not return their thinking instead of the answer
+        { max_tokens: maxTokens + 3000, reasoning: small ? { effort: 'low', exclude: true } : { exclude: true } };
+  return { max_tokens: maxTokens };
+}
+
+/** Long fixed instructions (material in the chat, rules for every card part) are worth caching. */
+export const CACHE_FROM_CHARS = 4000;
+/**
+ * The system text, marked for prompt caching where the provider needs it: Claude (directly, or on OpenRouter
+ * for anthropic/… and google/… models) then bills a repeated system text at about a tenth. OpenAI and Gemini
+ * cache by themselves when the start stays the same. Short texts stay plain (caching them would cost extra).
+ * Pure – tested.
+ */
+export function systemFor(kind: 'anthropic' | 'openrouter' | 'openai', model: string, system?: string): unknown {
+  if (!system) return undefined;
+  const long = system.length >= CACHE_FROM_CHARS;
+  const marked = [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }];
+  if (kind === 'anthropic') return long ? marked : system;
+  if (kind === 'openrouter' && long && /^(anthropic|google)\//.test(model)) return marked;
+  return system;
+}
+
 /** Did the provider stop the answer at the length limit? Pure – tested. */
 export function wasCut(kind: ApiKind, j: unknown): boolean {
   const o = (j ?? {}) as Record<string, any>;
@@ -275,7 +329,7 @@ async function completeOnce(messages: ChatMsg[], opts: Opts = {}): Promise<{ tex
           'anthropic-version': '2023-06-01',
           'anthropic-dangerous-direct-browser-access': 'true',
         },
-        body: JSON.stringify({ model: cfg.model, max_tokens: maxTokens, system: opts.system, messages: providerMessages('anthropic', messages) }),
+        body: JSON.stringify({ model: cfg.model, max_tokens: maxTokens, system: systemFor('anthropic', cfg.model, opts.system), messages: providerMessages('anthropic', messages) }),
       });
       if (!res.ok) await fail(res);
       const j = await res.json();
@@ -289,7 +343,7 @@ async function completeOnce(messages: ChatMsg[], opts: Opts = {}): Promise<{ tex
         body: JSON.stringify({
           systemInstruction: opts.system ? { parts: [{ text: opts.system }] } : undefined,
           contents: providerMessages('gemini', messages),
-          generationConfig: { maxOutputTokens: maxTokens, ...(opts.json ? { responseMimeType: 'application/json' } : {}) },
+          generationConfig: { ...(tokenSettings('gemini', cfg.model, maxTokens) as object), ...(opts.json ? { responseMimeType: 'application/json' } : {}) },
         }),
       });
       if (!res.ok) await fail(res);
@@ -306,16 +360,8 @@ async function completeOnce(messages: ChatMsg[], opts: Opts = {}): Promise<{ tex
       headers,
       body: JSON.stringify({
         model: cfg.model,
-        messages: [...(opts.system ? [{ role: 'system', content: opts.system }] : []), ...providerMessages('openai', messages)],
-        ...(cfg.provider === 'openai'
-          ? { max_completion_tokens: maxTokens }
-          : // OpenRouter: thinking models need room for their thinking and must not return it instead of the answer
-            cfg.provider === 'openrouter'
-            ? cfg.model.endsWith(':free')
-              ? // free OpenRouter models answer reliably only without thinking (tested: otherwise often empty replies)
-                { max_tokens: maxTokens, reasoning: { effort: 'none' } }
-              : { max_tokens: maxTokens + 3000, reasoning: { exclude: true } }
-            : { max_tokens: maxTokens }),
+        messages: [...(opts.system ? [{ role: 'system', content: systemFor(cfg.provider === 'openrouter' ? 'openrouter' : 'openai', cfg.model, opts.system) }] : []), ...providerMessages('openai', messages)],
+        ...tokenSettings(cfg.provider, cfg.model, maxTokens),
         ...(opts.json && cfg.provider === 'openai' ? { response_format: { type: 'json_object' } } : {}),
       }),
     });
@@ -381,15 +427,95 @@ export const LANG_RULE =
 
 const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n) + '\n[…gekürzt]' : s);
 
-export function materialFrom(source: string, cards: { front: string; back: string; html?: boolean }[], limit = 24000) {
+/**
+ * The deck as material for the AI, from the whole deck: long text is taken evenly from start to end
+ * (spreadClip), and when not all cards fit, the hard and marked ones plus an even sample go along.
+ */
+export function materialFrom(
+  source: string,
+  cards: { front: string; back: string; html?: boolean; marked?: boolean; srs?: { lapses?: number } }[],
+  limit = 24000,
+) {
   const parts: string[] = [];
-  if (source.trim()) parts.push('LERNMATERIAL:\n' + clip(source.trim(), limit));
-  if (cards.length)
-    parts.push(
-      'KARTEIKARTEN:\n' +
-        clip(cards.map((c, i) => `${i + 1}. F: ${sideText(c, c.front)}\n   A: ${sideText(c, c.back)}`).join('\n'), source.trim() ? limit / 2 : limit),
-    );
+  if (source.trim()) parts.push('LERNMATERIAL:\n' + spreadClip(source.trim(), limit));
+  if (cards.length) {
+    const budget = source.trim() ? limit / 2 : limit;
+    const line = (c: (typeof cards)[number]) => `F: ${sideText(c, c.front)}\n   A: ${c.html ? cardBackText(c as Card) : c.back}`;
+    const lines = cards.map(line);
+    const avg = lines.reduce((n, l) => n + l.length + 6, 0) / lines.length;
+    const fits = Math.max(1, Math.floor(budget / avg));
+    const chosen = sampleCards(cards, fits);
+    const text = chosen.map((c) => lines[cards.indexOf(c)]).map((l, i) => `${i + 1}. ${l}`).join('\n');
+    const note = chosen.length < cards.length ? ` (Auswahl: ${chosen.length} von ${cards.length}, über das ganze Deck verteilt)` : '';
+    parts.push(`KARTEIKARTEN${note}:\n` + clip(text, budget));
+  }
   return parts.join('\n\n') || '(Noch kein Material vorhanden.)';
+}
+
+/** Like runPrompt, and tells whether the answer stopped at the length limit. */
+export async function runPromptInfo(p: Prompt, signal?: AbortSignal) {
+  return completeInfo([{ role: 'user', content: p.user }], { system: p.system, maxTokens: p.maxTokens, json: p.json, signal });
+}
+
+/** Material up to this size is summarized in one go; longer material first section by section. */
+export const SUMMARY_ONE_GO = 36000;
+
+/**
+ * Summary of the whole deck: long material is first summarized per section (up to 3 at once), then one
+ * summary is written from those. An answer cut off at the length limit is continued once.
+ */
+export async function makeSummary(source: string, cards: Parameters<typeof materialFrom>[1], signal?: AbortSignal): Promise<string> {
+  const finish = async (p: Prompt) => {
+    const r = await runPromptInfo(p, signal);
+    if (!r.cut) return r.text;
+    const more = await completeInfo(
+      [
+        { role: 'user', content: p.user },
+        { role: 'assistant', content: r.text },
+        { role: 'user', content: 'Deine Antwort wurde abgeschnitten. Fahre genau an der Stelle fort, ohne etwas zu wiederholen.' },
+      ],
+      { system: p.system, maxTokens: p.maxTokens, signal },
+    );
+    return r.text + more.text;
+  };
+  if (source.trim().length + cards.length * 120 <= SUMMARY_ONE_GO) return finish(summaryPrompt(materialFrom(source, cards, 24000)));
+  const chunks = splitMaterial([{ name: 'Material', text: source }], 30000).map((c) => c.text);
+  const notes: string[] = new Array(chunks.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(3, chunks.length) }, async () => {
+      while (next < chunks.length) {
+        const i = next++;
+        notes[i] = await complete([{ role: 'user', content: `Fasse Teil ${i + 1} von ${chunks.length} des Lernmaterials knapp, aber vollständig als Stichpunkte zusammen (alle prüfungsrelevanten Begriffe, Modelle, Zusammenhänge).\n\n${chunks[i]}` }], {
+          system: `Du bist ein hilfreicher Lerncoach. ${LANG_RULE}`,
+          maxTokens: 3000,
+          signal,
+        });
+      }
+    }),
+  );
+  const material = 'NOTIZEN ZU DEN TEILEN DES LERNMATERIALS:\n' + notes.map((n, i) => `### Teil ${i + 1}\n${n}`).join('\n\n') + '\n\n' + materialFrom('', cards, 12000);
+  return finish(summaryPrompt(material));
+}
+
+/** Quiz questions; when the answer was cut off, the missing ones are asked for once more. Returns the JSON text. */
+export async function makeQuiz(material: string, count: number, signal?: AbortSignal): Promise<string> {
+  const p = quizPrompt(material, count);
+  const r = await runPromptInfo(p, signal);
+  const first = parseJsonInfo<{ questions?: unknown[] }>(r.text, 'questions');
+  const qs = Array.isArray(first.value.questions) ? first.value.questions : [];
+  if ((r.cut || first.cut) && qs.length < count) {
+    const asked = qs.map((q) => String((q as { question?: unknown })?.question ?? '')).filter(Boolean);
+    const p2 = quizPrompt(material, count - qs.length);
+    const r2 = await runPromptInfo({ ...p2, user: p2.user + `\n\nDiese Fragen gibt es schon – stelle andere:\n- ${asked.join('\n- ')}` }, signal);
+    try {
+      const more = parseJsonInfo<{ questions?: unknown[] }>(r2.text, 'questions').value.questions;
+      if (Array.isArray(more)) qs.push(...more);
+    } catch {
+      /* keep the questions there are */
+    }
+  }
+  return JSON.stringify({ questions: qs });
 }
 
 // ---------- prompts for the bigger tasks (run as background jobs) ----------
@@ -476,7 +602,7 @@ export function summaryPrompt(material: string): Prompt {
   return {
     system: `Du bist ein hilfreicher Lerncoach. ${LANG_RULE}`,
     user: `Erstelle eine gut strukturierte Lern-Zusammenfassung in Markdown (Überschriften mit ##, Aufzählungen, **Fettdruck** für Schlüsselbegriffe, am Ende ein Abschnitt „## Das Wichtigste in Kürze“ mit 3–5 Punkten).\n\n${material}`,
-    maxTokens: 4000,
+    maxTokens: 8000,
     json: false,
   };
 }
@@ -715,8 +841,16 @@ export async function explainCard(front: string, back: string) {
   );
 }
 
+/** The part of the conversation sent along: the last 12 messages, starting with a question (some providers refuse otherwise). Pure – tested. */
+export function chatWindow(history: ChatMsg[], max = 12): ChatMsg[] {
+  const w = history.slice(-max);
+  const first = w.findIndex((m) => m.role === 'user');
+  return first < 0 ? w : w.slice(first);
+}
+
 export async function tutorReply(deckName: string, material: string, history: ChatMsg[]) {
-  return complete(history.slice(-20), {
+  // the system text (rules + material) stays the same for the whole chat: cached by the provider
+  return complete(chatWindow(history), {
     system: `Du bist „Pip“, ein freundlicher KI-Lerntutor. Der Lernende arbeitet am Deck „${deckName}“. Nutze das folgende Material als Grundlage, sag ehrlich, wenn etwas nicht darin steht. Antworte kurz und hilfreich, Markdown erlaubt. ${LANG_RULE}\n\n${material}`,
     maxTokens: 2000,
     purpose: 'chat',

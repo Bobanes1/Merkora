@@ -4,7 +4,7 @@ import { CostHint } from './CostHint';
 import { estimate } from '../lib/costs';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { aiConfig, generateCardsInfo, hasKey, boldOn, loadVisionInfo, supportsImages } from '../lib/ai';
+import { aiConfig, cardsPrompt, generateCardsInfo, hasKey, boldOn, loadVisionInfo, supportsImages } from '../lib/ai';
 import { helpfulSlides, MAX_SLIDE_IMAGES, renderSlides, slidesInPart } from '../lib/slideImages';
 import { isPdf, MATERIAL_ACCEPT, MATERIAL_LABEL, readFileText, readPdfDetailed } from '../lib/files';
 import { figureLabel, markFigures, pickFigurePages } from '../lib/slides';
@@ -191,7 +191,8 @@ export function CreateWithAI({
     const set = prepareFigures();
     setFigSet(set);
     try {
-      const before = existing ? existing.cards.map(cardFrontText) : [];
+      // only the most recent cards of the deck (the AI need not see hundreds of unrelated questions)
+      const before = existing ? existing.cards.slice(-60).map(cardFrontText) : [];
       const n = parts.length;
       let done = 0;
       if (n > 1) setBusy(`${n} Teile werden gleichzeitig bearbeitet …`);
@@ -532,8 +533,15 @@ export function CreateWithAI({
       {text.trim().length > 0 && text.trim().length < 40 && <p className="muted small">Bitte etwas mehr Text eingeben.</p>}
       {text.trim().length >= 40 && (
         <CostHint
-          label={parts.length > 1 ? `${parts.length} Teile zusammen` : undefined}
-          est={estimate.cardsParts(parts.map((p) => p.text.length), counts, graphics)}
+          label={`${parts.length > 1 ? `${parts.length} Teile zusammen, ` : ''}inkl. Anleitung für die KI${withSlideImages ? ' und Folien-Bilder' : ''}`}
+          est={estimate.cardsParts(
+            parts.map((p) => p.text.length),
+            counts,
+            graphics,
+            // the instructions as they are really sent (graphics rule, slide note …)
+            cardsPrompt('', 0, focus, graphics, undefined, withFigures, withSlideImages ? ['x'] : []).system.length,
+            parts.map((p) => (withSlideImages ? slidesInPart(p.text).length : 0)),
+          )}
         />
       )}
       {error && (

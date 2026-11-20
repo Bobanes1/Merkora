@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { diagramForCard, hasKey } from '../lib/ai';
 import { cardBackText, cardFrontText, textToHtml } from '../lib/content';
 import { tokensOf } from '../lib/costs';
-import { cardGraphic, DIAGRAM_KINDS, PALETTES, renderDiagram, stripGraphics, withDiagram, type Diagram } from '../lib/diagram';
+import { cardGraphic, DIAGRAM_KINDS, PALETTES, renderDiagram, stripGraphics, withDiagram, type Diagram, DIAGRAM_RULE } from '../lib/diagram';
 import { updateCard, type Card, type Deck } from '../lib/store';
 import { useResolvedTheme } from '../lib/theme';
 import { CardContent, lookOf } from './CardContent';
@@ -116,7 +116,7 @@ export function GraphicDialog({ deck, card, onClose }: { deck: Deck; card: Card;
               {next ? <IconRefresh size={15} /> : <IconSparkle size={15} />} {busy ? 'Wird erstellt …' : next || current.kind ? 'Neu erstellen' : 'Grafik erstellen'}
             </button>
           </div>
-          <CostHint est={{ input: 450 + tokensOf(front.length + back.length), output: 250 }} />
+          <CostHint est={{ input: 300 + tokensOf(DIAGRAM_RULE.length + front.length + back.length), output: 250 }} />
         </div>
       ) : (
         <p className="muted small">Für eine neue Grafik brauchst du einen API-Key (Einstellungen › KI). Entfernen geht auch ohne.</p>

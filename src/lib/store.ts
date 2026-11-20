@@ -32,6 +32,8 @@ export type Card = {
   createdAt: number;
   updatedAt?: number;
   srs: Srs;
+  /** Made by one "Mit KI erstellen" (its parts know each other's questions). */
+  run?: string;
 };
 export type QuizQuestion = { question: string; options: string[]; answer: number; explanation: string };
 export type MockQuestion = {
@@ -718,7 +720,7 @@ export function updateDeck(id: string, patch: Partial<Deck> | ((d: Deck) => Part
     decks: d.decks.map((x) => (x.id === id ? { ...x, ...(typeof patch === 'function' ? patch(x) : patch), updatedAt: Date.now() } : x)),
   }));
 }
-export type NewCard = { front: string; back: string; html?: boolean; styleId?: string; cardClass?: string; tags?: string[]; marked?: boolean; srs?: Srs };
+export type NewCard = { front: string; back: string; html?: boolean; styleId?: string; cardClass?: string; tags?: string[]; marked?: boolean; srs?: Srs; run?: string };
 export function addCards(deckId: string, pairs: NewCard[]) {
   const now = Date.now();
   const cards: Card[] = pairs.map((p) => ({
@@ -730,6 +732,7 @@ export function addCards(deckId: string, pairs: NewCard[]) {
     ...(p.cardClass ? { cardClass: p.cardClass } : {}),
     ...(p.tags?.length ? { tags: p.tags } : {}),
     ...(p.marked ? { marked: true } : {}),
+    ...(p.run ? { run: p.run } : {}),
     createdAt: now,
     srs: p.srs ?? newSrs(now),
   }));

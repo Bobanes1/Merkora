@@ -19,6 +19,9 @@ import { ASK_SIDES, asksBack, sidesFor, type AskSide } from '../../lib/askSide';
 import { htmlToText } from '../../lib/content';
 import { graphicQuiz, withDiagramView } from '../../lib/diagram';
 
+/** Explanations already asked for in this session. */
+const explainMemo = new Map<string, string>();
+
 /** A stable number per card id (picks which label of a graphic is covered). */
 const seedOf = (id: string) => [...id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
 import { ImproveCardDialog } from '../../components/ImproveCardDialog';
@@ -253,7 +256,12 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
     setBusy('explain');
     setError('');
     try {
-      setExplain(await explainCard(plain(qa.question), plain(qa.answer)));
+      // the same card explained once per session (asking again costs nothing)
+      const key = plain(qa.question) + '|' + plain(qa.answer);
+      const known = explainMemo.get(key);
+      const text = known ?? (await explainCard(plain(qa.question), plain(qa.answer)));
+      explainMemo.set(key, text);
+      setExplain(text);
     } catch (e) {
       setError((e as Error).message);
     } finally {

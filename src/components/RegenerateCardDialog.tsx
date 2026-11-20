@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { boldOn, hasKey, regenerateCard } from '../lib/ai';
 import { cardBackText, cardFrontText } from '../lib/content';
 import { tokensOf } from '../lib/costs';
-import { cardGraphic, withDiagram, type Diagram } from '../lib/diagram';
+import { cardGraphic, withDiagram, type Diagram, DIAGRAM_RULE } from '../lib/diagram';
 import { emphasisHtml, stripEmphasis } from '../lib/emphasis';
 import { materialAbout } from '../lib/related';
 import { updateCard, type Card, type Deck } from '../lib/store';
@@ -97,7 +97,7 @@ export function RegenerateCardDialog({ deck, card, onClose }: { deck: Deck; card
               {next ? <IconRefresh size={15} /> : <IconSparkle size={15} />} {busy ? 'Wird geschrieben …' : next ? 'Noch einmal' : 'Neu generieren'}
             </button>
           </div>
-          <CostHint est={{ input: (graphic ? 1100 : 300) + tokensOf(front.length + back.length + material.length), output: graphic ? 450 : 200 }} />
+          <CostHint est={{ input: 400 + tokensOf((graphic ? DIAGRAM_RULE.length : 0) + front.length + back.length + material.length), output: graphic ? 450 : 200 }} />
         </>
       )}
       {next && (

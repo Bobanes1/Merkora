@@ -1576,30 +1576,23 @@ export function diagramsToSvg(html: string): string {
 }
 
 // ---------- instruction for the AI ----------
-/** What the AI is told when cards may get a graphic: describe it, never draw it. */
-export const DIAGRAM_RULE = `Grafiken: Gib etwa jeder dritten Karte das Feld "diagram" mit – überall, wo das Material Abläufe, Modelle, Gliederungen, Vergleiche, Zahlen, Formeln, Kurven oder Zusammenhänge enthält, besonders bei Karten zu Modellen, Prozessen und Theorien. Wähle die Form, die den Inhalt am klarsten zeigt. Nur eine kurze Beschreibung – kein SVG, keine Koordinaten, Merkora zeichnet sie selbst. Karten zu einzelnen Begriffen oder reinen Fakten brauchen keine Grafik.
-Beschriftungen sind kurze Stichworte (höchstens 6 Wörter). Erlaubte Formen (genau eine wählen):
-{"type":"flow","title":"…","steps":["Planung","Erhebung"],"icons":{"Planung":"kalender","Erhebung":"liste"}} – Ablauf, 2–8 Schritte
-{"type":"cycle","title":"…","steps":["…","…","…"]} – Kreislauf, 3–8 Schritte
-{"type":"hierarchy","title":"…","root":"…","children":[{"label":"…","children":["…"]}]} – Gliederung, 2–5 Äste mit höchstens 4 Unterpunkten
-{"type":"compare","title":"…","columns":[{"title":"…","items":["…"]}]} – Vergleich, 2–3 Spalten mit je höchstens 6 Punkten
-{"type":"timeline","title":"…","events":[{"when":"1990","label":"…"}]} – Zeitstrahl, 2–8 Ereignisse
-{"type":"concept","title":"…","center":"…","branches":["…","…","…"]} – Begriff mit 3–8 Merkmalen
-{"type":"matrix","title":"…","x":"…","y":"…","cells":["oben links","oben rechts","unten links","unten rechts"]} – Vierfeldertafel
-{"type":"axes","title":"…","x":"…","y":"…","shape":"steigend|fallend|u|umgekehrtes-u|s-kurve|linear","marks":[{"at":0.3,"label":"…"}]} – Verlauf/Kurve; für zwei Gruppen zusätzlich "label":"…","second":{"shape":"…","label":"…"}
-{"type":"model","title":"…","nodes":["A","B","M"],"links":[{"from":"A","to":"B","label":"+"},{"from":"M","to":"A -> B","label":"moderiert"}],"icons":{"A":"uhr","B":"fernseher","M":"person"}} – Modell mit Pfeilen zwischen Begriffen/Variablen (Hypothesen, Ursache–Wirkung, Mediator, Moderator, Kommunikationsmodelle); 2–8 Kästen; "to":"A -> B" zeigt auf den Pfeil A→B; optional "both":true (Wechselwirkung/Korrelation), "dashed":true (indirekt/vermutet)
-{"type":"venn","title":"…","sets":[{"label":"…","items":["…"]},{"label":"…","items":["…"]}],"shared":["…"]} – Gemeinsamkeiten und Unterschiede zweier Begriffe
-{"type":"pyramid","title":"…","levels":["Spitze","…","Basis"]} – Stufenmodell, 3–6 Stufen von oben nach unten
-{"type":"bars","title":"…","unit":"%","bars":[{"label":"…","value":42}]} – Zahlenvergleich, 2–8 Balken, nur mit Zahlen aus dem Material
-{"type":"decision","title":"…","question":"…?","yes":"…","no":{"question":"…?","yes":"…","no":"…"}} – Entscheidungsbaum, höchstens zwei Fragen tief
-{"type":"plot","title":"…","x":{"label":"Menge","min":0,"max":10},"y":{"label":"Preis","min":0,"max":10},"functions":[{"label":"Nachfrage","expr":"10 - x"},{"label":"Angebot","expr":"1 + 0.8*x"}],"points":[{"x":5,"label":"Gleichgewicht"}]} – exakte Kurve aus einer Formel in x (+ - * / ^, Klammern, sqrt exp ln log abs sin cos tan, pi, e), bis 3 Kurven; für echte Zusammenhänge mit Zahlen/Formeln (Funktionen, Verteilungen, Wachstum, Angebot/Nachfrage). Nur qualitative Verläufe ohne Formel: "axes"
-{"type":"pie","title":"…","slices":[{"label":"…","value":40},{"label":"…","value":60}]} – Anteile eines Ganzen, 2–6 Stücke, nur mit Zahlen aus dem Material
-{"type":"fishbone","title":"…","effect":"Problem/Wirkung","causes":[{"label":"Ursache-Kategorie","items":["…","…"]}]} – Ursache-Wirkung (Ishikawa), 2–6 Kategorien mit je höchstens 3 Punkten
-{"type":"numberline","title":"…","min":0,"max":100,"unit":"…","marks":[{"value":50,"label":"…"}],"ranges":[{"from":0,"to":30,"label":"…"}]} – Zahlenstrahl/Skala mit markierten Werten und Bereichen (z. B. Grenzwerte, Notenskala, pH-Wert)
-{"type":"network","title":"…","nodes":["A","B","C"],"links":[{"from":"A","to":"B","label":"beeinflusst"}]} – Begriffsnetz mit beschrifteten Beziehungen, 3–8 Begriffe
-Für Vierfeldertafeln wie SWOT oder Vier-Felder-Schemata: "matrix".
-Bei flow, cycle, hierarchy, concept und model kann "highlight" einen Kasten hervorheben, der den Kern der Karte trifft.
-Symbole: Gib im diagram-Objekt "icons":{"Beschriftung":"symbol"} an – für die meisten Kästen ein passendes kleines Symbol (Schlüssel = genau die Beschriftung des Kastens), bei flow, cycle, hierarchy, concept, compare, matrix, model, pyramid und decision. Lass ein Symbol nur weg, wenn keines passt. Erlaubte Symbole: ${ICON_NAMES.join(", ")}.`;
+/** Symbols named to the AI (a short list keeps the instruction small; all ICON_NAMES are still accepted). */
+export const RULE_ICONS = ['person', 'gruppe', 'gehirn', 'idee', 'frage', 'warnung', 'haken', 'kreuz', 'uhr', 'kalender', 'geld', 'trend', 'ziel', 'suche', 'chat', 'megafon', 'fernseher', 'smartphone', 'internet', 'zeitung', 'buch', 'schule', 'herz', 'gesundheit', 'firma', 'gesetz', 'politik', 'natur', 'wasser', 'zahnrad', 'daten', 'dokument', 'liste', 'waage', 'forschung', 'experiment', 'rechnen', 'wachstum', 'austausch', 'beziehung', 'erfolg', 'schutz', 'gesellschaft', 'familie', 'technik', 'loesung', 'medizin', 'stufen'];
+
+/** What the AI is told when cards may get a graphic: describe it, never draw it. Kept short – it goes with every card request. */
+export const DIAGRAM_RULE = `Grafiken: Gib etwa jeder dritten Karte ein Feld "diagram" – wo das Material Abläufe, Modelle, Gliederungen, Vergleiche, Zahlen, Formeln oder Zusammenhänge enthält; keine bei reinen Begriffen/Fakten. Nur eine Beschreibung (kein SVG), Merkora zeichnet. Beschriftungen: Stichworte, höchstens 6 Wörter. Formen:
+flow {"steps":["…","…"]} Ablauf 2–8 · cycle {"steps":[…]} Kreislauf 3–8
+hierarchy {"root":"…","children":[{"label":"…","children":["…"]}]} Gliederung, bis 5 Äste à 4
+compare {"columns":[{"title":"…","items":["…"]}]} Vergleich, 2–3 Spalten · venn {"sets":[{"label":"…","items":[…]},{…}],"shared":[…]}
+timeline {"events":[{"when":"1990","label":"…"}]} · concept {"center":"…","branches":[…]} 3–8 Merkmale
+matrix {"x":"…","y":"…","cells":["o.l.","o.r.","u.l.","u.r."]} Vierfelder/SWOT · pyramid {"levels":["Spitze",…,"Basis"]} 3–6
+model {"nodes":["A","B","M"],"links":[{"from":"A","to":"B","label":"+"},{"from":"M","to":"A -> B","label":"moderiert"}]} Pfeile zwischen Begriffen/Variablen, 2–8; optional "both":true, "dashed":true
+network {"nodes":[…],"links":[{"from":"A","to":"B","label":"…"}]} Begriffsnetz 3–8 · decision {"question":"…?","yes":"…","no":{"question":"…?","yes":"…","no":"…"}}
+bars {"unit":"%","bars":[{"label":"…","value":42}]} · pie {"slices":[{"label":"…","value":40},…]} – nur Zahlen aus dem Material
+plot {"x":{"label":"…","min":0,"max":10},"y":{…},"functions":[{"label":"…","expr":"10 - x"}],"points":[{"x":5,"label":"…"}]} exakte Kurve aus Formel in x (+-*/^ sqrt exp ln log sin cos pi e), bis 3
+axes {"x":"…","y":"…","shape":"steigend|fallend|u|umgekehrtes-u|s-kurve|linear"} Verlauf ohne Formel
+fishbone {"effect":"…","causes":[{"label":"…","items":["…"]}]} Ursache-Wirkung · numberline {"min":0,"max":14,"marks":[{"value":7,"label":"…"}],"ranges":[{"from":0,"to":7,"label":"…"}]}
+Immer mit "type" und "title". Optional "highlight":"Kasten" (Kern der Karte) und "icons":{"Beschriftung":"symbol"} für die meisten Kästen; Symbole: ${RULE_ICONS.join(',')}.`;
 
 // ---------- graphics of one card (improve per card) ----------
 const DIAGRAM_RE = /<div class="diagram" data-diagram="([^"]*)"><\/div>/;

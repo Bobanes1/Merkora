@@ -11,6 +11,9 @@ import { Modal } from './Modal';
 
 type Way = 'rewrite' | 'mnemonic' | 'split';
 
+/** Suggestions already made in this session (opening the dialog again costs nothing). */
+const improveMemo = new Map<string, CardImprovement>();
+
 /** A problem card (forgotten again and again): the AI suggests clearer wording, a memory hook or smaller cards. */
 export function ImproveCardDialog({ deck, card, onClose }: { deck: Deck; card: Card; onClose: () => void }) {
   const front = cardFrontText(card);
@@ -20,11 +23,19 @@ export function ImproveCardDialog({ deck, card, onClose }: { deck: Deck; card: C
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  const ask = async () => {
+  const memo = card.id + '|' + front + '|' + back;
+  const ask = async (again = false) => {
+    const known = !again ? improveMemo.get(memo) : undefined;
+    if (known) {
+      setTip(known);
+      setWay(known.rewrite.front ? 'rewrite' : known.mnemonic ? 'mnemonic' : 'split');
+      return;
+    }
     setBusy(true);
     setError('');
     try {
       const t = await improveCard(front, back, card.srs.lapses);
+      improveMemo.set(memo, t);
       setTip(t);
       setWay(t.rewrite.front ? 'rewrite' : t.mnemonic ? 'mnemonic' : 'split');
     } catch (e) {
@@ -77,7 +88,7 @@ export function ImproveCardDialog({ deck, card, onClose }: { deck: Deck; card: C
       footer={
         <>
           {tip && (
-            <button type="button" className="btn ghost" onClick={() => void ask()} disabled={busy}>
+            <button type="button" className="btn ghost" onClick={() => void ask(true)} disabled={busy}>
               <IconRefresh size={15} /> Neue Vorschläge
             </button>
           )}

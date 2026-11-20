@@ -10,7 +10,10 @@ import {
   AiError,
   AiFormatError,
   cardsPrompt,
+  makeQuiz,
+  makeSummary,
   materialFrom,
+  SUMMARY_ONE_GO,
   parseCardsInfo,
   parseQuiz,
   parseSummary,
@@ -89,7 +92,7 @@ function promptFor(job: Job, deck: Deck, slides: string[] = []): Prompt {
       const part = cp.part;
       const n = part?.n ?? 1;
       // a continuation, a second try or a later part: the questions already in the deck are not repeated
-      const avoid = cp.more || cp.few || (part && n > 1) ? avoidList(deck.cards.map(cardFrontText)) : [];
+      const avoid = cp.more || cp.few || (part && n > 1) ? avoidList(avoidFronts(deck.cards, cp.run)) : [];
       const info = n > 1 || cp.more || cp.few ? { i: part?.i ?? 1, n, avoid, ...(cp.more ? { more: true } : {}), ...(cp.few ? { few: true } : {}) } : undefined;
       return cardsPrompt(p.text || deck.source, p.count ?? 0, p.focus ?? '', !!p.graphics, info, !!cp.figureSet, slides);
     }
@@ -170,6 +173,17 @@ export function runProgress(jobs: Job[], job: Job): { n: number; done: number; r
   return { n, done, running, since: Math.min(...mine.map((j) => j.createdAt)) };
 }
 
+/**
+ * The questions the AI is told not to repeat: all cards of this run (parts side by side, continuations)
+ * and only the most recent earlier cards of the deck – not hundreds of unrelated ones. Pure – tested.
+ */
+export function avoidFronts(cards: { front: string; back: string; html?: boolean; run?: string }[], run?: string, earlier = 60): string[] {
+  const same = run ? cards.filter((c) => c.run === run) : [];
+  const others = cards.filter((c) => !run || c.run !== run).slice(-earlier);
+  // the run's own questions last: avoidList keeps the end of the list when it has to shorten it
+  return [...others, ...same].map((c) => cardFrontText(c as never));
+}
+
 /** "12 Karten, davon 4 mit Grafik" */
 export const madeText = (n: number, g: number) => `${n} ${n === 1 ? 'Karte' : 'Karten'}${g ? `, davon ${g} mit Grafik` : ''}`;
 /** A long part (this many characters) that gives fewer than 3 cards is tried once more. */
@@ -199,7 +213,7 @@ async function applyResult(job: Job, text: string, pre?: CardResult): Promise<{ 
       // parts running side by side may make the same card: keep the first
       const fresh = dropDuplicates(r.cards, deck ? deck.cards.map(cardFrontText) : []);
       const cards = await withGraphics(fresh, cp.figureSet);
-      addCards(job.deckId, cards);
+      addCards(job.deckId, cp.run ? cards.map((c) => ({ ...c, run: cp.run })) : cards);
       return { made: cards.length, graphics: cards.filter((c) => /data-diagram=|slide-figure|<svg/.test(c.back)).length, cut: r.cut };
     }
   }
@@ -269,9 +283,11 @@ async function finish(job: Job, text: string, pre?: CardResult) {
   }
 }
 
-function fail(job: Job, e: unknown) {
-  // an unreadable answer: start the job once more by itself before telling the person
-  if (e instanceof AiFormatError && (job.attempts ?? 0) < 2) {
+function fail(stale: Job, e: unknown) {
+  // the job as it is now (the copy passed in may be older and miss the counted attempts)
+  const job = getState().data.jobs.find((j) => j.id === stale.id) ?? stale;
+  // an unreadable answer: start the job once more by itself before telling the person (at most 2 times)
+  if (e instanceof AiFormatError && (job.attempts ?? 0) <= 2) {
     patchJob(job.id, { status: 'queued', error: undefined, remoteId: undefined, mode: undefined });
     // the run that just failed is still being cleaned up – start the new one a moment later
     setTimeout(pump, 1500);
@@ -330,6 +346,10 @@ async function runInTab(job: Job, deck: Deck) {
       const cp = job.params as CardParams;
       const r = await runCards(await promptWithSlides(job, deck), (!!cp.part && cp.part.n > 1) || !!cp.more || !!cp.few, imagesDropped);
       await finish(job, '', r);
+    } else if (job.kind === 'summary') {
+      await finish(job, await makeSummary(deck.source, deck.cards));
+    } else if (job.kind === 'quiz') {
+      await finish(job, await makeQuiz(materialFrom(deck.source, deck.cards), (job.params as { count?: number }).count ?? 8));
     } else {
       const text = await runPrompt(await promptWithSlides(job, deck));
       await finish(job, text);
@@ -370,10 +390,11 @@ async function start(job: Job) {
   const deck = deckOf(job);
   if (!deck) return fail(job, new Error('Das Deck gibt es nicht mehr.'));
   // with slide pictures the job runs here (background modes at the provider would need the pictures stored there)
-  const mode = slidesOf(job, deck).length ? null : remoteModeFor();
+  // with slide pictures, or a summary of long material (several requests), the job runs here
+  const mode = slidesOf(job, deck).length || (job.kind === 'summary' && deck.source.trim().length + deck.cards.length * 120 > SUMMARY_ONE_GO) ? null : remoteModeFor();
   if (mode) {
     localRunning.add(job.id);
-    patchJob(job.id, { status: 'running', mode });
+    patchJob(job.id, { status: 'running', mode, attempts: (job.attempts ?? 0) + 1 });
     try {
       const remoteId = await startRemote(mode, promptFor(job, deck), job.id);
       localRunning.delete(job.id);

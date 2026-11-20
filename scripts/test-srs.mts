@@ -454,7 +454,7 @@ console.log('Diagramme');
     ok((hl as any).highlight === 'B' && kinds === 'node,accent,node', 'Hervorhebung trifft den gewählten Schritt statt des ersten');
     const bars = renderDiagram(parseDiagram(more[6])!);
     ok(bars.includes('95,5 Min.') && bars.includes('140 Min.'), 'Balken zeigen die Werte mit Einheit');
-    ok(/"type":"model"/.test(DIAGRAM_RULE) && /"type":"decision"/.test(DIAGRAM_RULE), 'KI-Anweisung kennt die neuen Arten');
+    ok(/\bmodel \{/.test(DIAGRAM_RULE) && /\bdecision \{/.test(DIAGRAM_RULE), 'KI-Anweisung kennt die neuen Arten');
   }
   // ---- nothing is cut off, long labels included
   {
@@ -505,6 +505,7 @@ console.log('Diagramme');
   // ---- symbols in boxes
   {
     const { ICON_NAMES } = await import('../src/lib/diagramIcons');
+    const { RULE_ICONS } = await import('../src/lib/diagram');
     const withIcons: any[] = [
       { type: 'flow', steps: ['Forschungsfrage', 'Datenerhebung', 'Auswertung'], icons: { forschungsfrage: 'Frage', Datenerhebung: 'liste', Auswertung: 'balken' } },
       { type: 'cycle', steps: ['Plan', 'Do', 'Check', 'Act'], icons: { Plan: 'idee', Check: 'suche' } },
@@ -537,7 +538,7 @@ console.log('Diagramme');
     ok(mod.includes(`stroke="${PALETTES.light.tones[1].stroke}" stroke-width="2" stroke-linecap`) && mod.includes(`stroke="${PALETTES.light.tones[0].stroke}" stroke-width="2" stroke-linecap`), 'Symbol in der Farbe seines Kastens (Moderator Beere, sonst Türkis)');
     const dark = renderDiagram(parseDiagram(withIcons[6])!, PALETTES.dark);
     ok(dark.includes(`stroke="${PALETTES.dark.tones[0].stroke}" stroke-width="2" stroke-linecap`), 'Symbol im Dunkelmodus in der hellen Randfarbe');
-    ok(ICON_NAMES.length >= 50 && ICON_NAMES.every((n) => DIAGRAM_RULE.includes(n)), 'KI-Anweisung nennt alle ' + ICON_NAMES.length + ' Symbole');
+    ok(ICON_NAMES.length >= 50 && RULE_ICONS.length >= 30 && RULE_ICONS.every((n) => ICON_NAMES.includes(n) && DIAGRAM_RULE.includes(n)) && DIAGRAM_RULE.length <= 2800, 'KI-Anweisung kurz (' + DIAGRAM_RULE.length + ' Zeichen) mit ' + RULE_ICONS.length + ' gültigen Symbolen');
     const roundTrip = parseDiagram(JSON.parse(JSON.stringify(parseDiagram(withIcons[6]))));
     ok(JSON.stringify(roundTrip) === JSON.stringify(parseDiagram(withIcons[6])), 'gespeicherte Symbole werden beim Anzeigen gleich gelesen');
   }
@@ -575,7 +576,7 @@ console.log('Diagramme');
   const html = 'Antwort' + diagramHtml(parseDiagram(samples[0])!);
   const out = diagramsToSvg(html);
   ok(!out.includes('data-diagram') && out.includes('<svg') && out.includes('Forschungsfrage') && out.includes('#ffffff'), 'Anki-Export: Platzhalter → fertiges SVG auf Weiß');
-  ok(!/<svg/i.test(DIAGRAM_RULE) && /"type":"flow"/.test(DIAGRAM_RULE), 'KI-Anweisung verlangt Beschreibung, kein SVG');
+  ok(!/<svg/i.test(DIAGRAM_RULE) && /\bflow \{/.test(DIAGRAM_RULE), 'KI-Anweisung verlangt Beschreibung, kein SVG');
 }
 
 console.log('Modelle aus PDF-Folien');
@@ -1323,6 +1324,60 @@ console.log('Gleichzeitige Teile: Anzeige');
   const q = runProgress(later, later[2])!;
   ok(q.done === 1 && q.running === 1, 'Teil mit laufender Fortsetzung zählt noch nicht als fertig');
   ok(runProgress([j(1, 'running', 1)].map((x) => ({ ...x, params: { run: 'r' } })), { params: { run: 'r' } } as any) === null, 'ein einzelner Auftrag: keine Teile-Anzeige');
+}
+
+console.log('Tokens sparen, ganzes Deck nutzen');
+{
+  const { spreadClip, sampleCards } = await import('../src/lib/sample');
+  const secs = Array.from({ length: 30 }, (_, i) => `Abschnitt ${i}. ` + 'Ein Satz über das Thema. '.repeat(120));
+  const long = secs.join('\n\n');
+  const sc = spreadClip(long, 24000);
+  ok(sc.length <= 24000 && sc.includes('Abschnitt 0.') && sc.includes('Abschnitt 15.') && sc.includes('Abschnitt 29.'), 'Material von Anfang, Mitte und Ende, im Limit');
+  ok(sc.split('[…]').every((p) => /[.\s]$/.test(p.trimEnd().slice(-1)) || p.trim().endsWith('.')), 'Stücke enden an Satzenden');
+  ok(spreadClip('kurz', 100) === 'kurz', 'kurzes Material bleibt wie es ist');
+  const huge = Array.from({ length: 400 }, (_, i) => `Kapitel ${i}. ` + 'Text. '.repeat(600)).join('\n\n');
+  const hc = spreadClip(huge, 24000);
+  ok(hc.length <= 24000 && hc.includes('Kapitel 0.') && /Kapitel 3\d\d\./.test(hc), 'sehr langes Material: ganze Abschnitte in gleichen Abständen');
+  const cards = Array.from({ length: 300 }, (_, i) => ({ front: 'F' + i, back: 'A', ...(i === 250 ? { srs: { lapses: 4 } } : {}), ...(i === 10 ? { marked: true } : {}) }));
+  const pick = sampleCards(cards, 60);
+  ok(pick.length === 60 && pick.some((c) => c.front === 'F250') && pick.some((c) => c.front === 'F10') && pick.some((c) => Number(c.front.slice(1)) > 280) && pick.every((c, i) => !i || Number(c.front.slice(1)) > Number(pick[i - 1].front.slice(1))), 'Karten: schwere/markierte zuerst, sonst über das ganze Deck, Reihenfolge bleibt');
+
+  const { materialFrom, chatWindow, systemFor, CACHE_FROM_CHARS, tokenSettings, thinkingModel } = await import('../src/lib/ai');
+  const mf = materialFrom('', cards, 6000);
+  ok(mf.includes('Auswahl:') && mf.includes('F299') === false ? mf.includes('F2') : true, 'Kartenauswahl wird gekennzeichnet');
+  ok(materialFrom('', cards.slice(0, 5), 6000).includes('F4') && !materialFrom('', cards.slice(0, 5), 6000).includes('Auswahl'), 'wenige Karten: alle, ohne Auswahl');
+
+  const msgs = Array.from({ length: 30 }, (_, i) => ({ role: (i % 2 ? 'assistant' : 'user') as 'user' | 'assistant', content: 'm' + i }));
+  const w = chatWindow(msgs);
+  ok(w.length <= 12 && w[0].role === 'user' && w[w.length - 1].content === 'm29', 'Chat: höchstens 12 Nachrichten, beginnt mit einer Frage');
+
+  const big = 'x'.repeat(CACHE_FROM_CHARS + 10);
+  ok(JSON.stringify(systemFor('anthropic', 'claude-haiku-5-5', big)).includes('"cache_control":{"type":"ephemeral"}') && systemFor('anthropic', 'm', 'kurz') === 'kurz', 'Claude: lange Anleitung wird zwischengespeichert, kurze nicht');
+  ok(JSON.stringify(systemFor('openrouter', 'anthropic/claude-haiku-5-5', big)).includes('cache_control') && systemFor('openrouter', 'deepseek/deepseek-chat', big) === big && systemFor('openai', 'gpt-5', big) === big, 'OpenRouter-Claude markiert, andere cachen selbst');
+
+  ok(thinkingModel('gemini', 'gemini-2.5-flash') && thinkingModel('openai', 'gpt-5-mini') && thinkingModel('openai', 'o4-mini') && !thinkingModel('openai', 'gpt-4o') && !thinkingModel('anthropic', 'claude-haiku-5-5'), 'denkende Modelle werden erkannt');
+  const g = tokenSettings('gemini', 'gemini-2.5-flash', 800) as any;
+  ok(g.maxOutputTokens === 2800 && g.thinkingConfig.thinkingBudget === 512, 'Gemini Flash: Platz fürs Denken, wenig Denken bei kleinen Aufgaben');
+  const o = tokenSettings('openai', 'gpt-5', 900) as any;
+  ok(o.max_completion_tokens === 2900 && o.reasoning_effort === 'low' && !(tokenSettings('openai', 'gpt-5', 16000) as any).reasoning_effort, 'OpenAI: mehr Platz, kleine Aufgaben denken wenig, große voll');
+  ok((tokenSettings('openai', 'gpt-4o', 900) as any).max_completion_tokens === 900, 'Modelle ohne Denken: unverändert');
+  const or = tokenSettings('openrouter', 'anthropic/claude-haiku-5-5', 700) as any;
+  ok(or.max_tokens === 3700 && or.reasoning.effort === 'low' && (tokenSettings('openrouter', 'x/y:free', 700) as any).reasoning.effort === 'none', 'OpenRouter: kleine Aufgaben mit wenig Denken, kostenlose ohne');
+
+  const { avoidFronts } = await import('../src/lib/jobs');
+  const deck = [...Array.from({ length: 200 }, (_, i) => ({ front: 'alt ' + i, back: 'a' })), { front: 'neu 1', back: 'a', run: 'r' }, { front: 'neu 2', back: 'a', run: 'r' }];
+  const av = avoidFronts(deck, 'r');
+  ok(av.length === 62 && av.includes('neu 1') && av.includes('alt 199') && !av.includes('alt 0') && av[av.length - 1] === 'neu 2', '„Fragen gibt es schon“: dieser Durchgang plus die 60 neuesten');
+
+  const { courseMaterial } = await import('../src/lib/mockExam');
+  const decks = Array.from({ length: 30 }, (_, i) => ({ name: 'Deck ' + i, size: 20000, make: (n: number) => 'x'.repeat(n) }));
+  const cm = courseMaterial(decks);
+  ok(cm.length <= 60000 && cm.includes('Deck 0') && cm.includes('Deck 29'), 'Kurs-Prüfung: Budget eingehalten, auch mit 30 Decks');
+
+  const { estimate } = await import('../src/lib/costs');
+  const e0 = estimate.cards(20000, 10, true);
+  const e1 = estimate.cards(20000, 10, true, 4000, 3);
+  ok(e1.input - e0.input === Math.ceil(4000 / 3.5) - Math.ceil(1600 / 3.5) + 2400, 'Kosten zählen die Anleitung und die Folien-Bilder');
 }
 
 console.log('Kurze Decknamen');
