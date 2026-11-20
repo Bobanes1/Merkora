@@ -14,6 +14,7 @@ import CalendarPage from './pages/Calendar';
 import Stats from './pages/Stats';
 import Skills from './pages/Skills';
 import SkillPage from './pages/SkillPage';
+import Tools from './pages/Tools';
 import Setup from './pages/Setup';
 import { useStore } from './lib/store';
 import { useApplyTheme } from './lib/theme';
@@ -60,6 +61,7 @@ export default function App() {
         <Route path="/stats" element={<AppLayout><Stats /></AppLayout>} />
         <Route path="/skills" element={<AppLayout><Skills /></AppLayout>} />
         <Route path="/skills/:id" element={<AppLayout><SkillPage /></AppLayout>} />
+        <Route path="/tools" element={<AppLayout><Tools /></AppLayout>} />
         <Route path="/sync-callback" element={<SyncCallback />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

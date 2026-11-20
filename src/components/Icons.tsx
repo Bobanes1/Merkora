@@ -238,3 +238,28 @@ export const IconCopy = mk(
     <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
   </>,
 );
+export const IconTools = mk(
+  <>
+    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+  </>,
+);
+export const IconTimer = mk(
+  <>
+    <circle cx="12" cy="13" r="8" />
+    <path d="M12 9v4l2.5 1.5M9.5 3h5M12 3v2" />
+  </>,
+);
+export const IconChecklist = mk(
+  <>
+    <path d="M10 6h10M10 12h10M10 18h10" />
+    <path d="m3.5 6 1.5 1.5L7.5 5M3.5 12l1.5 1.5L7.5 11M3.5 18l1.5 1.5L7.5 17" />
+  </>,
+);
+export const IconPopout = mk(
+  <>
+    <path d="M14 4h6v6M20 4l-9 9" />
+    <path d="M18 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5" />
+  </>,
+);
+export const IconMinus = mk(<path d="M5 12h14" />);
+

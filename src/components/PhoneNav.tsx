@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { IconCalendar, IconChart, IconHome, IconLibrary, IconPlus, IconPractice, IconSearch, IconSettings } from './Icons';
-import { Pomodoro } from './Pomodoro';
+import { IconCalendar, IconChart, IconChecklist, IconHome, IconLibrary, IconPlus, IconPractice, IconSearch, IconSettings, IconTimer, IconTools } from './Icons';
+import { toolWindows } from '../lib/toolWindows';
 import { Sheet } from './Sheet';
 
 /** Phone view: navigation at the bottom (Start, Bibliothek, Skills, Prüfungen, Mehr); "Mehr" opens a panel with the rest. */
@@ -9,7 +9,7 @@ export function PhoneNav({ onSearch, onNewDeck }: { onSearch: () => void; onNewD
   const [more, setMore] = useState(false);
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const inMore = pathname.startsWith('/stats') || pathname.startsWith('/settings');
+  const inMore = pathname.startsWith('/stats') || pathname.startsWith('/settings') || pathname.startsWith('/tools');
   const go = (to: string) => {
     setMore(false);
     navigate(to);
@@ -37,6 +37,15 @@ export function PhoneNav({ onSearch, onNewDeck }: { onSearch: () => void; onNewD
       {more && (
         <Sheet title="Mehr" onClose={() => setMore(false)}>
           <div className="sheet-list">
+            <button type="button" onClick={() => go('/tools')}>
+              <IconTools size={20} /> Merkora Tools & Arbeitsplanung
+            </button>
+            <button type="button" onClick={() => (setMore(false), toolWindows.open('pomodoro'))}>
+              <IconTimer size={20} /> Pomodoro-Timer (Popup)
+            </button>
+            <button type="button" onClick={() => (setMore(false), toolWindows.open('todos'))}>
+              <IconChecklist size={20} /> To-do-Liste (Popup)
+            </button>
             <button type="button" onClick={() => (setMore(false), onSearch())}>
               <IconSearch size={20} /> Suchen
             </button>
@@ -50,11 +59,9 @@ export function PhoneNav({ onSearch, onNewDeck }: { onSearch: () => void; onNewD
               <IconSettings size={20} /> Einstellungen
             </button>
           </div>
-          <div className="sheet-pomo">
-            <Pomodoro big />
-          </div>
         </Sheet>
       )}
     </>
   );
 }
+

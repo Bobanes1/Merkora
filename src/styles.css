@@ -8954,3 +8954,592 @@ html.phone .lab-num { width: 96px; }
 .staff-acc { font-size: 18px; fill: #222; }
 .rhythm-tap { min-width: 160px; min-height: 48px; }
 html.phone .piano { height: 130px; }
+
+/* ---------- Merkora Toolbar (sidebar) ---------- */
+.sidebar-toolbar {
+  margin-top: 8px;
+  padding: 6px;
+  border-radius: var(--r-lg);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+.toolbar-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.toolbar-main {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px !important;
+  font-weight: 700;
+}
+.toolbar-toggle {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--muted);
+}
+.toolbar-toggle:hover {
+  background: var(--white);
+  color: var(--ink);
+}
+.toolbar-items {
+  display: grid;
+  gap: 2px;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+.toolbar-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  transition: background 0.12s, color 0.12s;
+}
+.toolbar-btn:hover {
+  background: var(--white);
+  color: var(--ink);
+}
+.toolbar-btn.active {
+  background: var(--primary-soft);
+  color: var(--primary-ink);
+  font-weight: 600;
+}
+.toolbar-btn.running svg {
+  color: var(--primary);
+}
+.toolbar-btn span:first-of-type {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pomo-pill {
+  font-variant-numeric: tabular-nums;
+  background: var(--primary);
+  color: #fff;
+}
+
+/* ---------- Floating Tool Popup Windows ---------- */
+.tool-wins-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 40;
+}
+.tool-win {
+  position: fixed;
+  pointer-events: auto;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 24px);
+  display: flex;
+  flex-direction: column;
+  background: var(--white);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-pop);
+  overflow: hidden;
+}
+.tool-win.minimized {
+  width: auto !important;
+  min-width: 200px;
+}
+.tool-win-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--tint);
+  border-bottom: 1px solid var(--line);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+.tool-win.minimized .tool-win-head {
+  border-bottom: 0;
+}
+.tool-win-head:active {
+  cursor: grabbing;
+}
+.tool-win-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--ink);
+}
+.tool-win-title b {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tool-win-badge {
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  padding: 2px 7px;
+  border-radius: var(--r-full);
+  background: var(--primary-soft);
+  color: var(--primary-ink);
+}
+.tool-win-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.tool-win-body {
+  padding: 14px;
+  overflow-y: auto;
+  max-height: min(520px, calc(100vh - 96px));
+}
+html.phone .tool-win {
+  left: 8px !important;
+  right: 8px !important;
+  width: auto !important;
+  bottom: 72px !important;
+  top: auto !important;
+}
+html.phone .tool-win.minimized {
+  left: auto !important;
+  right: 12px !important;
+}
+
+/* ---------- Redesigned Pomodoro Tool ---------- */
+.pomo-tool {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+}
+.pomo-phase-tabs {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+.pomo-phase-tabs button {
+  border: 0;
+  background: transparent;
+  padding: 5px 14px;
+  border-radius: var(--r-full);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.pomo-phase-tabs button.on {
+  background: var(--white);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+}
+.pomo-ring-wrap {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+.pomo-ring-bg {
+  stroke: var(--surface-2);
+}
+.pomo-ring-fg {
+  stroke: var(--primary);
+  transition: stroke-dashoffset 0.35s ease;
+}
+.pomo-tool.break .pomo-ring-fg {
+  stroke: #e29e2b;
+}
+.pomo-ring-center {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  gap: 2px;
+}
+.pomo-big-clock {
+  font-family: var(--font-display);
+  font-size: 34px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.pomo-tool.compact .pomo-big-clock {
+  font-size: 28px;
+}
+.pomo-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pomo-active-task {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--r-md);
+  background: var(--primary-soft);
+  border: 1px solid var(--line-strong);
+}
+.pomo-active-task-info {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+}
+.pomo-active-task-info b {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pomo-task-pick {
+  width: 100%;
+}
+.pomo-task-pick .input {
+  width: 100%;
+  font-size: 12.5px;
+}
+.pomo-presets {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+.pomo-custom {
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+.pomo-custom label {
+  flex: 1;
+  display: grid;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.pomo-custom .input {
+  width: 100%;
+  padding: 5px 8px;
+}
+
+/* ---------- Redesigned Todo Tool ---------- */
+.tool-todo-input-row {
+  display: flex;
+  gap: 6px;
+}
+.tool-todo-input-row .input {
+  flex: 1;
+  min-width: 0;
+}
+.todo-min {
+  width: 72px;
+}
+.tool-todo {
+  align-items: flex-start;
+  padding: 7px 6px;
+}
+.tool-todo.active-timer {
+  background: var(--primary-soft);
+  border-radius: var(--r-md);
+}
+.tool-todo-main {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.tool-todo-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+.tool-todo-note {
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+.tool-todo-btns {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+.tool-todo-play {
+  color: var(--primary);
+}
+.tool-todo-play:hover {
+  background: var(--primary-soft);
+}
+.phase-pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: var(--r-full);
+}
+.phase-pill.p-start {
+  background: var(--ok-soft);
+  color: var(--ok-ink);
+}
+.phase-pill.p-main {
+  background: var(--warn-soft);
+  color: var(--warn-ink);
+}
+.phase-pill.p-end {
+  background: var(--primary-soft);
+  color: var(--primary-ink);
+}
+.min-pill {
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 6px;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  color: var(--text);
+}
+.tool-empty {
+  padding: 16px 8px;
+  text-align: center;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+.tool-done-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* ---------- Tools Page & Arbeitsplanung ---------- */
+.tools-tabs {
+  margin-bottom: 16px;
+}
+.tools-pomo-panel {
+  max-width: 520px;
+}
+.wp-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 960px) {
+  .wp-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.wp-setup,
+.wp-result {
+  display: grid;
+  gap: 14px;
+}
+.wp-time-block,
+.wp-add-box,
+.wp-quick {
+  display: grid;
+  gap: 8px;
+}
+.wp-time-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.wp-min-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.wp-min-input .input {
+  width: 78px;
+  padding: 5px 8px;
+}
+.wp-add-row {
+  display: flex;
+  gap: 8px;
+}
+.wp-add-row .input {
+  flex: 1;
+  min-width: 0;
+}
+.wp-add-opts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.wp-opt-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.wp-task-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.wp-task-item {
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  display: grid;
+  gap: 8px;
+}
+.wp-task-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.wp-task-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.seg.sm button {
+  padding: 4px 9px;
+  font-size: 12px;
+}
+.seg.xs button {
+  padding: 3px 7px;
+  font-size: 11.5px;
+}
+.wp-res-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.wp-empty {
+  padding: 28px 16px;
+  text-align: center;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-lg);
+}
+.wp-stats-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 8px 12px;
+  border-radius: var(--r-md);
+  background: var(--tint);
+  border: 1px solid var(--line);
+  font-size: 13px;
+}
+.wp-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.wp-step {
+  padding: 12px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--primary);
+  background: var(--white);
+  display: grid;
+  gap: 6px;
+}
+.wp-step.p-start {
+  border-left-color: var(--ok);
+}
+.wp-step.p-main {
+  border-left-color: #e29e2b;
+}
+.wp-step.p-end {
+  border-left-color: var(--primary);
+}
+.wp-step.wp-break {
+  padding: 8px 12px;
+  border-left: 4px dashed var(--line-strong);
+  background: var(--surface-2);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.wp-step-badge {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.wp-step-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.wp-step-title {
+  flex: 1;
+  min-width: 120px;
+}
+.wp-step-min {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.wp-step-min .input {
+  width: 60px;
+  padding: 3px 6px;
+  font-size: 12.5px;
+  text-align: right;
+}
+.wp-step-reason {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.wp-parked {
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--warn-soft);
+  color: var(--warn-ink);
+  display: grid;
+  gap: 4px;
+}
+.wp-parked ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+}
+.wp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ok-msg {
+  color: var(--ok-ink);
+  margin: 0;
+}
+.err-msg {
+  color: var(--bad-ink);
+  margin: 0;
+}
+

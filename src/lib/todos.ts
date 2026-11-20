@@ -4,6 +4,8 @@
  */
 import { DAY, dayKey, startOfDay } from './util';
 
+export type TodoPhase = 'start' | 'main' | 'end';
+
 export type Todo = {
   id: string;
   text: string;
@@ -11,6 +13,14 @@ export type Todo = {
   due?: string;
   deckId?: string;
   examId?: string;
+  /** Planned duration in minutes (e.g. from Arbeitsplanung). */
+  minutes?: number;
+  /** Role in a planned work session (Einstieg, Hauptteil, Abschluss). */
+  phase?: TodoPhase;
+  /** Short planning hint / reason. */
+  note?: string;
+  /** Explicit order within a day's plan. */
+  order?: number;
   /** Checked off at (ms). */
   doneAt?: number;
   createdAt: number;
@@ -40,11 +50,12 @@ export function todoGroups(todos: Todo[], now = Date.now()): TodoGroup[] {
   const order: TodoGroupId[] = ['overdue', 'today', 'soon', 'nodate', 'done'];
   const by = new Map<TodoGroupId, Todo[]>(order.map((id) => [id, []]));
   for (const t of todos) by.get(todoGroup(t, now))!.push(t);
-  const byDate = (a: Todo, b: Todo) => (a.due ?? '').localeCompare(b.due ?? '') || a.createdAt - b.createdAt;
+  const byOrder = (a: Todo, b: Todo) => (a.order ?? 1e9) - (b.order ?? 1e9);
+  const byDate = (a: Todo, b: Todo) => (a.due ?? '').localeCompare(b.due ?? '') || byOrder(a, b) || a.createdAt - b.createdAt;
   by.get('overdue')!.sort(byDate);
   by.get('today')!.sort(byDate);
   by.get('soon')!.sort(byDate);
-  by.get('nodate')!.sort((a, b) => a.createdAt - b.createdAt);
+  by.get('nodate')!.sort((a, b) => byOrder(a, b) || a.createdAt - b.createdAt);
   by.get('done')!.sort((a, b) => (b.doneAt ?? 0) - (a.doneAt ?? 0));
   return order.filter((id) => by.get(id)!.length).map((id) => ({ id, label: LABELS[id], items: by.get(id)! }));
 }

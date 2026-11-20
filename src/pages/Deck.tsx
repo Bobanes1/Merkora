@@ -133,7 +133,7 @@ export default function DeckPage() {
               type="button"
               className="btn ghost sm"
               onClick={() => setTodoDialog(true)}
-              title={todos ? `${todos} offene${todos === 1 ? 's' : ''} To-do${todos === 1 ? '' : 's'} – auf der Startseite` : 'To-do zu diesem Deck anlegen'}
+              title={todos ? `${todos} offene${todos === 1 ? 's' : ''} To-do${todos === 1 ? '' : 's'} – in Merkora Tools` : 'To-do zu diesem Deck anlegen'}
             >
               <IconCheck size={14} /> {todos ? `${todos} To-do${todos === 1 ? '' : 's'}` : 'To-do'}
             </button>

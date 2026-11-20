@@ -7,12 +7,9 @@ import { IconCalendar, IconCards, IconChevron, IconFlame, IconPlay, IconPlus, Ic
 import { nextLesson } from '../lib/skills';
 import { FoldPanel } from '../components/FoldPanel';
 import { Mascot } from '../components/Mascot';
-import { TodoList } from '../components/TodoList';
 import { usePhone } from '../lib/phone';
 import { pokeMove, type PokeMove } from '../lib/pipLines';
-import { todoGroups } from '../lib/todos';
 import { NoKeyHint } from '../components/NoKey';
-import { Pomodoro } from '../components/Pomodoro';
 import { countdownText, dailyPlan, examAt, examCards, examDecks, examForecast, forecastText, readiness, upcomingExams } from '../lib/exams';
 import { pathProgress, playerLevel, totalXp, xpStreak, xpToday } from '../lib/path';
 import { masteryPercent, sortDecks, streak, studyDays, type DeckSort } from '../lib/stats';
@@ -137,13 +134,9 @@ export default function Dashboard() {
   const serie = Math.max(xpStreak(data), streak(data.reviews));
   const exams = upcomingExams(data);
   const dueDecks = data.decks.filter((d) => dueCards(d).length > 0).sort((a, b) => dueCards(b).length - dueCards(a).length);
-  const openTodos = (data.todos ?? []).filter((t) => !t.doneAt);
   // the skill used last (active ones only)
   const lastSkill = [...(data.skills ?? [])].filter((s) => s.status === 'active').sort((a, b) => b.updatedAt - a.updatedAt)[0];
   const skillNext = lastSkill ? { skill: lastSkill, lesson: nextLesson(lastSkill)?.lesson.title } : null;
-  const urgentTodos = todoGroups(openTodos, now)
-    .filter((g) => g.id === 'overdue' || g.id === 'today')
-    .reduce((a, g) => a + g.items.length, 0);
   const cardGoal = data.settings.cardGoal ?? 50;
   const minuteGoal = data.settings.minuteGoal ?? 60;
   const deckSort = data.settings.homeDeckSort ?? 'due';
@@ -254,14 +247,6 @@ export default function Dashboard() {
                 <span className="btn outline sm">Üben</span>
               </Link>
             )}
-            <FoldPanel
-              title="To-dos"
-              summary={openTodos.length ? `${openTodos.length} offen${urgentTodos ? ` · ${urgentTodos} heute oder überfällig` : ''}` : undefined}
-              collapsed={!!data.settings.homeTodosCollapsed}
-              onToggle={() => setSettings({ homeTodosCollapsed: !data.settings.homeTodosCollapsed })}
-            >
-              <TodoList compactAdd={phone} />
-            </FoldPanel>
             {phone && exams[0] && (
               <Link to="/calendar" className="phone-exam">
                 <IconCalendar size={16} />
@@ -432,9 +417,6 @@ export default function Dashboard() {
           <Ring value={minutesToday} goal={minuteGoal} color="#f2b84b">
             <IconFlame size={20} />
           </Ring>
-        </div>
-        <div className="widget pomo-widget">
-          <Pomodoro big />
         </div>
         <MiniCalendar />
       </aside>

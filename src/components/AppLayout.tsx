@@ -8,6 +8,7 @@ import { shortNames } from '../lib/deckNames';
 import { NewDeckModal } from './NewDeck';
 import {
   IconCheck,
+  IconChecklist,
   IconChevron,
   IconChevronDown,
   IconClose,
@@ -16,6 +17,9 @@ import {
   IconLibrary,
   IconMenu,
   IconSettings,
+  IconSparkle,
+  IconTimer,
+  IconTools,
   IconCalendar,
   IconChart,
   IconFolder,
@@ -33,7 +37,73 @@ import { ErrorBoundary } from './ErrorBoundary';
 import { UpdateNotice } from './UpdateNotice';
 import { ApkUpdateNotice } from './ApkUpdate';
 import { MasterySnapshots } from './WeekReview';
-import { FocusBar, Pomodoro, setFocus } from './Pomodoro';
+import { FocusBar, setFocus } from './Pomodoro';
+import { ToolWindows } from './tools/ToolWindows';
+import { fmtClock, usePomodoro } from '../lib/pomodoro';
+import { remaining } from '../lib/pomodoroRule';
+import { toolWindows, useToolWindows } from '../lib/toolWindows';
+
+/** Collapsible Merkora Toolbar menu in the left sidebar. */
+function SidebarToolbar({ onNavigate }: { onNavigate: () => void }) {
+  const [expanded, setExpanded] = useState(true);
+  const wins = useToolWindows();
+  const p = usePomodoro();
+  const openTodos = useStore((s) => (s.data.todos ?? []).filter((t) => !t.doneAt).length);
+  const { pathname } = useLocation();
+  const pomoClock = p.running ? fmtClock(remaining(p, Date.now())) : null;
+
+  return (
+    <div className="sidebar-toolbar">
+      <div className="toolbar-head">
+        <NavLink to="/tools" onClick={onNavigate} className={({ isActive }) => `nav-link toolbar-main ${isActive ? 'active' : ''}`}>
+          <IconTools size={17} /> Merkora Tools
+        </NavLink>
+        <button
+          type="button"
+          className="toolbar-toggle"
+          aria-label={expanded ? 'Toolbar zuklappen' : 'Toolbar aufklappen'}
+          aria-expanded={expanded}
+          onClick={() => setExpanded((v) => !v)}
+        >
+          {expanded ? <IconChevronDown size={14} /> : <IconChevron size={14} />}
+        </button>
+      </div>
+      {expanded && (
+        <div className="toolbar-items" role="menu" aria-label="Merkora Toolbar">
+          <button
+            type="button"
+            className={`toolbar-btn ${wins.pomodoro.open ? 'active' : ''} ${p.running ? 'running' : ''}`}
+            onClick={() => (toolWindows.toggle('pomodoro'), onNavigate())}
+            title="Pomodoro-Timer als Popup öffnen"
+          >
+            <IconTimer size={15} />
+            <span>Pomodoro-Timer</span>
+            {pomoClock && <span className="pill-count pomo-pill">{pomoClock}</span>}
+          </button>
+          <button
+            type="button"
+            className={`toolbar-btn ${wins.todos.open ? 'active' : ''}`}
+            onClick={() => (toolWindows.toggle('todos'), onNavigate())}
+            title="To-do-Liste als Popup öffnen"
+          >
+            <IconChecklist size={15} />
+            <span>To-do-Liste</span>
+            {openTodos > 0 && <span className="pill-count soft">{openTodos}</span>}
+          </button>
+          <Link
+            to="/tools?tab=plan"
+            onClick={onNavigate}
+            className={`toolbar-btn ${pathname === '/tools' ? 'soft-on' : ''}`}
+            title="Arbeitsplanung starten"
+          >
+            <IconSparkle size={15} />
+            <span>Arbeitsplanung</span>
+          </Link>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function Tree({ onNavigate }: { onNavigate: () => void }) {
   const data = useStore((s) => s.data);
@@ -226,9 +296,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
             <IconSettings /> Einstellungen
           </NavLink>
         </div>
+        <SidebarToolbar onNavigate={close} />
         <div className="nav-section">Meine Kurse</div>
         <Tree onNavigate={close} />
-        {pathname !== '/dashboard' && <Pomodoro />}
         <JobsIndicator />
         {!isDesktop && <InstallButton />}
         <SaveState />
@@ -247,6 +317,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       {aiCourse && <CreateWithAI courseId={aiCourse} onClose={() => setAiCourse(null)} onBack={() => (setAiCourse(null), setNewDeck(true))} />}
       {search && <SearchPalette onClose={() => setSearch(false)} />}
       {phone && <PhoneNav onSearch={() => setSearch(true)} onNewDeck={() => setNewDeck(true)} />}
+      <ToolWindows />
       <main className="app-main">
         <FocusBar />
         {isAndroid ? <ApkUpdateNotice /> : <UpdateNotice />}

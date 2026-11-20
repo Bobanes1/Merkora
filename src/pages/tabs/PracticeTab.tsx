@@ -101,7 +101,7 @@ export default function PracticeTab({ deck }: { deck: Deck }) {
         </section>
       )}
       <p className="muted small">
-        Labore zum Ausprobieren (Stochastik, Funktionen, Vektoren) und Werkzeuge findest du unter <Link to="/skills">Skills</Link>.
+        Labore zum Ausprobieren (Stochastik, Funktionen, Vektoren) und Werkzeuge findest du unter <Link to="/tools?tab=labs">Merkora Tools</Link>.
       </p>
     </div>
   );

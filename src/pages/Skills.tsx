@@ -1,13 +1,9 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { CodeEditor } from '../components/CodeEditor';
-import { IconPlay, IconSparkle, IconUpload } from '../components/Icons';
-import { Lab, LAB_DEFAULTS, LAB_TITLES } from '../components/labs/Labs';
+import { IconSparkle, IconUpload } from '../components/Icons';
 import { NoKeyNotice } from '../components/NoKey';
-import { Piano } from '../components/practice/MusicTask';
 import { hasKey } from '../lib/ai';
 import { MATERIAL_ACCEPT, readFileText } from '../lib/files';
-import { buildHarness, localJava, runJavaLocal, runJavaOnline } from '../lib/javaRun';
 import { DOMAIN_LABEL } from '../lib/practice';
 import { startSkill } from '../lib/skillRun';
 import { nextLesson, skillProgress } from '../lib/skills';
@@ -25,7 +21,6 @@ export default function Skills() {
   const [level, setLevel] = useState(data.settings.eduLevel ?? '');
   const [material, setMaterial] = useState('');
   const [fileNote, setFileNote] = useState('');
-  const [tool, setTool] = useState<'' | 'labs' | 'piano' | 'java'>('');
 
   const start = () => {
     if (!topic.trim()) return;
@@ -104,27 +99,6 @@ export default function Skills() {
           </div>
         </section>
       )}
-
-      <section className="panel">
-        <h2>Werkzeuge</h2>
-        <p className="muted small">Zum freien Ausprobieren – ohne KI.</p>
-        <div className="seg wrap">
-          {(
-            [
-              ['labs', 'Mathe-Labore'],
-              ['piano', 'Klavier'],
-              ['java', 'Java-Spielwiese'],
-            ] as const
-          ).map(([id, l]) => (
-            <button key={id} type="button" className={tool === id ? 'on' : ''} onClick={() => setTool(tool === id ? '' : id)}>
-              {l}
-            </button>
-          ))}
-        </div>
-        {tool === 'labs' && <LabPicker />}
-        {tool === 'piano' && <FreePiano />}
-        {tool === 'java' && <JavaPlayground />}
-      </section>
     </div>
   );
 }
@@ -150,83 +124,6 @@ function SkillTile({ skill }: { skill: Skill }) {
         </>
       )}
     </Link>
-  );
-}
-
-function LabPicker() {
-  const [i, setI] = useState(0);
-  return (
-    <div className="tool">
-      <div className="chips">
-        {LAB_DEFAULTS.map((l, k) => (
-          <button key={l.type} type="button" className={'chip' + (k === i ? ' on' : '')} onClick={() => setI(k)}>
-            {LAB_TITLES[l.type]}
-          </button>
-        ))}
-      </div>
-      <Lab key={i} spec={LAB_DEFAULTS[i]} />
-    </div>
-  );
-}
-
-const PCN = ['C', 'Cis', 'D', 'Dis', 'E', 'F', 'Fis', 'G', 'Gis', 'A', 'B', 'H'];
-function FreePiano() {
-  const [notes, setNotes] = useState<number[]>([]);
-  return (
-    <div className="tool">
-      <Piano onPlay={(m) => setNotes((n) => [...n.slice(-11), m])} />
-      <p className="muted small">Gespielt: {notes.length ? notes.map((m) => PCN[m % 12] + Math.floor(m / 12 - 1)).join(' · ') : '–'}</p>
-    </div>
-  );
-}
-
-const STARTER = `class Solution {
-    public static void main(String[] args) {
-        System.out.println("Hallo Merkora!");
-    }
-}`;
-function JavaPlayground() {
-  const [code, setCode] = useState(STARTER);
-  const [out, setOut] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [online, setOnline] = useState(false);
-  const run = async () => {
-    setBusy(true);
-    setOut('');
-    try {
-      const src = buildHarness(code, []);
-      let r = (await localJava()) ? await runJavaLocal(src) : 'no-java';
-      if (r === 'no-java') {
-        if (!online) {
-          setOut('Auf diesem Gerät gibt es kein Java. Mit „Online ausführen“ schickt Merkora nur den Code an wandbox.org.');
-          return;
-        }
-        r = await runJavaOnline(src);
-      }
-      setOut((r.stdout + (r.stderr ? '\n' + r.stderr : '')).trim() || '(keine Ausgabe)');
-    } catch (e) {
-      setOut((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <div className="tool">
-      <CodeEditor value={code} onChange={setCode} />
-      <div className="row-gap">
-        <button type="button" className="btn primary" onClick={() => void run()} disabled={busy}>
-          <IconPlay size={14} /> {busy ? 'Läuft …' : 'Ausführen'}
-        </button>
-        <label className="check-row">
-          <input type="checkbox" checked={online} onChange={(e) => (setOnline(e.target.checked), e.target.checked && setSettings({ onlineCodeOk: true }))} /> Online ausführen (wandbox.org), wenn kein Java da ist
-        </label>
-      </div>
-      {out && (
-        <div className="code-output">
-          <pre>{out}</pre>
-        </div>
-      )}
-    </div>
   );
 }
 

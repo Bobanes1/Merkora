@@ -1560,5 +1560,53 @@ console.log('Kurze Decknamen');
   ok(shortNames([{ id: 'x', name: 'A › B' }]).get('x') === 'A › B', 'einzelnes Deck bleibt unverändert');
 }
 
+console.log('Arbeitsplanung & To-do-Reihenfolge');
+{
+  const { buildWorkPlan } = await import('../src/lib/workPlan');
+  const { todoGroups } = await import('../src/lib/todos');
+
+  const empty = buildWorkPlan([], 60);
+  ok(empty.steps.length === 0 && empty.parked.length === 0, 'ohne Aufgaben: leerer Plan');
+
+  const plan = buildWorkPlan(
+    [
+      { id: 't1', title: 'Trockene Theorie', motivation: 1, size: 'l', important: true },
+      { id: 't2', title: 'Lieblingsthema Einstieg', motivation: 3, size: 's' },
+      { id: 't3', title: 'Zusammenfassung', motivation: 2, size: 's' },
+    ],
+    90,
+    true,
+  );
+  const taskSteps = plan.steps.filter((s) => s.kind === 'task');
+  ok(plan.totalMinutes === 90, 'Gesamtzeit stimmt exakt (90 Min.)');
+  ok(taskSteps[0].taskId === 't2' && taskSteps[0].phase === 'start', 'Einstieg wählt motivierende/leichte Aufgabe zuerst');
+  ok(taskSteps[1].taskId === 't1' && taskSteps[1].phase === 'main', 'Hauptteil bekommt wichtige/schwere Aufgabe');
+  ok(taskSteps[2].taskId === 't3' && taskSteps[2].phase === 'end', 'Abschluss bekommt machbare Aufgabe am Ende');
+  ok(plan.breakMinutes > 0 && plan.steps.some((s) => s.kind === 'break'), 'bei 90 Min. wird mindestens eine Pause eingeplant');
+
+  const tight = buildWorkPlan(
+    [
+      { id: 'a', title: 'A', motivation: 3, size: 'm', important: true },
+      { id: 'b', title: 'B', motivation: 2, size: 'm' },
+      { id: 'c', title: 'C', motivation: 1, size: 'l' },
+      { id: 'd', title: 'D', motivation: 1, size: 'l' },
+    ],
+    25,
+    false,
+  );
+  ok(tight.parked.length >= 2 && tight.steps.filter((s) => s.kind === 'task').length === 2, 'bei knapper Zeit werden überschüssige Aufgaben geparkt');
+
+  const now = new Date('2026-11-20T10:00:00Z').getTime();
+  const g = todoGroups(
+    [
+      { id: '2', text: 'Zweite', due: '2026-11-20', order: 2, createdAt: 1 },
+      { id: '1', text: 'Erste', due: '2026-11-20', order: 1, createdAt: 99 },
+    ],
+    now,
+  );
+  ok(g[0].items[0].id === '1' && g[0].items[1].id === '2', 'To-dos eines Tages folgen der Arbeitsplan-Reihenfolge');
+}
+
 console.log(failures ? `\n${failures} Test(s) fehlgeschlagen` : '\nAlle SRS-Tests bestanden');
 process.exit(failures ? 1 : 0);
+
