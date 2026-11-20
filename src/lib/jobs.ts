@@ -15,6 +15,7 @@ import {
   materialFrom,
   SUMMARY_ONE_GO,
   parseCardsInfo,
+  parseJson,
   parseQuiz,
   parseSummary,
   pollRemote,
@@ -31,6 +32,7 @@ import {
   type RemoteMode,
 } from './ai';
 import { withGraphics } from './graphics';
+import { parsePractice, practicePrompt, type PracticeKind } from './practice';
 import { renderSlides, slidesInPart } from './slideImages';
 import { deckFileBlob } from './deckFiles';
 import { avoidList, dropDuplicates } from './chunks';
@@ -41,14 +43,16 @@ export const JOB_LABEL: Record<JobKind, string> = {
   summary: 'Zusammenfassung',
   quiz: 'Quiz',
   cards: 'Karteikarten',
+  practice: 'Übungsaufgaben',
 };
 /** Verb that fits the job's name ("Karteikarten werden …", "Zusammenfassung wird …"). */
 export const JOB_VERB: Record<JobKind, { is: string; could: string }> = {
   summary: { is: 'wird', could: 'konnte' },
   quiz: { is: 'wird', could: 'konnte' },
   cards: { is: 'werden', could: 'konnten' },
+  practice: { is: 'werden', could: 'konnten' },
 };
-export const JOB_TAB: Record<JobKind, string> = { summary: 'summary', quiz: 'quiz', cards: 'cards' };
+export const JOB_TAB: Record<JobKind, string> = { summary: 'summary', quiz: 'quiz', cards: 'cards', practice: 'practice' };
 
 // ---------- toasts ----------
 export type Toast = { id: string; text: string; jobId?: string; ok: boolean; /** Link target (e.g. the calendar). */ to?: string; toLabel?: string; /** Stays until closed. */ sticky?: boolean };
@@ -87,6 +91,8 @@ function promptFor(job: Job, deck: Deck, slides: string[] = []): Prompt {
       return summaryPrompt(materialFrom(deck.source, deck.cards));
     case 'quiz':
       return quizPrompt(materialFrom(deck.source, deck.cards), p.count ?? 8);
+    case 'practice':
+      return practicePrompt(materialFrom(deck.source, deck.cards), ((job.params as { type?: PracticeKind }).type ?? 'auto') as PracticeKind, p.count ?? 8);
     case 'cards': {
       const cp = job.params as CardParams;
       const part = cp.part;
@@ -205,6 +211,12 @@ async function applyResult(job: Job, text: string, pre?: CardResult): Promise<{ 
     case 'quiz':
       updateDeck(job.deckId, { quiz: parseQuiz(text) });
       break;
+    case 'practice': {
+      const set = parsePractice(parseJson(text), Math.random().toString(36).slice(2, 10), Date.now());
+      if (!set) throw new AiFormatError('Die KI hat keine brauchbaren Aufgaben geliefert. Bitte versuche es noch einmal.');
+      updateDeck(job.deckId, (d) => ({ practice: [set, ...(d.practice ?? [])].slice(0, 20) }));
+      break;
+    }
     case 'cards': {
       const cp = job.params as CardParams;
       // a part of long material may contain nothing exam-relevant (e.g. only the literature list)

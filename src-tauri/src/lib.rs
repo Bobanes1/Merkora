@@ -359,6 +359,165 @@ fn open_media_file(id: String, name: String) -> Result<(), String> {
     }
 }
 
+// ---------- running Java (programming tasks) ----------
+/// Result of running one Java file with the installed Java.
+#[derive(Serialize)]
+struct JavaRun {
+    stdout: String,
+    stderr: String,
+    code: Option<i32>,
+    #[serde(rename = "timedOut")]
+    timed_out: bool,
+    #[serde(rename = "compileError")]
+    compile_error: bool,
+}
+
+/// The java program: JAVA_HOME/bin/java if set, else "java" from PATH.
+#[cfg(desktop)]
+fn java_exe() -> std::path::PathBuf {
+    if let Ok(home) = std::env::var("JAVA_HOME") {
+        let p = std::path::Path::new(&home).join("bin").join(if cfg!(windows) { "java.exe" } else { "java" });
+        if p.is_file() {
+            return p;
+        }
+    }
+    std::path::PathBuf::from("java")
+}
+
+#[cfg(desktop)]
+fn java_command() -> std::process::Command {
+    #[allow(unused_mut)]
+    let mut c = std::process::Command::new(java_exe());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        c.creation_flags(0x0800_0000); // no console window
+    }
+    c
+}
+
+/// Installed Java version ("21.0.4"), or nothing when Java is missing (or on the phone).
+#[tauri::command]
+async fn java_available() -> Option<String> {
+    #[cfg(desktop)]
+    {
+        let out = java_command().arg("-version").output().ok()?;
+        let text = String::from_utf8_lossy(&out.stderr).to_string() + &String::from_utf8_lossy(&out.stdout);
+        let v = text.split('"').nth(1).map(|s| s.to_string()).or_else(|| text.lines().next().map(|s| s.to_string()))?;
+        Some(v)
+    }
+    #[cfg(mobile)]
+    {
+        None
+    }
+}
+
+/// Keeps at most `max` bytes of program output.
+fn cap_output(bytes: &[u8], max: usize) -> String {
+    let s = String::from_utf8_lossy(&bytes[..bytes.len().min(max)]).to_string();
+    if bytes.len() > max { s + "\n… (Ausgabe gekürzt)" } else { s }
+}
+
+/// Runs one Java source file (`java File.java`, JDK 11+) in a fresh temp folder: 10 s time limit,
+/// 64 KB output at most, no network access needed. The folder is deleted afterwards.
+#[tauri::command]
+async fn run_java(code: String, stdin: String) -> Result<JavaRun, String> {
+    #[cfg(mobile)]
+    {
+        let _ = (code, stdin);
+        Err("Auf dem Handy gibt es kein Java – Merkora führt den Code online aus.".into())
+    }
+    #[cfg(desktop)]
+    {
+        tauri::async_runtime::spawn_blocking(move || run_java_blocking(&code, &stdin, std::time::Duration::from_secs(10)))
+            .await
+            .map_err(|e| e.to_string())?
+    }
+}
+
+#[cfg(desktop)]
+fn run_java_blocking(code: &str, stdin: &str, limit: std::time::Duration) -> Result<JavaRun, String> {
+    use std::io::{Read, Write};
+    use std::process::Stdio;
+    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+    let dir = std::env::temp_dir().join(format!("merkora-java-{nanos}"));
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let file = dir.join("MerkoraTest.java");
+    std::fs::write(&file, code).map_err(|e| e.to_string())?;
+    let spawned = java_command()
+        .args(["-Xmx256m", "-Dfile.encoding=UTF-8", "-Dstdout.encoding=UTF-8", "MerkoraTest.java"])
+        .current_dir(&dir)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn();
+    let mut child = match spawned {
+        Ok(c) => c,
+        Err(_) => {
+            let _ = std::fs::remove_dir_all(&dir);
+            return Err("NO_JAVA".into());
+        }
+    };
+    if let Some(mut si) = child.stdin.take() {
+        let _ = si.write_all(stdin.as_bytes());
+    }
+    // read output in the background so a full pipe never blocks the program
+    let mut so = child.stdout.take().ok_or("Keine Ausgabe")?;
+    let mut se = child.stderr.take().ok_or("Keine Ausgabe")?;
+    let t_out = std::thread::spawn(move || {
+        let mut b = Vec::new();
+        let _ = so.read_to_end(&mut b);
+        b
+    });
+    let t_err = std::thread::spawn(move || {
+        let mut b = Vec::new();
+        let _ = se.read_to_end(&mut b);
+        b
+    });
+    let start = std::time::Instant::now();
+    let mut timed_out = false;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(s)) => break Some(s),
+            Ok(None) if start.elapsed() > limit => {
+                timed_out = true;
+                let _ = child.kill();
+                break child.wait().ok();
+            }
+            Ok(None) => std::thread::sleep(std::time::Duration::from_millis(25)),
+            Err(_) => break None,
+        }
+    };
+    let out = t_out.join().unwrap_or_default();
+    let err = t_err.join().unwrap_or_default();
+    let _ = std::fs::remove_dir_all(&dir);
+    let stderr = cap_output(&err, 65536);
+    Ok(JavaRun {
+        stdout: cap_output(&out, 65536),
+        compile_error: stderr.contains("error: compilation failed") || (stderr.contains(".java:") && stderr.contains("error:") && !timed_out),
+        stderr,
+        code: status.and_then(|s| s.code()),
+        timed_out,
+    })
+}
+
+#[cfg(test)]
+mod java_tests {
+    #[test]
+    fn output_is_capped() {
+        assert_eq!(super::cap_output(b"hello", 10), "hello");
+        assert!(super::cap_output(&[b'a'; 20], 10).ends_with("(Ausgabe gekürzt)"));
+    }
+    #[cfg(desktop)]
+    #[test]
+    fn runs_java_or_reports_it_missing() {
+        match super::run_java_blocking("class MerkoraTest { public static void main(String[] a) { System.out.println(6 * 7); } }", "", std::time::Duration::from_secs(20)) {
+            Ok(r) => assert!(r.stdout.trim() == "42" && !r.timed_out, "{}", r.stderr),
+            Err(e) => assert_eq!(e, "NO_JAVA"),
+        }
+    }
+}
+
 #[cfg(test)]
 mod body_tests {
     use super::body_bytes;
@@ -596,6 +755,8 @@ pub fn run() {
             http_fetch,
             download_apk,
             open_media_file,
+            run_java,
+            java_available,
             smoke_info,
             smoke_done,
             save_download,

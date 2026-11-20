@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ChatPanel } from '../components/ChatPanel';
 import { ExamDialog } from '../components/ExamDialog';
 import { countdownText, nextExamForDeck } from '../lib/exams';
-import { IconCalendar, IconCards, IconChart, IconChat, IconCheck, IconDoc, IconMatch, IconMindmap, IconNote, IconPath, IconPlay, IconQuiz, IconTarget } from '../components/Icons';
+import { IconCalendar, IconCards, IconChart, IconChat, IconCheck, IconDoc, IconMatch, IconMindmap, IconNote, IconPath, IconPlay, IconPractice, IconQuiz, IconTarget } from '../components/Icons';
 import { PromptModal } from '../components/Modal';
 import MatchTab from './tabs/MatchTab';
 import PathTab from './tabs/PathTab';
@@ -19,6 +19,7 @@ import CardsTab from './tabs/CardsTab';
 import LearnTab from './tabs/LearnTab';
 import MasteryTab from './tabs/MasteryTab';
 import QuizTab from './tabs/QuizTab';
+import PracticeTab from './tabs/PracticeTab';
 import ExamTab from './tabs/ExamTab';
 import SourceTab from './tabs/SourceTab';
 import SummaryTab from './tabs/SummaryTab';
@@ -31,6 +32,7 @@ const TABS = [
   { id: 'path', label: 'Lernpfad', icon: IconPath, group: 'Üben' },
   { id: 'match', label: 'Zuordnen', icon: IconMatch, group: 'Üben' },
   { id: 'quiz', label: 'Quiz', icon: IconQuiz, group: 'Üben' },
+  { id: 'practice', label: 'Aufgaben', icon: IconPractice, group: 'Üben' },
   { id: 'exam', label: 'Prüfung üben', icon: IconTarget, group: 'Üben' },
   { id: 'summary', label: 'Zusammenfassung', icon: IconDoc, group: 'Verstehen' },
   { id: 'mindmap', label: 'Mindmap', icon: IconMindmap, group: 'Verstehen' },
@@ -220,6 +222,7 @@ export default function DeckPage() {
           {tab === 'mindmap' && <MindmapTab deck={deck} onCards={(term) => setParams({ tab: 'cards', q: term })} />}
           {tab === 'quiz' && <QuizTab deck={deck} />}
           {tab === 'exam' && <ExamTab deck={deck} />}
+          {tab === 'practice' && <PracticeTab deck={deck} />}
           {tab === 'source' && <SourceTab deck={deck} />}
         </div>
       </div>

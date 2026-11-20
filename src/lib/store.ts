@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import type { PracticeSet } from './practice';
 import { kvDel, kvGet, kvSet, mediaDeleteMany, mediaKeys } from './db';
 import { desktop, isDesktop } from './desktop';
 import { capForExam, nextExamAt } from './exams';
@@ -124,6 +125,8 @@ export type Deck = {
   newBoost?: { day: string; n: number };
   /** Current mock exam and earlier results. */
   mockExam?: MockExam;
+  /** Practice sets („Aufgaben“): math tasks, Java programming tasks, labs – with progress. */
+  practice?: PracticeSet[];
   mockHistory?: MockHistory[];
 };
 /** A stored material file (media id = `id`). */
@@ -151,7 +154,7 @@ export type Exam = {
   updatedAt?: number;
 };
 
-export type JobKind = 'summary' | 'quiz' | 'cards';
+export type JobKind = 'summary' | 'quiz' | 'cards' | 'practice';
 export type JobStatus = 'queued' | 'running' | 'done' | 'error';
 export type Job = {
   id: string;
@@ -238,6 +241,8 @@ export type Settings = {
   slideImages?: boolean;
   /** Own server ("custom"): the model reads images. */
   customVision?: boolean;
+  /** Code of programming tasks may be run online (wandbox.org) – asked once. */
+  onlineCodeOk?: boolean;
   /** Own price in US-$ per 1M tokens (input/output) – overrides the price list. */
   priceIn?: number;
   priceOut?: number;

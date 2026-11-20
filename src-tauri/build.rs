@@ -19,6 +19,8 @@ const COMMANDS: &[&str] = &[
     "http_fetch",
     "download_apk",
     "open_media_file",
+    "run_java",
+    "java_available",
     "smoke_info",
     "smoke_done",
     "save_download",

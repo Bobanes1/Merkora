@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-run-java"
+description = "Enables the run_java command without any pre-configured scope."
+commands.allow = ["run_java"]
+
+[[permission]]
+identifier = "deny-run-java"
+description = "Denies the run_java command without any pre-configured scope."
+commands.deny = ["run_java"]

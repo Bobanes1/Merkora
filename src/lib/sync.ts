@@ -419,7 +419,25 @@ function mergeDeck(a: Deck, b: Deck, isDel: (id: string) => boolean): Deck {
     const o = path[k];
     path[k] = o ? { stars: Math.max(o.stars, r.stars), best: Math.max(o.best, r.best), at: Math.max(o.at, r.at) } : r;
   }
-  return { ...newer, cards, path, updatedAt: Math.max(a.updatedAt ?? 0, b.updatedAt ?? 0) || undefined };
+  // practice sets of both devices; progress per task: solved on either counts, the higher tries/hints stay
+  const sets = new Map((older.practice ?? []).map((p) => [p.id, p]));
+  for (const p of newer.practice ?? []) {
+    const o = sets.get(p.id);
+    sets.set(
+      p.id,
+      o
+        ? {
+            ...p,
+            progress: p.progress.map((x, i) => {
+              const y = o.progress[i];
+              return y ? { solved: x.solved || y.solved, tries: Math.max(x.tries, y.tries), hints: Math.max(x.hints, y.hints), shown: x.shown || y.shown } : x;
+            }),
+          }
+        : p,
+    );
+  }
+  const practice = sets.size ? [...sets.values()].sort((x, y) => y.createdAt - x.createdAt) : undefined;
+  return { ...newer, cards, path, ...(practice ? { practice } : {}), updatedAt: Math.max(a.updatedAt ?? 0, b.updatedAt ?? 0) || undefined };
 }
 export function mergeData(local: Data, remote: Data): Data {
   const deleted = { ...(remote.deleted ?? {}), ...(local.deleted ?? {}) };

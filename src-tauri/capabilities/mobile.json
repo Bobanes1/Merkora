@@ -46,6 +46,8 @@
     "allow-read-backup",
     "allow-backup-now",
     "allow-download-apk",
-    "allow-open-media-file"
+    "allow-open-media-file",
+    "allow-run-java",
+    "allow-java-available"
   ]
 }

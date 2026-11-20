@@ -1380,6 +1380,74 @@ console.log('Tokens sparen, ganzes Deck nutzen');
   ok(e1.input - e0.input === Math.ceil(4000 / 3.5) - Math.ceil(1600 / 3.5) + 2400, 'Kosten zählen die Anleitung und die Folien-Bilder');
 }
 
+console.log('Übungsaufgaben: Mathe, Labore, Java');
+{
+  const L = await import('../src/lib/labs');
+  const near = (a: number, b: number, e = 1e-4) => Math.abs(a - b) < e;
+  ok(near(L.binomPmf(10, 0.3, 3), 0.2668) && near(L.binomRange(10, 0.3, 0, 10), 1, 1e-9), 'Binomialverteilung: P(X=3) für n=10, p=0,3 ≈ 0,2668');
+  ok(near(L.normalCdf(1.96), 0.975) && near(L.normalCdf(100, 100, 15), 0.5) && near(L.normalCdf(1) - L.normalCdf(-1), 0.6827), 'Normalverteilung: Φ(1,96) ≈ 0,975, 68-%-Regel');
+  const bt = L.bayesTable(0.01, 0.95, 0.9);
+  ok(near(bt.truePos, 9.5) && near(bt.falsePos, 99) && near(bt.ppv, 9.5 / 108.5), 'Bayes: von 1000 Personen 9,5 richtig und 99 falsch positiv');
+  ok(near(L.hypergeom(10, 3, 4, 1), 0.5), 'Ziehen ohne Zurücklegen (hypergeometrisch)');
+  const t = L.treePaths(0.3, 0.8, 0.1);
+  ok(near(t.B, 0.31) && near(t.AB + t.AnB + t.nAB + t.nAnB, 1), 'Baumdiagramm: Pfad- und Summenregel');
+  const c1 = L.simulateCoin(1000, 0.5, 7), c2 = L.simulateCoin(1000, 0.5, 7);
+  ok(c1.join() === c2.join() && Math.abs(c1[999] - 0.5) < 0.06, 'Münzwurf: gleiche Simulation bei gleichem Startwert, nahe 0,5');
+  ok(near(L.diceSumDist(2)[7], 1 / 6) && L.simulateDice(600, 2, 3).reduce((a, b) => a + b, 0) === 600, 'Würfelsummen: exakte Verteilung und Simulation');
+  const sq = (x: number) => x * x;
+  ok(near(L.derivative(sq, 3), 6) && near(L.integral(sq, 0, 1), 1 / 3, 1e-9), 'Ableitung f(x)=x² bei 3 = 6, Integral 0–1 = 1/3');
+  const zs = L.zeros((x) => x * x - 4, -5, 5);
+  ok(zs.length === 2 && near(zs[0], -2) && near(zs[1], 2), 'Nullstellen von x² − 4');
+  const ex = L.extrema((x) => x * x * x - 3 * x, -3, 3);
+  ok(ex.length === 2 && ex[0].kind === 'max' && near(ex[0].x, -1, 1e-3) && ex[1].kind === 'min', 'Hoch- und Tiefpunkt von x³ − 3x');
+  ok(L.det([[2, 1], [1, 3]]) === 5 && L.apply([[0, -1], [1, 0]], [1, 0]).join() === '0,1', 'Matrix: Determinante, Drehung um 90°');
+
+  const P = await import('../src/lib/practice');
+  ok(P.parseNumber('0,2668') === 0.2668 && P.parseNumber('26,68 %') === 0.2668 && P.parseNumber('3/8') === 0.375 && P.parseNumber('≈ 1.234,5') === 1234.5 && P.parseNumber('-2') === -2 && P.parseNumber('abc') === null, 'Zahlen: Komma, Prozent, Bruch, Tausender');
+  const num = { type: 'number' as const, value: '0,2668' };
+  ok(P.checkAnswer(num, '0,2668') === 'right' && P.checkAnswer(num, '26,68 %') === 'right' && P.checkAnswer(num, '0,27') === 'wrong' && P.checkAnswer(num, '') === 'invalid', 'Zahlen-Antwort: genau auf die Stellen der Lösung');
+  ok(P.checkAnswer({ type: 'number', value: '0,27', tolerance: 0.01 }, '0,2668') === 'right', 'Toleranz wird beachtet');
+  ok(P.checkAnswer({ type: 'fraction', value: '3/8' }, '0,375') === 'right' && P.checkAnswer({ type: 'fraction', value: '3/8' }, '6/16') === 'right' && P.checkAnswer({ type: 'fraction', value: '1/3' }, '0,333') === 'right' && P.checkAnswer({ type: 'fraction', value: '1/3' }, '0,3') === 'wrong', 'Bruch-Antwort');
+  ok(P.checkAnswer({ type: 'number', value: '6' }, '6') === 'right' && P.checkAnswer({ type: 'number', value: '6' }, '5,6') === 'wrong', 'ganze Zahl muss genau stimmen');
+  ok(P.sameFormula('2*x+2', '2(x+1)') && !P.sameFormula('2*x+2', '2x+1') && P.checkAnswer({ type: 'expr', value: '3*x^2' }, '3x^2') === 'right', 'gleichwertige Formeln werden erkannt');
+  ok(P.checkAnswer({ type: 'choice', value: 'B', options: ['A', 'B', 'C'] }, 'b') === 'right' && P.checkAnswer({ type: 'choice', value: '1', options: ['A', 'B'] }, 'B') === 'right', 'Auswahl-Antwort');
+  ok(P.checkAnswer({ type: 'text', value: 'weil …' }, 'egal') === 'ai', 'freie Antwort geht an die KI');
+  const ms = P.parsePractice(
+    {
+      kind: 'math', topic: 'Binomial', intro: 'i',
+      problems: [{ problem: 'P(X=3)?', answer: { type: 'number', value: '0,2668' }, hints: ['h'], steps: ['s'] }, { problem: '', answer: { type: 'number', value: '1' } }, { problem: 'x', answer: { type: 'expr', value: 'alert(1)' } }],
+      labs: [{ type: 'binomial', n: 500, p: 2 }, { type: 'unbekannt' }, { type: 'function', expr: 'a*x^2+b', params: { a: 2 } }],
+    },
+    'id1', 1,
+  )!;
+  ok(ms.kind === 'math' && ms.math!.length === 2 && ms.math![1].answer.type === 'text' && ms.progress.length === 2, 'Mathe-Satz: leere Aufgaben fallen weg, ungültige Formel wird Text');
+  ok(ms.labs.length === 2 && (ms.labs[0] as any).n === 100 && (ms.labs[0] as any).p === 1, 'Labore: Werte begrenzt, unbekannte fallen weg');
+  ok(P.withParams('a*x^2+b', { a: 2, b: -1 }) === '(2)*x^2+(-1)', 'Funktionen-Labor setzt Parameter ein');
+  const js = P.parsePractice({ kind: 'java', topic: 'Arrays', problems: [{ title: 'Summe', task: 'Summiere', starter: 'class Solution {}', tests: [{ call: 'Solution.sum(new int[]{1})', expected: '1' }, { call: '', expected: 'x' }] }, { title: 'ohne Tests', task: 't', starter: 's', tests: [] }] }, 'id2', 1)!;
+  ok(js.kind === 'java' && js.java!.length === 1 && js.java![0].tests.length === 1, 'Java-Satz: Aufgaben ohne Tests fallen weg');
+  ok(P.parsePractice({ kind: 'math', problems: [] }, 'x', 1) === null, 'ohne Aufgaben kein Satz');
+  const pp = P.practicePrompt('Material', 'java', 8);
+  ok(pp.system.includes('class Solution') && !pp.system.includes('"kind":"math"') && pp.user === 'Material', 'Java-Prompt ohne Mathe-Teil');
+
+  const J = await import('../src/lib/javaRun');
+  const tests = [{ call: 'Solution.sum(new int[]{1,2,3})', expected: '6' }, { call: 'Solution.arr()', expected: '[1, 2]' }];
+  const src = J.buildHarness('public class Solution {\n  static int sum(int[] a) { return 0; }\n}', tests);
+  ok(src.indexOf('class MerkoraTest') < src.indexOf('class Solution') && !/public class Solution/.test(src) && src.includes('show(Solution.sum(new int[]{1,2,3}))'), 'Testklasse zuerst, Lernenden-Code ohne public');
+  const pr = J.parseResults('Hallo\n#T1|OK\n#T2|FAIL|[2, 1]\n', tests);
+  ok(pr.results[0].ok && !pr.results[1].ok && pr.results[1].got === '[2, 1]' && pr.output === 'Hallo', 'Testergebnisse und eigene Ausgabe werden getrennt');
+  const pe = J.parseResults('#T1|ERR|java.lang.ArithmeticException: / by zero', tests);
+  ok(!pe.results[0].ok && pe.results[0].error!.includes('ArithmeticException') && pe.results[1].error === 'nicht ausgeführt', 'Fehler im Test werden gezeigt');
+  const off = J.harnessOffset(tests);
+  ok(J.mapErrors(`prog.java:${off + 2}: error: ';' expected`, off) === "Zeile 2: ';' expected" && J.mapErrors('prog.java:3: error: x', off).startsWith('Testcode'), 'Compilerfehler mit Zeile im eigenen Code');
+  const userCode = 'class Solution {\n    static int f() {\n        return a\n    }\n}';
+  const javacLine = J.buildHarness(userCode, tests).split('\n').findIndex((l) => l.includes('return a')) + 1;
+  ok(J.mapErrors(`prog.java:${javacLine}: error: x`, off) === 'Zeile 3: x', 'Zeilennummer zeigt genau auf die eigene Zeile');
+
+  const { highlightJava } = await import('../src/lib/javaHighlight');
+  const h = highlightJava('public int x = 5; // Kommentar\nString s = "a // b < c";');
+  ok(h.includes('<span class="tk-kw">public</span>') && h.includes('<span class="tk-type">int</span>') && h.includes('<span class="tk-com">// Kommentar</span>') && h.includes('<span class="tk-str">"a // b &lt; c"</span>') && h.includes('<span class="tk-num">5</span>'), 'Java-Hervorhebung: Schlüsselwörter, Typen, Kommentare, Strings');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

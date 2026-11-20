@@ -979,7 +979,8 @@ Format: {"front":"...","back":"..."${graphic ? ',"diagram":{…} (optional)' : '
 
 /** Real formulas as LaTeX – the card shows them typeset (KaTeX). In JSON the backslash is doubled. */
 export const FORMULA_RULE =
-  String.raw`Schreibe echte Formeln (Mathe, Statistik, Physik, Chemie, Ökonomie) in LaTeX zwischen \\( und \\), z. B. "\\( s^2 = \\frac{1}{n-1}\\sum (x_i-\\bar{x})^2 \\)" – im JSON mit doppeltem Backslash. Einfache Zahlen, Einheiten und Prozentwerte schreibst du normal, ohne LaTeX.`;
+  String.raw`Schreibe echte Formeln (Mathe, Statistik, Physik, Chemie, Ökonomie) in LaTeX zwischen \\( und \\), z. B. "\\( s^2 = \\frac{1}{n-1}\\sum (x_i-\\bar{x})^2 \\)" – im JSON mit doppeltem Backslash. Einfache Zahlen, Einheiten und Prozentwerte schreibst du normal, ohne LaTeX.` +
+  ' Programmcode schreibst du als Codeblock mit drei Backticks (z. B. ```java … ```, Zeilenumbrüche im JSON als \\n), kurze Bezeichner im Text als `name`.';
 
 /** Single terms: a short, still understandable definition – the 2–3 sentences are for explanations. */
 export const TERM_RULE =

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
+import { highlightJava, looksLikeJava } from '../lib/javaHighlight';
 import { sanitize } from '../lib/content';
 import { mediaUrl } from '../lib/db';
 import type { Card, Deck } from '../lib/store';
@@ -61,6 +62,17 @@ function zoomableSlides(root: ParentNode) {
       e.stopPropagation();
       if (img.src) openLightbox(img.src, img.alt);
     };
+  }
+}
+
+/** Code blocks on cards: Java (and similar) highlighted – our own escaped HTML, safe to insert. */
+export function highlightCode(root: ParentNode) {
+  for (const el of Array.from(root.querySelectorAll<HTMLElement>('pre.code code, pre > code'))) {
+    if (el.dataset.hl) continue;
+    const code = el.textContent ?? '';
+    if (!looksLikeJava(code)) continue;
+    el.innerHTML = highlightJava(code);
+    el.dataset.hl = '1';
   }
 }
 
@@ -215,12 +227,14 @@ export function CardContent({ text, html, className = '', look }: { text: string
       void hydrateMedia(root);
       hydrateDiagrams(root, dark);
       zoomableSlides(root);
+      highlightCode(root);
       if (hasMath(clean)) void renderMath(wrap, root).catch(() => undefined);
     } else {
       el.innerHTML = clean;
       void hydrateMedia(el);
       hydrateDiagrams(el, dark);
       zoomableSlides(el);
+      highlightCode(el);
       if (hasMath(clean)) void renderMath(el).catch(() => undefined);
     }
     return () => {

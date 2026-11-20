@@ -37,6 +37,13 @@ export const IconCards = mk(
     <path d="M7 3h11a3 3 0 0 1 3 3v11" />
   </>,
 );
+/** Practice tasks: a pencil over lines. */
+export const IconPractice = mk(
+  <>
+    <path d="M4 20h6" />
+    <path d="M14.5 4.5l5 5L9 20H4v-5z" />
+  </>,
+);
 export const IconPlay = mk(<path d="M7 4.5v15l12-7.5z" fill="currentColor" stroke="none" />);
 export const IconPause = mk(
   <>

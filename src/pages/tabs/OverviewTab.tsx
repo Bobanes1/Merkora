@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react';
-import { IconCards, IconChart, IconDoc, IconMatch, IconMindmap, IconNote, IconPath, IconPlay, IconQuiz, IconTarget } from '../../components/Icons';
+import { IconCards, IconChart, IconDoc, IconMatch, IconMindmap, IconNote, IconPath, IconPlay, IconQuiz, IconPractice, IconTarget } from '../../components/Icons';
 import { pathProgress } from '../../lib/path';
 import { masteryPercent } from '../../lib/stats';
 import { dueCards, type Deck } from '../../lib/store';
@@ -20,6 +20,7 @@ export default function OverviewTab({ deck, onOpen }: { deck: Deck; onOpen: (tab
     { id: 'path', label: 'Lernpfad', sub: `${path.done} / ${path.total} Stationen`, icon: IconPath },
     { id: 'match', label: 'Zuordnen', sub: 'Spiel auf Zeit', icon: IconMatch },
     { id: 'quiz', label: 'Quiz', sub: 'Multiple Choice', icon: IconQuiz },
+    { id: 'practice', label: 'Aufgaben', sub: 'Mathe, Java, Labore', icon: IconPractice },
     { id: 'exam', label: 'Prüfung üben', sub: 'Probeprüfung', icon: IconTarget },
     { id: 'summary', label: 'Zusammenfassung', sub: 'zum Nachlesen', icon: IconDoc },
     { id: 'mindmap', label: 'Mindmap', sub: 'Überblick', icon: IconMindmap },

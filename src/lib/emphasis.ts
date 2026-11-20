@@ -27,11 +27,20 @@ export function repairMath(s: string): string {
     .replace(/\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$/g, fix);
 }
 
-/** Plain AI text → card HTML: escaped, line breaks kept, **word** in bold (a lone ** stays as it is). */
+/**
+ * Plain AI text → card HTML: escaped, line breaks kept, **word** in bold (a lone ** stays as it is).
+ * Code blocks (```java … ```) become <pre class="code"> (highlighted when shown), `inline code` <code>.
+ */
 export function emphasisHtml(s: string): string {
-  return esc(repairMath(s))
-    .replace(/\*\*([^*\n]+?)\*\*/g, '<b>$1</b>')
-    .replace(/\n/g, '<br>');
+  const text = (t: string) =>
+    esc(t)
+      .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+      .replace(/\*\*([^*\n]+?)\*\*/g, '<b>$1</b>')
+      .replace(/\n/g, '<br>');
+  return repairMath(s)
+    .split(/```[\w+#-]*[ \t]*\n?([\s\S]*?)```/)
+    .map((part, i) => (i % 2 ? `<pre class="code"><code>${esc(part.replace(/\n$/, ''))}</code></pre>` : text(part.replace(/^\n|\n$/g, ''))))
+    .join('');
 }
 
 /** The instruction for the AI (only when bold words are on). */
