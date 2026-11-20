@@ -1420,11 +1420,15 @@ console.log('Übungsaufgaben: Mathe, Labore, Java');
     },
     'id1', 1,
   )!;
-  ok(ms.kind === 'math' && ms.math!.length === 2 && ms.math![1].answer.type === 'text' && ms.progress.length === 2, 'Mathe-Satz: leere Aufgaben fallen weg, ungültige Formel wird Text');
+  const mt = P.taskList(ms) as any[];
+  ok(ms.kind === 'math' && mt.length === 2 && mt[0].type === 'calc' && mt[1].answer.type === 'text' && ms.progress.length === 2, 'Mathe-Satz: leere Aufgaben fallen weg, ungültige Formel wird Text');
   ok(ms.labs.length === 2 && (ms.labs[0] as any).n === 100 && (ms.labs[0] as any).p === 1, 'Labore: Werte begrenzt, unbekannte fallen weg');
   ok(P.withParams('a*x^2+b', { a: 2, b: -1 }) === '(2)*x^2+(-1)', 'Funktionen-Labor setzt Parameter ein');
   const js = P.parsePractice({ kind: 'java', topic: 'Arrays', problems: [{ title: 'Summe', task: 'Summiere', starter: 'class Solution {}', tests: [{ call: 'Solution.sum(new int[]{1})', expected: '1' }, { call: '', expected: 'x' }] }, { title: 'ohne Tests', task: 't', starter: 's', tests: [] }] }, 'id2', 1)!;
-  ok(js.kind === 'java' && js.java!.length === 1 && js.java![0].tests.length === 1, 'Java-Satz: Aufgaben ohne Tests fallen weg');
+  const jt = P.taskList(js) as any[];
+  ok(js.kind === 'java' && jt.length === 1 && jt[0].type === 'code' && jt[0].tests.length === 1, 'Java-Satz: Aufgaben ohne Tests fallen weg');
+  const old = { id: 'o', createdAt: 1, kind: 'java', topic: 't', intro: '', labs: [], progress: [{ tries: 0, hints: 0 }], java: [{ title: 'a', task: 'b', starter: 'c', tests: [{ call: 'x', expected: '1' }], hints: [], solution: '' }] } as any;
+  ok(P.taskList(old).length === 1 && P.taskList(old)[0].type === 'code' && P.problemCount(old) === 1, 'Aufgaben aus v0.9.5 bleiben lesbar');
   ok(P.parsePractice({ kind: 'math', problems: [] }, 'x', 1) === null, 'ohne Aufgaben kein Satz');
   const pp = P.practicePrompt('Material', 'java', 8);
   ok(pp.system.includes('class Solution') && !pp.system.includes('"kind":"math"') && pp.user === 'Material', 'Java-Prompt ohne Mathe-Teil');
@@ -1446,6 +1450,104 @@ console.log('Übungsaufgaben: Mathe, Labore, Java');
   const { highlightJava } = await import('../src/lib/javaHighlight');
   const h = highlightJava('public int x = 5; // Kommentar\nString s = "a // b < c";');
   ok(h.includes('<span class="tk-kw">public</span>') && h.includes('<span class="tk-type">int</span>') && h.includes('<span class="tk-com">// Kommentar</span>') && h.includes('<span class="tk-str">"a // b &lt; c"</span>') && h.includes('<span class="tk-num">5</span>'), 'Java-Hervorhebung: Schlüsselwörter, Typen, Kommentare, Strings');
+}
+
+console.log('Skills: aktive Aufgaben und Musik');
+{
+  const T = await import('../src/lib/tasks');
+  const order = T.parseActive({ type: 'order', prompt: 'Prüfungsschema', items: ['Tatbestand', 'Rechtswidrigkeit', 'Schuld'] }) as any;
+  ok(order && T.checkOrder(order, ['Tatbestand', 'Rechtswidrigkeit', 'Schuld']).right && !T.checkOrder(order, ['Schuld', 'Tatbestand', 'Rechtswidrigkeit']).right, 'Reihenfolge prüfen');
+  ok(T.parseActive({ type: 'order', items: ['a', 'a', 'b'] }) === null && T.shuffled(order.items, 3).join() !== order.items.join(), 'Reihenfolge: Doppelte verworfen, Mischen nie schon richtig');
+  const cl = T.parseActive({ type: 'classify', groups: ['Kaufvertrag', 'Mietvertrag'], items: [{ text: 'Auto kaufen', group: 0 }, { text: 'Wohnung mieten', group: 'Mietvertrag' }, { text: 'Brot kaufen', group: 0 }, { text: 'x', group: 5 }] }) as any;
+  ok(cl && cl.items.length === 3 && cl.items[1].group === 1 && T.checkClassify(cl, [0, 1, 0]).right && !T.checkClassify(cl, [0, 0, 0]).right, 'Zuordnen: Gruppen auch per Name, ungültige weg');
+  const cz = T.parseActive({ type: 'cloze', text: 'Ein {{1}} ist ein {{2}} Vertrag.', gaps: [['Kaufvertrag'], ['gegenseitiger', 'synallagmatischer']] }) as any;
+  ok(cz && T.checkCloze(cz, ['kaufvertrag', 'Synallagmatischer']).right && T.checkCloze(cz, ['Kaufvertag', 'gegenseitiger']).right && !T.checkCloze(cz, ['Miete', 'gegenseitiger']).right, 'Lückentext tolerant (Groß/klein, Synonym, ein Tippfehler)');
+  ok(T.parseActive({ type: 'cloze', text: 'Nur {{1}} Lücke', gaps: [['a'], ['b']] }) === null && T.clozeParts('A {{1}} B {{2}}').join('|') === 'A |0| B |1|', 'Lückentext: Lücken passen zum Text');
+  const mu = T.parseActive({ type: 'multi', prompt: 'p', options: ['a', 'b', 'c', 'd'], correct: [2, 0, 9] }) as any;
+  ok(mu.correct.join() === '0,2' && T.checkMulti(mu, [2, 0]).right && !T.checkMulti(mu, [0]).right, 'mehrere richtige Antworten');
+  const cs = T.parseActive({ type: 'case', facts: 'A kauft bei B ein Rad.', question: 'Anspruch?', rubric: [{ criterion: 'Anspruchsgrundlage § 433 II', points: 2 }, { criterion: 'Ergebnis', points: 1 }], solution: 'Ja.' }) as any;
+  const g = T.parseCaseGrade(cs, { criteria: [{ points: 5, feedback: 'gut' }, { points: 0.5 }], summary: 's' });
+  ok(g.total === 2.5 && g.max === 3 && g.criteria[0].points === 2, 'Fallbewertung: Punkte nie über dem Maximum, halbe Punkte');
+  ok(T.parseActive({ type: 'case', facts: 'x', question: 'y', rubric: [{ criterion: 'nur eins' }] }) === null, 'Fall braucht ein Bewertungsschema');
+
+  const M = await import('../src/lib/music');
+  const D = M.parseNote('D4')!;
+  ok(M.spell(M.chordNotes(D, 'Dur')) === 'D – Fis – A' && M.spell(M.chordNotes(M.parseNote('F')!, 'Moll')) === 'F – As – C', 'Akkorde richtig geschrieben (D-Dur, f-Moll)');
+  ok(M.spell(M.scaleNotes(M.parseNote('A3')!, 'Moll')) === 'A – H – C – D – E – F – G' && M.spell(M.scaleNotes(M.parseNote('B')!, 'Dur')) === 'B – C – D – Es – F – G – A', 'Tonleitern (a-Moll, B-Dur)');
+  ok(M.intervalBySemis(7) === 'reine Quinte' && M.noteName(M.transpose(M.parseNote('E')!, 3, 2)) === 'G' && M.noteName(M.transpose(M.parseNote('Fis')!, 4, 2)) === 'Ais', 'Intervalle mit richtiger Schreibweise');
+  const dDur = M.chordNotes(D, 'Dur');
+  ok(M.checkChord(dDur, [62, 66, 69]) && M.checkChord(dDur, [50, 69, 66, 74]) && !M.checkChord(dDur, [62, 65, 69]), 'Akkord gespielt: Lage egal, falscher Ton fällt auf');
+  const cDur = M.scaleNotes(M.parseNote('C4')!, 'Dur');
+  ok(M.checkScale(cDur, [60, 62, 64, 65, 67, 69, 71, 72]) && M.checkScale(cDur, [60, 62, 64, 65, 67, 69, 71]) && !M.checkScale(cDur, [60, 62, 63, 65, 67, 69, 71]), 'Tonleiter gespielt: aufwärts, Oktave am Ende erlaubt');
+  ok(M.checkNoteName(M.parseNote('Fis4')!, 'fis') && !M.checkNoteName(M.parseNote('Fis4')!, 'Ges') && M.checkNoteName(M.parseNote('B3')!, 'b'), 'Note benennen: Schreibweise zählt');
+  ok(M.staffStep(M.parseNote('E4')!, 'treble') === 0 && M.staffStep(M.parseNote('F5')!, 'treble') === 8 && M.staffStep(M.parseNote('G2')!, 'bass') === 0 && M.staffStep(M.parseNote('C4')!, 'treble') === -2, 'Notensystem: Linien und Hilfslinien');
+  const beat = 60000 / 60;
+  ok(M.checkRhythm([1, 0.5, 0.5, 1], 60, [0, beat, beat * 1.5, beat * 2.05]).right && !M.checkRhythm([1, 1, 1], 60, [0, 500, 1000]).right, 'Rhythmus geklopft: Toleranz 20 % eines Schlags');
+  ok(M.parseMusic({ mode: 'build-chord', root: 'D4', chord: 'moll' })?.mode === 'build-chord' && M.parseMusic({ mode: 'build-chord', root: 'D4', chord: 'Quatsch' }) === null && M.parseMusic({ mode: 'name-note', note: 'C9' }) === null, 'Musikaufgaben werden geprüft gelesen');
+
+  const P = await import('../src/lib/practice');
+  const set = P.parsePractice({ kind: 'Recht', topic: 'Kaufvertrag', problems: [{ type: 'case', facts: 'A kauft.', question: 'Anspruch?', rubric: [{ criterion: 'a', points: 1 }, { criterion: 'b', points: 1 }], solution: 'x' }, { type: 'order', items: ['1', '2', '3'] }, { type: 'music', music: { mode: 'chord-ear', root: 'C4', chord: 'Dur' } }] }, 's', 1)!;
+  ok(set.kind === 'law' && P.taskList(set).map((t) => t.type).join() === 'case,order,music', 'gemischter Satz mit Fall, Reihenfolge und Musik');
+  ok(P.taskRules('law').includes('"type":"case"') && !P.taskRules('law').includes('"type":"code"') && P.taskRules('music').includes('build-chord'), 'Aufgabentypen passend zum Fach');
+}
+
+console.log('Skills: Lernpfad planen und lernen');
+{
+  const S = await import('../src/lib/skills');
+  const q = S.parseQuestions({ title: 'Musiktheorie', domain: 'Musik', levels: ['Einsteiger', 'Grundlagen', 'Fortgeschritten', 'Profi'], questions: [{ q: 'Spielst du ein Instrument?', options: ['Ja', 'Nein'] }, { q: 'leer', options: ['nur eine'] }, { q: 'Ziel?', options: ['Prüfung', 'Hobby', 'Band'], multi: true }] })!;
+  ok(q.domain === 'music' && q.levels.length === 4 && q.questions.length === 2 && q.questions[1].multi === true, 'Fragen der Planung: unvollständige fallen weg, Fach erkannt');
+  ok(S.parseQuestions({ levels: ['nur'], questions: [{ q: 'x', options: ['a', 'b'] }] }) === null, 'ohne Niveaustufen keine Planung');
+
+  const base = { id: 'sk', topic: 'Musiktheorie', title: 'Musiktheorie', domain: 'music', levels: q.levels, targetLevel: 2, level: 'Hobby', status: 'planning', plan: { questions: q.questions, answers: { 0: 'Ja', 1: 'Hobby · Band' } }, stages: [], createdAt: 1, updatedAt: 1 } as any;
+  const prop = S.parseProposal({ title: 'Musiktheorie praktisch', approach: 'So …', duration: '6 Wochen', stages: [{ name: 'Einsteiger', goal: 'Noten lesen', lessons: [{ title: 'Notennamen', goal: 'g' }, { title: 'Intervalle hören', goal: 'g', known: true }, { title: '' }] }, { name: 'Grundlagen', lessons: [] }] })!;
+  ok(prop.stages.length === 1 && prop.stages[0].lessons.length === 2 && prop.stages[0].lessons[1].known === true && prop.duration === '6 Wochen', 'Vorschlag: leere Stufen und Lektionen fallen weg, „kann ich schon“ bleibt');
+  const withSet = { ...prop.stages[0], lessons: [{ ...prop.stages[0].lessons[0], set: { id: 'x' } as any }, prop.stages[0].lessons[1]] };
+  const again = S.parseProposal({ stages: [{ name: 'Einsteiger', lessons: [{ title: 'notennamen', goal: '' }, { title: 'Akkorde', goal: 'a' }] }] }, [withSet])!;
+  ok(again.stages[0].id === withSet.id && (again.stages[0].lessons[0] as any).set?.id === 'x' && again.stages[0].lessons[0].goal === 'g', 'angepasster Vorschlag behält schon begonnene Lektionen');
+
+  let st = prop.stages;
+  const [l1, l2] = st[0].lessons;
+  st = S.moveLesson(st, l2.id, -1);
+  ok(st[0].lessons[0].id === l2.id && S.moveLesson(st, l2.id, -1)[0].lessons[0].id === l2.id, 'Lektion verschieben (nicht über den Rand)');
+  st = S.addLesson(st, st[0].id, '  Dreiklänge  ');
+  ok(st[0].lessons.length === 3 && st[0].lessons[2].title === 'Dreiklänge', 'eigene Lektion hinzufügen');
+  ok(S.removeLesson(S.removeLesson(S.removeLesson(st, l1.id), l2.id), st[0].lessons[2].id).length === 0, 'leere Stufe verschwindet nach dem Entfernen');
+  ok(S.toggleKnown(st, l1.id)[0].lessons.find((l) => l.id === l1.id)!.known === true, '„kann ich schon“ umschalten');
+
+  const set = (solved: number, n: number) => ({ id: 's' + solved, createdAt: 1, kind: 'music', topic: 't', intro: '', labs: [], tasks: Array.from({ length: n }, () => ({ type: 'calc', problem: 'p', answer: { type: 'number', value: '1' }, hints: [], steps: [] })), progress: Array.from({ length: n }, (_, k) => ({ tries: 1, hints: 0, solved: k < solved })) }) as any;
+  const skill = { ...base, status: 'active', stages: [
+    { id: 'a', name: 'Einsteiger', goal: '', lessons: [{ id: 'l1', title: 'A', goal: '', set: set(4, 5) }, { id: 'l2', title: 'B', goal: '', known: true }, { id: 'l3', title: 'C', goal: '', set: set(1, 5) }] },
+    { id: 'b', name: 'Grundlagen', goal: '', lessons: [{ id: 'l4', title: 'D', goal: '' }, { id: 'l5', title: 'E', goal: '' }] },
+  ] } as any;
+  ok(S.lessonDone(skill.stages[0].lessons[0]) && S.lessonDone(skill.stages[0].lessons[1]) && !S.lessonDone(skill.stages[0].lessons[2]), 'Lektion geschafft ab 80 % (oder „kann ich schon“)');
+  ok(S.nextLesson(skill)!.lesson.id === 'l3' && S.lessonAfter(skill, 'l3')!.lesson.id === 'l4', 'nächste Lektion und die, die im Hintergrund vorbereitet wird');
+  const pr = S.skillProgress(skill);
+  ok(pr.done === 2 && pr.total === 5, 'Fortschritt des Skills');
+  ok(!S.stageReady(skill.stages[0]) && !S.canReview(skill), 'Stufentest erst nach allen Lektionen, Wiederholung erst nach 2 geübten');
+  skill.stages[0].lessons[2].set = set(5, 5);
+  ok(S.stageReady(skill.stages[0]) && S.canReview(skill) && S.reachedStage(skill) === -1, 'Stufe bereit für den Test');
+  skill.stages[0].passed = true;
+  ok(S.reachedStage(skill) === 0, 'bestandener Stufentest: Stufe erreicht');
+
+  const lp = S.lessonPrompt(skill, skill.stages[1], skill.stages[1].lessons[0]);
+  ok(lp.user.includes('LEKTION 4 von 5: D') && lp.user.includes('Vorher gelernt: A; B; C') && lp.user.includes('Hobby · Band') && lp.system.includes('build-chord'), 'Lektion kennt Ziel, Vorwissen, Antworten und Musik-Aufgaben');
+  ok(S.proposalPrompt({ ...skill, plan: { ...skill.plan, placementNote: 'Intervalle: gekonnt' } }).user.includes('Einstufung: Intervalle: gekonnt'), 'Einstufung fließt in den Vorschlag');
+  ok(S.revisePrompt(skill, 'mehr Praxis').user.includes('WUNSCH DER PERSON: mehr Praxis') && S.questionsPrompt('Jura', 'Uni').user.includes('Skill: Jura'), 'Anpassen und Fragen');
+  ok(S.placementNote(set(1, 2), [{ label: 'Noten' }, { label: 'Akkorde' }]) === 'Noten: gekonnt; Akkorde: nicht gekonnt', 'Einstufungsergebnis als Notiz');
+
+  const { mergeSkill } = await import('../src/lib/sync');
+  const a = { ...skill, updatedAt: 5, stages: [{ ...skill.stages[0], lessons: [{ id: 'l1', title: 'A', goal: '', set: set(1, 5) }] }] };
+  const b = { ...skill, updatedAt: 9, stages: [{ ...skill.stages[0], passed: undefined, lessons: [{ id: 'l1', title: 'A', goal: '', set: { ...set(0, 5), id: 's1', progress: set(0, 5).progress.map((p: any, k: number) => ({ ...p, solved: k === 3, tries: 3 })) } }] }] };
+  const m = mergeSkill(a as any, b as any);
+  const prog = m.stages[0].lessons[0].set!.progress;
+  ok(prog[0].solved && prog[3].solved && prog[0].tries === 3 && m.stages[0].passed === true, 'Sync: Fortschritt beider Geräte bleibt erhalten');
+}
+
+console.log('Skills: Speichern und Laden');
+{
+  const { normalize } = await import('../src/lib/store');
+  const loaded = normalize({ version: 2, workspaces: [], courses: [], decks: [{ id: 'd', name: 'x', cards: [], practice: [{ id: 'p' }] }], reviews: [], skills: [{ id: 's1', title: 'Musik' }], settings: {}, game: {}, jobs: [], exams: [] })!;
+  ok(loaded.skills?.length === 1 && loaded.skills[0].id === 's1' && (loaded.decks[0] as any).practice?.[0].id === 'p', 'Skills und Deck-Aufgaben überstehen das Neuladen');
 }
 
 console.log('Kurze Decknamen');

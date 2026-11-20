@@ -21,6 +21,7 @@ import {
   IconFolder,
   IconPlus,
   IconSearch,
+  IconPractice,
 } from './Icons';
 import { SearchPalette } from './SearchPalette';
 import { PhoneNav } from './PhoneNav';
@@ -211,6 +212,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </NavLink>
           <NavLink to="/library" end className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             <IconLibrary /> Bibliothek
+          </NavLink>
+          <NavLink to="/skills" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            <IconPractice /> Skills
           </NavLink>
           <NavLink to="/calendar" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             <IconCalendar /> Prüfungen

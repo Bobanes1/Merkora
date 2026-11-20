@@ -4,6 +4,7 @@
  * Pure – tested in scripts/test-srs.mts.
  */
 import { compileExpr } from './plotExpr';
+import { parseActive, type ActiveTask } from './tasks';
 import { LANG_RULE, type Prompt } from './ai';
 import { FORMULA_RULE } from './ai';
 
@@ -28,10 +29,13 @@ export type ProblemProgress = { solved?: boolean; tries: number; hints: number; 
 export type PracticeSet = {
   id: string;
   createdAt: number;
-  kind: 'math' | 'java';
+  kind: Domain;
   topic: string;
   intro: string;
   example?: { problem: string; steps: string[]; answer?: string; code?: string };
+  /** All tasks (new sets). */
+  tasks?: Task[];
+  /** Only in sets from v0.9.5 (see taskList). */
   math?: MathProblem[];
   java?: JavaProblem[];
   labs: LabSpec[];
@@ -117,36 +121,58 @@ function parseAnswer(raw: unknown): AnswerSpec | null {
   return { type: 'text', value };
 }
 
-/** Reads a practice set. Problems without a task, answer or tests are left out. */
+/** Subjects of practice sets and skills. */
+export type Domain = 'math' | 'java' | 'law' | 'music' | 'language' | 'general';
+export const DOMAIN_LABEL: Record<Domain, string> = { math: 'Mathe', java: 'Programmieren', law: 'Recht', music: 'Musik', language: 'Sprache', general: 'Allgemein' };
+export const toDomain = (v: unknown): Domain => {
+  const k = String(v ?? '').toLowerCase();
+  if (/java|program|code|informatik/.test(k)) return 'java';
+  if (/law|recht|jura/.test(k)) return 'law';
+  if (/music|musik/.test(k)) return 'music';
+  if (/lang|sprach/.test(k)) return 'language';
+  if (/math|stoch|statist|analys|algebra/.test(k)) return 'math';
+  return k === 'general' || k === 'allgemein' ? 'general' : 'general';
+};
+
+/** One task of a set: calculate/answer, write code, or one of the active types (lib/tasks.ts). */
+export type Task = ({ type: 'calc' } & MathProblem) | ({ type: 'code' } & JavaProblem) | ActiveTask;
+
+/** All tasks of a set (sets from v0.9.5 kept math/java lists). */
+export function taskList(p: PracticeSet): Task[] {
+  if (p.tasks) return p.tasks;
+  return [...(p.math ?? []).map((m) => ({ type: 'calc' as const, ...m })), ...(p.java ?? []).map((j) => ({ type: 'code' as const, ...j }))];
+}
+
+function parseCode(o: Record<string, unknown>): ({ type: 'code' } & JavaProblem) | null {
+  const tests = (Array.isArray(o.tests) ? o.tests : [])
+    .map((t) => ({ call: s((t as Record<string, unknown>)?.call, 400), expected: s((t as Record<string, unknown>)?.expected, 400) }))
+    .filter((t) => t.call && t.expected !== '')
+    .slice(0, 8);
+  const p = { type: 'code' as const, title: s(o.title, 80), task: s(o.task ?? o.prompt), starter: s(o.starter, 6000), tests, hints: arr(o.hints, 5), solution: s(o.solution, 8000) };
+  return p.task && p.starter && p.tests.length ? p : null;
+}
+
+/** One task of any type from the AI's JSON. */
+export function parseTask(raw: unknown): Task | null {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  const type = String(o.type ?? '').toLowerCase();
+  if (['order', 'classify', 'cloze', 'multi', 'case', 'music'].includes(type)) return parseActive(o);
+  if (type === 'code' || (o.starter && o.tests)) return parseCode(o);
+  const answer = parseAnswer(o.answer);
+  const problem = s(o.problem ?? o.prompt ?? o.question);
+  return problem && answer ? { type: 'calc', problem, answer, hints: arr(o.hints, 5), steps: arr(o.steps, 12) } : null;
+}
+
+/** Reads a practice set. Tasks that are not usable are left out. */
 export function parsePractice(json: unknown, id: string, now: number): PracticeSet | null {
   const r = (json ?? {}) as Record<string, unknown>;
-  const kind = String(r.kind ?? '').toLowerCase() === 'java' ? 'java' : 'math';
+  const kind = toDomain(r.kind ?? r.domain);
   const ex = (r.example ?? null) as Record<string, unknown> | null;
   const example = ex ? { problem: s(ex.problem), steps: arr(ex.steps ?? ex.explain, 10), answer: s(ex.answer) || undefined, code: s(ex.code, 6000) || undefined } : undefined;
   const labs = (Array.isArray(r.labs) ? r.labs : []).map(parseLab).filter((l): l is LabSpec => !!l).slice(0, 4);
-  const base = { id, createdAt: now, kind, topic: s(r.topic, 80) || 'Übung', intro: s(r.intro, 3000), ...(example?.problem ? { example } : {}), labs } as const;
-  if (kind === 'java') {
-    const java = (Array.isArray(r.problems) ? r.problems : [])
-      .map((p) => {
-        const o = (p ?? {}) as Record<string, unknown>;
-        const tests = (Array.isArray(o.tests) ? o.tests : [])
-          .map((t) => ({ call: s((t as Record<string, unknown>)?.call, 400), expected: s((t as Record<string, unknown>)?.expected, 400) }))
-          .filter((t) => t.call && t.expected !== '')
-          .slice(0, 8);
-        return { title: s(o.title, 80), task: s(o.task), starter: s(o.starter, 6000), tests, hints: arr(o.hints, 5), solution: s(o.solution, 8000) };
-      })
-      .filter((p) => p.task && p.starter && p.tests.length)
-      .slice(0, 15);
-    return java.length ? { ...base, kind: 'java', java, progress: java.map(() => ({ tries: 0, hints: 0 })) } : null;
-  }
-  const math = (Array.isArray(r.problems) ? r.problems : [])
-    .map((p) => {
-      const o = (p ?? {}) as Record<string, unknown>;
-      return { problem: s(o.problem), answer: parseAnswer(o.answer), hints: arr(o.hints, 5), steps: arr(o.steps, 12) };
-    })
-    .filter((p): p is MathProblem => !!p.problem && !!p.answer)
-    .slice(0, 15);
-  return math.length ? { ...base, kind: 'math', math, progress: math.map(() => ({ tries: 0, hints: 0 })) } : null;
+  const tasks = (Array.isArray(r.problems ?? r.tasks) ? ((r.problems ?? r.tasks) as unknown[]) : []).map(parseTask).filter((t): t is Task => !!t).slice(0, 15);
+  if (!tasks.length) return null;
+  return { id, createdAt: now, kind, topic: s(r.topic, 80) || 'Übung', intro: s(r.intro, 3000), ...(example?.problem ? { example } : {}), labs, tasks, progress: tasks.map(() => ({ tries: 0, hints: 0 })) };
 }
 
 // ---------- checking answers ----------
@@ -226,35 +252,57 @@ function tolFor(spec: AnswerSpec, want: number): number {
 }
 
 // ---------- asking the AI ----------
-export type PracticeKind = 'auto' | 'math' | 'java';
+export type PracticeKind = 'auto' | Domain;
 
-/** The instruction for a practice set. */
+/** The JSON task types the AI may use – described once, chosen per subject. */
+const TASK_TYPES = {
+  calc: `{"type":"calc","problem":"…","answer":{"type":"number|fraction|expr|choice|text","value":"…","tolerance":0.001,"options":["…"]},"hints":["…"],"steps":["Lösungsweg"]} – rechnen/antworten; "number" (z. B. "0,2668" oder "26,68 %"), "fraction" ("3/8"), "expr" (Formel in x: + - * / ^ sqrt exp ln sin cos), "choice" (mit "options", value = richtige Option), "text" (frei, nur wenn nötig)`,
+  multi: `{"type":"multi","prompt":"…","options":["…","…","…","…"],"correct":[0,2],"explain":"…"} – mehrere richtige Antworten`,
+  order: `{"type":"order","prompt":"Bringe … in die richtige Reihenfolge","items":["Schritt 1","Schritt 2","Schritt 3"],"explain":"…"} – items in RICHTIGER Reihenfolge (Merkora mischt sie)`,
+  classify: `{"type":"classify","prompt":"Ordne zu","groups":["Gruppe A","Gruppe B"],"items":[{"text":"…","group":0},{"text":"…","group":1}],"explain":"…"} – 4–10 Elemente`,
+  cloze: `{"type":"cloze","prompt":"…","text":"Ein {{1}} ist … und {{2}} …","gaps":[["Antwort","Synonym"],["…"]],"explain":"…"} – Lücken {{1}}, {{2}} … mit erlaubten Antworten`,
+  case: `{"type":"case","facts":"Sachverhalt (realistisch, 4–10 Sätze)","question":"Aufgabe (z. B. Hat A gegen B einen Anspruch auf …?)","rubric":[{"criterion":"Anspruchsgrundlage richtig benannt (§ …)","points":2},{"criterion":"…","points":3}],"solution":"vollständige Musterlösung"} – Fallaufgabe, die man selbst ausformuliert`,
+  code: `{"type":"code","title":"…","task":"…","starter":"class Solution {\\n    static int f(int[] a) {\\n        // dein Code\\n        return 0;\\n    }\\n}","tests":[{"call":"Solution.f(new int[]{1,2})","expected":"3"}],"hints":["…"],"solution":"…"} – Java: Klasse "Solution" ohne "public", statische Methoden, keine main; tests 3–6 Aufrufe, expected wie String.valueOf / Arrays.toString ("[1, 2]")`,
+  music: `{"type":"music","prompt":"…","music":{"mode":"interval-ear","root":"C4","interval":"reine Quinte"}} – modes: "interval-ear" (Intervall hören: Prime … Oktave, z. B. "kleine Terz"), "chord-ear" (Akkord hören, "chord": Dur|Moll|vermindert|übermäßig|Dominantseptakkord|großer Septakkord|Moll-Septakkord|halbvermindert|verminderter Septakkord), "build-chord" (Akkord auf dem Klavier spielen, "root","chord"), "build-scale" (Tonleiter spielen, "scale": Dur|natürliches Moll|harmonisches Moll|melodisches Moll|dorisch|phrygisch|lydisch|mixolydisch|lokrisch|Dur-Pentatonik|Moll-Pentatonik), "name-note" (Note im Notensystem benennen, "note":"Fis4","clef":"treble|bass"), "rhythm" (Rhythmus klopfen, "beats":[1,0.5,0.5,1,1] in Vierteln, "tempo":80). Deutsche Notennamen (H, B = H♭, Fis, Es …)`,
+};
+const LABS_RULE = `"labs" (0–2, nur wenn sie zum Thema passen): {"type":"coin","p":0.5} · {"type":"dice","dice":2} · {"type":"binomial","n":10,"p":0.3} · {"type":"normal","mu":100,"sigma":15,"a":85,"b":115} · {"type":"tree","pA":0.3,"pBA":0.8,"pBnA":0.1,"a":"krank","b":"positiv"} · {"type":"bayes","prevalence":0.01,"sensitivity":0.95,"specificity":0.9} · {"type":"urn","N":10,"K":3,"n":4} · {"type":"function","expr":"a*x^2+b","params":{"a":1,"b":0},"min":-5,"max":5} · {"type":"vectors","matrix":[[1,1],[0,1]]}; jeweils mit "ask": eine Frage zum Ausprobieren.`;
+
+/** Which task types fit which subject (most active ones first). */
+export const DOMAIN_TASKS: Record<Domain, (keyof typeof TASK_TYPES)[]> = {
+  math: ['calc', 'order', 'multi', 'classify'],
+  java: ['code', 'cloze', 'order', 'calc', 'multi'],
+  law: ['case', 'classify', 'order', 'cloze', 'multi'],
+  music: ['music', 'calc', 'classify', 'cloze', 'multi'],
+  language: ['cloze', 'classify', 'order', 'calc', 'multi'],
+  general: ['calc', 'order', 'classify', 'cloze', 'multi', 'case'],
+};
+
+/** The task rules for one subject (or all for "auto"). */
+export function taskRules(kind: PracticeKind): string {
+  const types = kind === 'auto' ? (Object.keys(TASK_TYPES) as (keyof typeof TASK_TYPES)[]) : DOMAIN_TASKS[kind];
+  return `Aufgabentypen (mische mehrere, der Lernende soll SELBST etwas tun – rechnen, ordnen, zuordnen, ausformulieren, spielen, programmieren; keine reinen Wissensfragen):\n${types.map((t) => '- ' + TASK_TYPES[t]).join('\n')}${kind === 'math' || kind === 'auto' ? '\n' + LABS_RULE : ''}`;
+}
+
+/** The common frame: explanation, worked example, then tasks that get harder. */
+export function setFrame(kind: PracticeKind) {
+  return `Format: {"kind":"${kind === 'auto' ? 'math|java|law|music|language|general' : kind}","topic":"…","intro":"kurze, anschauliche Erklärung des Kerngedankens (3–6 Sätze)","example":{"problem":"…","steps":["Schritt 1 …","Schritt 2 …"],"answer":"…","code":"(nur bei Programmieren)"},"problems":[…],"labs":[…]}
+${taskRules(kind)}
+Steigere die Schwierigkeit langsam: zuerst verstehen, dann anwenden, dann selbst lösen. Hinweise ("hints") helfen schrittweise, ohne die Lösung zu verraten.`;
+}
+
+/** The instruction for a practice set from deck material. */
 export function practicePrompt(material: string, kind: PracticeKind, count: number): Prompt {
-  const math = `Für Mathematik (jedes Gebiet: Analysis, Algebra, Stochastik, lineare Algebra …):
-{"kind":"math","topic":"…","intro":"kurze, anschauliche Erklärung des Kerngedankens (3–6 Sätze)","example":{"problem":"…","steps":["Schritt 1 …","Schritt 2 …"],"answer":"…"},
-"problems":[{"problem":"Aufgabe","answer":{"type":"number|fraction|expr|choice|text","value":"…","tolerance":0.001,"options":["…"]},"hints":["kleiner Tipp","größerer Tipp"],"steps":["Lösungsweg Schritt für Schritt"]}],
-"labs":[{"type":"…", …}]}
-- answer.type: "number" (Zahl, z. B. "0,2668" oder "26,68 %"), "fraction" ("3/8"), "expr" (Formel in x, z. B. "2*x+3" – nur + - * / ^ Klammern sqrt exp ln sin cos), "choice" (mit "options", value = richtige Option), "text" (nur wenn nichts anderes geht).
-- Steigere die Schwierigkeit langsam: zuerst Verständnis, dann Rechnen, dann Anwenden.
-- labs (0–2, nur wenn sie zum Thema passen): {"type":"coin","p":0.5} · {"type":"dice","dice":2} · {"type":"binomial","n":10,"p":0.3} · {"type":"normal","mu":100,"sigma":15,"a":85,"b":115} · {"type":"tree","pA":0.3,"pBA":0.8,"pBnA":0.1,"a":"krank","b":"positiv"} · {"type":"bayes","prevalence":0.01,"sensitivity":0.95,"specificity":0.9} · {"type":"urn","N":10,"K":3,"n":4} · {"type":"function","expr":"a*x^2+b","params":{"a":1,"b":0},"min":-5,"max":5} · {"type":"vectors","matrix":[[1,1],[0,1]]}; jeweils mit "ask": eine Frage zum Ausprobieren.`;
-  const java = `Für Programmieren in Java:
-{"kind":"java","topic":"…","intro":"kurze Erklärung des Konzepts","example":{"problem":"…","code":"…Java-Code…","steps":["Erklärung Zeile für Zeile"]},
-"problems":[{"title":"…","task":"klare Aufgabenstellung","starter":"class Solution {\\n    static int summe(int[] a) {\\n        // dein Code\\n        return 0;\\n    }\\n}","tests":[{"call":"Solution.summe(new int[]{1,2,3})","expected":"6"}],"hints":["…","…"],"solution":"vollständige Lösung"}]}
-- starter: Klasse "Solution" (ohne "public") mit statischen Methoden und leerem Rumpf; keine main-Methode, kein package, nur java.util-Importe falls nötig.
-- tests: 3–6 Java-Ausdrücke, die die Methode aufrufen; expected = das erwartete Ergebnis wie String.valueOf es ausgibt (Arrays wie Arrays.toString: "[1, 2, 3]", Strings ohne Anführungszeichen, Wahrheitswerte true/false). Prüfe Randfälle (leeres Array, 0, negative Zahlen).
-- Steigere die Schwierigkeit langsam.`;
-  const which = kind === 'math' ? math : kind === 'java' ? java : `Entscheide nach dem Material: Mathematik oder Programmieren (Java).\n\n${math}\n\n${java}`;
   return {
-    system: `Du bist ein geduldiger Tutor und erstellst Übungsaufgaben, mit denen man ein Thema wirklich versteht. ${LANG_RULE}
+    system: `Du bist ein geduldiger Tutor und erstellst Übungsaufgaben, mit denen man ein Thema wirklich versteht und anwendet. ${LANG_RULE}
 ${FORMULA_RULE}
-${which}
+${kind === 'auto' ? 'Entscheide nach dem Material, welches Fach es ist (kind).\n' : ''}${setFrame(kind)}
 Erstelle ${count} Aufgaben zum Material. Antworte ausschließlich mit gültigem JSON, ohne Erklärtext und ohne Markdown-Codeblock.`,
     user: material,
-    maxTokens: Math.min(16000, 1500 + count * (kind === 'java' ? 900 : 600)),
+    maxTokens: Math.min(16000, 1500 + count * (kind === 'java' || kind === 'law' ? 900 : 600)),
     json: true,
   };
 }
 
 /** How far a set is done. */
 export const solvedCount = (p: PracticeSet) => p.progress.filter((x) => x.solved).length;
-export const problemCount = (p: PracticeSet) => (p.kind === 'java' ? p.java?.length : p.math?.length) ?? 0;
+export const problemCount = (p: PracticeSet) => taskList(p).length;

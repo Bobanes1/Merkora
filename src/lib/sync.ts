@@ -3,6 +3,8 @@
  * Everything lives in the person's own cloud storage: Dropbox "App folder" or Google Drive's hidden app data.
  * Two copies are merged card by card, so learning on two devices doesn't lose progress.
  */
+import type { Skill } from './skills';
+import type { PracticeSet } from './practice';
 import { useSyncExternalStore } from 'react';
 import { mediaGet, mediaKeys, mediaPutMany } from './db';
 import { applySynced, getState, subscribe, type Card, type Data, type Deck } from './store';
@@ -439,6 +441,31 @@ function mergeDeck(a: Deck, b: Deck, isDel: (id: string) => boolean): Deck {
   const practice = sets.size ? [...sets.values()].sort((x, y) => y.createdAt - x.createdAt) : undefined;
   return { ...newer, cards, path, ...(practice ? { practice } : {}), updatedAt: Math.max(a.updatedAt ?? 0, b.updatedAt ?? 0) || undefined };
 }
+/** Progress of the same practice set on two devices: solved on either counts, the higher tries/hints stay. */
+function mergeSet(a?: PracticeSet, b?: PracticeSet): PracticeSet | undefined {
+  if (!a || !b) return a ?? b;
+  if (a.id !== b.id) return a.createdAt >= b.createdAt ? a : b;
+  return { ...a, progress: a.progress.map((x, i) => { const y = b.progress[i]; return y ? { solved: x.solved || y.solved, tries: Math.max(x.tries, y.tries), hints: Math.max(x.hints, y.hints), shown: x.shown || y.shown } : x; }) };
+}
+/** A skill changed on two devices: the newer plan wins, lessons and tests keep the progress of both. */
+export function mergeSkill(a: Skill, b: Skill): Skill {
+  const newer = b.updatedAt > a.updatedAt ? b : a;
+  const older = newer === a ? b : a;
+  const oldLessons = new Map(older.stages.flatMap((st) => st.lessons).map((l) => [l.id, l]));
+  const oldStages = new Map(older.stages.map((st) => [st.id, st]));
+  return {
+    ...newer,
+    plan: { ...older.plan, ...newer.plan },
+    review: mergeSet(newer.review, older.review),
+    stages: newer.stages.map((st) => ({
+      ...st,
+      test: mergeSet(st.test, oldStages.get(st.id)?.test),
+      passed: st.passed || oldStages.get(st.id)?.passed || undefined,
+      lessons: st.lessons.map((l) => ({ ...l, set: mergeSet(l.set, oldLessons.get(l.id)?.set) })),
+    })),
+  };
+}
+
 export function mergeData(local: Data, remote: Data): Data {
   const deleted = { ...(remote.deleted ?? {}), ...(local.deleted ?? {}) };
   const isDel = (id: string) => id in deleted;
@@ -458,6 +485,7 @@ export function mergeData(local: Data, remote: Data): Data {
     workspaces: unionById(local.workspaces, remote.workspaces ?? [], isDel),
     courses: unionById(local.courses, remote.courses ?? [], isDel, (x, y) => ({ ...x, folders: unionById(x.folders ?? [], y.folders ?? [], isDel) })),
     decks: unionById(local.decks, remote.decks ?? [], isDel, (x, y) => mergeDeck(x, y, isDel)),
+    skills: unionById(local.skills ?? [], remote.skills ?? [], isDel, mergeSkill),
     reviews: reviews.sort((x, y) => x.at - y.at),
     exams: unionById(local.exams ?? [], remote.exams ?? [], isDel, (x, y) => ((y.updatedAt ?? y.createdAt) > (x.updatedAt ?? x.createdAt) ? y : x)),
     todos: mergeTodos(local.todos ?? [], remote.todos ?? [], isDel),

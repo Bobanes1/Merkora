@@ -12,6 +12,8 @@ import Library from './pages/Library';
 import Settings from './pages/Settings';
 import CalendarPage from './pages/Calendar';
 import Stats from './pages/Stats';
+import Skills from './pages/Skills';
+import SkillPage from './pages/SkillPage';
 import Setup from './pages/Setup';
 import { useStore } from './lib/store';
 import { useApplyTheme } from './lib/theme';
@@ -56,6 +58,8 @@ export default function App() {
         <Route path="/settings" element={<AppLayout><Settings /></AppLayout>} />
         <Route path="/calendar" element={<AppLayout><CalendarPage /></AppLayout>} />
         <Route path="/stats" element={<AppLayout><Stats /></AppLayout>} />
+        <Route path="/skills" element={<AppLayout><Skills /></AppLayout>} />
+        <Route path="/skills/:id" element={<AppLayout><SkillPage /></AppLayout>} />
         <Route path="/sync-callback" element={<SyncCallback />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { IconCalendar, IconChart, IconHome, IconLibrary, IconPlus, IconSearch, IconSettings } from './Icons';
+import { IconCalendar, IconChart, IconHome, IconLibrary, IconPlus, IconPractice, IconSearch, IconSettings } from './Icons';
 import { Pomodoro } from './Pomodoro';
 import { Sheet } from './Sheet';
 
-/** Phone view: navigation at the bottom (Start, Bibliothek, Prüfungen, Mehr); "Mehr" opens a panel with the rest. */
+/** Phone view: navigation at the bottom (Start, Bibliothek, Skills, Prüfungen, Mehr); "Mehr" opens a panel with the rest. */
 export function PhoneNav({ onSearch, onNewDeck }: { onSearch: () => void; onNewDeck: () => void }) {
   const [more, setMore] = useState(false);
   const navigate = useNavigate();
@@ -25,6 +25,7 @@ export function PhoneNav({ onSearch, onNewDeck }: { onSearch: () => void; onNewD
       <nav className="phone-nav" aria-label="Hauptnavigation">
         {item('/dashboard', 'Start', <IconHome size={22} />)}
         {item('/library', 'Bibliothek', <IconLibrary size={22} />)}
+        {item('/skills', 'Skills', <IconPractice size={22} />)}
         {item('/calendar', 'Prüfungen', <IconCalendar size={22} />)}
         <button type="button" className={'pn-item' + (inMore || more ? ' on' : '')} aria-expanded={more} onClick={() => setMore(true)}>
           <span className="pn-dots" aria-hidden="true">

@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import type { Skill } from './skills';
 import type { PracticeSet } from './practice';
 import { kvDel, kvGet, kvSet, mediaDeleteMany, mediaKeys } from './db';
 import { desktop, isDesktop } from './desktop';
@@ -274,6 +275,8 @@ export type Data = {
   exams: Exam[];
   /** To-dos on the start page. */
   todos?: Todo[];
+  /** Skills: learning by doing, without decks (lib/skills.ts). */
+  skills?: Skill[];
   /** Deleted ids with time – so a sync doesn't bring them back. */
   deleted?: Record<string, number>;
   /** When this copy was last saved (to pick the newest copy on start). */
@@ -384,7 +387,7 @@ const migrateSettings = (s: Settings): Settings => ({
 });
 
 /** Brings older saved data up to date. */
-function normalize(raw: unknown): Data | null {
+export function normalize(raw: unknown): Data | null {
   const d = raw as Partial<Data> & { version?: number };
   if (!d || typeof d !== 'object' || !Array.isArray(d.decks)) return null;
   const base = sampleData();
@@ -419,6 +422,7 @@ function normalize(raw: unknown): Data | null {
     jobs: (d.jobs ?? []).filter((j) => (j.kind as string) !== 'podcast'),
     exams: d.exams ?? [],
     todos: d.todos ?? [],
+    skills: d.skills ?? [],
     deleted,
     savedAt: d.savedAt,
   };
@@ -709,6 +713,20 @@ export function deleteCourse(id: string) {
     deleted: tomb(d, [id, ...deckIds]),
   }));
 }
+// ---------- skills ----------
+export function addSkill(skill: Skill) {
+  update((d) => ({ ...d, skills: [skill, ...(d.skills ?? [])] }));
+}
+export function updateSkill(id: string, patch: Partial<Skill> | ((s: Skill) => Partial<Skill>)) {
+  update((d) => ({
+    ...d,
+    skills: (d.skills ?? []).map((x) => (x.id === id ? { ...x, ...(typeof patch === 'function' ? patch(x) : patch), updatedAt: Date.now() } : x)),
+  }));
+}
+export function deleteSkill(id: string) {
+  update((d) => ({ ...d, skills: (d.skills ?? []).filter((x) => x.id !== id), deleted: tomb(d, [id]) }));
+}
+
 export function deleteDeck(id: string) {
   update((d) => ({
     ...d,

@@ -3,7 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { AnkiImport } from '../components/AnkiImport';
 import { CreateWithAI } from '../components/CreateWithAI';
 import { ExamDialog } from '../components/ExamDialog';
-import { IconCalendar, IconCards, IconChevron, IconFlame, IconPlay, IconPlus, IconSparkle, IconStar, IconTarget, IconSearch, IconUpload } from '../components/Icons';
+import { IconCalendar, IconCards, IconChevron, IconFlame, IconPlay, IconPlus, IconSparkle, IconStar, IconTarget, IconSearch, IconUpload, IconPractice } from '../components/Icons';
+import { nextLesson } from '../lib/skills';
 import { FoldPanel } from '../components/FoldPanel';
 import { Mascot } from '../components/Mascot';
 import { TodoList } from '../components/TodoList';
@@ -137,6 +138,9 @@ export default function Dashboard() {
   const exams = upcomingExams(data);
   const dueDecks = data.decks.filter((d) => dueCards(d).length > 0).sort((a, b) => dueCards(b).length - dueCards(a).length);
   const openTodos = (data.todos ?? []).filter((t) => !t.doneAt);
+  // the skill used last (active ones only)
+  const lastSkill = [...(data.skills ?? [])].filter((s) => s.status === 'active').sort((a, b) => b.updatedAt - a.updatedAt)[0];
+  const skillNext = lastSkill ? { skill: lastSkill, lesson: nextLesson(lastSkill)?.lesson.title } : null;
   const urgentTodos = todoGroups(openTodos, now)
     .filter((g) => g.id === 'overdue' || g.id === 'today')
     .reduce((a, g) => a + g.items.length, 0);
@@ -234,6 +238,20 @@ export default function Dashboard() {
                   </small>
                 </span>
                 <span className="btn primary sm">{pathDeck.p.done ? 'Weiterspielen' : 'Starten'}</span>
+              </Link>
+            )}
+            {skillNext && (
+              <Link to={`/skills/${skillNext.skill.id}`} className="path-cta skill-cta">
+                <span className="path-cta-icon">
+                  <IconPractice size={22} />
+                </span>
+                <span className="grow">
+                  <b>Weiterüben: {skillNext.skill.title}</b>
+                  <small>
+                    {skillNext.lesson ? `Lektion: ${skillNext.lesson}` : 'Alle Lektionen geschafft – Stufentest wartet'}
+                  </small>
+                </span>
+                <span className="btn outline sm">Üben</span>
               </Link>
             )}
             <FoldPanel
