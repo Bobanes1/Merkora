@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Link } from 'react-router-dom';
-import { askNotifications, canSurviveClose, dismissToast, getToasts, JOB_LABEL, JOB_TAB, JOB_VERB, subscribeToasts, retryJob } from '../lib/jobs';
+import { askNotifications, canSurviveClose, dismissToast, getToasts, JOB_LABEL, JOB_TAB, JOB_VERB, runProgress, subscribeToasts, retryJob } from '../lib/jobs';
 import { deckUrl, getState, removeJob, useStore, type Job, type JobKind } from '../lib/store';
 import { IconBell, IconCheck, IconClose, IconSparkle } from './Icons';
 import { Mascot } from './Mascot';
@@ -41,20 +41,35 @@ const partOf = (job: Job) => {
 };
 
 export function JobBanner({ job }: { job: Job }) {
-  const elapsed = useElapsed(job.createdAt);
+  // several parts of long material run at the same time: one line for all of them
+  // (selected as text, so the same progress gives the same value and React does not redraw endlessly)
+  const runText = useStore((s) => JSON.stringify(runProgress(s.data.jobs, job)));
+  const run = useMemo(() => JSON.parse(runText) as ReturnType<typeof runProgress>, [runText]);
+  const elapsed = useElapsed(run?.since ?? job.createdAt);
   const remote = job.mode === 'openai-bg' || job.mode === 'anthropic-batch' || (!job.mode && canSurviveClose());
   return (
     <div className="job-banner" role="status">
       <Mascot className="job-mascot" mood="think" size={58} />
       <div className="job-text">
         <b>
-          {JOB_LABEL[job.kind]} {partOf(job) ? `– Teil ${partOf(job)!.i} von ${partOf(job)!.n} – ` : ''}{JOB_VERB[job.kind].is} im Hintergrund erstellt …{' '}
+          {JOB_LABEL[job.kind]} {JOB_VERB[job.kind].is} im Hintergrund erstellt …{' '}
           <span className="muted">({elapsed})</span>
         </b>
-        {partOf(job) && (
-          <span className="bar job-parts" aria-hidden="true">
-            <i style={{ width: `${((partOf(job)!.i - 1) / partOf(job)!.n) * 100}%` }} />
-          </span>
+        {run ? (
+          <>
+            <small className="job-parts-text">
+              Langes Material in {run.n} Teilen, {run.running > 1 ? `${run.running} gleichzeitig` : 'nacheinander'} – {run.done} von {run.n} fertig
+            </small>
+            <span className="bar job-parts" aria-hidden="true">
+              <i style={{ width: `${Math.max(4, (run.done / run.n) * 100)}%` }} />
+            </span>
+          </>
+        ) : (
+          partOf(job) && (
+            <span className="bar job-parts" aria-hidden="true">
+              <i style={{ width: `${((partOf(job)!.i - 1) / partOf(job)!.n) * 100}%` }} />
+            </span>
+          )
         )}
         <p>
           {remote ? (

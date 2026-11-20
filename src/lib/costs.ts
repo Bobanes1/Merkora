@@ -88,10 +88,16 @@ export function priceFor(
 
 export const costOf = (e: Estimate, p: Price) => (e.input * p.in + e.output * p.out) / 1_000_000;
 
+/**
+ * "0,0034 $", "0,042 $", "1,25 $": below 1 $ with two significant digits (so a fraction of a cent is shown
+ * as it is, not as "< 0,01 $"); from 1 $ on in cents.
+ */
 export function formatCost(usd: number): string {
   if (usd <= 0) return 'kostenlos';
-  if (usd < 0.01) return '< 0,01 $';
-  return `${usd.toFixed(2).replace('.', ',')} $`;
+  if (usd < 0.000001) return '< 0,000001 $';
+  if (usd >= 1) return `${usd.toFixed(2).replace('.', ',')} $`;
+  const decimals = Math.max(2, 1 - Math.floor(Math.log10(usd)));
+  return `${Number(usd.toPrecision(2)).toFixed(decimals).replace('.', ',')} $`;
 }
 export const formatTokens = (n: number) => Math.round(n).toLocaleString('de-DE');
 
@@ -100,7 +106,6 @@ export function formatCostRange(low: number, high?: number): string {
   if (high === undefined) return formatCost(low);
   const a = formatCost(low);
   const b = formatCost(high);
-  if (a === b) return a;
-  if (low < 0.01) return `bis ${b}`;
+  if (a === b || low <= 0) return a === b ? a : `bis ${b}`;
   return `${a.replace(' $', '')}–${b}`;
 }

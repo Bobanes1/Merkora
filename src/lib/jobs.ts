@@ -149,6 +149,27 @@ export function startCardJobs(deck: Deck, parts: string[], o: { counts: number[]
 const partTitle = (deck: Deck, p: CardParams) =>
   `${JOB_LABEL.cards}${p.part && p.part.n > 1 ? ` (Teil ${p.part.i}/${p.part.n}${p.more ? ', Fortsetzung' : ''})` : p.more ? ' (Fortsetzung)' : ''} · ${deck.name}`;
 
+/**
+ * All parts of one "Mit KI erstellen" (they run side by side): how many there are, how many are done,
+ * and when the first started. Null for a single job. Pure – tested.
+ */
+export function runProgress(jobs: Job[], job: Job): { n: number; done: number; running: number; since: number } | null {
+  const run = (job.params as CardParams).run;
+  const n = (job.params as CardParams).part?.n ?? 1;
+  if (!run || n < 2) return null;
+  const mine = jobs.filter((j) => j.kind === 'cards' && (j.params as CardParams).run === run);
+  const active = (j: Job) => j.status === 'queued' || j.status === 'running';
+  let done = 0;
+  let running = 0;
+  for (let i = 1; i <= n; i++) {
+    const part = mine.filter((j) => (j.params as CardParams).part?.i === i);
+    if (part.some((j) => j.status === 'running')) running++;
+    // a part counts as done when none of its jobs (also continuations) is still waiting or working
+    if (part.length && !part.some(active)) done++;
+  }
+  return { n, done, running, since: Math.min(...mine.map((j) => j.createdAt)) };
+}
+
 /** "12 Karten, davon 4 mit Grafik" */
 export const madeText = (n: number, g: number) => `${n} ${n === 1 ? 'Karte' : 'Karten'}${g ? `, davon ${g} mit Grafik` : ''}`;
 /** A long part (this many characters) that gives fewer than 3 cards is tried once more. */

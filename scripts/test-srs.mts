@@ -319,7 +319,7 @@ console.log('Kostenschätzung');
   ok(priceFor('llama3.1') === null, 'unbekanntes Modell → Preis unbekannt');
   ok(priceFor('llama3.1', { custom: { in: 1, out: 2 } })?.source === 'custom', 'eigener Preis überschreibt');
   ok(priceFor('x/y', { live: { 'x/y': { in: 3, out: 4 } } })?.in === 3, 'aktuelle OpenRouter-Preise werden genutzt');
-  ok(formatCost(0.004) === '< 0,01 $' && formatCost(0.042) === '0,04 $' && formatCost(0) === 'kostenlos', 'Betrag wird lesbar formatiert');
+  ok(formatCost(0.004) === '0,0040 $' && formatCost(0.00037) === '0,00037 $' && formatCost(0.042) === '0,042 $' && formatCost(0.25) === '0,25 $' && formatCost(1.234) === '1,23 $' && formatCost(0) === 'kostenlos', 'Betrag genau, auch unter einem Cent');
 }
 
 console.log('Langes Material in Teilen');
@@ -350,7 +350,7 @@ console.log('Langes Material in Teilen');
   const one = estimate.cards(40000, 0), two = estimate.cardsParts([40000, 40000], [0, 0]);
   ok(two.input > 2 * one.input - 1 && two.output === 2 * one.output && two.outputHigh === 2 * one.outputHigh!, 'Kosten aller Teile werden zusammengezählt');
   const { formatCostRange } = await import('../src/lib/costs');
-  ok(formatCostRange(0.1, 0.25) === '0,10–0,25 $' && formatCostRange(0.002, 0.004) === '< 0,01 $' && formatCostRange(0.004, 0.03) === 'bis 0,03 $', 'Kostenspanne lesbar');
+  ok(formatCostRange(0.1, 0.25) === '0,10–0,25 $' && formatCostRange(0.002, 0.004) === '0,0020–0,0040 $' && formatCostRange(0.0034, 0.0034) === '0,0034 $' && formatCostRange(0, 0.01) === 'bis 0,010 $', 'Kostenspanne genau');
 }
 
 console.log('Diagramme');
@@ -1310,6 +1310,19 @@ console.log('Handy: Dateien als Text übertragen');
   const bytes = new Uint8Array(70000).map((_, i) => (i * 37) % 256);
   const back = fromBase64(toBase64(bytes));
   ok(back.length === bytes.length && back.every((b, i) => b === bytes[i]), 'Datei kommt als Text hin und zurück unverändert an (auch große Dateien)');
+}
+
+console.log('Gleichzeitige Teile: Anzeige');
+{
+  const { runProgress } = await import('../src/lib/jobs');
+  const j = (i: number, status: string, created: number, more = 0) => ({ id: `${i}-${more}`, kind: 'cards', deckId: 'd', title: '', status, createdAt: created, params: { run: 'r', part: { i, n: 2 }, ...(more ? { more } : {}) } }) as any;
+  const jobs = [j(1, 'running', 100), j(2, 'running', 101)];
+  const p = runProgress(jobs, jobs[1])!;
+  ok(p.n === 2 && p.done === 0 && p.running === 2 && p.since === 100, 'beide Teile laufen gleichzeitig, keiner fertig (nicht „Teil 2 von 2“)');
+  const later = [j(1, 'done', 100), j(2, 'done', 101), j(2, 'running', 150, 1)];
+  const q = runProgress(later, later[2])!;
+  ok(q.done === 1 && q.running === 1, 'Teil mit laufender Fortsetzung zählt noch nicht als fertig');
+  ok(runProgress([j(1, 'running', 1)].map((x) => ({ ...x, params: { run: 'r' } })), { params: { run: 'r' } } as any) === null, 'ein einzelner Auftrag: keine Teile-Anzeige');
 }
 
 console.log('Kurze Decknamen');
