@@ -10,9 +10,10 @@ const API: &str = "https://api.adoptium.net/v3/assets/latest/21/hotspot";
 /// Only Adoptium's own release downloads are accepted.
 const ALLOWED: &str = "https://github.com/adoptium/";
 
-/// Folder of the built-in JDK (inside Merkora's data folder).
+/// Folder of the built-in JDK (inside Merkora's data folder – the same one the learning data uses,
+/// e.g. %APPDATA%\Merkora on Windows; MERKORA_DATA_DIR overrides it).
 pub fn jdk_root() -> Option<PathBuf> {
-    std::env::var_os("MERKORA_DATA_DIR").map(|d| PathBuf::from(d).join("java"))
+    Some(crate::storage::data_dir().join("java"))
 }
 
 /// java(.exe) of the built-in JDK, if it is installed.
@@ -137,6 +138,17 @@ mod tests {
         let evil = good.replace("https://github.com/adoptium/", "https://example.com/");
         assert!(parse_offer(&evil).is_err());
         assert!(parse_offer("[]").is_err());
+    }
+
+    /// The desktop app never sets MERKORA_DATA_DIR – the JDK folder must still be found (it was not: „Kein Datenordner gefunden“).
+    #[test]
+    fn jdk_folder_without_env_var() {
+        if std::env::var_os("MERKORA_DATA_DIR").is_some() {
+            return;
+        }
+        let root = jdk_root().expect("jdk folder");
+        assert!(root.ends_with("java"));
+        assert_eq!(root.parent().unwrap(), crate::storage::data_dir());
     }
 
     #[test]
