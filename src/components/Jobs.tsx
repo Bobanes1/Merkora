@@ -134,7 +134,7 @@ export function JobsIndicator() {
   if (!recent.length) return null;
   return (
     <div className="jobs-ind" ref={ref}>
-      <button type="button" className={`jobs-btn ${running.length ? 'busy' : ''}`} onClick={() => setOpen(!open)} aria-expanded={open}>
+      <button type="button" className={`jobs-btn ${running.length ? 'busy' : ''}`} onClick={() => setOpen(!open)} aria-expanded={open} title="KI-Aufträge">
         <span className="job-spinner small" aria-hidden="true">
           {running.length ? <IconSparkle size={14} /> : <IconCheck size={14} />}
         </span>

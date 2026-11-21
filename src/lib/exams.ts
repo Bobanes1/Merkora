@@ -151,3 +151,12 @@ export function forecastText(f: Forecast): string {
   const now = f.perDay < 1 ? 'weniger als 1' : String(Math.round(f.perDay));
   return `Achtung: Wenn du so weiterlernst wie bisher, kannst du erst etwa am ${date(f.at)} alle Karten – das ist nach der Prüfung. Damit es reicht, lerne täglich etwa ${need} (bisher ${now} pro Tag).`;
 }
+
+/** The forecast in a few words, for the start page (the full sentence goes into the tooltip). */
+export function forecastShort(f: Forecast): string {
+  const date = (t: number) => new Date(t).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' });
+  if (f.kind === 'done') return 'Alles sitzt';
+  if (f.kind === 'none') return 'Noch keine Prognose';
+  if (f.kind === 'ok') return `Im Plan · fertig ca. ${date(f.at)}`;
+  return `Zu langsam · ca. ${f.needPerDay} Wdh./Tag nötig`;
+}

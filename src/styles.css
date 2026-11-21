@@ -49,7 +49,14 @@ html,
 body {
   margin: 0;
   padding: 0;
+}
+/* html clips sideways for the window; body must not become a scroll box itself,
+   otherwise the sticky sidebar scrolls away with the page */
+html {
   overflow-x: hidden;
+}
+body {
+  overflow-x: clip;
 }
 body {
   font-family: var(--font);
@@ -10881,3 +10888,168 @@ html.glass .pip-tip-bubble { background: color-mix(in srgb, var(--white) 86%, tr
 .party-stats { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; }
 .party-stats span { display: grid; font-size: 0.8rem; color: var(--muted); }
 .party-stats b { font-size: 1.3rem; color: var(--ink); }
+
+/* ---------- start page: compact exam rows, calm forecast note ---------- */
+.dash-exam-row {
+  border-top: 1px solid var(--line);
+  padding: 6px 0 8px;
+}
+.dash-exam-row .dash-exam {
+  border-top: none;
+  padding: 2px 0;
+}
+.dash-exam-row .dash-exam-more {
+  margin: 0;
+  justify-content: flex-start;
+  gap: 4px 14px;
+}
+.fc-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: help;
+}
+.fc-note i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+.fc-note.late i {
+  background: #e8833a;
+}
+.dash-exam-row .dash-exam-practice {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  font-size: 12.5px;
+}
+
+/* ---------- sidebar: fold to an icon strip; Tools sits in the main list ---------- */
+.sidebar-spacer {
+  flex: 1;
+  min-height: 12px;
+}
+.sidebar-collapse {
+  color: var(--muted);
+}
+.sidebar-collapse:hover {
+  color: var(--ink);
+}
+.nav-main .nav-c-tools .grow {
+  flex: 1;
+}
+@media (max-width: 1023px) {
+  .sidebar-collapse {
+    display: none;
+  }
+}
+@media (min-width: 1024px) {
+  .sidebar {
+    transition: width 0.2s ease, padding 0.2s ease;
+  }
+  .sidebar.collapsed {
+    width: 76px;
+    padding-left: 12px;
+    padding-right: 12px;
+    overflow-x: hidden;
+  }
+  .sidebar.collapsed .sidebar-top {
+    flex-direction: column;
+    gap: 10px;
+    padding: 0 0 14px;
+  }
+  .sidebar.collapsed .logo-word,
+  .sidebar.collapsed .nav-text,
+  .sidebar.collapsed .search-btn kbd,
+  .sidebar.collapsed .mini-player,
+  .sidebar.collapsed .job-banner,
+  .sidebar.collapsed .save-state,
+  .sidebar.collapsed .ai-status span,
+  .sidebar.collapsed .install-btn {
+    display: none;
+  }
+  .sidebar.collapsed .new-deck-btn,
+  .sidebar.collapsed .search-btn,
+  .sidebar.collapsed .nav-link,
+  .sidebar.collapsed .ai-status {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+    gap: 0;
+  }
+  .sidebar.collapsed .nav-link {
+    position: relative;
+  }
+  /* counters become a small dot on the icon */
+  .sidebar.collapsed .nav-link .pill-count {
+    position: absolute;
+    top: 6px;
+    right: 10px;
+    width: 9px;
+    height: 9px;
+    min-width: 0;
+    padding: 0;
+    font-size: 0;
+    border-radius: 50%;
+    background: var(--primary);
+  }
+}
+
+/* ---------- start page: the three action tiles react when you point at them ---------- */
+:root .path-cta {
+  position: relative;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
+}
+:root .path-cta .path-cta-icon {
+  transition: transform 0.18s ease, background 0.18s ease;
+}
+:root .path-cta .btn.outline {
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+:root .path-cta:hover,
+:root .path-cta:focus-visible {
+  transform: translateY(-2px);
+  filter: brightness(1.06) saturate(1.05);
+  box-shadow: 0 18px 34px -16px color-mix(in srgb, var(--cta, var(--primary)) 90%, transparent);
+}
+:root .path-cta:hover .path-cta-icon,
+:root .path-cta:focus-visible .path-cta-icon {
+  transform: scale(1.08) rotate(-4deg);
+  background: rgba(255, 255, 255, 0.3);
+}
+:root .path-cta:hover .btn.outline,
+:root .path-cta:focus-visible .btn.outline {
+  background: #fff;
+  border-color: #fff;
+  color: var(--cta, var(--primary));
+}
+:root .path-cta:active {
+  transform: translateY(0);
+}
+:root.no-anim .path-cta:hover {
+  transform: none;
+}
+/* exam page: the forecast sentence (not the bar chart .forecast) */
+.fc-text.ok { color: var(--ok-ink, var(--ok)); }
+.fc-text.late { color: var(--text); padding-left: 10px; border-left: 3px solid #e8833a; }
+@media (min-width: 1024px) {
+  .sidebar.collapsed .jobs-btn {
+    justify-content: center;
+    padding: 8px 0;
+  }
+  .sidebar.collapsed .jobs-btn .grow,
+  .sidebar.collapsed .jobs-hint {
+    display: none;
+  }
+  .sidebar.collapsed .jobs-pop {
+    position: fixed;
+    left: 84px;
+    right: auto;
+    bottom: 70px;
+    width: 300px;
+  }
+}

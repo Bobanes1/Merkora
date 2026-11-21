@@ -62,7 +62,7 @@ function ExamCard({ exam, onEdit, onDelete, onPractice }: { exam: Exam; onEdit: 
                   )}{' '}
                   · {r.open} von {r.total} Karten noch nicht sicher
                 </p>
-                <p className={'small forecast ' + forecast.kind}>{forecastText(forecast)}</p>
+                <p className={'small fc-text ' + forecast.kind}>{forecastText(forecast)}</p>
                 {whole && <p className="muted small">Ganze Kurse oder Ordner – neue Decks darin zählen automatisch mit.</p>}
                 <div className="exam-deck-links">
                   {decks.map((d) => (

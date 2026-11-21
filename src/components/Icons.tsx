@@ -301,3 +301,9 @@ export const IconMore = mk(
   </>,
 );
 export const IconSkip = mk(<path d="M5 6l7 6-7 6zM13 6l7 6-7 6z" />);
+export const IconSidebar = mk(
+  <>
+    <rect x="3" y="4" width="18" height="16" rx="3" />
+    <path d="M9 4v16" />
+  </>,
+);

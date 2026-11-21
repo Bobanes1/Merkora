@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Aquarium } from '../components/Aquarium';
 import { GoalRing } from '../components/GoalRing';
 import { HeroScene } from '../components/HeroScene';
@@ -16,7 +16,7 @@ import { Mascot } from '../components/Mascot';
 import { usePhone } from '../lib/phone';
 import { pokeMove, type PokeMove } from '../lib/pipLines';
 import { NoKeyHint } from '../components/NoKey';
-import { countdownText, dailyPlan, examAt, examCards, examDecks, examForecast, forecastText, readiness, upcomingExams } from '../lib/exams';
+import { countdownText, dailyPlan, examAt, examCards, examDecks, examForecast, forecastShort, forecastText, readiness, upcomingExams } from '../lib/exams';
 import { pathProgress, playerLevel, totalXp, xpStreak, xpToday } from '../lib/path';
 import { masteryPercent, sortDecks, streak, studyDays, type DeckSort } from '../lib/stats';
 import { deckUrl, dueCards, setSettings, useStore, type Deck } from '../lib/store';
@@ -244,7 +244,7 @@ export default function Dashboard() {
                     {pathDeck.p.done} von {pathDeck.p.total} Stationen · {pathDeck.p.stars} Sterne gesammelt
                   </small>
                 </span>
-                <span className="btn primary sm">{pathDeck.p.done ? 'Weiterspielen' : 'Starten'}</span>
+                <span className="btn outline sm">{pathDeck.p.done ? 'Weiterspielen' : 'Starten'}</span>
               </Link>
             )}
             <Link to="/tools?tab=todos" className="path-cta todo-cta">
@@ -302,24 +302,28 @@ export default function Dashboard() {
                   const p = dailyPlan(data, e);
                   const f = examForecast(examCards(data, e), data.reviews, examAt(e));
                   return (
-                    <Fragment key={e.id}>
-                    <Link to="/tools?tab=exams" className="dash-exam">
-                      <b>{e.title}</b>
-                      <span className="pill-count">{countdownText(e)}</span>
-                      <span className="bar">
-                        <i style={{ width: `${r.percent}%` }} />
-                      </span>
-                      <small>{r.total ? (p.left ? `heute ${p.left} Karten` : 'Tagesziel erreicht') : 'keine Decks'}</small>
-                    </Link>
-                    <div className="dash-exam-more">
-                      {r.total > 0 && (f.kind === 'ok' || f.kind === 'late') && <p className={'dash-forecast forecast ' + f.kind}>{forecastText(f)}</p>}
-                      {examDecks(data, e)[0] && (
-                        <Link to={deckUrl(data, examDecks(data, e)[0], 'exam')} className="btn ghost sm dash-exam-practice" title="Probeprüfung mit Note und Musterlösung">
-                          <IconTarget size={14} /> Prüfung üben
-                        </Link>
-                      )}
+                    <div key={e.id} className="dash-exam-row">
+                      <Link to="/tools?tab=exams" className="dash-exam">
+                        <b>{e.title}</b>
+                        <span className="pill-count">{countdownText(e)}</span>
+                        <span className="bar">
+                          <i style={{ width: `${r.percent}%` }} />
+                        </span>
+                        <small>{r.total ? (p.left ? `heute ${p.left} Karten` : 'Tagesziel erreicht') : 'keine Decks'}</small>
+                      </Link>
+                      <div className="dash-exam-more">
+                        {r.total > 0 && (f.kind === 'ok' || f.kind === 'late') && (
+                          <span className={'fc-note ' + f.kind} title={forecastText(f)}>
+                            <i /> {forecastShort(f)}
+                          </span>
+                        )}
+                        {examDecks(data, e)[0] && (
+                          <Link to={deckUrl(data, examDecks(data, e)[0], 'exam')} className="small-link dash-exam-practice" title="Probeprüfung mit Note und Musterlösung">
+                            <IconTarget size={13} /> Prüfung üben
+                          </Link>
+                        )}
+                      </div>
                     </div>
-                    </Fragment>
                   );
                 })}
               </section>
