@@ -166,3 +166,14 @@ Format: {"criteria":[{"points":2,"feedback":"…"}],"summary":"…"} – genau s
     user: `SACHVERHALT:\n${task.facts}\n\nAUFGABE:\n${task.question}\n\nBEWERTUNGSSCHEMA:\n${task.rubric.map((c, i) => `${i + 1}. ${c.criterion} (max. ${c.points} P.)`).join('\n')}\n\nMUSTERLÖSUNG (nur für dich):\n${task.solution}\n\nLÖSUNG DES LERNENDEN:\n${answer || '(leer)'}`,
   };
 }
+
+/**
+ * Where a dragged item lands: the place whose box the pointer is over; above the list → first place,
+ * below it → last place, in a gap → the item just below the gap. Pure – tested.
+ */
+export function dropIndex(rects: { top: number; bottom: number }[], y: number): number {
+  if (!rects.length) return 0;
+  if (y < rects[0].top) return 0;
+  for (let k = 0; k < rects.length; k++) if (y <= rects[k].bottom) return k;
+  return rects.length - 1;
+}

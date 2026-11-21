@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { CardContent } from '../CardContent';
 import { IconArrowDown, IconArrowUp, IconGrip } from '../Icons';
 import { completeJson, LANG_RULE } from '../../lib/ai';
@@ -8,6 +8,7 @@ import {
   checkCloze,
   checkMulti,
   checkOrder,
+  dropIndex,
   clozeParts,
   parseCaseGrade,
   shuffled,
@@ -25,14 +26,25 @@ const seedOf = (s: string) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0))
 const pts = (n: number) => String(n).replace('.', ',');
 const Explain = ({ text }: { text?: string }) => (text ? <CardContent text={text} className="practice-explain" /> : null);
 
-/** Put in order: arrows (and dragging with a mouse). */
+/** Put in order: drag (mouse, finger, pen) or arrows. */
 export function OrderTaskView({ ctx, task }: { ctx: TaskCtx; task: OrderTask }) {
   const { prog, host, i } = ctx;
   const [list, setList] = useState(() => (prog.solved ? task.items : shuffled(task.items, seedOf(ctx.set.id) + i)));
   const [marks, setMarks] = useState<boolean[] | null>(prog.solved ? task.items.map(() => true) : null);
   const [drag, setDrag] = useState<number | null>(null);
   const listRef = useRef<HTMLOListElement>(null);
-  // dragging with the mouse, a finger or a pen: the item follows the pointer and swaps places on the way
+  const move = (from: number, to: number) => {
+    setList((cur) => {
+      if (to < 0 || to >= cur.length || from === to) return cur;
+      const next = [...cur];
+      const [x] = next.splice(from, 1);
+      next.splice(to, 0, x);
+      return next;
+    });
+    setMarks(null);
+  };
+  // Dragging with the mouse, a finger or a pen: the item swaps places on the way, all the way to the top or bottom.
+  // The window follows the pointer (moving an element in the page drops its pointer capture, so the item can't).
   const dragFrom = useRef<number | null>(null);
   const startDrag = (e: ReactPointerEvent<HTMLLIElement>, k: number) => {
     const target = e.target as HTMLElement;
@@ -41,40 +53,44 @@ export function OrderTaskView({ ctx, task }: { ctx: TaskCtx; task: OrderTask }) 
     // on touch screens only the grip starts a drag, so the page can still be scrolled
     if (e.pointerType !== 'mouse' && !target.closest('.order-grip')) return;
     e.preventDefault();
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch {
-      /* no capture possible: the item still follows while the pointer is over the list */
-    }
     dragFrom.current = k;
     setDrag(k);
   };
-  const dragMove = (e: ReactPointerEvent<HTMLLIElement>) => {
-    const from = dragFrom.current;
-    if (from === null || !listRef.current) return;
-    const items = [...listRef.current.children] as HTMLElement[];
-    const to = items.findIndex((el) => {
-      const r = el.getBoundingClientRect();
-      return e.clientY >= r.top && e.clientY <= r.bottom;
-    });
-    if (to >= 0 && to !== from) {
-      move(from, to);
-      dragFrom.current = to;
-      setDrag(to);
-    }
-  };
-  const endDrag = () => {
-    dragFrom.current = null;
-    setDrag(null);
-  };
-  const move = (from: number, to: number) => {
-    if (to < 0 || to >= list.length || from === to) return;
-    const next = [...list];
-    const [x] = next.splice(from, 1);
-    next.splice(to, 0, x);
-    setList(next);
-    setMarks(null);
-  };
+  useEffect(() => {
+    if (drag === null) return;
+    const onMove = (e: PointerEvent) => {
+      const from = dragFrom.current;
+      if (from === null || !listRef.current) return;
+      e.preventDefault();
+      const rects = ([...listRef.current.children] as HTMLElement[]).map((el) => el.getBoundingClientRect());
+      const to = dropIndex(rects, e.clientY);
+      if (to !== from) {
+        move(from, to);
+        dragFrom.current = to;
+        setDrag(to);
+      }
+      // near the window edge the page scrolls along (long lists on the phone)
+      const edge = 56;
+      if (e.clientY < edge) window.scrollBy(0, -12);
+      else if (e.clientY > window.innerHeight - edge) window.scrollBy(0, 12);
+    };
+    const onEnd = () => {
+      dragFrom.current = null;
+      setDrag(null);
+    };
+    window.addEventListener('pointermove', onMove, { passive: false });
+    window.addEventListener('pointerup', onEnd);
+    window.addEventListener('pointercancel', onEnd);
+    window.addEventListener('blur', onEnd);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onEnd);
+      window.removeEventListener('pointercancel', onEnd);
+      window.removeEventListener('blur', onEnd);
+    };
+    // the listeners only need to exist while dragging
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drag !== null]);
   const check = () => {
     const r = checkOrder(task, list);
     setMarks(r.places);
@@ -91,10 +107,6 @@ export function OrderTaskView({ ctx, task }: { ctx: TaskCtx; task: OrderTask }) 
             key={item}
             className={'order-item' + (marks ? (marks[k] ? ' ok' : ' bad') : '') + (drag === k ? ' dragging' : '')}
             onPointerDown={(e) => startDrag(e, k)}
-            onPointerMove={dragMove}
-            onPointerUp={endDrag}
-            onPointerCancel={endDrag}
-            onLostPointerCapture={endDrag}
           >
             <span className="order-grip" aria-hidden="true">
               <IconGrip size={18} />

@@ -1667,6 +1667,14 @@ console.log('Anfänger-Lektionen: Grundlagen zuerst');
   ok(!!set && set.theory!.startsWith('### Worum'), 'Grundlagen werden übernommen');
 }
 
+console.log('Sortieren per Ziehen');
+{
+  const { dropIndex } = await import('../src/lib/tasks');
+  const rects = [0, 1, 2, 3].map((k) => ({ top: 100 + k * 60, bottom: 150 + k * 60 }));
+  ok(dropIndex(rects, 20) === 0 && dropIndex(rects, 125) === 0 && dropIndex(rects, 300) === 3 && dropIndex(rects, 900) === 3, 'ganz nach oben und ganz nach unten – auch über und unter der Liste');
+  ok(dropIndex(rects, 155) === 1 && dropIndex(rects, 215) === 2, 'in der Lücke zählt der Platz darunter');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));
