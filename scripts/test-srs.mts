@@ -1807,6 +1807,61 @@ console.log('Skills: Tagesziel, Serie, Kompetenz-Karte');
   ok(fp.system.includes('Schwachstellen-Training') && fp.user.includes('UNSICHERE THEMEN: schwach') && !fp.user.includes('gut ('), 'Schwachstellen-Training fragt nur die schwachen Themen ab');
 }
 
+console.log('Klavier-Tastatur und neue Aufgabenarten');
+{
+  const M = await import('../src/lib/music');
+  ok(M.keyToMidi('KeyZ') === 60 && M.keyToMidi('KeyS') === 61 && M.keyToMidi('KeyQ') === 72 && M.keyToMidi('Digit2') === 73 && M.keyToMidi('KeyU') === 83 && M.keyToMidi('KeyP') === null, 'Klavier: Tasten Y/S/Q/2/U → C4/Cis4/C5/Cis5/H5, P spielt nichts');
+  ok(M.keyToMidi('KeyZ', 36) === 36 && M.pianoFrom([64, 67]) === 60 && M.pianoFrom([47]) === 36, 'Klavier beginnt beim C unter der tiefsten Note');
+  const pn = M.parseMusic({ mode: 'play-notes', notes: ['C4', 'E4', 'G4'], clef: 'treble' });
+  ok(pn?.mode === 'play-notes' && (pn as any).notes.length === 3 && M.parseMusic({ mode: 'play-notes', notes: ['C4', 'C6'] }) === null, 'Noten vom Blatt: Aufbau, höchstens zwei Oktaven');
+  const tg = ['C4', 'Fis4'].map((x) => M.parseNote(x)!);
+  ok(M.checkSequence(tg, [60, 66]).right && M.checkSequence([M.parseNote('Ges4')!], [66]).right && !M.checkSequence(tg, [60, 67]).right, 'Noten vom Blatt: Reihenfolge, Fis = Ges');
+
+  const T = await import('../src/lib/tasks');
+  const est = T.parseActive({ type: 'estimate', prompt: 'Wie viel % …?', min: 0, max: 100, answer: 37, tolerance: 3, unit: '%' }) as any;
+  ok(est?.type === 'estimate' && T.checkEstimate(est, 39) === 'right' && T.checkEstimate(est, 44) === 'close' && T.checkEstimate(est, 80) === 'far' && T.parseActive({ type: 'estimate', prompt: 'x', min: 0, max: 10, answer: 20 }) === null, 'Schätzen: richtig, nah dran, weit weg; Antwort muss im Bereich liegen');
+  ok(T.niceStep(100) === 1 && T.niceStep(1) === 0.01 && T.niceStep(2000) === 20, 'Schätzen: runde Schrittweite ' + T.niceStep(100));
+
+  const lab = T.parseActive({ type: 'label', prompt: 'Beschrifte', diagram: { type: 'flow', title: 'Ablauf', steps: ['Planen', 'Bauen', 'Testen'] } }) as any;
+  ok(lab?.type === 'label' && lab.labels.join(',') === 'Planen,Bauen,Testen' && T.checkLabels(lab, ['planen', 'Bauen', 'Testen']).right && !T.checkLabels(lab, ['Bauen', 'Planen', 'Testen']).right, 'Beschriften: Begriffe aus der Grafik, Prüfung je Nummer');
+  const D = await import('../src/lib/diagram');
+  const svg = D.renderDiagram(lab.diagram, D.PALETTES.light, { hideMany: lab.hide });
+  ok(!svg.includes('>Planen<') && svg.includes('>1</text>') && svg.includes('>3</text>'), 'Beschriften: Felder verdeckt und nummeriert');
+
+  const SH = await import('../src/lib/sheet');
+  const v = SH.evalSheet([['2', '3', '=A1*B1'], ['=SUMME(A1:C1)', '=MITTELWERT(A1;B1)', '=C3'], ['1,5', '', '=C2']]);
+  ok(v[0][2] === 6 && v[1][0] === 11 && v[1][1] === 2.5 && v[2][0] === 1.5 && SH.isErr(v[1][2]) && SH.isErr(v[2][2]), 'Tabelle: Formeln, Bereiche, Dezimalkomma, Zirkelbezug');
+  ok(SH.evalSheet([['=MAX(1;7;3)', '=ANZAHL(A2:C2)', '=2^3+1'], ['x', '4', '5']])[0].join(',') === '7,2,9', 'Tabelle: MAX, ANZAHL, Potenz');
+  const sh = T.parseActive({ type: 'sheet', prompt: 'Rechne', rows: [['Menge', 'Preis', 'Summe'], ['3', '0,5', ''], ['2', '1', '']], expect: { C2: '=A2*B2', C3: '=A3*B3' } }) as any;
+  ok(sh?.type === 'sheet' && T.checkSheet(sh, { C2: '=A2*B2', C3: '2' }).right && !T.checkSheet(sh, { C2: '1,5', C3: '3' }).right && T.checkSheet(sh, { C2: '1,5', C3: '3' }).cells.C2, 'Tabelle: Formel oder Zahl zählt, falsche Zelle erkannt');
+
+  const sc = { type: 'scenario', prompt: 'Was tust du?', start: 'a', nodes: [
+    { id: 'a', text: 'Start', choices: [{ text: 'gut', next: 'b', score: 2, feedback: 'ja' }, { text: 'schlecht', next: 'e', score: 0, feedback: 'nein' }] },
+    { id: 'b', text: 'Weiter', choices: [{ text: 'gut', next: 'e', score: 2, feedback: 'ja' }, { text: 'mittel', next: 'e', score: 1, feedback: 'naja' }] },
+    { id: 'e', text: 'Ende', choices: [] },
+  ] };
+  const st = T.parseActive(sc) as any;
+  ok(st?.type === 'scenario' && T.scenarioMax(st) === 4 && T.scenarioWalk(st, [0, 0]).done && T.scenarioPassed(st, 4) && !T.scenarioPassed(st, 2), 'Szenario: beste Punktzahl, Weg, bestanden ab 70 %');
+  const loop = JSON.parse(JSON.stringify(sc));
+  loop.nodes[1].choices[0].next = 'a';
+  ok(T.parseActive(loop) === null && T.parseActive({ ...sc, start: 'x' }) === null, 'Szenario: Schleifen und fehlender Start werden abgelehnt');
+
+  const rp = T.parseActive({ type: 'roleplay', prompt: 'Verhandle', scenario: 'Du kaufst ein Auto.', persona: 'Verkäufer, hart', goal: '10 % Rabatt', opening: 'Guten Tag!', turns: 12, rubric: [{ criterion: 'freundlich', points: 2 }, { criterion: 'Argumente', points: 3 }] }) as any;
+  ok(rp?.type === 'roleplay' && rp.turns === 8 && T.parseActive({ type: 'roleplay', scenario: 'x' }) === null, 'Rollenspiel: Aufbau, höchstens 8 Beiträge');
+  const chat = [{ me: false, text: 'Guten Tag!' }, { me: true, text: 'Ich möchte Rabatt.' }];
+  const c = T.roleplayAsCase(rp, chat);
+  ok(c.facts.includes('Lernende Person: Ich möchte Rabatt.') && c.rubric.length === 2 && T.roleplayReplyPrompt(rp, chat, '').user.includes('LERNENDE PERSON: Ich möchte Rabatt.'), 'Rollenspiel: Verlauf geht in Antwort und Bewertung');
+
+  const P = await import('../src/lib/practice');
+  const js = P.parseTask({ type: 'code', lang: 'javascript', title: 'Summe', task: 'Summe', starter: 'function f(a) {}', tests: [{ call: 'f([1,2])', expected: '3' }] }) as any;
+  const sq = P.parseTask({ type: 'code', lang: 'sql', title: 'Alle', task: 'Alle Namen', schema: 'CREATE TABLE t(n TEXT);', solution: 'SELECT n FROM t' }) as any;
+  ok(js?.lang === 'javascript' && sq?.lang === 'sql' && sq.starter === 'SELECT ' && P.parseTask({ type: 'code', lang: 'sql', task: 'x', schema: 'y' }) === null, 'Code: Sprache JavaScript/SQL, SQL braucht Datenbank und Lösung');
+  const CR = await import('../src/lib/codeRun');
+  ok(CR.sameOut('[1, 2]', '[1,2]') && CR.sameOut('abc', "'abc'") && CR.sameOut("['a']", '["a"]') && !CR.sameOut('3', '4'), 'Code: Ausgaben tolerant verglichen');
+  const tA = { columns: ['n'], rows: [['a'], ['b']] }, tB = { columns: ['x'], rows: [['b'], ['a']] };
+  ok(CR.sameRows(tA, tB, false) && !CR.sameRows(tA, tB, true) && CR.sqlOrdered('select * from t order by n') && !CR.sqlOrdered('select 1'), 'SQL: Zeilen vergleichen, Reihenfolge nur bei ORDER BY');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

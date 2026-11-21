@@ -16,6 +16,8 @@ import { checkAnswer, insertTaskAfter, mistakePrompt, parseMistake, parseSimpler
 import { setSettings, useStore } from '../../lib/store';
 import { CaseTaskView, ClassifyTaskView, ClozeTaskView, MultiTaskView, OrderTaskView } from './ActiveTasks';
 import { MusicTaskView } from './MusicTask';
+import { WebCodeTask } from './WebCodeTask';
+import { EstimateTaskView, LabelTaskView, RoleplayTaskView, ScenarioTaskView, SheetTaskView } from './MoreTasks';
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -69,13 +71,18 @@ export function PracticeSetView({ set, host, head, onDone }: { set: PracticeSet;
           </span>
         </div>
         {t?.type === 'calc' && <CalcTask key={set.id + i} ctx={ctx} p={t} />}
-        {t?.type === 'code' && <CodeTask key={set.id + i} ctx={ctx} p={t} />}
+        {t?.type === 'code' && (t.lang && t.lang !== 'java' ? <WebCodeTask key={set.id + i} ctx={ctx} p={t} /> : <CodeTask key={set.id + i} ctx={ctx} p={t} />)}
         {t?.type === 'order' && <OrderTaskView key={set.id + i} ctx={ctx} task={t} />}
         {t?.type === 'classify' && <ClassifyTaskView key={set.id + i} ctx={ctx} task={t} />}
         {t?.type === 'cloze' && <ClozeTaskView key={set.id + i} ctx={ctx} task={t} />}
         {t?.type === 'multi' && <MultiTaskView key={set.id + i} ctx={ctx} task={t} />}
         {t?.type === 'case' && <CaseTaskView key={set.id + i} ctx={ctx} task={t} />}
         {t?.type === 'music' && <MusicTaskView key={set.id + i} ctx={ctx} task={t} />}
+        {t?.type === 'estimate' && <EstimateTaskView key={set.id + i} ctx={ctx} task={t} />}
+        {t?.type === 'label' && <LabelTaskView key={set.id + i} ctx={ctx} task={t} />}
+        {t?.type === 'sheet' && <SheetTaskView key={set.id + i} ctx={ctx} task={t} />}
+        {t?.type === 'scenario' && <ScenarioTaskView key={set.id + i} ctx={ctx} task={t} />}
+        {t?.type === 'roleplay' && <RoleplayTaskView key={set.id + i} ctx={ctx} task={t} />}
         {done === n && (onDone ?? <p className="form-ok">Alle Aufgaben gelöst – stark!</p>)}
         {done === n && startDone < n && <Confetti count={50} />}
       </section>

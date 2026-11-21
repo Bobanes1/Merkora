@@ -4,14 +4,15 @@
  * Pure – tested in scripts/test-srs.mts. Sound: lib/musicAudio.ts.
  */
 
-export type MusicMode = 'interval-ear' | 'chord-ear' | 'build-chord' | 'build-scale' | 'name-note' | 'rhythm';
+export type MusicMode = 'interval-ear' | 'chord-ear' | 'build-chord' | 'build-scale' | 'name-note' | 'rhythm' | 'play-notes';
 export type MusicSpec =
   | { mode: 'interval-ear'; root: string; interval: string; harmonic?: boolean }
   | { mode: 'chord-ear'; root: string; chord: string }
   | { mode: 'build-chord'; root: string; chord: string }
   | { mode: 'build-scale'; root: string; scale: string }
   | { mode: 'name-note'; note: string; clef: 'treble' | 'bass' }
-  | { mode: 'rhythm'; beats: number[]; tempo: number };
+  | { mode: 'rhythm'; beats: number[]; tempo: number }
+  | { mode: 'play-notes'; notes: string[]; clef: 'treble' | 'bass' };
 
 const LETTERS = ['C', 'D', 'E', 'F', 'G', 'A', 'H'];
 const LETTER_PC = [0, 2, 4, 5, 7, 9, 11];
@@ -204,6 +205,20 @@ export function parseMusic(raw: unknown): MusicSpec | null {
       const step = staffStep(n, clef);
       return step >= -4 && step <= 12 ? { mode, note: str(r.note), clef } : null;
     }
+    case 'play-notes': {
+      const clef = str(r.clef) === 'bass' ? 'bass' : 'treble';
+      const list = (Array.isArray(r.notes) ? r.notes : []).map((x) => str(x)).filter((x) => {
+        const n = parseNote(x);
+        if (!n) return false;
+        const step = staffStep(n, clef);
+        return step >= -4 && step <= 12;
+      });
+      const notes = list.slice(0, 6);
+      if (!notes.length) return null;
+      // the piano shows two octaves: all notes must fit from the C below the lowest one
+      const midis = notes.map((x) => midiOf(parseNote(x)!));
+      return Math.max(...midis) - pianoFrom(midis) < 24 ? { mode, notes, clef } : null;
+    }
     case 'rhythm': {
       const beats = (Array.isArray(r.beats) ? r.beats : []).map(Number).filter((b) => [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4].includes(b)).slice(0, 12);
       const tempo = Math.min(160, Math.max(50, Number(r.tempo) || 80));
@@ -211,4 +226,31 @@ export function parseMusic(raw: unknown): MusicSpec | null {
     }
   }
   return null;
+}
+
+// ---------- playing with the computer keyboard ----------
+/**
+ * Two octaves on the keyboard, by physical key (KeyboardEvent.code – the same on QWERTZ and QWERTY):
+ * lower octave on the bottom letter row (Y X C V B N M, black keys S D G H J),
+ * upper octave on the top letter row (Q W E R T Z U, black keys 2 3 5 6 7).
+ */
+export const KEY_CODES: Record<string, number> = {
+  KeyZ: 0, KeyS: 1, KeyX: 2, KeyD: 3, KeyC: 4, KeyV: 5, KeyG: 6, KeyB: 7, KeyH: 8, KeyN: 9, KeyJ: 10, KeyM: 11,
+  KeyQ: 12, Digit2: 13, KeyW: 14, Digit3: 15, KeyE: 16, KeyR: 17, Digit5: 18, KeyT: 19, Digit6: 20, KeyY: 21, Digit7: 22, KeyU: 23,
+};
+/** The MIDI note of a key on the piano starting at `from`; null if the key plays nothing. */
+export function keyToMidi(code: string, from = 60): number | null {
+  const k = KEY_CODES[code];
+  return k === undefined ? null : from + k;
+}
+/** Where a two-octave piano starts so these notes are on it: the C at or below the lowest one. */
+export function pianoFrom(midis: number[]): number {
+  const low = Math.min(...midis);
+  return low - (((low % 12) + 12) % 12);
+}
+/** Played the notes in this order? (Enharmonic spellings count as the same key.) */
+export function checkSequence(target: Note[], played: number[]): { right: boolean; places: boolean[] } {
+  const want = target.map(midiOf);
+  const places = want.map((m, i) => played[i] === m);
+  return { right: played.length === want.length && places.every(Boolean), places };
 }

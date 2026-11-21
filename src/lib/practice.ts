@@ -5,14 +5,21 @@
  */
 import { compileExpr } from './plotExpr';
 import { DIAGRAM_RULE, parseDiagram, type Diagram } from './diagram';
-import { parseActive, type ActiveTask } from './tasks';
+import { ACTIVE_TYPES, parseActive, type ActiveTask } from './tasks';
 import { LANG_RULE, type Prompt } from './ai';
 import { FORMULA_RULE } from './ai';
 
 export type AnswerSpec = { type: 'number' | 'fraction' | 'expr' | 'choice' | 'text'; value: string; tolerance?: number; options?: string[] };
 export type MathProblem = { problem: string; answer: AnswerSpec; hints: string[]; steps: string[] };
 export type JavaTest = { call: string; expected: string };
-export type JavaProblem = { title: string; task: string; starter: string; tests: JavaTest[]; hints: string[]; solution: string };
+/** Languages of code tasks: Java (local JDK or online), JavaScript, Python (in the browser) and SQL (sample database). */
+export type CodeLang = 'java' | 'javascript' | 'python' | 'sql';
+export const CODE_LANG_LABEL: Record<CodeLang, string> = { java: 'Java', javascript: 'JavaScript', python: 'Python', sql: 'SQL' };
+export type JavaProblem = { title: string; task: string; starter: string; tests: JavaTest[]; hints: string[]; solution: string; lang?: CodeLang; schema?: string };
+export const toLang = (v: unknown): CodeLang => {
+  const k = String(v ?? '').toLowerCase();
+  return /^(js|javascript|node)/.test(k) ? 'javascript' : /^(py|python)/.test(k) ? 'python' : /^sql/.test(k) ? 'sql' : 'java';
+};
 
 export type LabSpec =
   | { type: 'coin'; p: number; ask?: string }
@@ -34,6 +41,8 @@ export type ProblemProgress = {
   last?: string;
   /** Pip's explanation of that mistake (made once, kept). */
   mistake?: string;
+  /** A role play: the conversation so far. */
+  chat?: { me: boolean; text: string }[];
 };
 
 export type PracticeSet = {
@@ -164,7 +173,20 @@ function parseCode(o: Record<string, unknown>): ({ type: 'code' } & JavaProblem)
     .map((t) => ({ call: s((t as Record<string, unknown>)?.call, 400), expected: s((t as Record<string, unknown>)?.expected, 400) }))
     .filter((t) => t.call && t.expected !== '')
     .slice(0, 8);
-  const p = { type: 'code' as const, title: s(o.title, 80), task: s(o.task ?? o.prompt), starter: s(o.starter, 6000), tests, hints: arr(o.hints, 5), solution: s(o.solution, 8000) };
+  const lang = toLang(o.lang ?? o.language);
+  const p = {
+    type: 'code' as const,
+    title: s(o.title, 80),
+    task: s(o.task ?? o.prompt),
+    starter: s(o.starter, 6000) || (lang === 'sql' ? 'SELECT ' : ''),
+    tests,
+    hints: arr(o.hints, 5),
+    solution: s(o.solution, 8000),
+    ...(lang !== 'java' ? { lang } : {}),
+    ...(lang === 'sql' ? { schema: s(o.schema, 8000) } : {}),
+  };
+  // SQL is checked against the sample solution on a sample database, the others with test calls
+  if (lang === 'sql') return p.task && p.schema && p.solution ? p : null;
   return p.task && p.starter && p.tests.length ? p : null;
 }
 
@@ -172,8 +194,8 @@ function parseCode(o: Record<string, unknown>): ({ type: 'code' } & JavaProblem)
 export function parseTask(raw: unknown): Task | null {
   const o = (raw ?? {}) as Record<string, unknown>;
   const type = String(o.type ?? '').toLowerCase();
-  if (['order', 'classify', 'cloze', 'multi', 'case', 'music'].includes(type)) return parseActive(o);
-  if (type === 'code' || (o.starter && o.tests)) return parseCode(o);
+  if (ACTIVE_TYPES.includes(type)) return parseActive(o);
+  if (type === 'code' || (o.starter && o.tests) || (o.schema && o.solution)) return parseCode(o);
   const answer = parseAnswer(o.answer);
   const problem = s(o.problem ?? o.prompt ?? o.question);
   return problem && answer ? { type: 'calc', problem, answer, hints: arr(o.hints, 5), steps: arr(o.steps, 12) } : null;
@@ -278,19 +300,24 @@ const TASK_TYPES = {
   classify: `{"type":"classify","prompt":"Ordne zu","groups":["Gruppe A","Gruppe B"],"items":[{"text":"…","group":0},{"text":"…","group":1}],"explain":"…"} – 4–10 Elemente`,
   cloze: `{"type":"cloze","prompt":"…","text":"Ein {{1}} ist … und {{2}} …","gaps":[["Antwort","Synonym"],["…"]],"explain":"…"} – Lücken {{1}}, {{2}} … mit erlaubten Antworten`,
   case: `{"type":"case","facts":"Sachverhalt (realistisch, 4–10 Sätze)","question":"Aufgabe (z. B. Hat A gegen B einen Anspruch auf …?)","rubric":[{"criterion":"Anspruchsgrundlage richtig benannt (§ …)","points":2},{"criterion":"…","points":3}],"solution":"vollständige Musterlösung"} – Fallaufgabe, die man selbst ausformuliert`,
-  code: `{"type":"code","title":"…","task":"…","starter":"class Solution {\\n    static int f(int[] a) {\\n        // dein Code\\n        return 0;\\n    }\\n}","tests":[{"call":"Solution.f(new int[]{1,2})","expected":"3"}],"hints":["…"],"solution":"…"} – Java: Klasse "Solution" ohne "public", statische Methoden, keine main; tests 3–6 Aufrufe, expected wie String.valueOf / Arrays.toString ("[1, 2]")`,
-  music: `{"type":"music","prompt":"…","music":{"mode":"interval-ear","root":"C4","interval":"reine Quinte"}} – modes: "interval-ear" (Intervall hören: Prime … Oktave, z. B. "kleine Terz"), "chord-ear" (Akkord hören, "chord": Dur|Moll|vermindert|übermäßig|Dominantseptakkord|großer Septakkord|Moll-Septakkord|halbvermindert|verminderter Septakkord), "build-chord" (Akkord auf dem Klavier spielen, "root","chord"), "build-scale" (Tonleiter spielen, "scale": Dur|natürliches Moll|harmonisches Moll|melodisches Moll|dorisch|phrygisch|lydisch|mixolydisch|lokrisch|Dur-Pentatonik|Moll-Pentatonik), "name-note" (Note im Notensystem benennen, "note":"Fis4","clef":"treble|bass"), "rhythm" (Rhythmus klopfen, "beats":[1,0.5,0.5,1,1] in Vierteln, "tempo":80). Deutsche Notennamen (H, B = H♭, Fis, Es …)`,
+  code: `{"type":"code","lang":"java|javascript|python|sql","title":"…","task":"…","starter":"…","tests":[{"call":"…","expected":"…"}],"hints":["…"],"solution":"…"} – Programmieren; "lang" passend zum Thema (Standard java). Java: Klasse "Solution" ohne "public", statische Methoden, keine main, starter "class Solution {\\n    static int f(int[] a) {\\n        // dein Code\\n        return 0;\\n    }\\n}", call "Solution.f(new int[]{1,2})", expected wie String.valueOf / Arrays.toString ("[1, 2]"). JavaScript: Funktionen ("function f(a) { … }"), call "f([1,2])", expected wie JSON.stringify, Text ohne Anführungszeichen. Python: Funktionen ("def f(a):\\n    # dein Code\\n    pass"), call "f([1, 2])", expected wie repr() ("[1, 2]", Text ohne Anführungszeichen, True/False). tests 3–6 Aufrufe. SQL: statt tests "schema" (CREATE TABLE … ; INSERT … mit 5–15 Zeilen Beispieldaten, SQLite) und "solution" (die richtige Abfrage), starter "SELECT "; Merkora vergleicht die Ergebniszeilen`,
+  music: `{"type":"music","prompt":"…","music":{"mode":"interval-ear","root":"C4","interval":"reine Quinte"}} – modes: "interval-ear" (Intervall hören: Prime … Oktave, z. B. "kleine Terz"), "chord-ear" (Akkord hören, "chord": Dur|Moll|vermindert|übermäßig|Dominantseptakkord|großer Septakkord|Moll-Septakkord|halbvermindert|verminderter Septakkord), "build-chord" (Akkord auf dem Klavier spielen, "root","chord"), "build-scale" (Tonleiter spielen, "scale": Dur|natürliches Moll|harmonisches Moll|melodisches Moll|dorisch|phrygisch|lydisch|mixolydisch|lokrisch|Dur-Pentatonik|Moll-Pentatonik), "name-note" (Note im Notensystem benennen, "note":"Fis4","clef":"treble|bass"), "rhythm" (Rhythmus klopfen, "beats":[1,0.5,0.5,1,1] in Vierteln, "tempo":80), "play-notes" (Noten vom Blatt spielen: "notes":["C4","E4","G4"] 1–6 Noten, "clef":"treble|bass"; Violinschlüssel C4–H5, Bassschlüssel C2–H3, alle innerhalb von zwei Oktaven). Deutsche Notennamen (H, B = H♭, Fis, Es …)`,
+  estimate: `{"type":"estimate","prompt":"Schätze …","min":0,"max":100,"answer":37,"tolerance":3,"unit":"%","explain":"…"} – einen Wert per Schieberegler schätzen (Größenordnungen, Wahrscheinlichkeiten, Jahreszahlen); tolerance = Abweichung, die noch als richtig gilt`,
+  label: `{"type":"label","prompt":"Beschrifte …","diagram":{"type":"flow","title":"…","steps":["…","…","…"]},"hide":[0,1,2]} – eine Grafik, deren Beschriftungen verdeckt und nummeriert werden; die Person ordnet die Begriffe zu. "hide": Nummern der Beschriftungen in Zeichenreihenfolge (ab 0), 3–5 Stück. Grafik-Formen wie bei "figures"`,
+  sheet: `{"type":"sheet","prompt":"…","rows":[["Artikel","Menge","Preis","Summe"],["Äpfel","3","0,50",""],["Brot","1","2,40",""],["","","Gesamt",""]],"expect":{"D2":"=B2*C2","D3":"=B3*C3","D4":"=SUMME(D2:D3)"},"explain":"…"} – kleine Tabelle (höchstens 10 Zeilen × 6 Spalten); die Zellen aus "expect" füllt die Person mit Zahl oder Formel (=, Zellbezüge wie A1, + - * / ^, SUMME, MITTELWERT, MIN, MAX, ANZAHL mit Bereichen A1:A5, Argumente mit ;); Merkora vergleicht die berechneten Werte`,
+  scenario: `{"type":"scenario","prompt":"…","start":"a","nodes":[{"id":"a","text":"Ausgangslage …","choices":[{"text":"…","next":"b","score":2,"feedback":"warum gut"},{"text":"…","next":"c","score":0,"feedback":"warum ungünstig"}]},{"id":"b","text":"…","choices":[{"text":"…","next":"ende1","score":2,"feedback":"…"}]},{"id":"ende1","text":"Ausgang …","choices":[]}]} – Entscheidungsgeschichte mit Folgen: 2–4 Entscheidungen tief, 2–3 Möglichkeiten je Knoten, score 0–2 pro Wahl, Enden ohne choices, keine Schleifen; realistisch, mit nachvollziehbarem Feedback`,
+  roleplay: `{"type":"roleplay","prompt":"…","scenario":"Situation in 2–4 Sätzen","persona":"wer das Gegenüber ist und wie es sich verhält","goal":"was die Person im Gespräch erreichen soll","opening":"erster Satz des Gegenübers","turns":5,"rubric":[{"criterion":"…","points":2},{"criterion":"…","points":2}],"solution":"kurzes Beispiel für ein gutes Gespräch"} – Rollenspiel-Gespräch (Merkora spielt das Gegenüber), am Ende Bewertung nach Schema; für Gesprächsführung, Verhandeln, Beraten, Fremdsprache`,
 };
 const LABS_RULE = `"labs" (0–2, nur wenn sie zum Thema passen): {"type":"coin","p":0.5} · {"type":"dice","dice":2} · {"type":"binomial","n":10,"p":0.3} · {"type":"normal","mu":100,"sigma":15,"a":85,"b":115} · {"type":"tree","pA":0.3,"pBA":0.8,"pBnA":0.1,"a":"krank","b":"positiv"} · {"type":"bayes","prevalence":0.01,"sensitivity":0.95,"specificity":0.9} · {"type":"urn","N":10,"K":3,"n":4} · {"type":"function","expr":"a*x^2+b","params":{"a":1,"b":0},"min":-5,"max":5} · {"type":"vectors","matrix":[[1,1],[0,1]]}; jeweils mit "ask": eine Frage zum Ausprobieren.`;
 
 /** Which task types fit which subject (most active ones first). */
 export const DOMAIN_TASKS: Record<Domain, (keyof typeof TASK_TYPES)[]> = {
-  math: ['calc', 'order', 'multi', 'classify'],
+  math: ['calc', 'order', 'multi', 'classify', 'estimate', 'sheet'],
   java: ['code', 'cloze', 'order', 'calc', 'multi'],
-  law: ['case', 'classify', 'order', 'cloze', 'multi'],
+  law: ['case', 'scenario', 'classify', 'order', 'cloze', 'multi', 'roleplay'],
   music: ['music', 'calc', 'classify', 'cloze', 'multi'],
-  language: ['cloze', 'classify', 'order', 'calc', 'multi'],
-  general: ['calc', 'order', 'classify', 'cloze', 'multi', 'case'],
+  language: ['cloze', 'roleplay', 'classify', 'order', 'calc', 'multi'],
+  general: ['calc', 'order', 'classify', 'cloze', 'multi', 'case', 'scenario', 'roleplay', 'label', 'estimate', 'sheet'],
 };
 
 /** The task rules for one subject (or all for "auto"). */

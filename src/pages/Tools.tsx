@@ -158,13 +158,10 @@ function LabPicker() {
   );
 }
 
-const PCN = ['C', 'Cis', 'D', 'Dis', 'E', 'F', 'Fis', 'G', 'Gis', 'A', 'B', 'H'];
 function FreePiano() {
-  const [notes, setNotes] = useState<number[]>([]);
   return (
     <div className="tool">
-      <Piano onPlay={(m) => setNotes((n) => [...n.slice(-11), m])} />
-      <p className="muted small">Gespielt: {notes.length ? notes.map((m) => PCN[m % 12] + Math.floor(m / 12 - 1)).join(' · ') : '–'}</p>
+      <Piano />
     </div>
   );
 }

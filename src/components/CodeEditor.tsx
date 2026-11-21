@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef } from 'react';
-import { highlightJava } from '../lib/javaHighlight';
+import { highlightCode } from '../lib/javaHighlight';
 import { usePhone } from '../lib/phone';
 
 /**
@@ -7,7 +7,7 @@ import { usePhone } from '../lib/phone';
  * Tab = 4 spaces, Enter keeps the indentation (one more after "{"). On the phone a row of keys
  * that are hard to reach on a phone keyboard.
  */
-export function CodeEditor({ value, onChange, label = 'Code' }: { value: string; onChange: (v: string) => void; label?: string }) {
+export function CodeEditor({ value, onChange, label = 'Code', lang = 'java' }: { value: string; onChange: (v: string) => void; label?: string; lang?: string }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const hl = useRef<HTMLPreElement>(null);
   const phone = usePhone();
@@ -48,7 +48,7 @@ export function CodeEditor({ value, onChange, label = 'Code' }: { value: string;
     } else if (e.key === 'Enter') {
       const before = value.slice(0, el.selectionStart);
       const line = before.slice(before.lastIndexOf('\n') + 1);
-      const indent = /^\s*/.exec(line)![0] + (/\{\s*$/.test(line) ? '    ' : '');
+      const indent = /^\s*/.exec(line)![0] + ((lang === 'python' ? /:\s*$/ : /\{\s*$/).test(line) ? '    ' : '');
       e.preventDefault();
       insert('\n' + indent);
     } else if (e.key === '}') {
@@ -72,7 +72,7 @@ export function CodeEditor({ value, onChange, label = 'Code' }: { value: string;
       </div>
       <div className="code-area">
         {/* the highlighted copy behind the transparent text field */}
-        <pre ref={hl} className="code-hl" aria-hidden="true" dangerouslySetInnerHTML={{ __html: highlightJava(value) + '\n' }} />
+        <pre ref={hl} className="code-hl" aria-hidden="true" dangerouslySetInnerHTML={{ __html: highlightCode(value, lang) + '\n' }} />
         <textarea
           ref={ref}
           className="code-input"

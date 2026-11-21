@@ -5,6 +5,8 @@
  */
 import type { MusicSpec } from './music';
 import { parseMusic } from './music';
+import { diagramLabels, parseDiagram, type Diagram } from './diagram';
+import { cellPos, evalSheet, isErr, type CellValue } from './sheet';
 
 export type OrderTask = { type: 'order'; prompt: string; items: string[]; hints: string[]; explain?: string };
 export type ClassifyTask = { type: 'classify'; prompt: string; groups: string[]; items: { text: string; group: number }[]; hints: string[]; explain?: string };
@@ -12,7 +14,19 @@ export type ClozeTask = { type: 'cloze'; prompt: string; text: string; gaps: str
 export type MultiTask = { type: 'multi'; prompt: string; options: string[]; correct: number[]; hints: string[]; explain?: string };
 export type CaseTask = { type: 'case'; facts: string; question: string; rubric: { criterion: string; points: number }[]; solution: string; hints: string[] };
 export type MusicTask = { type: 'music'; prompt: string; music: MusicSpec; hints: string[]; explain?: string };
-export type ActiveTask = OrderTask | ClassifyTask | ClozeTask | MultiTask | CaseTask | MusicTask;
+/** Guess a value with a slider; points by how close you are. */
+export type EstimateTask = { type: 'estimate'; prompt: string; min: number; max: number; step: number; unit: string; answer: number; tolerance: number; hints: string[]; explain?: string };
+/** A graphic with numbered covered labels: choose the right term for each number. */
+export type LabelTask = { type: 'label'; prompt: string; diagram: Diagram; hide: number[]; labels: string[]; hints: string[]; explain?: string };
+/** A small spreadsheet: fill the empty cells (numbers or formulas); checked by the computed values. */
+export type SheetTask = { type: 'sheet'; prompt: string; rows: string[][]; expect: Record<string, string>; hints: string[]; explain?: string };
+/** A branching story: choices with consequences; points per choice. */
+export type ScenarioNode = { id: string; text: string; choices: { text: string; next?: string; score: number; feedback: string }[] };
+export type ScenarioTask = { type: 'scenario'; prompt: string; start: string; nodes: ScenarioNode[]; hints: string[]; explain?: string };
+/** A conversation with an AI character; graded with a scheme at the end. */
+export type RoleplayTask = { type: 'roleplay'; prompt: string; scenario: string; persona: string; goal: string; opening: string; turns: number; rubric: { criterion: string; points: number }[]; solution: string; hints: string[] };
+export type ActiveTask = OrderTask | ClassifyTask | ClozeTask | MultiTask | CaseTask | MusicTask | EstimateTask | LabelTask | SheetTask | ScenarioTask | RoleplayTask;
+export const ACTIVE_TYPES = ['order', 'classify', 'cloze', 'multi', 'case', 'music', 'estimate', 'label', 'sheet', 'scenario', 'roleplay'];
 
 const s = (v: unknown, max = 4000) => (typeof v === 'string' || typeof v === 'number' ? String(v).trim().slice(0, max) : '');
 const arr = (v: unknown, max = 12, len = 2000) => (Array.isArray(v) ? v : []).map((x) => s(x, len)).filter(Boolean).slice(0, max);
@@ -68,8 +82,206 @@ export function parseActive(raw: unknown): ActiveTask | null {
       const music = parseMusic(r.music ?? r);
       return music ? { type: 'music', prompt: prompt || '', music, hints, explain } : null;
     }
+    case 'estimate': {
+      const n = (v: unknown) => {
+        const x = Number(String(v ?? '').replace(',', '.'));
+        return Number.isFinite(x) ? x : NaN;
+      };
+      const answer = n(r.answer), lo = n(r.min), hi = n(r.max);
+      if (![answer, lo, hi].every(Number.isFinite) || lo >= hi || answer < lo || answer > hi || !prompt) return null;
+      const span = hi - lo;
+      const tol = n(r.tolerance);
+      const step = n(r.step);
+      return {
+        type: 'estimate',
+        prompt,
+        min: lo,
+        max: hi,
+        step: Number.isFinite(step) && step > 0 && step <= span / 4 ? step : niceStep(span),
+        unit: s(r.unit, 20),
+        answer,
+        tolerance: Number.isFinite(tol) && tol > 0 ? Math.min(tol, span / 4) : span / 20,
+        hints,
+        explain,
+      };
+    }
+    case 'label': {
+      const diagram = parseDiagram(r.diagram);
+      if (!diagram) return null;
+      const all = diagramLabels(diagram);
+      const want = (Array.isArray(r.hide) ? r.hide : []).map(Number).filter((k) => Number.isInteger(k) && k >= 0 && k < all.length);
+      const hide = [...new Set(want.length ? want : all.map((_, k) => k))].slice(0, 6);
+      return hide.length >= 2 ? { type: 'label', prompt: prompt || 'Beschrifte die Grafik.', diagram, hide, labels: hide.map((k) => all[k]), hints, explain } : null;
+    }
+    case 'sheet': {
+      const rows = (Array.isArray(r.rows) ? r.rows : []).slice(0, 10).map((row) => (Array.isArray(row) ? row : []).slice(0, 6).map((c) => s(c, 120)));
+      const width = Math.max(0, ...rows.map((x) => x.length));
+      rows.forEach((x) => {
+        while (x.length < width) x.push('');
+      });
+      const expect: Record<string, string> = {};
+      for (const [k, v] of Object.entries((r.expect ?? {}) as Record<string, unknown>)) {
+        const pos = cellPos(k);
+        if (pos && pos[0] < width && pos[1] < rows.length && s(v, 200)) expect[k.toUpperCase()] = s(v, 200);
+      }
+      if (!rows.length || !Object.keys(expect).length || !prompt) return null;
+      // the cells to fill start empty; the expected solution must compute without errors
+      for (const k of Object.keys(expect)) rows[cellPos(k)![1]][cellPos(k)![0]] = '';
+      const solved = evalSheet(fillSheet(rows, expect));
+      if (Object.keys(expect).some((k) => isErr(solved[cellPos(k)![1]][cellPos(k)![0]]))) return null;
+      return { type: 'sheet', prompt, rows, expect, hints, explain };
+    }
+    case 'scenario': {
+      const nodes: ScenarioNode[] = (Array.isArray(r.nodes) ? r.nodes : [])
+        .slice(0, 20)
+        .map((x) => {
+          const o = (x ?? {}) as Record<string, unknown>;
+          return {
+            id: s(o.id, 40),
+            text: s(o.text, 1500),
+            choices: (Array.isArray(o.choices) ? o.choices : [])
+              .slice(0, 4)
+              .map((c) => {
+                const q = (c ?? {}) as Record<string, unknown>;
+                const score = Math.round(Number(q.score ?? 0));
+                return { text: s(q.text, 300), next: s(q.next, 40) || undefined, score: Number.isFinite(score) ? Math.max(0, Math.min(2, score)) : 0, feedback: s(q.feedback, 600) };
+              })
+              .filter((c) => c.text),
+          };
+        })
+        .filter((n) => n.id && n.text);
+      const start = s(r.start, 40) || nodes[0]?.id || '';
+      const task: ScenarioTask = { type: 'scenario', prompt: prompt || 'Entscheide dich – jede Wahl hat Folgen.', start, nodes, hints, explain };
+      return scenarioOk(task) ? task : null;
+    }
+    case 'roleplay': {
+      const rubric = (Array.isArray(r.rubric) ? r.rubric : [])
+        .map((c) => {
+          const o = (c ?? {}) as Record<string, unknown>;
+          const points = Math.round(Number(o.points ?? 1));
+          return { criterion: s(o.criterion ?? o.name ?? c, 400), points: Number.isFinite(points) && points > 0 ? Math.min(points, 10) : 1 };
+        })
+        .filter((c) => c.criterion)
+        .slice(0, 6);
+      const scenario = s(r.scenario ?? r.facts, 2000);
+      const persona = s(r.persona ?? r.role, 600);
+      const goal = s(r.goal ?? r.question, 600);
+      const opening = s(r.opening, 800);
+      const turns = Math.round(Number(r.turns ?? 5));
+      return scenario && persona && goal && opening && rubric.length >= 2
+        ? { type: 'roleplay', prompt: prompt || 'Führe das Gespräch.', scenario, persona, goal, opening, turns: Number.isFinite(turns) ? Math.max(3, Math.min(8, turns)) : 5, rubric, solution: s(r.solution, 3000), hints }
+        : null;
+    }
   }
   return null;
+}
+
+
+/** A pleasant slider step for a range (…, 0.1, 0.5, 1, 5, 10, …) – about 100–200 steps. */
+export function niceStep(span: number): number {
+  const raw = span / 150;
+  const pow = Math.pow(10, Math.floor(Math.log10(raw)));
+  for (const m of [1, 2, 5, 10]) if (raw <= m * pow) return m * pow;
+  return 10 * pow;
+}
+
+// ---------- estimate ----------
+export function checkEstimate(task: EstimateTask, value: number): 'right' | 'close' | 'far' {
+  const d = Math.abs(value - task.answer);
+  return d <= task.tolerance + 1e-9 ? 'right' : d <= 3 * task.tolerance ? 'close' : 'far';
+}
+
+// ---------- label ----------
+export function checkLabels(task: LabelTask, given: string[]) {
+  const places = task.labels.map((l, i) => !!given[i] && norm(given[i]) === norm(l));
+  return { right: places.every(Boolean), places };
+}
+
+// ---------- sheet ----------
+/** The rows with the given entries put into their cells. */
+export function fillSheet(rows: string[][], entries: Record<string, string>): string[][] {
+  const out = rows.map((r) => [...r]);
+  for (const [k, v] of Object.entries(entries)) {
+    const pos = cellPos(k);
+    if (pos && out[pos[1]] && pos[0] < out[pos[1]].length) out[pos[1]][pos[0]] = v;
+  }
+  return out;
+}
+const sameValue = (a: CellValue, b: CellValue) =>
+  typeof a === 'number' && typeof b === 'number' ? Math.abs(a - b) <= Math.max(1e-6, Math.abs(b) * 1e-6) : !isErr(a) && !isErr(b) && norm(String(a)) === norm(String(b));
+/** Per cell to fill: does what you typed compute to the same value as the solution? */
+export function checkSheet(task: SheetTask, given: Record<string, string>) {
+  const mine = evalSheet(fillSheet(task.rows, given));
+  const want = evalSheet(fillSheet(task.rows, task.expect));
+  const cells: Record<string, boolean> = {};
+  for (const k of Object.keys(task.expect)) {
+    const [c, r] = cellPos(k)!;
+    cells[k] = !!given[k]?.trim() && sameValue(mine[r][c], want[r][c]);
+  }
+  return { right: Object.values(cells).every(Boolean), cells, values: mine };
+}
+
+// ---------- scenario ----------
+/** Usable: start exists, every "next" exists, no loops, at most 6 decisions deep, at least 2 decisions. */
+export function scenarioOk(t: ScenarioTask): boolean {
+  const byId = new Map(t.nodes.map((n) => [n.id, n]));
+  if (!byId.has(t.start) || byId.size !== t.nodes.length) return false;
+  let decisions = 0;
+  const walk = (id: string, path: string[]): boolean => {
+    if (path.includes(id) || path.length > 6) return false;
+    const n = byId.get(id);
+    if (!n) return false;
+    if (n.choices.length) decisions++;
+    return n.choices.every((c) => !c.next || walk(c.next, [...path, id]));
+  };
+  return walk(t.start, []) && decisions >= 2;
+}
+/** The most points one can get on the best way through. */
+export function scenarioMax(t: ScenarioTask, id = t.start): number {
+  const n = t.nodes.find((x) => x.id === id);
+  if (!n || !n.choices.length) return 0;
+  return Math.max(...n.choices.map((c) => c.score + (c.next ? scenarioMax(t, c.next) : 0)));
+}
+/** Points of a way through (choice indices from the start), and whether the end is reached. */
+export function scenarioWalk(t: ScenarioTask, picks: number[]) {
+  let id: string | undefined = t.start;
+  let score = 0;
+  const steps: { node: ScenarioNode; choice: ScenarioNode['choices'][number] }[] = [];
+  for (const k of picks) {
+    const n = t.nodes.find((x) => x.id === id);
+    const c = n?.choices[k];
+    if (!n || !c) break;
+    steps.push({ node: n, choice: c });
+    score += c.score;
+    id = c.next;
+  }
+  const here = id ? t.nodes.find((x) => x.id === id) : undefined;
+  return { score, steps, here, done: !here || !here.choices.length };
+}
+export const scenarioPassed = (t: ScenarioTask, score: number) => score >= 0.7 * Math.max(1, scenarioMax(t));
+
+// ---------- role play ----------
+export type ChatLine = { me: boolean; text: string };
+/** The AI character answers (in its role, short, without breaking character). */
+export function roleplayReplyPrompt(t: RoleplayTask, chat: ChatLine[], lang: string) {
+  return {
+    system: `Du spielst in einer Übung eine Rolle: ${t.persona}. ${lang}
+Situation: ${t.scenario}
+Bleib immer in der Rolle, antworte natürlich und kurz (1–4 Sätze), reagiere auf das, was die Person sagt, und mach es ihr nicht zu leicht, aber fair. Verrate nicht, wie bewertet wird.
+Format: {"reply":"…"}`,
+    user: chat.map((l) => (l.me ? 'LERNENDE PERSON: ' : 'DU: ') + l.text).join('\n'),
+  };
+}
+/** A role play is graded like a case: the conversation is the material, the goal the task. */
+export function roleplayAsCase(t: RoleplayTask, chat: ChatLine[]): CaseTask {
+  return {
+    type: 'case',
+    facts: `${t.scenario}\n\nROLLE DES GEGENÜBERS: ${t.persona}\n\nGESPRÄCH:\n${chat.map((l) => (l.me ? 'Lernende Person: ' : 'Gegenüber: ') + l.text).join('\n')}`,
+    question: `Ziel der lernenden Person: ${t.goal}. Bewerte NUR die Beiträge der lernenden Person.`,
+    rubric: t.rubric,
+    solution: t.solution || '(keine Musterlösung – bewerte nach dem Schema)',
+    hints: [],
+  };
 }
 
 // ---------- checking ----------

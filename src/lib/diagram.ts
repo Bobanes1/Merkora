@@ -1396,7 +1396,7 @@ const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 const r1 = (n: number) => Math.round(n * 10) / 10;
 
 /** How a graphic is shown while learning: one label covered ("?") or shown as the answer, or built up step by step. */
-export type DiagramView = { hide?: number; reveal?: number; steps?: boolean };
+export type DiagramView = { hide?: number; reveal?: number; steps?: boolean; /** several labels covered, numbered 1, 2, 3 … (labelling tasks) */ hideMany?: number[] };
 
 /** Kinds of boxes that hold a label one can be asked about (not titles, axis labels or small notes). */
 const QUIZ_KINDS = new Set<Box['kind']>(['node', 'node2', 'accent', 'accent2', 'soft']);
@@ -1432,7 +1432,7 @@ export const STEP_TYPES: Diagram['type'][] = ['flow', 'cycle', 'timeline', 'pyra
 
 export function renderDiagram(d: Diagram, p: Palette = PALETTES.light, view?: DiagramView): string {
   const L = layoutDiagram(d);
-  const quiz = view && (view.hide !== undefined || view.reveal !== undefined) ? quizBoxes(L) : [];
+  const quiz = view && (view.hide !== undefined || view.reveal !== undefined || view.hideMany?.length) ? quizBoxes(L) : [];
   const steps = !!view?.steps && STEP_TYPES.includes(d.type);
   let step = 0;
   // ids per colour scheme, so several diagrams on one page never borrow each other's arrow colours
@@ -1467,12 +1467,13 @@ export function renderDiagram(d: Diagram, p: Palette = PALETTES.light, view?: Di
   const isMatrixY = (b: Box) => d.type === 'matrix' && b.kind === 'label' && b.w < 40;
   const drawBox = (b: Box, bi: number) => {
     const qi = quiz.indexOf(bi);
-    if (qi >= 0 && qi === view?.hide) {
+    const many = qi >= 0 && view?.hideMany ? view.hideMany.indexOf(qi) : -1;
+    if (qi >= 0 && (qi === view?.hide || many >= 0)) {
       // the covered label: dashed frame with a question mark
       const t1 = tn(1);
       out.push(
         `<rect class="dg-hidden" x="${r1(b.x)}" y="${r1(b.y)}" width="${r1(b.w)}" height="${r1(b.h)}" rx="${r1(Math.min(12, b.h / 2))}" fill="${t1.soft}" stroke="${t1.line}" stroke-width="2.5" stroke-dasharray="7 5"/>`,
-        `<text x="${r1(b.x + b.w / 2)}" y="${r1(b.y + b.h / 2)}" font-size="22" font-weight="800" fill="${t1.line}" text-anchor="middle" dominant-baseline="middle">?</text>`,
+        `<text x="${r1(b.x + b.w / 2)}" y="${r1(b.y + b.h / 2)}" font-size="22" font-weight="800" fill="${t1.line}" text-anchor="middle" dominant-baseline="middle">${many >= 0 ? many + 1 : '?'}</text>`,
       );
       return;
     }
