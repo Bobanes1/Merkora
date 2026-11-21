@@ -1,4 +1,9 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+import { GoalRing } from '../components/GoalRing';
+import { HeroScene } from '../components/HeroScene';
+import { DeckCoverOf } from '../components/DeckCover';
+import { Plant } from '../components/Plant';
+import { GREETING, timeOfDay } from '../lib/look';
 import { Link, useNavigate } from 'react-router-dom';
 import { AnkiImport } from '../components/AnkiImport';
 import { CreateWithAI } from '../components/CreateWithAI';
@@ -83,9 +88,7 @@ function DeckRow({ deck }: { deck: Deck }) {
   const n = dueCards(deck).length;
   return (
     <Link to={document.documentElement.classList.contains('phone') ? deckUrl(data, deck) : deckUrl(data, deck, n ? 'learn' : 'cards')} className="deck-row">
-      <span className="deck-icon">
-        <IconCards />
-      </span>
+      <DeckCoverOf deck={deck} size={40} />
       <span className="deck-info">
         <b title={deck.name}>{name}</b>
         <small>
@@ -98,6 +101,7 @@ function DeckRow({ deck }: { deck: Deck }) {
         </span>
         <small>{pct}%</small>
       </span>
+      <Plant pct={pct} size={30} />
       {n > 0 ? <span className="pill-count">{n} fällig</span> : <span className="pill-ok">erledigt</span>}
     </Link>
   );
@@ -129,7 +133,8 @@ export default function Dashboard() {
   const cardsToday = new Set(data.reviews.filter((r) => dayKey(r.at) === today).map((r) => r.cardId)).size;
   const minutesToday = Math.round(data.game.minutesByDay?.[today] ?? 0);
   const hour = new Date().getHours();
-  const hello = hour < 11 ? 'Guten Morgen' : hour < 18 ? 'Guten Tag' : 'Guten Abend';
+  const tod = timeOfDay(hour);
+  const hello = GREETING[tod];
   const goalReached = xpToday(data) >= data.game.dailyGoal;
   const serie = Math.max(xpStreak(data), streak(data.reviews));
   const exams = upcomingExams(data);
@@ -150,7 +155,7 @@ export default function Dashboard() {
     setPoke({ n, move, active: true });
     pokeTimer.current = window.setTimeout(() => setPoke((p) => (p && p.n === n ? { ...p, active: false } : p)), move === 'flip' ? 1000 : 1700);
   };
-  const restMood = goalReached ? 'cheer' : serie > 0 ? 'happy' : 'wave';
+  const restMood = goalReached ? 'cheer' : tod === 'night' ? 'idle' : serie > 0 ? 'happy' : 'wave';
   const pathDeck = data.decks
     .filter((d) => d.cards.length)
     .map((d) => ({ deck: d, p: pathProgress(d) }))
@@ -167,7 +172,8 @@ export default function Dashboard() {
   return (
     <div className="home">
       <div className="home-main">
-        <section className="hero-banner">
+        <section className={`hero-banner tod-${tod}`}>
+          <HeroScene tod={tod} />
           <button type="button" className={`hero-pip ${poke?.active && poke.move === 'flip' ? 'poke-flip' : ''}`} aria-label="Pip" title="Pip anstupsen" onClick={pokePip}>
             <Mascot
               who="pip"
@@ -178,7 +184,10 @@ export default function Dashboard() {
             />
           </button>
           <div>
-            <h1>{hello}!</h1>
+            <h1>
+              {hello}
+              {tod === 'night' ? '' : '!'}
+            </h1>
             <p>
               {goalReached
                 ? 'Tagesziel geschafft – Pip ist stolz auf dich!'
@@ -194,6 +203,7 @@ export default function Dashboard() {
             </Link>
           )}
         </section>
+        {phone && <GoalRing cards={cardsToday} cardGoal={cardGoal} minutes={minutesToday} minuteGoal={minuteGoal} compact />}
 
 
         {!phone && (
@@ -409,27 +419,8 @@ export default function Dashboard() {
 
       {!phone && (
       <aside className="home-rail">
-        <div className="widget">
-          <div>
-            <small>Heute gelernte Karten</small>
-            <b className="w-num">
-              <span className="green">{cardsToday}</span> /{cardGoal}
-            </b>
-          </div>
-          <Ring value={cardsToday} goal={cardGoal} color="var(--primary)">
-            <IconCards size={20} />
-          </Ring>
-        </div>
-        <div className="widget">
-          <div>
-            <small>Lernzeit heute (Min.)</small>
-            <b className="w-num">
-              <span className="amber">{minutesToday}</span> /{minuteGoal}
-            </b>
-          </div>
-          <Ring value={minutesToday} goal={minuteGoal} color="#f2b84b">
-            <IconFlame size={20} />
-          </Ring>
+        <div className="widget goal-widget">
+          <GoalRing cards={cardsToday} cardGoal={cardGoal} minutes={minutesToday} minuteGoal={minuteGoal} />
         </div>
         <MiniCalendar />
       </aside>

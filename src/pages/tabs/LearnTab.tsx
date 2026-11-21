@@ -26,7 +26,8 @@ const explainMemo = new Map<string, string>();
 const seedOf = (id: string) => [...id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
 import { ImproveCardDialog } from '../../components/ImproveCardDialog';
 import { SpeakButton } from '../../components/SpeakButton';
-import { swipeRating, usePhone } from '../../lib/phone';
+import { usePhone } from '../../lib/phone';
+import { useSwipe } from '../../components/useSwipe';
 import { htmlSpeech } from '../../lib/speechText';
 import { speak, stopSpeaking } from '../../lib/speech';
 
@@ -47,7 +48,6 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
   const [queue, setQueue] = useState<string[]>([]);
   const phone = usePhone();
   // phone: swiping the turned card rates it (left = Nochmal, right = Gut)
-  const swipe = useRef<{ x: number; y: number } | null>(null);
   const [flipped, setFlipped] = useState(false);
   const [done, setDone] = useState(0);
   const [typed, setTyped] = useState('');
@@ -237,6 +237,8 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
     window.addEventListener('keydown', k);
     return () => window.removeEventListener('keydown', k);
   }, [card, flipped, rate, deck.id, takeBack]);
+  // phone: after turning, the card follows the finger – right = „Gut“, left = „Nochmal“
+  const swipeProps = useSwipe(phone && flipped && !typeMode, rate);
 
   const check = async () => {
     if (!card) return;
@@ -414,14 +416,7 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
       <Mascot className="learn-mascot" mood={mood} pulse={done + queue.length} size={64} say={moodSay} />
       <div key={`${card.id}-${flipped ? 'b' : 'f'}`} className={`flashcard ${flipped ? 'flipped flip-in' : 'card-in'}`}
         onClick={() => !typeMode && setFlipped(true)}
-        onPointerDown={(e) => (swipe.current = { x: e.clientX, y: e.clientY })}
-        onPointerUp={(e) => {
-          const st = swipe.current;
-          swipe.current = null;
-          if (!st || !phone || !flipped) return;
-          const r = swipeRating(e.clientX - st.x, e.clientY - st.y);
-          if (r) rate(r);
-        }}
+        {...swipeProps}
       >
         <MarkButton deckId={deck.id} card={card} className="fc-mark" />
         <small className="fc-label">

@@ -116,6 +116,8 @@ export type Deck = {
   quiz?: QuizQuestion[];
   podcast?: PodcastLine[];
   chat: ChatMsg[];
+  /** Cover: colour, pattern and icon (lib/look.ts); without it an automatic one. */
+  cover?: import('./look').DeckCover;
   /** Learning path: result per level index. */
   path?: Record<string, PathResult>;
   /** CSS of imported Anki note types (colours, fonts, layout), by note type id. */

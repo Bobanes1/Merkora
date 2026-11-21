@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { DeckCoverOf } from '../components/DeckCover';
+import { Plant } from '../components/Plant';
 import { Mascot } from '../components/Mascot';
 import { undoable } from '../lib/undo';
 import { accentFor } from '../lib/util';
@@ -561,9 +563,10 @@ function CourseView({
             setView('deck');
           }}
         >
-          <IconCards size={16} />
+          <DeckCoverOf deck={d} size={22} />
           <span className="cdeck-name" title={d.name}>{names.get(d.id)}</span>
           {n > 0 && <span className="pill-count">{n}</span>}
+          <Plant pct={masteryPercent(d.cards)} size={22} />
           <small className="cdeck-pct">{masteryPercent(d.cards)}%</small>
         </button>
         <span className="cdeck-actions">

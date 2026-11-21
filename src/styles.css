@@ -10554,3 +10554,97 @@ html.glass .skill-tile {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: none; }
 }
+
+/* =====================================================================
+   Step 2: time-of-day scene, goal ring, deck covers, plant, swiping
+   ===================================================================== */
+/* start page sky by time of day (white text stays readable on all of them) */
+.hero-banner { overflow: hidden; }
+.hero-banner > :not(.hero-scene) { position: relative; z-index: 1; }
+.hero-scene { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+.hero-banner.tod-morning { background: linear-gradient(135deg, #c2410c -10%, #b8327a 45%, #4b55c9 115%); }
+.hero-banner.tod-day { background: linear-gradient(135deg, #08807c 0%, #1d68b6 70%, #4b55c9 120%); }
+.hero-banner.tod-evening { background: linear-gradient(135deg, #7445d6 -10%, #b8327a 45%, #c2410c 110%); }
+.hero-banner.tod-night { --hero-night-bg: #1f2a5a; background: linear-gradient(135deg, #141c44 0%, #1f2a5a 55%, #3b2a78 120%); }
+@media (prefers-reduced-motion: no-preference) {
+  :root:not(.no-anim) .hero-scene .twinkle { animation: twinkle 3s ease-in-out infinite; }
+  :root:not(.no-anim) .hero-scene .clouds { animation: drift 40s linear infinite alternate; }
+  :root:not(.no-anim) .hero-scene .sun { animation: sun-glow 6s ease-in-out infinite; transform-origin: center; transform-box: fill-box; }
+}
+@keyframes twinkle { 50% { opacity: 0.25; } }
+@keyframes drift { to { transform: translateX(-40px); } }
+@keyframes sun-glow { 50% { transform: scale(1.06); opacity: 0.9; } }
+
+/* large daily goal ring */
+.goal-widget { display: block; padding: 16px; }
+.goal-ring { position: relative; display: grid; justify-items: center; gap: 10px; }
+.goal-ring.compact { grid-template-columns: auto 1fr; align-items: center; justify-items: start; padding: 12px 16px; border-radius: var(--r-xl); background: var(--white); border: 1px solid var(--line); }
+.gr-track { fill: none; stroke: var(--surface-2); }
+.gr-arc { transition: stroke-dasharray 1.1s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.gr-big { font-family: var(--font-display); font-weight: 800; font-size: 30px; fill: var(--ink); }
+.gr-small { font-size: 13px; fill: var(--muted); }
+.goal-ring.done .gr-arc { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--chart-6) 70%, transparent)); }
+.gr-legend { display: grid; gap: 4px; font-size: 0.85rem; color: var(--muted); }
+.gr-legend b { color: var(--ink); }
+.gr-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; }
+.gr-dot.cards { background: linear-gradient(135deg, var(--chart-6), var(--chart-1)); }
+.gr-dot.min { background: linear-gradient(135deg, #f2b84b, var(--chart-4)); }
+
+/* deck covers */
+.deck-cover {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  border: 0;
+  padding: 0;
+  border-radius: 28%;
+  color: #fff;
+  background-color: var(--cv);
+  background-image: linear-gradient(135deg, var(--cv), color-mix(in srgb, var(--cv) 65%, var(--grad-end)));
+  box-shadow: 0 6px 14px -8px color-mix(in srgb, var(--cv) 80%, transparent);
+  position: relative;
+  overflow: hidden;
+}
+button.deck-cover { cursor: pointer; }
+.deck-cover::before { content: ''; position: absolute; inset: 0; opacity: 0.28; pointer-events: none; }
+.deck-cover.p-dots::before { background: radial-gradient(circle at 2px 2px, #fff 1.2px, transparent 1.6px) 0 0 / 7px 7px; }
+.deck-cover.p-waves::before { background: radial-gradient(8px 5px at 8px 0, transparent 95%, #fff 100%) 0 0 / 16px 8px; }
+.deck-cover.p-grid::before { background: linear-gradient(#fff 1px, transparent 1px) 0 0 / 8px 8px, linear-gradient(90deg, #fff 1px, transparent 1px) 0 0 / 8px 8px; opacity: 0.2; }
+.deck-cover.p-stripes::before { background: repeating-linear-gradient(135deg, #fff 0 2px, transparent 2px 7px); opacity: 0.22; }
+.deck-cover svg { position: relative; }
+.deck-row .deck-cover { margin-right: 2px; }
+.cover-dialog { display: grid; gap: 10px; }
+.cover-preview { display: flex; gap: 14px; align-items: center; padding: 10px; border-radius: var(--r-lg); background: var(--surface-2); }
+.cover-colors { display: flex; gap: 10px; flex-wrap: wrap; }
+.cover-colors button { width: 34px; height: 34px; border-radius: 50%; border: 3px solid transparent; background: linear-gradient(135deg, var(--cv), color-mix(in srgb, var(--cv) 65%, var(--grad-end))); box-shadow: 0 0 0 2px var(--white) inset; }
+.cover-colors button.on { border-color: var(--ink); }
+.cover-icons { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; }
+.cover-icons button { display: grid; place-items: center; height: 40px; border-radius: 10px; border: 1px solid var(--line); background: var(--white); color: var(--text); }
+.cover-icons button.on { border-color: var(--primary); background: var(--primary-soft); color: var(--primary-ink); }
+html.phone .cover-icons { grid-template-columns: repeat(4, 1fr); }
+
+/* growing plant */
+:root { --plant-pot: #c9744a; --plant-pot-rim: #a85a34; --plant-seed: #8a5a3b; --plant-stem: #2f8a3a; --plant-leaf: #4caf50; --plant-leaf-2: #2e8b57; --plant-bud: #e86aa6; --plant-petal: #f472b6; --plant-heart: #fbbf24; }
+.plant { display: inline-grid; place-items: center; flex: none; }
+@media (prefers-reduced-motion: no-preference) {
+  :root:not(.no-anim) .plant-grow { animation: plant-grow 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both; transform-origin: 16px 22px; }
+}
+@keyframes plant-grow { from { transform: scale(0.4); opacity: 0; } }
+.cdeck-main .plant { margin-left: auto; }
+
+/* swiping cards on the phone */
+.flashcard[data-swipeable] { touch-action: pan-y; position: relative; }
+.flashcard[data-swipe]::after {
+  position: absolute;
+  top: 16px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-weight: 800;
+  font-size: 15px;
+  color: #fff;
+  pointer-events: none;
+}
+.flashcard[data-swipe='right']::after { content: 'Gut'; right: 16px; background: #0b7d56; }
+.flashcard[data-swipe='left']::after { content: 'Nochmal'; left: 16px; background: #c93545; }
+.flashcard[data-swipe='right'] { box-shadow: 0 0 0 3px #0b7d56, var(--shadow-lg); }
+.flashcard[data-swipe='left'] { box-shadow: 0 0 0 3px #c93545, var(--shadow-lg); }

@@ -1706,6 +1706,18 @@ console.log('Arbeitsplanung ↔ To-do-Liste');
   ok(T.todayPlan([{ id: 'x', due: '2026-11-21', createdAt: 1 }], now) === null, 'ohne geplante Schritte kein Plan');
 }
 
+console.log('Gestaltung: Tageszeit, Pflanze, Deck-Cover');
+{
+  const L = await import('../src/lib/look');
+  ok([L.timeOfDay(6), L.timeOfDay(12), L.timeOfDay(19), L.timeOfDay(23), L.timeOfDay(3)].join() === 'morning,day,evening,night,night', 'Tageszeit-Szene: Morgen, Tag, Abend, Nacht');
+  ok([0, 10, 30, 50, 70, 95].map(L.plantStage).join() === '0,1,2,3,4,5' && L.plantStage(-5) === 0 && L.plantStage(150) === 5, 'Pflanze wächst mit der Beherrschung: Samen bis Blüte');
+  const a = L.coverOf({ id: 'deck-1' });
+  ok(JSON.stringify(a) === JSON.stringify(L.coverOf({ id: 'deck-1' })) && a.color >= 1 && a.color <= 6 && a.icon === 'cards', 'automatisches Cover: stabil je Deck');
+  const own = L.coverOf({ id: 'deck-1', cover: { color: 3, pattern: 'waves', icon: 'flask' } });
+  const bad = L.coverOf({ id: 'deck-1', cover: { color: 9, pattern: 'x' as any, icon: 'y' as any } });
+  ok(own.color === 3 && own.pattern === 'waves' && own.icon === 'flask' && bad.color === a.color && bad.pattern === a.pattern && bad.icon === 'cards', 'eigenes Cover gilt, ungültige Werte fallen aufs automatische zurück');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

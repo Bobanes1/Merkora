@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react';
+import { CoverDialog, DeckCoverTile } from '../components/DeckCover';
+import { Plant } from '../components/Plant';
+import { coverOf } from '../lib/look';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ChatPanel } from '../components/ChatPanel';
 import { ExamDialog } from '../components/ExamDialog';
@@ -65,6 +68,7 @@ export default function DeckPage() {
   const navigate = useNavigate();
   const [moreTabs, setMoreTabs] = useState(false);
   const [menu, setMenu] = useState(false);
+  const [coverDialog, setCoverDialog] = useState(false);
 
   useEffect(() => {
     if (deck) document.title = `${deck.name} – Merkora`;
@@ -93,6 +97,7 @@ export default function DeckPage() {
             <Link to={`/library/${workspace.slug}/${crs.slug}`} className="icon-btn" aria-label={`Zurück zu ${crs.name}`}>
               ‹
             </Link>
+            <DeckCoverTile cover={coverOf(deck)} size={26} onClick={() => setCoverDialog(true)} />
             <b className="phone-deck-name" title={deck.name}>
               {shortName(deck, data.decks.filter((d) => d.courseId === deck.courseId))}
             </b>
@@ -107,13 +112,14 @@ export default function DeckPage() {
             <span>›</span>
             <Link to={`/library/${workspace.slug}/${crs.slug}`}>{crs.name}</Link>
             <span>›</span>
+            <DeckCoverTile cover={coverOf(deck)} size={26} onClick={() => setCoverDialog(true)} />
             <span className="crumb-current" title={deck.name}>
               {shortName(deck, data.decks.filter((d) => d.courseId === deck.courseId))}
             </span>
           </nav>
           <div className="deck-actions">
             <button type="button" className="mastery-chip" onClick={() => setTab('mastery')} title="Fortschritt ansehen">
-              <Mastery pct={masteryPercent(deck.cards)} size={20} /> {masteryPercent(deck.cards)} %
+              <Plant pct={masteryPercent(deck.cards)} size={22} /> {masteryPercent(deck.cards)} %
             </button>
             {(deck.files?.length ?? 0) > 0 && (
               <button type="button" className="files-chip" onClick={() => setTab('source')} title="Deine Dateien ansehen">
@@ -248,6 +254,9 @@ export default function DeckPage() {
             <button type="button" onClick={() => (setMenu(false), setChat(true))}>
               <IconChat size={20} /> Tutor Pip fragen
             </button>
+            <button type="button" onClick={() => (setMenu(false), setCoverDialog(true))}>
+              <DeckCoverTile cover={coverOf(deck)} size={22} /> Cover ändern
+            </button>
             <button type="button" onClick={() => (setMenu(false), navigate(`/tools?tab=todos&deck=${deck.id}`))}>
               <IconCheck size={20} /> {todos ? `To-dos (${todos} offen) – neues anlegen` : 'To-do anlegen'}
             </button>
@@ -265,6 +274,7 @@ export default function DeckPage() {
       )}
       {chat && <ChatPanel deck={deck} onClose={() => setChat(false)} />}
       {examDialog && <ExamDialog presetDeckId={deck.id} onClose={() => setExamDialog(false)} />}
+      {coverDialog && <CoverDialog deck={deck} onClose={() => setCoverDialog(false)} />}
     </div>
   );
 }

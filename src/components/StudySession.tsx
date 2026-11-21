@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useSwipe } from './useSwipe';
 import { ASK_SIDES, asksBack, sidesFor, type AskSide } from '../lib/askSide';
 import { stopSpeaking } from '../lib/speech';
 import { htmlSpeech } from '../lib/speechText';
@@ -52,6 +53,7 @@ export function StudySession({ title, items, onExit }: { title: string; items: S
     },
     [card, deck, queue, done],
   );
+  const swipeProps = useSwipe(phone && flipped, rate);
   const takeBack = useCallback(() => {
     if (!undo) return;
     undoReview(undo.deckId, undo.cardId, undo.prevSrs, undo.at, undo.xp);
@@ -133,7 +135,7 @@ export function StudySession({ title, items, onExit }: { title: string; items: S
         <i style={{ width: `${(done / Math.max(1, done + queue.length)) * 100}%` }} />
       </span>
       <small className="muted">{deck.name}</small>
-      <div className={`flashcard ${flipped ? 'flipped' : ''}`} onClick={() => setFlipped(true)}>
+      <div className={`flashcard ${flipped ? 'flipped' : ''}`} onClick={() => setFlipped(true)} {...swipeProps}>
         <MarkButton deckId={deck.id} card={card} className="fc-mark" />
         <small className="fc-label">
           Frage <SpeakButton text={say(qa.question)} label="Frage vorlesen" className="icon-btn fc-speak" />
@@ -148,7 +150,7 @@ export function StudySession({ title, items, onExit }: { title: string; items: S
             <CardContent text={qa.answer} html={card.html} look={look} className="fc-back" />
           </>
         )}
-        {!flipped && <span className="fc-hint">{phone ? 'Tippen zum Umdrehen' : 'Klicken oder Leertaste zum Umdrehen'}</span>}
+        {!flipped && <span className="fc-hint">{phone ? 'Tippen zum Umdrehen – danach wischen: ← Nochmal, Gut →' : 'Klicken oder Leertaste zum Umdrehen'}</span>}
       </div>
       {flipped ? (
         <div className="rate-row">
