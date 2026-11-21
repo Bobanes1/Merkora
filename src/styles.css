@@ -10471,3 +10471,86 @@ html.phone .app-main[data-area] .page > .page-head::before {
 }
 .forecast .fc-col i.zero { background: var(--line); }
 .mastery-ring { --ring-a: initial; }
+
+/* =====================================================================
+   Step 1: phone bar on one line, smooth transitions, background per area, glass look
+   ===================================================================== */
+/* phone bar: all five on one line */
+.phone-nav { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.pn-item { min-width: 0; }
+.pn-item > span:last-child { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; padding: 0 2px; }
+.pn-item svg { flex: none; }
+
+/* background per area: a soft glow in the area colour plus a fine dot pattern */
+.app-main[data-area='start'] { --area: #08807c; }
+.app-main[data-area='deck'] { --area: #1d68b6; }
+.app-main[data-area] {
+  min-height: 100vh;
+  background:
+    radial-gradient(900px 420px at 100% -10%, color-mix(in srgb, var(--area) 14%, transparent), transparent 70%),
+    radial-gradient(700px 380px at -10% 110%, color-mix(in srgb, var(--area) 9%, transparent), transparent 70%),
+    radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--area) 14%, transparent) 1px, transparent 1.6px) 0 0 / 22px 22px,
+    var(--bg);
+  background-attachment: fixed, fixed, fixed, fixed;
+}
+:root[data-theme='dark'] .app-main[data-area] {
+  background:
+    radial-gradient(900px 420px at 100% -10%, color-mix(in srgb, var(--area) 20%, transparent), transparent 70%),
+    radial-gradient(700px 380px at -10% 110%, color-mix(in srgb, var(--area) 12%, transparent), transparent 70%),
+    radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--area) 16%, transparent) 1px, transparent 1.6px) 0 0 / 22px 22px,
+    var(--bg);
+  background-attachment: fixed, fixed, fixed, fixed;
+}
+
+/* glass look: bars and windows see-through with blur, panels slightly see-through */
+@supports ((backdrop-filter: blur(4px)) or (-webkit-backdrop-filter: blur(4px))) {
+  html.glass .sidebar,
+  html.glass .mobile-bar,
+  html.glass .phone-nav,
+  html.glass .sheet,
+  html.glass .modal,
+  html.glass .tool-win,
+  html.glass .undo-toast {
+    background: color-mix(in srgb, var(--white) 74%, transparent);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    backdrop-filter: blur(18px) saturate(1.5);
+  }
+  html.glass .sidebar { border-right-color: color-mix(in srgb, var(--line) 60%, transparent); }
+  html.glass .undo-toast { background: color-mix(in srgb, var(--ink) 86%, transparent); }
+}
+html.glass .panel,
+html.glass .course-card,
+html.glass .stat-tile,
+html.glass .todo-row,
+html.glass .ov-tile,
+html.glass .skill-tile {
+  background: color-mix(in srgb, var(--white) 84%, transparent);
+}
+:root[data-theme='dark'].glass .panel,
+:root[data-theme='dark'].glass .course-card,
+:root[data-theme='dark'].glass .stat-tile,
+:root[data-theme='dark'].glass .ov-tile {
+  background: color-mix(in srgb, var(--white) 80%, transparent);
+}
+
+/* smooth transitions: pages and tabs fade in, lists appear one after another */
+@media (prefers-reduced-motion: no-preference) {
+  :root:not(.no-anim) .app-main > *,
+  :root:not(.no-anim) .tab-body > *,
+  :root:not(.no-anim) .tools-page > :not(.page-head):not(.tools-tabs):not(.tools-picker) {
+    animation: fade-up 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  :root:not(.no-anim) :is(.course-grid, .ov-grid, .skill-grid, .stat-tiles, .todo-rows) > * {
+    animation: fade-up 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  :root:not(.no-anim) :is(.course-grid, .ov-grid, .skill-grid, .stat-tiles, .todo-rows) > :nth-child(2) { animation-delay: 30ms; }
+  :root:not(.no-anim) :is(.course-grid, .ov-grid, .skill-grid, .stat-tiles, .todo-rows) > :nth-child(3) { animation-delay: 60ms; }
+  :root:not(.no-anim) :is(.course-grid, .ov-grid, .skill-grid, .stat-tiles, .todo-rows) > :nth-child(4) { animation-delay: 90ms; }
+  :root:not(.no-anim) :is(.course-grid, .ov-grid, .skill-grid, .stat-tiles, .todo-rows) > :nth-child(5) { animation-delay: 120ms; }
+  :root:not(.no-anim) :is(.course-grid, .ov-grid, .skill-grid, .stat-tiles, .todo-rows) > :nth-child(6) { animation-delay: 150ms; }
+  :root:not(.no-anim) :is(.course-grid, .ov-grid, .skill-grid, .stat-tiles, .todo-rows) > :nth-child(n + 7) { animation-delay: 180ms; }
+}
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}

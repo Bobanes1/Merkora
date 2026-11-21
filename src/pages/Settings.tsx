@@ -338,7 +338,11 @@ export default function Settings() {
         </div>
         <label className="check-row">
           <input type="checkbox" checked={settings.animations} onChange={(e) => setSettings({ animations: e.target.checked })} />
-          <span>Verspielte Effekte: Pip, Flo, Konfetti, Sterne, hüpfende Knöpfe und Karten-Drehungen.</span>
+          <span>Verspielte Effekte: Pip, Flo, Konfetti, Sterne, hüpfende Knöpfe, Karten-Drehungen und weiche Übergänge.</span>
+        </label>
+        <label className="check-row">
+          <input type="checkbox" checked={settings.glass !== false} onChange={(e) => setSettings({ glass: e.target.checked })} />
+          <span>Glas-Optik: Seitenleiste, Leisten und Fenster leicht durchscheinend.</span>
         </label>
       </section>
       </div>

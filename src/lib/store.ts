@@ -202,6 +202,8 @@ export type Settings = {
   theme: 'system' | 'light' | 'dark';
   /** Colour world: the main colour plus six accent colours ("bunt" by default). */
   palette?: Palette;
+  /** Glass look: sidebar, bars and windows slightly see-through (on by default). */
+  glass?: boolean;
   /** The short introduction with Pip was finished or skipped. */
   tourDone?: boolean;
   /** New cards per course and day, shared by its decks (the rest waits for the next days). */

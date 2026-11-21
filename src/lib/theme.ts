@@ -20,9 +20,13 @@ export function useResolvedTheme(): 'light' | 'dark' {
 /** Puts the theme on <html data-theme> so the CSS tokens switch. */
 export function useApplyTheme() {
   const theme = useResolvedTheme();
+  const glass = useStore((s) => s.data.settings.glass !== false);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+  useEffect(() => {
+    document.documentElement.classList.toggle('glass', glass);
+  }, [glass]);
 }
 
 export const isDarkNow = () => document.documentElement.dataset.theme === 'dark';

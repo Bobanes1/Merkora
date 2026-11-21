@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { IconCalendar, IconChart, IconChecklist, IconHome, IconLibrary, IconPlus, IconPractice, IconSearch, IconSettings, IconTimer, IconTools } from './Icons';
+import { IconCalendar, IconChart, IconChecklist, IconHome, IconLibrary, IconPlus, IconPractice, IconSearch, IconSettings, IconTimer, IconTools, IconMore } from './Icons';
 import { toolWindows } from '../lib/toolWindows';
 import { Sheet } from './Sheet';
 
@@ -28,9 +28,7 @@ export function PhoneNav({ onSearch, onNewDeck }: { onSearch: () => void; onNewD
         {item('/skills', 'Skills', <IconPractice size={22} />, 3)}
         {item('/tools', 'Tools', <IconTools size={22} />, 4)}
         <button type="button" className={'pn-item' + (inMore || more ? ' on' : '')} aria-expanded={more} onClick={() => setMore(true)}>
-          <span className="pn-dots" aria-hidden="true">
-            •••
-          </span>
+          <IconMore size={22} />
           <span>Mehr</span>
         </button>
       </nav>

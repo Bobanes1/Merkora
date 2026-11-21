@@ -293,3 +293,10 @@ export const IconMusic = mk(
   </>,
 );
 export const IconCode = mk(<path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16" />);
+export const IconMore = mk(
+  <>
+    <circle cx="5" cy="12" r="1.6" />
+    <circle cx="12" cy="12" r="1.6" />
+    <circle cx="19" cy="12" r="1.6" />
+  </>,
+);
