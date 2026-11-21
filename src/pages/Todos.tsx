@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { IconCheck, IconPlay, IconPlus, IconSparkle, IconTrash } from '../components/Icons';
 import { isLeech } from '../lib/cardLinks';
-import { pomodoro, usePomodoroMeta } from '../lib/pomodoro';
+import { pomodoro, usePomodoro, usePomodoroMeta } from '../lib/pomodoro';
 import { addTodo, deckUrl, deleteTodo, toggleTodo, updateTodo, useData } from '../lib/store';
 import {
   dueText,
@@ -28,6 +28,49 @@ const VIEWS: [View, string][] = [
   ['all', 'Alle'],
   ['done', 'Erledigt'],
 ];
+
+/**
+ * The plan from the Arbeitsplanung keeps going here: which step is running, and what's next once the timer is done.
+ * Planned steps are today's (or overdue) open to-dos with a phase, in their order.
+ */
+function PlanNext({ todos, today, handedOver, onStart }: { todos: Todo[]; today: string; handedOver: number; onStart: (t: Todo) => void }) {
+  const p = usePomodoro();
+  const { activeTodoId } = usePomodoroMeta();
+  const steps = sortTodos(todos.filter((t) => !t.doneAt && t.phase && t.due && t.due <= today));
+  if (!steps.length) return null;
+  const working = p.running && p.phase === 'work';
+  const current = working ? steps.find((t) => t.id === activeTodoId) : undefined;
+  const next = steps.find((t) => t.id !== current?.id);
+  return (
+    <div className="plan-next" role="status">
+      <span className="grow">
+        {handedOver > 0 && <small>Plan übernommen – {handedOver} Schritte in deiner Reihenfolge.</small>}
+        {current ? (
+          <>
+            <b>Gerade dran: {current.text}</b>
+            {next && <small>Danach: {next.text}</small>}
+          </>
+        ) : (
+          <>
+            <b>
+              {p.running && p.phase === 'break' ? 'Pause – danach: ' : 'Nächster Schritt: '}
+              {steps[0].text}
+            </b>
+            <small>
+              {steps[0].time ? `geplant ${steps[0].time} · ` : ''}
+              {steps[0].minutes ? `${steps[0].minutes} Min. · ` : ''}noch {steps.length} {steps.length === 1 ? 'Schritt' : 'Schritte'} im Plan
+            </small>
+          </>
+        )}
+      </span>
+      {!current && (
+        <button type="button" className="btn primary sm" onClick={() => onStart(steps[0])}>
+          <IconPlay size={14} /> Starten
+        </button>
+      )}
+    </div>
+  );
+}
 
 /** The to-do list as its own page: quick entry, views, details, sub-tasks, repeating, bulk actions, undo, keyboard. */
 export default function Todos() {
@@ -140,6 +183,8 @@ export default function Todos() {
           <kbd>↓</kbd> wählen, <kbd>Leertaste</kbd> erledigt, <kbd>Enter</kbd> Details
         </p>
       </header>
+
+      <PlanNext todos={all} today={today} handedOver={Number(params.get('plan')) || 0} onStart={startTimer} />
 
       <QuickAdd inputRef={addRef} deckId={deckFilter} />
 

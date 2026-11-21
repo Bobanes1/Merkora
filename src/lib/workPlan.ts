@@ -15,6 +15,8 @@ export type PlanInputTask = {
   size: TaskSize;
   important?: boolean;
   deckId?: string;
+  /** Taken from the to-do list: handing the plan over updates this to-do instead of making a new one. */
+  todoId?: string;
 };
 
 export type PlanTaskStep = {
@@ -26,12 +28,21 @@ export type PlanTaskStep = {
   motivation: Motivation;
   reason: string;
   deckId?: string;
+  /** Part n of m when a long task is split. */
+  part?: number;
+  parts?: number;
+  /** All minutes of the task (over all parts). */
+  taskMinutes?: number;
+  from?: string;
+  to?: string;
 };
 
 export type PlanBreakStep = {
   kind: 'break';
   minutes: number;
   reason: string;
+  from?: string;
+  to?: string;
 };
 
 export type PlanStep = PlanTaskStep | PlanBreakStep;
@@ -42,6 +53,8 @@ export type WorkPlan = {
   breakMinutes: number;
   steps: PlanStep[];
   parked: PlanInputTask[];
+  /** Minutes the plan is longer than the available time (because of hand-edited minutes). */
+  overflow: number;
   summary: string;
 };
 
@@ -137,10 +150,63 @@ function enderReason(t: PlanInputTask): string {
   return 'Guter Ausklang zum Schluss ohne zu viel Druck.';
 }
 
+/** Longest block without a break; longer tasks are split into parts. */
+export const MAX_BLOCK = 50;
+
+export type PlanOptions = {
+  /** Fixed minutes per task (edited by hand); the rest of the time is shared by the other tasks. */
+  overrides?: Record<string, number>;
+  /** Start time HH:MM – then every step gets from/to clock times. */
+  start?: string;
+};
+
+/** Splits `m` minutes into the fewest parts of at most MAX_BLOCK, as even as possible (multiples of 5 where it fits). */
+export function splitBlock(m: number): number[] {
+  if (m <= MAX_BLOCK) return [m];
+  const n = Math.ceil(m / MAX_BLOCK);
+  const unit = m % 5 === 0 ? 5 : 1;
+  const parts = Array.from({ length: n }, () => Math.floor(m / n / unit) * unit);
+  let rest = m - parts.reduce((a, b) => a + b, 0);
+  for (let i = 0; rest > 0; i = (i + 1) % n) {
+    const add = Math.min(unit, rest);
+    parts[i] += add;
+    rest -= add;
+  }
+  return parts;
+}
+
+const toMin = (hhmm: string) => {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm.trim());
+  return m ? Math.min(23, +m[1]) * 60 + Math.min(59, +m[2]) : null;
+};
+/** Minutes since midnight as HH:MM (capped at 23:59). */
+export const clockText = (min: number) => {
+  const m = Math.max(0, Math.min(23 * 60 + 59, Math.round(min)));
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+};
+/** Now, rounded up to the next 5 minutes, as HH:MM. */
+export const nextStartTime = (now = Date.now()) => {
+  const d = new Date(now);
+  return clockText(Math.ceil((d.getHours() * 60 + d.getMinutes()) / 5) * 5);
+};
+
+/** Deck ids with an exam in the next `days` days (today included). */
+export function examSoonDecks<E extends { date: string }>(exams: E[], deckIdsOf: (e: E) => string[], now = Date.now(), days = 7): Set<string> {
+  const out = new Set<string>();
+  const d = new Date(now);
+  const today = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+  for (const e of exams) {
+    const [y, mo, da] = e.date.split('-').map(Number);
+    const diff = Math.round((Date.UTC(y, mo - 1, da) - today) / 86400000);
+    if (diff >= 0 && diff <= days) for (const id of deckIdsOf(e)) out.add(id);
+  }
+  return out;
+}
+
 /**
  * Builds a complete work plan for the given tasks and total available minutes.
  */
-export function buildWorkPlan(rawTasks: PlanInputTask[], rawMinutes: number, withBreaks = true): WorkPlan {
+export function buildWorkPlan(rawTasks: PlanInputTask[], rawMinutes: number, withBreaks = true, opts: PlanOptions = {}): WorkPlan {
   const tasks = rawTasks.filter((t) => t.title.trim().length > 0).map((t) => ({ ...t, title: t.title.trim() }));
   const totalMinutes = Math.max(10, Math.min(480, Math.round(rawMinutes || 60)));
 
@@ -151,15 +217,15 @@ export function buildWorkPlan(rawTasks: PlanInputTask[], rawMinutes: number, wit
       breakMinutes: 0,
       steps: [],
       parked: [],
+      overflow: 0,
       summary: 'Füge mindestens eine Aufgabe hinzu, um deinen Arbeitsplan zu erstellen.',
     };
   }
 
-  // Decide break budget: 5 min per ~40 min session when >= 45 min and breaks enabled.
-  const plannedBreaks = withBreaks && totalMinutes >= 45 ? Math.min(4, Math.floor((totalMinutes - 15) / 40)) : 0;
+  // Break budget: one break per ~40 min when the session is 45 min or longer.
+  const plannedBreaks = withBreaks && totalMinutes >= 45 ? Math.min(6, Math.floor((totalMinutes - 15) / 40)) : 0;
   const breakUnit = totalMinutes >= 150 ? 10 : 5;
-  const breakMinutes = plannedBreaks * breakUnit;
-  const workMinutes = Math.max(10, totalMinutes - breakMinutes);
+  const workMinutes = Math.max(10, totalMinutes - plannedBreaks * breakUnit);
 
   // If too many tasks for the available time, park overflow tasks cleanly.
   const maxFit = Math.max(1, Math.floor(workMinutes / MIN_TASK_MINUTES));
@@ -181,7 +247,6 @@ export function buildWorkPlan(rawTasks: PlanInputTask[], rawMinutes: number, wit
   let starter: PlanInputTask | null = null;
   let ender: PlanInputTask | null = null;
   let middle: PlanInputTask[] = [];
-
   if (active.length === 1) {
     starter = active[0];
   } else if (active.length === 2) {
@@ -192,10 +257,8 @@ export function buildWorkPlan(rawTasks: PlanInputTask[], rawMinutes: number, wit
     const pool = [...active];
     pool.sort((a, b) => starterScore(b) - starterScore(a));
     starter = pool.shift()!;
-
     pool.sort((a, b) => enderScore(b) - enderScore(a));
     ender = pool.shift()!;
-
     // Middle: tackle important & harder/low-motivation tasks while in peak focus.
     middle = pool.sort(
       (a, b) =>
@@ -204,74 +267,118 @@ export function buildWorkPlan(rawTasks: PlanInputTask[], rawMinutes: number, wit
         SIZE_WEIGHT[b.size] - SIZE_WEIGHT[a.size],
     );
   }
-
   const ordered: { task: PlanInputTask; phase: TodoPhase; reason: string }[] = [];
   if (starter) ordered.push({ task: starter, phase: 'start', reason: starterReason(starter) });
   for (const m of middle) ordered.push({ task: m, phase: 'main', reason: mainReason(m) });
   if (ender) ordered.push({ task: ender, phase: 'end', reason: enderReason(ender) });
 
-  // Allocate minutes proportionally.
-  const stepUnit = workMinutes >= 25 ? 5 : 1;
-  const minPer = Math.min(MIN_TASK_MINUTES, Math.floor(workMinutes / ordered.length));
-  const durations = allocateMinutes(
-    ordered.map((o) => taskWeight(o.task)),
-    workMinutes,
+  // Minutes: hand-edited tasks keep theirs, the others share the rest proportionally.
+  const fixed = (t: PlanInputTask) => {
+    const v = opts.overrides?.[t.id];
+    return v && v > 0 ? Math.max(5, Math.min(240, Math.round(v))) : null;
+  };
+  const fixedSum = ordered.reduce((n, o) => n + (fixed(o.task) ?? 0), 0);
+  const free = ordered.filter((o) => fixed(o.task) === null);
+  const freeMinutes = Math.max(0, workMinutes - fixedSum);
+  const stepUnit = freeMinutes >= 25 ? 5 : 1;
+  const minPer = free.length ? Math.max(5, Math.min(MIN_TASK_MINUTES, Math.floor(freeMinutes / free.length))) : 5;
+  const shared = allocateMinutes(
+    free.map((o) => taskWeight(o.task)),
+    Math.max(freeMinutes, free.length * minPer),
     stepUnit,
-    Math.max(5, minPer),
+    minPer,
   );
+  const durations = ordered.map((o) => fixed(o.task) ?? shared[free.indexOf(o)]);
 
-  // Build steps and interleave breaks roughly evenly across the session.
-  const steps: PlanStep[] = [];
-  let breaksLeft = plannedBreaks;
-  let sinceBreak = 0;
-  const breakThreshold = breaksLeft > 0 ? Math.max(25, Math.floor(workMinutes / (breaksLeft + 1))) : Infinity;
-
+  // Blocks: long tasks are split into parts, so nobody works 90 minutes straight.
+  type Block = Omit<PlanTaskStep, 'reason'> & { reason: string };
+  const blocks: Block[] = [];
   ordered.forEach((o, idx) => {
-    const mins = durations[idx];
-    steps.push({
-      kind: 'task',
-      taskId: o.task.id,
-      title: o.task.title,
-      phase: o.phase,
-      minutes: mins,
-      motivation: o.task.motivation,
-      reason: o.reason,
-      deckId: o.task.deckId,
-    });
-    sinceBreak += mins;
-    const isLast = idx === ordered.length - 1;
-    if (!isLast && breaksLeft > 0 && sinceBreak >= breakThreshold) {
-      steps.push({
-        kind: 'break',
-        minutes: breakUnit,
-        reason: 'Kurz aufstehen, Wasser trinken, Augen entspannen.',
-      });
-      breaksLeft--;
-      sinceBreak = 0;
-    }
+    const parts = splitBlock(durations[idx]);
+    parts.forEach((m, k) =>
+      blocks.push({
+        kind: 'task',
+        taskId: o.task.id,
+        title: o.task.title,
+        phase: o.phase,
+        minutes: m,
+        motivation: o.task.motivation,
+        reason: k === 0 ? o.reason : 'Weiter am selben Thema – nach der Pause geht es leichter.',
+        deckId: o.task.deckId,
+        ...(parts.length > 1 ? { part: k + 1, parts: parts.length } : {}),
+        taskMinutes: durations[idx],
+      }),
+    );
   });
 
-  // If a planned break wasn't placed (e.g. only 1 long task), fold its minutes back into the task or insert mid-break.
-  const actualBreakMinutes = steps.filter((s) => s.kind === 'break').reduce((n, s) => n + s.minutes, 0);
-  const leftoverBreak = breakMinutes - actualBreakMinutes;
-  if (leftoverBreak > 0) {
-    const firstTask = steps.find((s): s is PlanTaskStep => s.kind === 'task');
-    if (firstTask) firstTask.minutes += leftoverBreak;
+  // Breaks go into the gaps closest to evenly spread points; spare break time makes those breaks longer.
+  const workSum = blocks.reduce((n, b) => n + b.minutes, 0);
+  const gaps: number[] = []; // cumulative work minutes after block i (for i < last)
+  let cum = 0;
+  blocks.forEach((b, i) => {
+    cum += b.minutes;
+    if (i < blocks.length - 1) gaps.push(cum);
+  });
+  const breakAt = new Map<number, number>(); // gap index -> minutes
+  if (plannedBreaks > 0 && gaps.length > 0) {
+    const n = Math.min(plannedBreaks, gaps.length);
+    for (let k = 1; k <= n; k++) {
+      const target = (k * workSum) / (n + 1);
+      let best = -1;
+      gaps.forEach((g, gi) => {
+        if (breakAt.has(gi)) return;
+        if (best < 0 || Math.abs(g - target) < Math.abs(gaps[best] - target)) best = gi;
+      });
+      if (best >= 0) breakAt.set(best, breakUnit);
+    }
+    // more breaks planned than gaps: the extra minutes make the breaks a bit longer
+    let extra = (plannedBreaks - breakAt.size) * breakUnit;
+    const keys = [...breakAt.keys()].sort((a, b) => a - b);
+    for (let i = 0; extra > 0 && keys.length; i = (i + 1) % keys.length) {
+      breakAt.set(keys[i], breakAt.get(keys[i])! + 5);
+      extra -= 5;
+    }
+  } else if (plannedBreaks > 0 && blocks.length) {
+    // a single short block: no break needed, the time goes to the work itself
+    blocks[0].minutes += plannedBreaks * breakUnit;
+    blocks[0].taskMinutes = (blocks[0].taskMinutes ?? 0) + plannedBreaks * breakUnit;
   }
 
-  const finalWorkMinutes = steps.filter((s): s is PlanTaskStep => s.kind === 'task').reduce((n, s) => n + s.minutes, 0);
+  const steps: PlanStep[] = [];
+  blocks.forEach((b, i) => {
+    steps.push(b);
+    const br = breakAt.get(i);
+    if (br) steps.push({ kind: 'break', minutes: br, reason: br > 10 ? 'Längere Pause: kurz raus, etwas essen, bewegen.' : 'Kurz aufstehen, Wasser trinken, Augen entspannen.' });
+  });
+
+  // Clock times from the start time.
+  const startMin = opts.start ? toMin(opts.start) : null;
+  if (startMin !== null) {
+    let t = startMin;
+    for (const s of steps) {
+      s.from = clockText(t);
+      t += s.minutes;
+      s.to = clockText(t);
+    }
+  }
+
+  const finalWork = steps.filter((s): s is PlanTaskStep => s.kind === 'task').reduce((n, s) => n + s.minutes, 0);
+  const finalBreak = steps.filter((s) => s.kind === 'break').reduce((n, s) => n + s.minutes, 0);
+  const overflow = Math.max(0, finalWork + finalBreak - totalMinutes);
+  const first = ordered[0];
+  const last = ordered[ordered.length - 1];
   const summary =
     ordered.length === 1
-      ? `${finalWorkMinutes} Min. fokussiert an „${ordered[0].task.title}“`
-      : `Einstieg mit „${ordered[0].task.title}“ (${durations[0]} Min.), Abschluss mit „${ordered[ordered.length - 1].task.title}“` +
-        (actualBreakMinutes > 0 ? ` · inkl. ${actualBreakMinutes} Min. Pause` : '');
+      ? `${finalWork} Min. fokussiert an „${first.task.title}“` + (finalBreak > 0 ? ` · inkl. ${finalBreak} Min. Pause` : '')
+      : `Einstieg mit „${first.task.title}“ (${durations[0]} Min.), Abschluss mit „${last.task.title}“` + (finalBreak > 0 ? ` · inkl. ${finalBreak} Min. Pause` : '');
 
   return {
-    totalMinutes: finalWorkMinutes + actualBreakMinutes,
-    workMinutes: finalWorkMinutes,
-    breakMinutes: actualBreakMinutes,
+    totalMinutes: finalWork + finalBreak,
+    workMinutes: finalWork,
+    breakMinutes: finalBreak,
     steps,
     parked,
+    overflow,
     summary,
   };
 }

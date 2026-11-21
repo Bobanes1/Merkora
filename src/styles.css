@@ -9618,3 +9618,17 @@ html.phone .todos-bar .input.sm { flex: 1; min-width: 120px; }
 /* ---------- skills learning path (same scene as the deck path) ---------- */
 .node-label .node-sub { display: block; font-size: 0.72rem; font-weight: 500; opacity: 0.75; margin-top: 1px; }
 .skill-path .unit-banner .badge { margin-left: 6px; vertical-align: middle; }
+
+/* ---------- work planning: clock times, overflow, next step ---------- */
+.badge.warn { background: var(--warn-soft, #fff3d6); color: var(--warn-ink); }
+.badge.soft { background: var(--surface-2); color: var(--muted); }
+.wp-task-head .badge { flex: none; font-size: 0.7rem; }
+.wp-start { display: inline-flex; align-items: center; gap: 8px; }
+.wp-start .input { width: auto; min-width: 110px; }
+.wp-clock { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 0.8rem; color: var(--primary); min-width: 3em; }
+.wp-break .wp-clock { margin-right: 4px; }
+.wp-step-min .input.fixed { border-color: var(--primary); font-weight: 700; }
+.wp-overflow { padding: 8px 12px; border-radius: var(--r-md); background: var(--warn-soft, #fff3d6); color: var(--warn-ink); margin: 0 0 8px; }
+.plan-next { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 10px 14px; border-radius: var(--r-md); background: var(--primary-soft); border: 1px solid var(--primary); }
+.plan-next .grow { min-width: 0; }
+.plan-next small { display: block; color: var(--muted); }

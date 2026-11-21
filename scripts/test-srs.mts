@@ -1585,6 +1585,34 @@ console.log('Skills-Lernpfad: Sterne');
   ok([lessonStars({ id: 'a', title: 'a', goal: '', set: set(10, 10) }), lessonStars({ id: 'a', title: 'a', goal: '', set: set(9, 10) }), lessonStars({ id: 'a', title: 'a', goal: '', set: set(8, 10) }), lessonStars({ id: 'a', title: 'a', goal: '', set: set(5, 10) })].join() === '3,2,1,0', 'alles / 90 % / 80 % / halb gelöst');
 }
 
+console.log('Arbeitsplanung: Blöcke, feste Minuten, Uhrzeiten, Prüfungen');
+{
+  const W = await import('../src/lib/workPlan');
+  const big = W.buildWorkPlan([{ id: 'x', title: 'Hausarbeit', motivation: 2, size: 'l' }], 90, true);
+  const parts = big.steps.filter((s) => s.kind === 'task');
+  ok(parts.length === 2 && big.steps[1].kind === 'break' && big.totalMinutes === 90 && parts.every((s) => s.minutes <= W.MAX_BLOCK), 'große Aufgabe in 90 Min.: zwei Teile mit Pause dazwischen, Summe 90: ' + big.steps.map((s) => s.kind + s.minutes).join(' '));
+  ok(JSON.stringify(W.splitBlock(85)) === '[45,40]' && JSON.stringify(W.splitBlock(40)) === '[40]' && W.splitBlock(173).reduce((a, b) => a + b, 0) === 173, 'Blöcke teilen (höchstens 50 Min.)');
+  const tasks = [
+    { id: 'a', title: 'A', motivation: 3 as const, size: 's' as const },
+    { id: 'b', title: 'B', motivation: 1 as const, size: 'l' as const },
+    { id: 'c', title: 'C', motivation: 2 as const, size: 'm' as const },
+  ];
+  const fixedPlan = W.buildWorkPlan(tasks, 60, false, { overrides: { b: 30 } });
+  const sumOf = (p: typeof fixedPlan, id: string) => p.steps.filter((s) => s.kind === 'task' && s.taskId === id).reduce((n, s) => n + s.minutes, 0);
+  ok(sumOf(fixedPlan, 'b') === 30 && fixedPlan.workMinutes === 60 && fixedPlan.overflow === 0, 'feste Minuten bleiben, der Rest wird verteilt');
+  const over = W.buildWorkPlan(tasks, 60, false, { overrides: { a: 40, b: 40 } });
+  ok(over.overflow > 0 && sumOf(over, 'a') === 40, 'zu viel geplant: wird gemeldet (' + over.overflow + ' Min.)');
+  const timed = W.buildWorkPlan(tasks, 90, true, { start: '14:00' });
+  ok(timed.steps[0].from === '14:00' && timed.steps[timed.steps.length - 1].to === '15:30' && timed.steps.every((s, i) => i === 0 || s.from === timed.steps[i - 1].to), 'Uhrzeiten ab Startzeit, lückenlos');
+  ok(W.clockText(24 * 60 + 30) === '23:59' && W.nextStartTime(new Date(2026, 10, 21, 9, 12).getTime()) === '09:15', 'Uhrzeit: nicht über Mitternacht, Start auf 5 Min. gerundet');
+  const soon = W.examSoonDecks(
+    [{ date: '2026-11-24', deckIds: ['bio'] }, { date: '2026-12-20', deckIds: ['chem'] }, { date: '2026-11-01', deckIds: ['alt'] }],
+    (e) => e.deckIds,
+    new Date(2026, 10, 21, 10).getTime(),
+  );
+  ok(soon.has('bio') && !soon.has('chem') && !soon.has('alt'), 'Prüfung in 3 Tagen macht das Deck wichtig');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));
@@ -1616,7 +1644,7 @@ console.log('Arbeitsplanung & To-do-Reihenfolge');
   ok(plan.totalMinutes === 90, 'Gesamtzeit stimmt exakt (90 Min.)');
   ok(taskSteps[0].taskId === 't2' && taskSteps[0].phase === 'start', 'Einstieg wählt motivierende/leichte Aufgabe zuerst');
   ok(taskSteps[1].taskId === 't1' && taskSteps[1].phase === 'main', 'Hauptteil bekommt wichtige/schwere Aufgabe');
-  ok(taskSteps[2].taskId === 't3' && taskSteps[2].phase === 'end', 'Abschluss bekommt machbare Aufgabe am Ende');
+  ok(taskSteps[taskSteps.length - 1].taskId === 't3' && taskSteps[taskSteps.length - 1].phase === 'end', 'Abschluss bekommt machbare Aufgabe am Ende');
   ok(plan.breakMinutes > 0 && plan.steps.some((s) => s.kind === 'break'), 'bei 90 Min. wird mindestens eine Pause eingeplant');
 
   const tight = buildWorkPlan(
