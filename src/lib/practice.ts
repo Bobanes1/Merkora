@@ -7,6 +7,7 @@ import { compileExpr } from './plotExpr';
 import { DIAGRAM_RULE, parseDiagram, type Diagram } from './diagram';
 import { ACTIVE_TYPES, parseActive, type ActiveTask } from './tasks';
 import { LANG_RULE, type Prompt } from './ai';
+import { parseFormulaLab, parseProgram, parseScore, parseSketch, parseSyntax, parseTables, type FormulaLab, type Program, type Score, type Sentence, type Sketch, type Table } from './visuals';
 import { FORMULA_RULE } from './ai';
 
 export type AnswerSpec = { type: 'number' | 'fraction' | 'expr' | 'choice' | 'text'; value: string; tolerance?: number; options?: string[] };
@@ -30,7 +31,8 @@ export type LabSpec =
   | { type: 'bayes'; prevalence: number; sensitivity: number; specificity: number; ask?: string }
   | { type: 'urn'; N: number; K: number; n: number; ask?: string }
   | { type: 'function'; expr: string; params: Record<string, number>; min: number; max: number; ask?: string }
-  | { type: 'vectors'; matrix: [[number, number], [number, number]]; ask?: string };
+  | { type: 'vectors'; matrix: [[number, number], [number, number]]; ask?: string }
+  | FormulaLab;
 
 export type ProblemProgress = {
   solved?: boolean;
@@ -41,6 +43,8 @@ export type ProblemProgress = {
   last?: string;
   /** Pip's explanation of that mistake (made once, kept). */
   mistake?: string;
+  /** „Weiß nicht“ was pressed: the solution was shown and Pip explained the way. */
+  dunno?: boolean;
   /** A role play: the conversation so far. */
   chat?: { me: boolean; text: string }[];
 };
@@ -53,7 +57,16 @@ export type PracticeSet = {
   intro: string;
   example?: { problem: string; steps: string[]; answer?: string; code?: string };
   /** Pictures for the explanation (Merkora draws them from a description, like card graphics). */
-  figures?: { diagram: Diagram; caption?: string }[];
+  figures?: { diagram: Diagram; caption?: string; narration?: string[] }[];
+  /** Music: a sheet of music to look at and listen to. */
+  score?: Score;
+  /** Programming: a small example program to run and to follow step by step. */
+  program?: Program;
+  /** Law: who is who and who wants what from whom. */
+  sketch?: Sketch;
+  /** Languages: sentences with coloured parts, and tables (endings highlighted). */
+  syntax?: Sentence[];
+  tables?: Table[];
   /** „Grundlagen“ before the explanation: what it is about, a picture in the head, the key terms (Markdown). */
   theory?: string;
   /** The explanation once more, even simpler („Einfacher erklären“). */
@@ -114,6 +127,8 @@ export function parseLab(raw: unknown): LabSpec | null {
       const min = num(r.min, -5), max = num(r.max, 5);
       return { type: 'function', expr, params, min: Math.min(min, max - 0.1), max: Math.max(max, min + 0.1), ask };
     }
+    case 'formula':
+      return parseFormulaLab(r);
     case 'vectors': {
       const m = Array.isArray(r.matrix) ? (r.matrix as unknown[][]) : [];
       const v = (i: number, j: number, d: number) => num(m[i]?.[j], d);
@@ -210,7 +225,13 @@ export function parsePractice(json: unknown, id: string, now: number): PracticeS
   const labs = (Array.isArray(r.labs) ? r.labs : []).map(parseLab).filter((l): l is LabSpec => !!l).slice(0, 4);
   const tasks = (Array.isArray(r.problems ?? r.tasks) ? ((r.problems ?? r.tasks) as unknown[]) : []).map(parseTask).filter((t): t is Task => !!t).slice(0, 15);
   if (!tasks.length) return null;
-  return { id, createdAt: now, kind, topic: s(r.topic, 80) || 'Übung', intro: s(r.intro, 3000), ...(s(r.theory, 8000) ? { theory: s(r.theory, 8000) } : {}), ...(parseFigures(r.figures).length ? { figures: parseFigures(r.figures) } : {}), ...(example?.problem ? { example } : {}), labs, tasks, progress: tasks.map(() => ({ tries: 0, hints: 0 })) };
+  const score = parseScore(r.score);
+  const program = parseProgram(r.program);
+  const sketch = parseSketch(r.sketch);
+  const syntax = parseSyntax(r.syntax);
+  const tables = parseTables(r.tables);
+  const visuals = { ...(score ? { score } : {}), ...(program ? { program } : {}), ...(sketch ? { sketch } : {}), ...(syntax.length ? { syntax } : {}), ...(tables.length ? { tables } : {}) };
+  return { id, createdAt: now, kind, topic: s(r.topic, 80) || 'Übung', intro: s(r.intro, 3000), ...visuals, ...(s(r.theory, 8000) ? { theory: s(r.theory, 8000) } : {}), ...(parseFigures(r.figures).length ? { figures: parseFigures(r.figures) } : {}), ...(example?.problem ? { example } : {}), labs, tasks, progress: tasks.map(() => ({ tries: 0, hints: 0 })) };
 }
 
 // ---------- checking answers ----------
@@ -336,8 +357,20 @@ export const PLAIN_RULE = `Erklärungen ("intro", "example", "hints") schreibst 
 - "example.steps": jeder Schritt ein kurzer Satz plus warum ("weil …").
 - Lieber zu einfach als zu schwer – die Tiefe kommt durch die Aufgaben.`;
 
+/** Visual explanations per subject (optional fields next to "intro"). */
+export const VISUAL_RULES: Record<Domain, string> = {
+  music: `Notenblatt: Zeig Musik als Noten – Feld "score":{"clef":"treble|bass","key":"G-Dur","time":"4/4","items":[{"notes":["G4"],"dur":1,"label":"G"},{"notes":["C4","E4","G4"],"dur":2,"label":"C-Dur"}],"caption":"…"} (dur in Vierteln: 0.25, 0.5, 1, 1.5, 2, 3, 4; mehrere notes = Akkord; Violinschlüssel etwa C4–C6, Bassschlüssel etwa C2–E4; deutsche Notennamen). Bei Tonleitern, Akkorden, Intervallen, Rhythmen, Melodien praktisch immer.`,
+  java: `Beispielprogramm: Gib der Erklärung ein kleines, vollständiges Programm (5–20 Zeilen), das man ausführen kann – Feld "program":{"lang":"java|javascript|python|sql","code":"…","output":"genaue Ausgabe","trace":[{"line":3,"vars":{"i":"0","summe":"0"},"note":"was in dieser Zeile passiert"}]} (Java: class Main mit main; SQL: zusätzlich "schema"). "trace": 4–12 Schritte durch den Ablauf, line = Zeilennummer ab 1, vars = Werte nach der Zeile.`,
+  law: `Fallskizze: Zeig, wer beteiligt ist und wer was von wem will – Feld "sketch":{"parties":[{"id":"k","name":"K","role":"Käufer"},{"id":"v","name":"V","role":"Verkäufer"}],"links":[{"from":"k","to":"v","label":"Kaufvertrag § 433","kind":"vertrag"},{"from":"v","to":"k","label":"Zahlung 300 €?","kind":"anspruch"}],"question":"…"} (kind: vertrag | anspruch | uebereignung | sonstiges; 2–5 Personen). Das Prüfungsschema als "figures" (flow).`,
+  language: `Sprache sichtbar machen: Felder "syntax":[{"sentence":"…","parts":[{"text":"Der Hund","role":"subjekt"},{"text":"beißt","role":"praedikat"},{"text":"den Mann","role":"akkobjekt"}],"translation":"…"}] (role: subjekt | praedikat | akkobjekt | datobjekt | adverbial | attribut | konjunktion | sonstiges) und "tables":[{"title":"Präsens von gehen","head":["Person","Form"],"rows":[["ich","geh[[e]]"],["du","geh[[st]]"]]}] – Endungen in [[…]] werden farbig.`,
+  math: `Formel-Spielwiese: Wo eine Formel mehrere Größen verbindet, gib in "labs" {"type":"formula","title":"…","expr":"K*(1+p/100)^n","vars":[{"name":"K","label":"Startkapital","min":100,"max":10000,"step":100,"value":1000,"unit":"€"},{"name":"p","label":"Zins","min":0,"max":10,"step":0.5,"value":3,"unit":"%"},{"name":"n","label":"Jahre","min":0,"max":30,"step":1,"value":10}],"result":{"label":"Endkapital","unit":"€"},"plot":"n","ask":"Frage zum Ausprobieren"} (Namen 1–3 Buchstaben; Rechenzeichen + - * / ^, sqrt, exp, ln).`,
+  general: '',
+};
+VISUAL_RULES.general = VISUAL_RULES.math.replace('Wo eine Formel', 'Nur wo eine Formel (Physik, Wirtschaft, Alltag)');
+
 export function setFrame(kind: PracticeKind) {
   return `${PLAIN_RULE}
+${kind === 'auto' ? '' : VISUAL_RULES[kind]}
 Format: {"kind":"${kind === 'auto' ? 'math|java|law|music|language|general' : kind}","topic":"…","intro":"- Stichpunkt 1\\n- Stichpunkt 2 …","example":{"problem":"…","steps":["Schritt 1 …","Schritt 2 …"],"answer":"…","code":"(nur bei Programmieren)"},"problems":[…],"labs":[…]}
 ${taskRules(kind)}
 Steigere die Schwierigkeit langsam: zuerst verstehen, dann anwenden, dann selbst lösen. Hinweise ("hints") helfen schrittweise, ohne die Lösung zu verraten.`;
@@ -391,26 +424,32 @@ export function parseFigures(raw: unknown): { diagram: Diagram; caption?: string
     const d = parseDiagram(o.diagram ?? o);
     if (!d) continue;
     const caption = s(o.caption ?? (o.diagram as Record<string, unknown> | undefined)?.caption, 200);
-    out.push({ diagram: d, ...(caption ? { caption } : {}) });
+    const narration = arr(o.narration, 10).map((x) => x.slice(0, 200));
+    out.push({ diagram: d, ...(caption ? { caption } : {}), ...(narration.length ? { narration } : {}) });
     if (out.length === 2) break;
   }
   return out;
 }
 
 /** Pictures for lessons: when and how (the shapes are the same as for card graphics). */
-export const FIGURE_RULE = `Bilder: Gib der Erklärung ein Feld "figures" mit 0–2 Grafiken – wo Abläufe, Modelle, Gliederungen, Vergleiche, Zahlen oder Zusammenhänge erklärt werden (bei reinen Begriffen keine). Format: "figures":[{"caption":"ein Satz, was die Grafik zeigt","diagram":{"type":"flow","title":"…","steps":["…","…"]}}]. Nur eine Beschreibung (kein SVG), Merkora zeichnet. Beschriftungen: Stichworte, höchstens 6 Wörter. ${DIAGRAM_RULE.slice(DIAGRAM_RULE.indexOf('Formen:'))}`;
+export const FIGURE_RULE = `Bilder: Gib der Erklärung ein Feld "figures" mit 0–2 Grafiken – wo Abläufe, Modelle, Gliederungen, Vergleiche, Zahlen oder Zusammenhänge erklärt werden (bei reinen Begriffen keine). Format: "figures":[{"caption":"ein Satz, was die Grafik zeigt","diagram":{"type":"flow","title":"…","steps":["…","…"]},"narration":["Satz zum 1. Kasten","Satz zum 2. Kasten"]}] – "narration" (bei Abläufen, Modellen, Zeitstrahlen, Hierarchien): je Kasten in Zeichenreihenfolge ein kurzer Satz, die Grafik baut sich damit Schritt für Schritt auf. Nur eine Beschreibung (kein SVG), Merkora zeichnet. Beschriftungen: Stichworte, höchstens 6 Wörter. ${DIAGRAM_RULE.slice(DIAGRAM_RULE.indexOf('Formen:'))}`;
 
 // ---------- „Warum falsch?“ ----------
 /** Pip explains a wrong answer simply and makes a similar, slightly easier task. */
-export function mistakePrompt(set: PracticeSet, task: Task, answer: string, level = ''): Prompt {
-  return {
-    system: `Du bist ein geduldiger Tutor. Jemand hat eine Übungsaufgabe falsch gelöst${level ? ` (Niveau: ${level})` : ''}. ${LANG_RULE}
+export function mistakePrompt(set: PracticeSet, task: Task, answer: string, level = '', dunno = false): Prompt {
+  const first = dunno
+    ? `Jemand weiß bei einer Übungsaufgabe nicht weiter${level ? ` (Niveau: ${level})` : ''} und hat „Weiß nicht“ gedrückt. ${LANG_RULE}
 ${PLAIN_RULE}
-1. "explain": Erkläre in 2–5 kurzen Sätzen (Markdown), wo genau der Denkfehler in der Antwort liegt, was richtig wäre und warum – freundlich, ohne Vorwurf. Zeig den richtigen Weg, nicht nur das Ergebnis.
+1. "explain": Erkläre den Lösungsweg von Grund auf, Schritt für Schritt (Markdown, nummerierte kurze Schritte, höchstens 6): womit man anfängt, was man in jedem Schritt tut und warum. Ganz einfach, ermutigend – Nichtwissen ist völlig okay.`
+    : `Jemand hat eine Übungsaufgabe falsch gelöst${level ? ` (Niveau: ${level})` : ''}. ${LANG_RULE}
+${PLAIN_RULE}
+1. "explain": Erkläre in 2–5 kurzen Sätzen (Markdown), wo genau der Denkfehler in der Antwort liegt, was richtig wäre und warum – freundlich, ohne Vorwurf. Zeig den richtigen Weg, nicht nur das Ergebnis.`;
+  return {
+    system: `Du bist ein geduldiger Tutor. ${first}
 2. "similar": Eine ähnliche, etwas leichtere Aufgabe zum selben Punkt, genau im selben Format wie die Aufgabe (gleicher "type").
 ${taskRules(set.kind)}
 Format: {"explain":"…","similar":{…Aufgabe…}}. Antworte ausschließlich mit gültigem JSON.`,
-    user: `THEMA: ${set.topic}\n\nAUFGABE (JSON):\n${JSON.stringify(task).slice(0, 6000)}\n\nANTWORT DER PERSON:\n${answer.slice(0, 4000)}`,
+    user: `THEMA: ${set.topic}\n\nAUFGABE (JSON):\n${JSON.stringify(task).slice(0, 6000)}\n\nANTWORT DER PERSON:\n${dunno ? '(Die Person weiß es nicht und hat keine Antwort gegeben.)' : answer.slice(0, 4000)}`,
     maxTokens: 2500,
     json: true,
   };

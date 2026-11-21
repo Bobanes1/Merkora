@@ -308,3 +308,10 @@ export const IconSidebar = mk(
   </>,
 );
 export const IconBulb = mk(<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.7.6 1.1 1.3 1.1 2.1V16h5v-.1c0-.8.4-1.5 1.1-2.1A6 6 0 0 0 12 3z" />);
+export const IconHelp = mk(
+  <>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.6V14" />
+    <path d="M12 17h.01" />
+  </>,
+);

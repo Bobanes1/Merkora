@@ -22,6 +22,7 @@ import {
 } from '../../lib/labs';
 import { compileExpr } from '../../lib/plotExpr';
 import { withParams, type LabSpec } from '../../lib/practice';
+import { formulaCurve, formulaValue, type FormulaLab as FormulaSpec } from '../../lib/visuals';
 
 /**
  * Interactive labs: Merkora's own, tested building blocks (lib/labs.ts). The AI only picks a type and
@@ -40,6 +41,7 @@ export const LAB_TITLES: Record<LabSpec['type'], string> = {
   urn: 'Urne: mit und ohne Zurücklegen',
   function: 'Funktionen: Ableitung und Fläche',
   vectors: 'Vektoren und Matrizen',
+  formula: 'Formel zum Ausprobieren',
 };
 
 /** Default starting values for every lab (for „Labore“ without an AI set). */
@@ -493,6 +495,61 @@ function VectorsLab({ spec }: { spec: Extract<LabSpec, { type: 'vectors' }> }) {
   );
 }
 
+/** A formula with sliders for its quantities: the result changes live, optionally as a curve over one of them. */
+function FormulaLab({ spec }: { spec: FormulaSpec }) {
+  const [vals, setVals] = useState<Record<string, number>>(() => Object.fromEntries(spec.vars.map((v) => [v.name, v.value])));
+  const value = formulaValue(spec, vals);
+  const curve = useMemo(() => formulaCurve(spec, vals), [spec, vals]);
+  const pv = spec.vars.find((v) => v.name === spec.plot);
+  const pts = (curve ?? []).filter((q): q is { x: number; y: number } => !!q);
+  const ys = pts.map((q) => q.y);
+  const lo = Math.min(0, ...ys), hi = Math.max(1e-9, ...ys);
+  const sx = (x: number) => PAD + ((x - (pv?.min ?? 0)) / ((pv?.max ?? 1) - (pv?.min ?? 0))) * (W - 2 * PAD);
+  const sy = (y: number) => H - PAD - ((y - lo) / (hi - lo || 1)) * (H - 2 * PAD);
+  const d = pts.map((q, k) => `${k ? 'L' : 'M'}${sx(q.x).toFixed(1)} ${sy(q.y).toFixed(1)}`).join(' ');
+  return (
+    <>
+      <p className="lab-formula">
+        <code>{spec.expr}</code>
+      </p>
+      <div className="lab-controls">
+        {spec.vars.map((v) => (
+          <Slider
+            key={v.name}
+            label={`${v.label} (${v.name})`}
+            value={vals[v.name]}
+            min={v.min}
+            max={v.max}
+            step={v.step}
+            onChange={(x) => setVals((o) => ({ ...o, [v.name]: x }))}
+            show={`${fmt(vals[v.name], 3)}${v.unit ? ' ' + v.unit : ''}`}
+          />
+        ))}
+      </div>
+      <div className="lab-result">
+        {spec.result.label}: <b>{value === null ? '–' : fmt(value, Math.abs(value) >= 100 ? 2 : 4)}</b>
+        {spec.result.unit && <span> {spec.result.unit}</span>}
+      </div>
+      {pv && d && (
+        <svg className="lab-svg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${spec.result.label} abhängig von ${pv.label}`}>
+          <line x1={PAD} y1={sy(0)} x2={W - PAD} y2={sy(0)} className="lab-axis" />
+          <path d={d} className="lab-line" />
+          {value !== null && <circle cx={sx(vals[pv.name])} cy={sy(value)} r={6} className="lab-dot" />}
+          <text x={PAD} y={H - 8} className="lab-tick">
+            {fmt(pv.min, 2)}
+          </text>
+          <text x={W - PAD} y={H - 8} className="lab-tick" textAnchor="end">
+            {fmt(pv.max, 2)} {pv.unit}
+          </text>
+          <text x={W / 2} y={H - 8} className="lab-tick" textAnchor="middle">
+            {pv.label}
+          </text>
+        </svg>
+      )}
+    </>
+  );
+}
+
 /** One lab with its title and the question to try out. */
 export function Lab({ spec }: { spec: LabSpec }) {
   const body = (() => {
@@ -515,11 +572,13 @@ export function Lab({ spec }: { spec: LabSpec }) {
         return <FunctionLab spec={spec} />;
       case 'vectors':
         return <VectorsLab spec={spec} />;
+      case 'formula':
+        return <FormulaLab spec={spec} />;
     }
   })();
   return (
     <section className="panel lab">
-      <h3>{LAB_TITLES[spec.type]}</h3>
+      <h3>{spec.type === 'formula' ? spec.title : LAB_TITLES[spec.type]}</h3>
       {spec.ask && <p className="lab-ask">{spec.ask}</p>}
       {body}
     </section>

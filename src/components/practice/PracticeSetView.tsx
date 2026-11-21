@@ -7,7 +7,7 @@ import { CodeEditor } from '../CodeEditor';
 import { Confetti } from '../Mascot';
 import { Markdown } from '../Markdown';
 import { JavaSetup } from '../JavaSetup';
-import { IconBulb, IconCheck, IconChevron, IconClose, IconPlay, IconPlus, IconSparkle } from '../Icons';
+import { IconBulb, IconCheck, IconChevron, IconClose, IconHelp, IconPlay, IconPlus, IconSparkle } from '../Icons';
 import { Lab } from '../labs/Labs';
 import { completeJson, gradeAnswer } from '../../lib/ai';
 import { openExternal } from '../../lib/desktop';
@@ -17,6 +17,7 @@ import { setSettings, useStore } from '../../lib/store';
 import { CaseTaskView, ClassifyTaskView, ClozeTaskView, MultiTaskView, OrderTaskView } from './ActiveTasks';
 import { MusicTaskView } from './MusicTask';
 import { WebCodeTask } from './WebCodeTask';
+import { BuildFigure, ProgramView, ScoreView, SketchView, SyntaxView, TablesView } from './Visuals';
 import { EstimateTaskView, LabelTaskView, RoleplayTaskView, ScenarioTaskView, SheetTaskView } from './MoreTasks';
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -134,6 +135,11 @@ function Explanation({ set, host, steps, setSteps }: { set: PracticeSet; host: S
         </div>
       )}
       {set.figures?.length ? <Figures figures={set.figures} /> : null}
+      {set.score && <ScoreView score={set.score} />}
+      {set.sketch && <SketchView sketch={set.sketch} />}
+      {set.syntax?.length ? <SyntaxView sentences={set.syntax} /> : null}
+      {set.tables?.length ? <TablesView tables={set.tables} /> : null}
+      {set.program && <ProgramView program={set.program} />}
       {example && (
         <div className="practice-example">
           <b>Beispiel</b>
@@ -219,36 +225,49 @@ export function TaskFooter({ ctx, solution, card, canShow, noNext }: { ctx: Task
   const [note, setNote] = useState('');
   const [why, setWhy] = useState<'' | 'busy' | string>('');
   // „Warum falsch?“: Pip explains the last wrong answer and adds a similar, easier task right after this one
-  const canExplain = !ctx.prog.solved && !!ctx.prog.last && !!ctx.host.updateSet;
-  const explain = async () => {
+  const canExplain = !ctx.prog.solved && !!ctx.prog.last && !ctx.prog.dunno && !!ctx.host.updateSet;
+  const explain = async (dunno = false) => {
     const task = taskList(ctx.set)[ctx.i];
-    if (!task || !ctx.prog.last) return;
+    if (!task || (!dunno && !ctx.prog.last)) return;
     setWhy('busy');
     try {
-      const p = mistakePrompt(ctx.set, task, ctx.prog.last, ctx.host.level);
+      const p = mistakePrompt(ctx.set, task, ctx.prog.last ?? '', ctx.host.level, dunno);
       const r = parseMistake(await completeJson(p.system, p.user, p.maxTokens));
       if (!r) throw new Error('Pip konnte gerade keine Erklärung schreiben. Bitte nochmal versuchen.');
       // one update for both, so the explanation is not overwritten by the older progress
+      const mark = dunno ? { dunno: true, shown: true, last: '(weiß nicht)' } : {};
       if (r.similar && ctx.host.updateSet) {
         const next = insertTaskAfter(ctx.set, ctx.i, r.similar);
-        next.progress[ctx.i] = { ...next.progress[ctx.i], mistake: r.explain };
+        next.progress[ctx.i] = { ...next.progress[ctx.i], ...mark, mistake: r.explain };
         ctx.host.updateSet(next);
-      } else ctx.host.progress(ctx.i, { mistake: r.explain });
+      } else ctx.host.progress(ctx.i, { ...mark, mistake: r.explain });
       setWhy('');
     } catch (e) {
       setWhy((e as Error).message);
     }
   };
+  // „Weiß nicht“: show the solution at once, Pip explains the way and adds a similar, easier task after this one
+  const dunno = () => {
+    setShow(true);
+    ctx.host.progress(ctx.i, { dunno: true, shown: true, last: '(weiß nicht)' });
+    if (ctx.host.updateSet) void explain(true);
+  };
   return (
     <>
       {ctx.prog.mistake && !ctx.prog.solved && (
-        <div className="mistake-box">
-          <b>Warum es nicht gepasst hat</b>
+        <div className={'mistake-box' + (ctx.prog.dunno ? ' dunno' : '')}>
+          <b>{ctx.prog.dunno ? 'So geht’s – Schritt für Schritt' : 'Warum es nicht gepasst hat'}</b>
           <Markdown text={ctx.prog.mistake} />
           {taskList(ctx.set).length > ctx.i + 1 && <small className="muted">Danach wartet eine ähnliche, etwas leichtere Aufgabe zum Üben.</small>}
         </div>
       )}
       <div className="row-gap">
+        {!ctx.prog.solved && !ctx.prog.dunno && (
+          <button type="button" className="btn ghost sm dunno-btn" onClick={dunno} disabled={why === 'busy'} title="Lösung ansehen – Pip erklärt den Weg und gibt dir eine ähnliche Aufgabe">
+            <IconHelp size={14} /> Weiß nicht
+          </button>
+        )}
+        {ctx.prog.dunno && why === 'busy' && <small className="muted">Pip erklärt dir den Lösungsweg …</small>}
         {canExplain && !ctx.prog.mistake && (
           <button type="button" className="btn outline sm" onClick={() => void explain()} disabled={why === 'busy'}>
             <IconSparkle size={14} /> {why === 'busy' ? 'Pip schaut es sich an …' : 'Warum falsch?'}
@@ -274,6 +293,11 @@ export function TaskFooter({ ctx, solution, card, canShow, noNext }: { ctx: Task
         {ctx.prog.solved && !noNext && (
           <button type="button" className="btn outline sm" onClick={ctx.onNext}>
             Nächste Aufgabe ›
+          </button>
+        )}
+        {ctx.prog.dunno && !ctx.prog.solved && !ctx.isLast && why !== 'busy' && (
+          <button type="button" className="btn primary sm next-btn" onClick={ctx.onNext}>
+            Weiter <IconChevron size={14} />
           </button>
         )}
       </div>
@@ -541,15 +565,10 @@ function CodeTask({ ctx, p }: { ctx: TaskCtx; p: JavaProblem }) {
 
 /** The pictures of an explanation, drawn by Merkora from the AI's description (light or dark). */
 function Figures({ figures }: { figures: NonNullable<PracticeSet['figures']> }) {
-  const theme = useResolvedTheme();
   return (
     <div className="practice-figures">
       {figures.map((f, k) => (
-        <figure key={k} className="practice-figure">
-          {/* our own SVG with escaped labels – safe to insert */}
-          <div className="diagram" dangerouslySetInnerHTML={{ __html: renderDiagram(f.diagram, PALETTES[theme]) }} />
-          {f.caption && <figcaption>{f.caption}</figcaption>}
-        </figure>
+        <BuildFigure key={k} diagram={f.diagram} caption={f.caption} narration={f.narration} />
       ))}
     </div>
   );

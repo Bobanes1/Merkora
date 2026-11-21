@@ -11231,3 +11231,87 @@ html.glass .pip-tip-bubble { background: color-mix(in srgb, var(--white) 86%, tr
 .sql-result table { border-collapse: collapse; font-size: 13px; }
 .sql-result th, .sql-result td { border: 1px solid var(--line); padding: 4px 10px; text-align: left; }
 .sql-result th { background: var(--bg); }
+
+/* ---------- „Weiß nicht“ ---------- */
+.mistake-box.dunno { background: var(--primary-soft); border-color: color-mix(in srgb, var(--primary) 30%, transparent); }
+.mistake-box.dunno > b { color: var(--primary); }
+.dunno-btn { color: var(--muted); }
+
+/* ---------- visual explanations ---------- */
+.score, .sketch, .program, .syntax, .lang-tables { margin: 14px 0; }
+.score svg { width: 100%; height: auto; display: block; background: #fffdf8; border: 1px solid var(--line); border-radius: var(--r-md); }
+:root[data-theme='dark'] .score svg { background: #f3efe6; }
+.score .staff-line { stroke: #4a4f4d; stroke-width: 1; }
+.score .staff-line.bar { stroke-width: 1.3; }
+.score .staff-line.bar.end { stroke-width: 2.4; }
+.score .staff-clef { font-size: 40px; fill: #1f2421; }
+.score .staff-acc { font-size: 15px; fill: #1f2421; }
+.score .staff-note { fill: #1f2421; stroke: #1f2421; stroke-width: 1.4; }
+.score .staff-note.hollow { fill: #fffdf8; }
+.score .staff-stem, .score .staff-flag { stroke: #1f2421; stroke-width: 1.4; fill: none; }
+.score .staff-dot { fill: #1f2421; }
+.score .score-time text { font-size: 20px; font-weight: 800; fill: #1f2421; text-anchor: middle; }
+.score .score-label { font-size: 11px; font-weight: 700; fill: #6b716f; }
+.score .score-hit { fill: transparent; cursor: pointer; }
+.score .score-item:hover .staff-note, .score .score-item.now .staff-note { fill: var(--primary); stroke: var(--primary); }
+.score .score-item.now .staff-note.hollow { fill: color-mix(in srgb, var(--primary) 30%, #fffdf8); }
+.score .score-item.now .score-label { fill: var(--primary); }
+.score figcaption, .sketch figcaption { margin-top: 6px; color: var(--muted); font-size: 13px; }
+
+.program { border: 1px solid var(--line); border-radius: var(--r-md); padding: 10px 12px; background: var(--bg); }
+.program-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.program-code { margin: 0 0 8px; padding: 8px 0; border-radius: 8px; background: var(--code-bg, #1e2421); color: #e6ebe9; font-size: 13px; line-height: 1.55; overflow-x: auto; }
+.program-line { display: flex; gap: 12px; padding: 0 12px; }
+.program-line .ln { width: 22px; flex: none; text-align: right; color: #7d8784; user-select: none; }
+.program-line code { white-space: pre; font: inherit; background: none; color: inherit; }
+.program-line.now { background: color-mix(in srgb, var(--primary) 40%, transparent); box-shadow: inset 3px 0 0 var(--primary); }
+.program-trace { margin: 8px 0; padding: 10px 12px; border-radius: 8px; background: var(--white); border: 1px solid var(--line); }
+.program-trace p { margin: 0 0 6px; }
+.trace-vars { border-collapse: collapse; font-size: 13px; font-family: var(--mono, ui-monospace, monospace); }
+.trace-vars th, .trace-vars td { border: 1px solid var(--line); padding: 3px 10px; text-align: left; }
+.trace-vars th { color: var(--muted); font-weight: 600; }
+.trace-vars tr.changed td { background: color-mix(in srgb, #e0b23a 28%, transparent); font-weight: 700; }
+
+.sketch svg { width: 100%; max-width: 560px; height: auto; display: block; }
+.sk-party rect { fill: var(--white); stroke: var(--line-strong); stroke-width: 1.5; }
+.sk-name { font-size: 16px; font-weight: 800; fill: var(--ink); }
+.sk-role { font-size: 11px; fill: var(--muted); }
+.sk-link path { fill: none; stroke: var(--primary); stroke-width: 2; }
+.sk-head { fill: var(--primary); }
+.sk-link.anspruch path { stroke: #e8733a; stroke-dasharray: 7 5; }
+.sk-link.uebereignung path { stroke: #4b55c9; }
+.sk-link.sonstiges path { stroke: var(--muted); }
+.sk-label { font-size: 12px; font-weight: 700; fill: var(--ink); paint-order: stroke; stroke: var(--white); stroke-width: 4px; }
+.sk-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); }
+.sk-key i { display: inline-block; width: 22px; height: 0; border-top: 2px solid var(--primary); vertical-align: middle; margin-right: 4px; }
+.sk-key.anspruch i { border-top: 2px dashed #e8733a; }
+.sk-key.uebereignung i { border-top: 4px double #4b55c9; }
+
+.syntax-sentence p { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 4px; font-size: 17px; }
+.sp { position: relative; display: inline-flex; flex-direction: column; align-items: center; padding: 2px 8px 0; border-radius: 8px; border-bottom: 3px solid var(--sp); background: color-mix(in srgb, var(--sp) 14%, transparent); line-height: 1.4; }
+.sp small { font-size: 10px; font-weight: 700; color: var(--sp); text-transform: uppercase; letter-spacing: 0.03em; }
+.sp.subjekt, .sp-key.subjekt { --sp: #1d68b6; }
+.sp.praedikat, .sp-key.praedikat { --sp: #c0347f; }
+.sp.akkobjekt, .sp-key.akkobjekt { --sp: #0b7d56; }
+.sp.datobjekt, .sp-key.datobjekt { --sp: #7445d6; }
+.sp.adverbial, .sp-key.adverbial { --sp: #c27a12; }
+.sp.attribut, .sp-key.attribut { --sp: #0f8a9a; }
+.sp.konjunktion, .sp-key.konjunktion, .sp.sonstiges, .sp-key.sonstiges { --sp: #7d8784; }
+.syntax-sentence { margin-bottom: 10px; }
+.syntax-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); }
+.sp-key i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: var(--sp); margin-right: 4px; vertical-align: -1px; }
+.lang-tables { display: flex; flex-wrap: wrap; gap: 14px; }
+.lang-table { border-collapse: collapse; font-size: 14px; }
+.lang-table caption { text-align: left; font-weight: 700; padding-bottom: 4px; }
+.lang-table th, .lang-table td { border: 1px solid var(--line); padding: 4px 12px; text-align: left; }
+.lang-table th { background: var(--bg); color: var(--muted); font-weight: 600; }
+.lang-table mark { background: color-mix(in srgb, #c0347f 18%, transparent); color: #c0347f; font-weight: 800; border-radius: 3px; padding: 0 1px; }
+:root[data-theme='dark'] .lang-table mark { color: #ff8cc6; }
+
+.build-figure .dg-build { transition: opacity 0.35s ease; }
+.build-note { display: flex; gap: 10px; align-items: flex-start; margin: 8px 0 0; padding: 8px 12px; border-radius: 8px; background: var(--primary-soft); }
+.build-note > span { display: grid; place-items: center; width: 22px; height: 22px; flex: none; border-radius: 50%; background: var(--primary); color: #fff; font-weight: 800; font-size: 12px; }
+
+.lab-formula code { font-size: 15px; padding: 4px 10px; border-radius: 8px; background: var(--bg); }
+.lab-result { margin: 10px 0; font-size: 16px; }
+.lab-result b { font-size: 22px; color: var(--primary); }

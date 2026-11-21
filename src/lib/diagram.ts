@@ -1396,7 +1396,7 @@ const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 const r1 = (n: number) => Math.round(n * 10) / 10;
 
 /** How a graphic is shown while learning: one label covered ("?") or shown as the answer, or built up step by step. */
-export type DiagramView = { hide?: number; reveal?: number; steps?: boolean; /** several labels covered, numbered 1, 2, 3 … (labelling tasks) */ hideMany?: number[] };
+export type DiagramView = { hide?: number; reveal?: number; steps?: boolean; /** built up step by step: only the first `upto` text boxes are shown */ upto?: number; /** several labels covered, numbered 1, 2, 3 … (labelling tasks) */ hideMany?: number[] };
 
 /** Kinds of boxes that hold a label one can be asked about (not titles, axis labels or small notes). */
 const QUIZ_KINDS = new Set<Box['kind']>(['node', 'node2', 'accent', 'accent2', 'soft']);
@@ -1425,6 +1425,11 @@ export function hideLabel(d: Diagram, i: number): { label: string; front: Diagra
   const labels = diagramLabels(d);
   if (i < 0 || i >= labels.length) return null;
   return { label: labels[i], front: { hide: i }, back: { reveal: i } };
+}
+
+/** How many text boxes a graphic has (the steps when it is built up). */
+export function diagramBoxCount(d: Diagram): number {
+  return layoutDiagram(d).boxes.filter((b) => b.lines.length).length;
 }
 
 /** Graphics that read best when they appear box by box. */
@@ -1514,10 +1519,16 @@ export function renderDiagram(d: Diagram, p: Palette = PALETTES.light, view?: Di
     if (qi >= 0 && qi === view?.reveal)
       out.push(`<rect class="dg-reveal" x="${r1(b.x - 3)}" y="${r1(b.y - 3)}" width="${r1(b.w + 6)}" height="${r1(b.h + 6)}" rx="${r1(Math.min(14, b.h / 2 + 3))}" fill="none" stroke="${tn(1).line}" stroke-width="3"/>`);
   };
+  let shown = 0;
   L.boxes.forEach((b, bi) => {
     const mark = out.length;
     drawBox(b, bi);
-    if (steps && out.length > mark && b.lines.length) {
+    if (view?.upto !== undefined && out.length > mark && b.lines.length) {
+      // built up step by step: boxes from number `upto` on are hidden (they fade in when it is their turn)
+      const on = shown++ < view.upto;
+      out.splice(mark, 0, `<g class="dg-build${on ? ' on' : ''}"${on ? '' : ' opacity="0.06"'}>`);
+      out.push('</g>');
+    } else if (steps && out.length > mark && b.lines.length) {
       out.splice(mark, 0, `<g class="dg-step" style="animation-delay:${(step++ * 0.15).toFixed(2)}s">`);
       out.push('</g>');
     }

@@ -1862,6 +1862,45 @@ console.log('Klavier-Tastatur und neue Aufgabenarten');
   ok(CR.sameRows(tA, tB, false) && !CR.sameRows(tA, tB, true) && CR.sqlOrdered('select * from t order by n') && !CR.sqlOrdered('select 1'), 'SQL: Zeilen vergleichen, Reihenfolge nur bei ORDER BY');
 }
 
+console.log('Weiß nicht und visuelle Erklärungen');
+{
+  const P = await import('../src/lib/practice');
+  const S = await import('../src/lib/skills');
+  const set = { id: 's', createdAt: 1, kind: 'math', topic: 'T', intro: '', labs: [], tasks: [{ type: 'calc', problem: '3·4?', answer: { type: 'number', value: '12' }, hints: [], steps: [] }], progress: [{ tries: 0, hints: 0 }] } as any;
+  const d = P.mistakePrompt(set, set.tasks[0], '', '', true);
+  ok(d.system.includes('Weiß nicht') && d.system.includes('Schritt für Schritt') && d.user.includes('weiß es nicht') && !P.mistakePrompt(set, set.tasks[0], '5').system.includes('Weiß nicht'), '„Weiß nicht“: Pip erklärt den Lösungsweg statt einen Denkfehler');
+  ok(S.taskScore({ tries: 0, hints: 0, shown: true, dunno: true } as any) === 0.2, '„Weiß nicht“ zählt wie eine angezeigte Lösung');
+
+  const V = await import('../src/lib/visuals');
+  ok(V.keyFifths('G-Dur') === 1 && V.keyFifths('F-Dur') === -1 && V.keyFifths('e-Moll') === 1 && V.keyFifths('Es-Dur') === -3 && V.keyFifths('X-Dur') === null, 'Notenblatt: Tonarten → Vorzeichen');
+  ok(V.keySignatureSteps(1, 'treble')[0] === 8 && V.keySignatureSteps(-1, 'treble')[0] === 4 && V.keySignatureSteps(1, 'bass')[0] === 6, 'Notenblatt: Fis/B an der richtigen Linie');
+  const sc = V.parseScore({ clef: 'treble', key: 'G-Dur', time: '4/4', items: [{ notes: ['G4'], dur: 1 }, { notes: ['Fis4'], dur: 1 }, { notes: ['F4'], dur: 2 }, { notes: ['C4', 'E4', 'G4'], dur: 4, label: 'C' }, { notes: ['Q9'] }] })!;
+  const L = V.layoutScore(sc);
+  ok(sc.items.length === 4 && L.bars.length === 1 && L.items[1].notes[0].acc === '' && L.items[2].notes[0].acc === '♮' && L.items[3].notes.length === 3 && L.items[3].midis.join(',') === '60,64,67', 'Notenblatt: Takte, Vorzeichen nur wo nötig, Akkord');
+  ok(V.parseScore({ items: [] }) === null && V.parseScore({ items: ['C4', 'D4'] })!.items.length === 2, 'Notenblatt: leere Noten abgelehnt, Kurzform erlaubt');
+
+  const pr = V.parseProgram({ lang: 'python', code: 'a = 1\nb = a + 2\nprint(b)', output: '3', trace: [{ line: 1, vars: { a: 1 }, note: 'a wird 1' }, { line: 2, vars: { a: 1, b: 3 }, note: '' }, { line: 9, vars: {}, note: 'gibt es nicht' }] })!;
+  ok(pr.lang === 'python' && pr.trace.length === 2 && pr.trace[0].vars.a === '1' && V.changedVars(pr.trace, 1).join() === 'b' && V.parseProgram({ code: '' }) === null, 'Beispielprogramm: Ablauf, nur gültige Zeilen, geänderte Variablen');
+
+  const sk = V.parseSketch({ parties: [{ id: 'k', name: 'K', role: 'Käufer' }, { id: 'v', name: 'V' }], links: [{ from: 'k', to: 'v', label: '§ 433', kind: 'Kaufvertrag' }, { from: 'v', to: 'k', kind: 'Anspruch' }, { from: 'v', to: 'x' }] })!;
+  ok(sk.links.length === 2 && sk.links[0].kind === 'vertrag' && sk.links[1].kind === 'anspruch' && V.parseSketch({ parties: [{ id: 'a', name: 'A' }], links: [] }) === null, 'Fallskizze: Arten erkannt, falsche Personen weggelassen');
+
+  const sy = V.parseSyntax([{ sentence: 'Der Hund beißt den Mann.', parts: [{ text: 'Der Hund', role: 'Subjekt' }, { text: 'beißt', role: 'Verb' }, { text: 'den Mann', role: 'Akkusativobjekt' }] }]);
+  ok(sy.length === 1 && sy[0].parts.map((p) => p.role).join(',') === 'subjekt,praedikat,akkobjekt', 'Satzbau: Rollen erkannt');
+  ok(V.markedParts('geh[[st]]').length === 2 && V.markedParts('geh[[st]]')[1].mark === true && V.parseTables([{ title: 'x', head: ['a'], rows: [['ich', 'geh[[e]]'], ['du', 'geh[[st]]']] }]).length === 1, 'Tabellen: Endungen markiert');
+
+  const lab = P.parseLab({ type: 'formula', expr: 'K*(1+p/100)^n', vars: [{ name: 'K', min: 100, max: 10000, value: 1000 }, { name: 'p', min: 0, max: 10, value: 10 }, { name: 'n', min: 0, max: 30, value: 2 }], result: { label: 'Endkapital', unit: '€' }, plot: 'n' }) as any;
+  ok(lab?.type === 'formula' && Math.abs(V.formulaValue(lab, { K: 1000, p: 10, n: 2 })! - 1210) < 1e-6 && V.formulaCurve(lab, { K: 1000, p: 10, n: 2 })!.length === 81, 'Formel-Spielwiese: Ergebnis und Kurve');
+  ok(P.parseLab({ type: 'formula', expr: 'sin*2', vars: [{ name: 'sin', min: 0, max: 1 }] }) === null && P.parseLab({ type: 'formula', expr: 'a+', vars: [{ name: 'a', min: 0, max: 1 }] }) === null, 'Formel-Spielwiese: Funktionsnamen und kaputte Formeln abgelehnt');
+
+  const D = await import('../src/lib/diagram');
+  const dg = { type: 'flow', steps: ['Planen', 'Bauen', 'Testen'] } as any;
+  const part = D.renderDiagram(dg, D.PALETTES.light, { upto: 1 });
+  ok(D.diagramBoxCount(dg) === 3 && (part.match(/opacity="0.06"/g) ?? []).length === 2 && !D.renderDiagram(dg, D.PALETTES.light).includes('dg-build'), 'Bild baut sich auf: spätere Kästen ausgeblendet');
+  const ps = P.parsePractice({ kind: 'music', topic: 'T', intro: 'x', score: { items: ['C4'] }, figures: [{ diagram: dg, narration: ['a', 'b'] }], problems: [{ type: 'calc', problem: '1+1', answer: { type: 'number', value: '2' } }] }, 'id', 1)!;
+  ok(!!ps.score && ps.figures![0].narration!.length === 2, 'Lektion: Notenblatt und Erzähl-Sätze werden übernommen');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));
