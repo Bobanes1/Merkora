@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import { attachSkillFiles } from '../lib/deckFiles';
 import { Link, useNavigate } from 'react-router-dom';
-import { IconSparkle, IconUpload } from '../components/Icons';
+import { IconClose, IconNote, IconSparkle, IconUpload } from '../components/Icons';
 import { NoKeyNotice } from '../components/NoKey';
 import { hasKey } from '../lib/ai';
 import { MATERIAL_ACCEPT, readFileText } from '../lib/files';
@@ -21,11 +22,14 @@ export default function Skills() {
   const [level, setLevel] = useState(data.settings.eduLevel ?? '');
   const [material, setMaterial] = useState('');
   const [fileNote, setFileNote] = useState('');
+  // the documents themselves are kept too (not only their text), so they stay visible in the skill
+  const [files, setFiles] = useState<File[]>([]);
 
   const start = () => {
     if (!topic.trim()) return;
     if (level) setSettings({ eduLevel: level });
     const id = startSkill(topic, level, material);
+    if (files.length) void attachSkillFiles(id, files);
     navigate(`/skills/${id}`);
   };
   const onFiles = async (list: FileList | null) => {
@@ -33,6 +37,7 @@ export default function Skills() {
     for (const f of Array.from(list ?? [])) {
       try {
         texts.push(await readFileText(f));
+        setFiles((x) => [...x.filter((y) => y.name !== f.name), f]);
       } catch (e) {
         setFileNote(`${f.name}: ${(e as Error).message}`);
       }
@@ -84,6 +89,18 @@ export default function Skills() {
                 <input type="file" multiple accept={MATERIAL_ACCEPT} hidden onChange={(e) => void onFiles(e.target.files)} />
               </label>
               {fileNote && <small className="muted"> {fileNote}</small>}
+              {files.length > 0 && (
+                <ul className="skill-file-list">
+                  {files.map((f) => (
+                    <li key={f.name}>
+                      <IconNote size={14} /> <span className="grow">{f.name}</span>
+                      <button type="button" className="icon-btn sm" aria-label={`${f.name} entfernen`} onClick={() => setFiles((x) => x.filter((y) => y !== f))}>
+                        <IconClose size={12} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </details>
           </>
         )}

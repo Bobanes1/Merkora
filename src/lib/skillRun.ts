@@ -18,8 +18,16 @@ import {
   reviewPrompt,
   revisePrompt,
   stageTestPrompt,
+  parseProject,
+  projectAsCase,
+  projectPassed,
+  projectPrompt,
+  sheetPrompt,
   type Skill,
+  type Stage,
 } from './skills';
+import { LANG_RULE } from './ai';
+import { caseGradePrompt, parseCaseGrade } from './tasks';
 import { addSkill, getState, updateSkill } from './store';
 
 type Status = { busy: boolean; error?: string };
@@ -161,6 +169,44 @@ export function makeStageTest(id: string, stageId: string) {
     if (!s || !stage) return;
     const set = setOf(await ask(stageTestPrompt(s, stage)));
     updateSkill(id, (x) => ({ stages: x.stages.map((st) => (st.id === stageId ? { ...st, test: set, passed: undefined } : st)) }));
+  });
+}
+
+const patchStage = (id: string, stageId: string, patch: (st: Stage) => Partial<Stage>) =>
+  updateSkill(id, (x) => ({ stages: x.stages.map((st) => (st.id === stageId ? { ...st, ...patch(st) } : st)) }));
+
+/** The mini project at the end of a stage (made once). */
+export function makeStageProject(id: string, stageId: string) {
+  return run(id + ':project:' + stageId, async () => {
+    const s = skill(id);
+    const stage = s?.stages.find((st) => st.id === stageId);
+    if (!s || !stage) return;
+    const project = parseProject(await ask(projectPrompt(s, stage)));
+    if (!project) throw new Error('Pip konnte kein Projekt entwerfen. Bitte versuche es noch einmal.');
+    patchStage(id, stageId, () => ({ project }));
+  });
+}
+/** Grades the submitted project with the rubric (done from 70 %). */
+export function gradeStageProject(id: string, stageId: string, submission: string) {
+  return run(id + ':project:' + stageId, async () => {
+    const project = skill(id)?.stages.find((st) => st.id === stageId)?.project;
+    if (!project) return;
+    const task = projectAsCase(project);
+    const p = caseGradePrompt(task, submission, LANG_RULE);
+    const grade = parseCaseGrade(task, await completeJson(p.system, p.user, 2500));
+    patchStage(id, stageId, (st) => ({ project: { ...st.project!, submission, grade, done: st.project?.done || projectPassed(grade) } }));
+  });
+}
+/** The cheat sheet of a passed stage: everything important on one page (made once). */
+export function makeStageSheet(id: string, stageId: string) {
+  return run(id + ':sheet:' + stageId, async () => {
+    const s = skill(id);
+    const stage = s?.stages.find((st) => st.id === stageId);
+    if (!s || !stage) return;
+    const r = await ask<{ sheet?: string }>(sheetPrompt(s, stage));
+    const sheet = typeof r?.sheet === 'string' ? r.sheet.trim().slice(0, 12000) : '';
+    if (!sheet) throw new Error('Pip konnte keinen Spickzettel schreiben. Bitte versuche es noch einmal.');
+    patchStage(id, stageId, () => ({ sheet }));
   });
 }
 

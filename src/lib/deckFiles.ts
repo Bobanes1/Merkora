@@ -1,7 +1,7 @@
 /** The original material files of a deck (PDF, Word, PowerPoint, text …): stored like card pictures, shown under "Material". */
 import { mediaGet, mediaPutMany } from './db';
 import { fileKind, mimeOf } from './fileKind';
-import { collectMediaGarbage, updateDeck, type DeckFile } from './store';
+import { collectMediaGarbage, updateDeck, updateSkill, type DeckFile } from './store';
 import { uid } from './util';
 
 /** Stores the material files with the deck (a file with the same name replaces the older one). Returns how many. */
@@ -31,4 +31,20 @@ export function removeDeckFile(deckId: string, id: string) {
 export async function deckFileBlob(id: string): Promise<Blob | null> {
   const r = await mediaGet(id).catch(() => undefined);
   return r?.blob ?? null;
+}
+
+/** Stores the material files of a skill (same as for decks; a file with the same name replaces the older one). */
+export async function attachSkillFiles(skillId: string, files: File[]): Promise<number> {
+  const keep = files.filter((f) => fileKind(f.name, f.type) !== 'other');
+  if (!keep.length) return 0;
+  const recs = keep.map((f) => ({ id: 'mat-' + uid(), f, type: mimeOf(f.name, f.type) }));
+  await mediaPutMany(recs.map(({ id, f, type }) => ({ id, rec: { blob: f, name: f.name, type } })));
+  const added: DeckFile[] = recs.map(({ id, f, type }) => ({ id, name: f.name, size: f.size, addedAt: Date.now(), type }));
+  updateSkill(skillId, (s) => ({ files: [...(s.files ?? []).filter((x) => !added.some((a) => a.name === x.name)), ...added] }));
+  return added.length;
+}
+/** Removes a file from the skill (the text taken from it stays in the material). */
+export function removeSkillFile(skillId: string, id: string) {
+  updateSkill(skillId, (s) => ({ files: (s.files ?? []).filter((x) => x.id !== id) }));
+  void collectMediaGarbage();
 }

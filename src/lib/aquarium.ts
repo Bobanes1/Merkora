@@ -3,7 +3,7 @@
  * Which ones are unlocked is kept in game.aquarium (id → time), so they stay even if numbers go down later.
  */
 import { pathProgress, totalXp, xpStreak } from './path';
-import { lessonDone } from './skills';
+import { lessonDone, skillComplete } from './skills';
 import { masteryPercent, streak } from './stats';
 import type { Data } from './store';
 
@@ -17,6 +17,7 @@ export type AquaStats = {
   mockPassed: number;
   todosDone: number;
   xp: number;
+  skillsCompleted: number;
 };
 
 export function aquaStats(d: Data, now = Date.now()): AquaStats {
@@ -30,6 +31,7 @@ export function aquaStats(d: Data, now = Date.now()): AquaStats {
     mockPassed: d.decks.reduce((a, x) => a + (x.mockHistory ?? []).filter((m) => m.passed).length, 0),
     todosDone: (d.todos ?? []).filter((t) => t.doneAt).length,
     xp: totalXp(d),
+    skillsCompleted: (d.skills ?? []).filter(skillComplete).length,
   };
 }
 
@@ -55,6 +57,7 @@ export const AQUA_ITEMS: AquaItem[] = [
   { id: 'snail', name: 'Meeresschnecke', kind: 'ground', how: 'Hake 50 To-dos ab', stat: 'todosDone', need: 50, x: 22, y: 92 },
   { id: 'ray', name: 'Rochen', kind: 'swim', how: 'Lerne 20 Stunden insgesamt', stat: 'minutes', need: 1200, x: 60, y: 62 },
   { id: 'whale', name: 'Wal', kind: 'swim', how: 'Lerne 1000 Karten', stat: 'cards', need: 1000, x: 40, y: 18 },
+  { id: 'goldfish', name: 'Goldfisch', kind: 'swim', how: 'Schaffe einen ganzen Skill bis zum Ziel', stat: 'skillsCompleted', need: 1, x: 28, y: 36 },
   { id: 'dolphin', name: 'Pips Freund Flo', kind: 'swim', how: 'Lerne 30 Tage in Folge', stat: 'streak', need: 30, x: 80, y: 12 },
 ];
 

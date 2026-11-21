@@ -1739,6 +1739,39 @@ console.log('Aquarium und Pip-Tipps');
   ok(next.text === T.PIP_TIPS.library[1] && T.pickTip('nirgends', {}, '2026-11-21') === null, 'am nächsten Tag der nächste Tipp; Bereiche ohne Tipps bleiben still');
 }
 
+console.log('Skills: Bilder, Fehler erklären, Projekt, Zeitplan, Abschluss');
+{
+  const P = await import('../src/lib/practice');
+  const figs = P.parseFigures([{ caption: 'Ablauf', diagram: { type: 'flow', title: 'Kompilieren', steps: ['Code', 'javac', 'java'] } }, { type: 'compare', title: 'X', columns: [{ title: 'A', items: ['1'] }, { title: 'B', items: ['2'] }] }, { type: 'flow', title: 'zu viel', steps: ['a', 'b'] }, 'Unsinn']);
+  ok(figs.length === 2 && figs[0].caption === 'Ablauf' && figs[0].diagram.type === 'flow' && P.parseFigures('x').length === 0, 'Bilder in Lektionen: höchstens 2, Unsinn fällt weg');
+  const set = { id: 's', createdAt: 1, kind: 'math', topic: 'T', intro: '', labs: [], tasks: [{ type: 'calc', problem: 'p1', answer: { type: 'number', value: '1' }, hints: [], steps: [] }, { type: 'calc', problem: 'p2', answer: { type: 'number', value: '2' }, hints: [], steps: [] }], progress: [{ tries: 1, hints: 0, last: '5' }, { tries: 0, hints: 0 }] } as any;
+  const m = P.parseMistake({ explain: 'Du hast addiert statt multipliziert.', similar: { type: 'calc', problem: '2·3?', answer: { type: 'number', value: '6' }, hints: ['h'], steps: ['s'] } });
+  ok(!!m && m.explain.startsWith('Du hast') && m.similar?.type === 'calc' && P.parseMistake({}) === null, '„Warum falsch?“: Erklärung und ähnliche Aufgabe');
+  const ins = P.insertTaskAfter(set, 0, m!.similar!);
+  ok(ins.tasks!.length === 3 && (ins.tasks![1] as any).problem === '2·3?' && ins.progress.length === 3 && ins.progress[1].tries === 0 && ins.progress[0].last === '5', 'ähnliche Aufgabe kommt direkt danach');
+  ok(P.mistakePrompt(set, set.tasks[0], '5', 'Gymnasium').user.includes('ANTWORT DER PERSON:\n5'), 'Anfrage enthält die falsche Antwort');
+
+  const S = await import('../src/lib/skills');
+  const proj = S.parseProject({ title: 'Mini-Rechner', brief: 'Schreibe ein Programm …', steps: ['a', 'b'], deliverable: 'code', rubric: [{ criterion: 'läuft', points: 4 }, { criterion: 'lesbar', points: 6 }], solution: 'x', starter: 'class Solution {}' });
+  ok(!!proj && proj.deliverable === 'code' && proj.rubric.length === 2 && proj.starter === 'class Solution {}' && S.parseProject({ title: 'x' }) === null, 'Mini-Projekt: Aufbau wird geprüft');
+  const c = S.projectAsCase(proj!);
+  ok(c.type === 'case' && c.facts.includes('1. a') && c.rubric.length === 2, 'Projekt wird wie eine Fallaufgabe bewertet');
+  ok(S.projectPassed({ criteria: [], total: 7, max: 10, summary: '' }) && !S.projectPassed({ criteria: [], total: 6.5, max: 10, summary: '' }), 'Projekt geschafft ab 70 %');
+
+  const days = S.planLessons(6, '2026-11-21', '2026-11-23', 3);
+  ok(days.length === 6 && days[0] === '2026-11-21' && days[5] === '2026-11-23' && days.filter((d) => d === '2026-11-22').length === 2, 'Lektionen gleichmäßig bis zum Ziel-Datum verteilt: ' + days.join(','));
+  const crowd = S.planLessons(5, '2026-11-21', '2026-11-21', 3);
+  ok(crowd.every((d) => d === '2026-11-21'), 'zu wenig Tage: alles auf den letzten Tag');
+  const L = (id: string, extra = {}) => ({ id, title: id, goal: '', ...extra });
+  const sk = { id: 'k', status: 'active', title: 'T', levels: ['A'], targetLevel: 0, stages: [{ id: 's1', name: 'A', goal: '', passed: true, lessons: [L('a', { known: true }), L('b', { minutes: 30 }), L('c', { minutes: 10 })] }] } as any;
+  ok(S.minutesPerLesson(sk) === 20 && S.openLessons(sk).length === 2 && S.remainingText(sk) === 'noch ca. 40 Min. · 2 Lektionen', 'Restzeit aus gemessener Zeit pro Lektion: ' + S.remainingText(sk));
+  ok(S.skillComplete(sk) && !S.skillComplete({ ...sk, stages: [{ ...sk.stages[0], passed: false }] }), 'Skill komplett, wenn alle Stufen bestanden');
+
+  const A = await import('../src/lib/aquarium');
+  const zero = { cards: 0, streak: 0, minutes: 0, decksMastered: 0, pathStars: 0, skillsCompleted: 1, skillLessons: 0, mockPassed: 0, todosDone: 0, xp: 0 };
+  ok(A.unlockedBy(zero).includes('goldfish'), 'geschaffter Skill: Goldfisch im Aquarium');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

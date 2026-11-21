@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
+import { SkillCelebration, SkillSchedule } from '../components/SkillSchedule';
+import { ProjectView, SheetView } from '../components/SkillStageExtras';
+import { SkillMaterial } from '../components/SkillMaterial';
 import { undoable } from '../lib/undo';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { CardContent } from '../components/CardContent';
 import { ConfirmModal } from '../components/Modal';
 import { CostHint } from '../components/CostHint';
-import { IconArrowDown, IconArrowUp, IconCheck, IconSkip, IconLock, IconPlus, IconSparkle, IconStar, IconTrash, IconTrophy } from '../components/Icons';
+import { IconArrowDown, IconArrowUp, IconCheck, IconSkip, IconTools, IconLock, IconPlus, IconSparkle, IconStar, IconTrash, IconTrophy } from '../components/Icons';
 import { FloorDecor, NodeDecor, PATH_OFFSETS, PathLink, SandFloor, SwimmingFish, themeFor, Waves } from '../components/PathDecor';
 import { Mascot } from '../components/Mascot';
 import { PracticeSetView, type SetHost } from '../components/practice/PracticeSetView';
@@ -106,6 +109,7 @@ function Planner({ skill }: { skill: Skill }) {
         <h1>{skill.title}</h1>
         <p className="muted">Pip plant mit dir den Lernpfad – beantworte ein paar Fragen, dann bekommst du einen Vorschlag, den du anpassen kannst.</p>
       </header>
+      <SkillMaterial skill={skill} />
 
       {!questions.length && (q.busy || !q.error) && <Busy text="Pip überlegt sich Fragen zu deinem Ziel …" />}
       <Failed error={q.error} retry={() => void askQuestions(skill.id)} />
@@ -294,7 +298,7 @@ function Proposal({ skill }: { skill: Skill }) {
 }
 
 // ---------- learning ----------
-type View = { kind: 'lesson'; id: string } | { kind: 'test'; stageId: string } | { kind: 'review' } | null;
+type View = { kind: 'lesson'; id: string } | { kind: 'test'; stageId: string } | { kind: 'project'; stageId: string } | { kind: 'sheet'; stageId: string } | { kind: 'review' } | null;
 
 function Path({ skill }: { skill: Skill }) {
   const navigate = useNavigate();
@@ -313,6 +317,8 @@ function Path({ skill }: { skill: Skill }) {
   if (view?.kind === 'lesson') return <LessonView skill={skill} lessonId={view.id} onBack={() => setView(null)} onOpen={(lid) => setView({ kind: 'lesson', id: lid })} />;
   if (view?.kind === 'test') return <StageTestView skill={skill} stageId={view.stageId} onBack={() => setView(null)} />;
   if (view?.kind === 'review') return <ReviewView skill={skill} onBack={() => setView(null)} />;
+  if (view?.kind === 'project') return <ProjectView skill={skill} stageId={view.stageId} onBack={() => setView(null)} />;
+  if (view?.kind === 'sheet') return <SheetView skill={skill} stageId={view.stageId} onBack={() => setView(null)} />;
 
   return (
     <>
@@ -325,6 +331,7 @@ function Path({ skill }: { skill: Skill }) {
         <p className="muted">
           {p.done} von {p.total} Lektionen{p.skipped ? ` · ${p.skipped} übersprungen` : ''} · erreicht: {reached >= 0 ? skill.stages[reached].name : 'noch keine Stufe'} · Ziel: {skill.levels[skill.targetLevel] ?? '–'}
         </p>
+        <SkillSchedule skill={skill} />
         <span className="bar skill-bar" aria-hidden="true">
           <i style={{ width: `${Math.round(p.share * 100)}%` }} />
         </span>
@@ -355,6 +362,8 @@ function Path({ skill }: { skill: Skill }) {
           <CardContent text={skill.plan.approach} />
         </details>
       )}
+      <SkillCelebration skill={skill} />
+      <SkillMaterial skill={skill} />
       <div className="path-summary">
         <span>
           <b>
@@ -380,6 +389,8 @@ function Path({ skill }: { skill: Skill }) {
           const nodes = [
             ...st.lessons.map((l) => ({ key: l.id, lesson: l as Lesson | null })),
             { key: st.id + ':test', lesson: null as Lesson | null },
+            // the mini project: apply the whole stage once (after the stage test)
+            { key: st.id + ':project', lesson: null as Lesson | null, project: true },
           ];
           return (
             <section
@@ -401,6 +412,11 @@ function Path({ skill }: { skill: Skill }) {
                   <b>
                     {st.name} {st.passed && <span className="badge ok">erreicht</span>}
                   </b>
+                  {st.passed && (
+                    <button type="button" className="btn ghost sm sheet-btn" onClick={() => setView({ kind: 'sheet', stageId: st.id })}>
+                      Spickzettel
+                    </button>
+                  )}
                   <small>
                     {st.goal ? st.goal + ' · ' : ''}
                     {skippedHere ? `${skippedHere} übersprungen · ` : ''}
@@ -414,7 +430,14 @@ function Path({ skill }: { skill: Skill }) {
               <div className="unit-nodes">
                 {nodes.map((n, k) => {
                   const l = n.lesson;
-                  const state = l
+                  const isProject = 'project' in n;
+                  const state = isProject
+                    ? st.project?.done
+                      ? 'done'
+                      : st.passed
+                        ? 'open'
+                        : 'locked'
+                    : l
                     ? l.known
                       ? 'skipped'
                       : lessonDone(l)
@@ -435,9 +458,9 @@ function Path({ skill }: { skill: Skill }) {
                   const mascotSide = off > 0 ? 'left' : 'right';
                   let decoSide: 'left' | 'right' = off > 0 ? 'left' : off < 0 ? 'right' : k % 2 ? 'left' : 'right';
                   if (state === 'current') decoSide = mascotSide === 'left' ? 'right' : 'left';
-                  const Icon = !l ? (state === 'locked' ? IconLock : IconTrophy) : state === 'skipped' ? IconSkip : state === 'done' ? IconCheck : IconStar;
+                  const Icon = isProject ? (state === 'locked' ? IconLock : state === 'done' ? IconCheck : IconTools) : !l ? (state === 'locked' ? IconLock : IconTrophy) : state === 'skipped' ? IconSkip : state === 'done' ? IconCheck : IconStar;
                   const nStars = l ? lessonStars(l) : 0;
-                  const sub = l ? (l.known ? 'übersprungen – kannst du schon' : l.set ? `${solvedCount(l.set)}/${problemCount(l.set)} gelöst` : '') : st.passed ? 'bestanden' : ready ? 'Stufentest' : 'erst alle Lektionen';
+                  const sub = isProject ? (st.project?.done ? 'geschafft' : st.passed ? 'jetzt anwenden' : 'nach dem Stufentest') : l ? (l.known ? 'übersprungen – kannst du schon' : l.set ? `${solvedCount(l.set)}/${problemCount(l.set)} gelöst` : '') : st.passed ? 'bestanden' : ready ? 'Stufentest' : 'erst alle Lektionen';
                   return (
                     <div key={n.key} className={`path-node-wrap ${state}`} style={{ transform: `translateX(${off}px)`, animationDelay: `${Math.min(offIndex, 24) * 45}ms`, zIndex: 200 - k }}>
                       {dx !== null && <PathLink dx={dx} height={state === 'current' ? 88 : 58} done={state === 'done' || state === 'current'} />}
@@ -447,15 +470,15 @@ function Path({ skill }: { skill: Skill }) {
                       <button
                         ref={state === 'current' ? currentRef : undefined}
                         type="button"
-                        className={`path-node ${l ? 'lesson' : 'final'} ${state}`}
+                        className={`path-node ${l ? 'lesson' : 'final'} ${isProject ? 'project' : ''} ${state}`}
                         disabled={state === 'locked'}
-                        onClick={() => setView(l ? { kind: 'lesson', id: l.id } : { kind: 'test', stageId: st.id })}
-                        aria-label={`${l ? l.title : 'Stufentest ' + st.name}${state === 'locked' ? ' (gesperrt)' : state === 'done' && l ? ` (${nStars} Sterne)` : ''}`}
+                        onClick={() => setView(isProject ? { kind: 'project', stageId: st.id } : l ? { kind: 'lesson', id: l.id } : { kind: 'test', stageId: st.id })}
+                        aria-label={`${isProject ? 'Mini-Projekt ' + st.name : l ? l.title : 'Stufentest ' + st.name}${state === 'locked' ? ' (gesperrt)' : state === 'done' && l ? ` (${nStars} Sterne)` : ''}`}
                       >
                         <Icon size={l ? 28 : 30} />
                       </button>
                       <span className="node-label">
-                        {l ? l.title : `Stufentest`}
+                        {isProject ? 'Mini-Projekt' : l ? l.title : `Stufentest`}
                         {sub && <small className="node-sub">{sub}</small>}
                       </span>
                       {state === 'done' && l && (
@@ -498,6 +521,17 @@ function LessonView({ skill, lessonId, onBack, onOpen }: { skill: Skill; lessonI
   const t = useSkillTask(skill.id + ':' + lessonId);
   useEffect(() => {
     void ensureLesson(skill.id, lessonId);
+  }, [skill.id, lessonId]);
+  // the time spent in the lesson (for „noch ca. … Std.“) – at most an hour per visit
+  useEffect(() => {
+    const start = Date.now();
+    return () => {
+      const m = Math.min(60, (Date.now() - start) / 60000);
+      if (m < 0.5) return;
+      updateSkill(skill.id, (s) => ({
+        stages: s.stages.map((st) => ({ ...st, lessons: st.lessons.map((l) => (l.id === lessonId ? { ...l, minutes: Math.round(((l.minutes ?? 0) + m) * 10) / 10 } : l)) })),
+      }));
+    };
   }, [skill.id, lessonId]);
   if (!found) return null;
   const { lesson } = found;

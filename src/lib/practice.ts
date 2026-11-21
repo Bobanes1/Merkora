@@ -4,6 +4,7 @@
  * Pure – tested in scripts/test-srs.mts.
  */
 import { compileExpr } from './plotExpr';
+import { DIAGRAM_RULE, parseDiagram, type Diagram } from './diagram';
 import { parseActive, type ActiveTask } from './tasks';
 import { LANG_RULE, type Prompt } from './ai';
 import { FORMULA_RULE } from './ai';
@@ -24,7 +25,16 @@ export type LabSpec =
   | { type: 'function'; expr: string; params: Record<string, number>; min: number; max: number; ask?: string }
   | { type: 'vectors'; matrix: [[number, number], [number, number]]; ask?: string };
 
-export type ProblemProgress = { solved?: boolean; tries: number; hints: number; shown?: boolean };
+export type ProblemProgress = {
+  solved?: boolean;
+  tries: number;
+  hints: number;
+  shown?: boolean;
+  /** The last wrong answer as text (for „Warum falsch?“). */
+  last?: string;
+  /** Pip's explanation of that mistake (made once, kept). */
+  mistake?: string;
+};
 
 export type PracticeSet = {
   id: string;
@@ -33,6 +43,8 @@ export type PracticeSet = {
   topic: string;
   intro: string;
   example?: { problem: string; steps: string[]; answer?: string; code?: string };
+  /** Pictures for the explanation (Merkora draws them from a description, like card graphics). */
+  figures?: { diagram: Diagram; caption?: string }[];
   /** „Grundlagen“ before the explanation: what it is about, a picture in the head, the key terms (Markdown). */
   theory?: string;
   /** The explanation once more, even simpler („Einfacher erklären“). */
@@ -176,7 +188,7 @@ export function parsePractice(json: unknown, id: string, now: number): PracticeS
   const labs = (Array.isArray(r.labs) ? r.labs : []).map(parseLab).filter((l): l is LabSpec => !!l).slice(0, 4);
   const tasks = (Array.isArray(r.problems ?? r.tasks) ? ((r.problems ?? r.tasks) as unknown[]) : []).map(parseTask).filter((t): t is Task => !!t).slice(0, 15);
   if (!tasks.length) return null;
-  return { id, createdAt: now, kind, topic: s(r.topic, 80) || 'Übung', intro: s(r.intro, 3000), ...(s(r.theory, 8000) ? { theory: s(r.theory, 8000) } : {}), ...(example?.problem ? { example } : {}), labs, tasks, progress: tasks.map(() => ({ tries: 0, hints: 0 })) };
+  return { id, createdAt: now, kind, topic: s(r.topic, 80) || 'Übung', intro: s(r.intro, 3000), ...(s(r.theory, 8000) ? { theory: s(r.theory, 8000) } : {}), ...(parseFigures(r.figures).length ? { figures: parseFigures(r.figures) } : {}), ...(example?.problem ? { example } : {}), labs, tasks, progress: tasks.map(() => ({ tries: 0, hints: 0 })) };
 }
 
 // ---------- checking answers ----------
@@ -342,3 +354,51 @@ Erstelle ${count} Aufgaben zum Material. Antworte ausschließlich mit gültigem 
 /** How far a set is done. */
 export const solvedCount = (p: PracticeSet) => p.progress.filter((x) => x.solved).length;
 export const problemCount = (p: PracticeSet) => taskList(p).length;
+
+/** Up to two pictures of an explanation: each either a diagram description or {diagram, caption}. Pure – tested. */
+export function parseFigures(raw: unknown): { diagram: Diagram; caption?: string }[] {
+  if (!Array.isArray(raw)) return [];
+  const out: { diagram: Diagram; caption?: string }[] = [];
+  for (const f of raw) {
+    const o = (f ?? {}) as Record<string, unknown>;
+    const d = parseDiagram(o.diagram ?? o);
+    if (!d) continue;
+    const caption = s(o.caption ?? (o.diagram as Record<string, unknown> | undefined)?.caption, 200);
+    out.push({ diagram: d, ...(caption ? { caption } : {}) });
+    if (out.length === 2) break;
+  }
+  return out;
+}
+
+/** Pictures for lessons: when and how (the shapes are the same as for card graphics). */
+export const FIGURE_RULE = `Bilder: Gib der Erklärung ein Feld "figures" mit 0–2 Grafiken – wo Abläufe, Modelle, Gliederungen, Vergleiche, Zahlen oder Zusammenhänge erklärt werden (bei reinen Begriffen keine). Format: "figures":[{"caption":"ein Satz, was die Grafik zeigt","diagram":{"type":"flow","title":"…","steps":["…","…"]}}]. Nur eine Beschreibung (kein SVG), Merkora zeichnet. Beschriftungen: Stichworte, höchstens 6 Wörter. ${DIAGRAM_RULE.slice(DIAGRAM_RULE.indexOf('Formen:'))}`;
+
+// ---------- „Warum falsch?“ ----------
+/** Pip explains a wrong answer simply and makes a similar, slightly easier task. */
+export function mistakePrompt(set: PracticeSet, task: Task, answer: string, level = ''): Prompt {
+  return {
+    system: `Du bist ein geduldiger Tutor. Jemand hat eine Übungsaufgabe falsch gelöst${level ? ` (Niveau: ${level})` : ''}. ${LANG_RULE}
+${PLAIN_RULE}
+1. "explain": Erkläre in 2–5 kurzen Sätzen (Markdown), wo genau der Denkfehler in der Antwort liegt, was richtig wäre und warum – freundlich, ohne Vorwurf. Zeig den richtigen Weg, nicht nur das Ergebnis.
+2. "similar": Eine ähnliche, etwas leichtere Aufgabe zum selben Punkt, genau im selben Format wie die Aufgabe (gleicher "type").
+${taskRules(set.kind)}
+Format: {"explain":"…","similar":{…Aufgabe…}}. Antworte ausschließlich mit gültigem JSON.`,
+    user: `THEMA: ${set.topic}\n\nAUFGABE (JSON):\n${JSON.stringify(task).slice(0, 6000)}\n\nANTWORT DER PERSON:\n${answer.slice(0, 4000)}`,
+    maxTokens: 2500,
+    json: true,
+  };
+}
+export function parseMistake(raw: unknown): { explain: string; similar: Task | null } | null {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const explain = s(r.explain, 3000);
+  if (!explain) return null;
+  return { explain, similar: r.similar ? parseTask(r.similar) : null };
+}
+/** The set with a new task right after task `i` (and its fresh progress). */
+export function insertTaskAfter(set: PracticeSet, i: number, task: Task): Pick<PracticeSet, 'tasks' | 'progress'> {
+  const tasks = [...taskList(set)];
+  tasks.splice(i + 1, 0, task);
+  const progress = [...set.progress];
+  progress.splice(i + 1, 0, { tries: 0, hints: 0 });
+  return { tasks, progress };
+}

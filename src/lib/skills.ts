@@ -5,12 +5,35 @@
  * Pure – tested in scripts/test-srs.mts. Running the AI requests: lib/skillRun.ts.
  */
 import { FORMULA_RULE, LANG_RULE, type Prompt } from './ai';
-import { problemCount, setFrame, solvedCount, toDomain, type Domain, type PracticeSet } from './practice';
+import { FIGURE_RULE, problemCount, setFrame, solvedCount, toDomain, type Domain, type PracticeSet } from './practice';
 import { spreadClip } from './sample';
+import type { DeckFile } from './store';
+import type { CaseGrade, CaseTask } from './tasks';
 
 export type PlanQuestion = { q: string; options: string[]; multi?: boolean };
-export type Lesson = { id: string; title: string; goal: string; known?: boolean; set?: PracticeSet };
-export type Stage = { id: string; name: string; goal: string; lessons: Lesson[]; test?: PracticeSet; passed?: boolean };
+export type Lesson = {
+  id: string;
+  title: string;
+  goal: string;
+  known?: boolean;
+  set?: PracticeSet;
+  /** Minutes spent in this lesson (measured while it is open) – for the remaining-time estimate. */
+  minutes?: number;
+};
+/** A small hands-on project at the end of a stage: apply everything of the stage once. */
+export type StageProject = {
+  title: string;
+  brief: string;
+  steps: string[];
+  deliverable: 'text' | 'code';
+  rubric: { criterion: string; points: number }[];
+  solution: string;
+  starter?: string;
+  submission?: string;
+  grade?: CaseGrade;
+  done?: boolean;
+};
+export type Stage = { id: string; name: string; goal: string; lessons: Lesson[]; test?: PracticeSet; passed?: boolean; project?: StageProject; sheet?: string };
 export type Skill = {
   id: string;
   /** What the person typed („Musiktheorie“). */
@@ -24,6 +47,12 @@ export type Skill = {
   /** Education level of the person (school, university …). */
   level: string;
   material?: string;
+  /** The original files of the material (PDF, Word, PowerPoint …), stored like deck files and shown under „Dein Material“. */
+  files?: DeckFile[];
+  /** Optional target date (YYYY-MM-DD) – the lessons can be spread over the days until then. */
+  targetDate?: string;
+  /** When the completion was celebrated (once). */
+  celebrated?: number;
   status: 'planning' | 'active';
   plan: {
     questions?: PlanQuestion[];
@@ -204,9 +233,10 @@ export function lessonPrompt(skill: Skill, stage: Stage, lesson: Lesson, count =
   return {
     system: `Du bist ein geduldiger Tutor. Du erstellst eine Lektion, in der man durch eigenes Tun lernt: kurze Erklärung, ein durchgerechnetes Beispiel, dann ${count} Aufgaben, die man selbst löst. ${kindRule(skill)}
 ${beginnerRule(skill, stageIndex, i)}
+${FIGURE_RULE}
 ${JSON_ONLY}`,
     user: `${context(skill)}\n\nSTUFE: ${stage.name} – ${stage.goal}\nLEKTION ${i + 1} von ${all.length}: ${lesson.title} – Ziel: ${lesson.goal}${before.length ? `\nVorher gelernt: ${before.slice(-8).join('; ')}` : ''}`,
-    maxTokens: Math.min(16000, 3000 + count * (skill.domain === 'java' || skill.domain === 'law' ? 900 : 600)),
+    maxTokens: Math.min(16000, 3600 + count * (skill.domain === 'java' || skill.domain === 'law' ? 900 : 600)),
     json: true,
   };
 }
@@ -275,3 +305,97 @@ export function reachedStage(skill: Skill): number {
   });
   return n;
 }
+
+// ---------- mini project per stage ----------
+export function projectPrompt(skill: Skill, stage: Stage): Prompt {
+  const code = skill.domain === 'java';
+  return {
+    system: `Du entwirfst ein kleines Praxisprojekt zum Abschluss einer Lernstufe: Die Person wendet alles an, was sie in dieser Stufe gelernt hat – an einer echten, kleinen Aufgabe (30–60 Minuten). ${LANG_RULE}
+Beispiele: ein kurzes Programm, ein Brief oder Dialog in der Fremdsprache, eine kleine Datenanalyse, ein Gutachten zu einem Mini-Fall, eine kleine Komposition.
+"brief": 3–5 Sätze, worum es geht und was am Ende herauskommt. "steps": 3–6 konkrete Schritte. "deliverable": "${code ? 'code' : 'text'}". "rubric": 3–5 Kriterien mit Punkten (zusammen 10). "solution": eine gute Musterlösung (nur für die Bewertung).${code ? ' "starter": Startcode (Java, class Solution mit main).' : ''}
+Format: {"title":"…","brief":"…","steps":["…"],"deliverable":"${code ? 'code' : 'text'}","rubric":[{"criterion":"…","points":3}],"solution":"…"${code ? ',"starter":"…"' : ''}}
+${JSON_ONLY}`,
+    user: `${context(skill)}\n\nSTUFE: ${stage.name} – ${stage.goal}\nLektionen: ${stage.lessons.map((l) => l.title).join('; ')}`,
+    maxTokens: 4000,
+    json: true,
+  };
+}
+export function parseProject(raw: unknown): StageProject | null {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const str = (v: unknown, n = 4000) => (typeof v === 'string' ? v.trim().slice(0, n) : '');
+  const title = str(r.title, 120);
+  const brief = str(r.brief, 2000);
+  const steps = (Array.isArray(r.steps) ? r.steps : []).map((x) => str(x, 400)).filter(Boolean).slice(0, 8);
+  const rubric = (Array.isArray(r.rubric) ? r.rubric : [])
+    .map((x) => ({ criterion: str((x as Record<string, unknown>)?.criterion, 300), points: Math.max(1, Math.min(10, Math.round(Number((x as Record<string, unknown>)?.points) || 2))) }))
+    .filter((x) => x.criterion)
+    .slice(0, 6);
+  if (!title || !brief || !rubric.length) return null;
+  return { title, brief, steps, deliverable: r.deliverable === 'code' ? 'code' : 'text', rubric, solution: str(r.solution, 8000), ...(str(r.starter, 6000) ? { starter: str(r.starter, 6000) } : {}) };
+}
+/** The project as a case task, so the existing grading (caseGradePrompt / parseCaseGrade) can mark it. */
+export const projectAsCase = (p: StageProject): CaseTask => ({
+  type: 'case',
+  facts: p.brief + (p.steps.length ? '\n\nSchritte:\n' + p.steps.map((x, i) => `${i + 1}. ${x}`).join('\n') : ''),
+  question: p.title,
+  rubric: p.rubric,
+  solution: p.solution,
+  hints: [],
+});
+/** A project counts as done from 70 % of the points. */
+export const projectPassed = (g?: CaseGrade) => !!g && g.max > 0 && g.total / g.max >= 0.7;
+
+// ---------- cheat sheet per stage ----------
+export function sheetPrompt(skill: Skill, stage: Stage): Prompt {
+  return {
+    system: `Du schreibst einen Spickzettel für eine geschaffte Lernstufe: alles Wichtige auf einer Seite zum Nachschlagen und Wiederholen. ${LANG_RULE}
+${FORMULA_RULE}
+Markdown, höchstens etwa 350 Wörter, klar gegliedert:
+"## Das Wichtigste" (3–6 Stichpunkte) · "## Begriffe" (Liste: **Begriff** – kurze Erklärung) · "## Regeln & Formeln" (wenn passend) · "## Beispiel" (ein kurzes, typisches) · "## Typische Fehler" (2–4 Stichpunkte).
+Format: {"sheet":"…Markdown…"}
+${JSON_ONLY}`,
+    user: `${context(skill)}\n\nSTUFE: ${stage.name} – ${stage.goal}\nLektionen: ${stage.lessons.map((l) => `${l.title} (${l.goal})`).join('; ')}`,
+    maxTokens: 2500,
+    json: true,
+  };
+}
+
+// ---------- remaining time, target date, completion ----------
+/** Lessons still to learn (not done, not skipped). */
+export const openLessons = (skill: Skill) => skill.stages.flatMap((st) => st.lessons).filter((l) => !l.known && !lessonDone(l));
+/** Typical minutes per lesson: the average of measured ones (from two on), else 20. */
+export function minutesPerLesson(skill: Skill): number {
+  const m = skill.stages.flatMap((st) => st.lessons).map((l) => l.minutes ?? 0).filter((x) => x >= 3);
+  return m.length >= 2 ? Math.round(m.reduce((a, b) => a + b, 0) / m.length) : 20;
+}
+/** „noch ca. 6 Std.“ – how long the open lessons take. */
+export function remainingText(skill: Skill): string {
+  const n = openLessons(skill).length;
+  if (!n) return 'alle Lektionen geschafft';
+  const min = n * minutesPerLesson(skill);
+  const h = Math.round(min / 30) / 2;
+  const t = min < 90 ? `${Math.max(5, Math.round(min / 5) * 5)} Min.` : `${Number.isInteger(h) ? h : `${Math.floor(h)},5`} Std.`;
+  return `noch ca. ${t} · ${n} ${n === 1 ? 'Lektion' : 'Lektionen'}`;
+}
+/**
+ * Spreads `count` lessons evenly over the days from `from` to `until` (both YYYY-MM-DD, until included),
+ * at most `perDay` a day; if there are too few days, the last day gets the rest. Returns one day per lesson. Pure – tested.
+ */
+export function planLessons(count: number, from: string, until: string, perDay = 3): string[] {
+  const day = (k: string) => new Date(k + 'T12:00:00').getTime();
+  const key = (t: number) => {
+    const d = new Date(t);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const days = Math.max(1, Math.round((day(until) - day(from)) / 86400000) + 1);
+  const out: string[] = [];
+  for (let i = 0; i < count; i++) {
+    let d = Math.floor((i * days) / Math.max(1, count));
+    // not more than perDay on one day: move on while there are days left
+    while (d < days - 1 && out.filter((x) => x === key(day(from) + d * 86400000)).length >= perDay) d++;
+    out.push(key(day(from) + d * 86400000));
+  }
+  return out;
+}
+/** The whole skill is done: every stage up to the target is passed. */
+export const skillComplete = (skill: Skill) => skill.status === 'active' && skill.stages.length > 0 && skill.stages.every((st) => st.passed);

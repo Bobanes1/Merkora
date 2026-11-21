@@ -153,7 +153,7 @@ export function OrderTaskView({ ctx, task }: { ctx: TaskCtx; task: OrderTask }) 
   const check = () => {
     const r = checkOrder(task, list);
     setMarks(r.places);
-    host.progress(i, { tries: prog.tries + 1, ...(r.right ? { solved: true } : {}) });
+    host.progress(i, { tries: prog.tries + 1, ...(r.right ? { solved: true } : { last: list.join(' → '), mistake: undefined }) });
   };
   const right = !!marks?.every(Boolean);
   return (
@@ -222,7 +222,8 @@ export function ClassifyTaskView({ ctx, task }: { ctx: TaskCtx; task: ClassifyTa
   const check = () => {
     const r = checkClassify(task, chosen);
     setMarks(r.items);
-    host.progress(i, { tries: prog.tries + 1, ...(r.right ? { solved: true } : {}) });
+    const last = task.items.map((it, k) => `${it.text} → ${task.groups[chosen[k] as number] ?? '–'}`).join('; ');
+    host.progress(i, { tries: prog.tries + 1, ...(r.right ? { solved: true } : { last, mistake: undefined }) });
   };
   const right = !!marks?.every(Boolean);
   return (
@@ -276,7 +277,7 @@ export function ClozeTaskView({ ctx, task }: { ctx: TaskCtx; task: ClozeTask }) 
   const check = () => {
     const r = checkCloze(task, given);
     setMarks(r.gaps);
-    host.progress(i, { tries: prog.tries + 1, ...(r.right ? { solved: true } : {}) });
+    host.progress(i, { tries: prog.tries + 1, ...(r.right ? { solved: true } : { last: given.map((g, k) => `Lücke ${k + 1}: ${g || '(leer)'}`).join('; '), mistake: undefined }) });
   };
   const right = !!marks?.every(Boolean);
   const mono = /[{};=()]/.test(task.text) && /\n/.test(task.text);
@@ -328,7 +329,7 @@ export function MultiTaskView({ ctx, task }: { ctx: TaskCtx; task: MultiTask }) 
   const check = () => {
     const r = checkMulti(task, chosen).right;
     setResult(r);
-    host.progress(i, { tries: prog.tries + 1, ...(r ? { solved: true } : {}) });
+    host.progress(i, { tries: prog.tries + 1, ...(r ? { solved: true } : { last: 'gewählt: ' + (chosen.map((k) => task.options[k]).join('; ') || 'nichts'), mistake: undefined }) });
   };
   return (
     <div className="practice-task">

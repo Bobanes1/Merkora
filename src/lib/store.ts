@@ -953,6 +953,8 @@ export async function collectMediaGarbage() {
         for (const s of [c.front, c.back]) for (const m of s.matchAll(re)) used.add(m[1]);
       }
     for (const d of data.decks) for (const f of d.files ?? []) used.add(f.id);
+    // material files of skills are kept too
+    for (const s of data.skills ?? []) for (const f of s.files ?? []) used.add(f.id);
     const keys = (await mediaKeys()).map(String);
     const unused = keys.filter((k) => !used.has(k));
     if (unused.length) await mediaDeleteMany(unused);

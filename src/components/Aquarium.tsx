@@ -132,6 +132,18 @@ const ART: Record<string, ReactElement> = {
       <circle cx="16" cy="19" r="1.6" fill="#123" />
     </g>
   ),
+  goldfish: (
+    <g>
+      <path d="M42 20l14-10-3 10 3 10z" fill="#f5a623" />
+      <ellipse cx="27" cy="20" rx="17" ry="11" fill="#ffb627" />
+      <path d="M22 9q6-6 12 0M22 31q6 6 12 0" fill="#f5a623" />
+      <path d="M17 14q8 6 0 12" stroke="#fff3c4" strokeWidth="2" fill="none" />
+      <circle cx="13" cy="17" r="2.6" fill="#fff" />
+      <circle cx="12.5" cy="17" r="1.4" fill="#123" />
+      <circle cx="38" cy="9" r="1.4" fill="#fff6cf" />
+      <circle cx="44" cy="5" r="1" fill="#fff6cf" />
+    </g>
+  ),
   dolphin: (
     <g>
       <path d="M8 24c6-12 22-16 34-10 6 3 10 8 12 12-6-2-10-2-14 0-8 4-22 6-32-2z" fill="#3fb6c9" />
