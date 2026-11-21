@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { CardContent } from '../components/CardContent';
 import { ConfirmModal } from '../components/Modal';
 import { CostHint } from '../components/CostHint';
-import { IconCheck, IconPlus, IconSparkle, IconTrash } from '../components/Icons';
+import { IconCheck, IconLock, IconPlus, IconSparkle, IconStar, IconTrash, IconTrophy } from '../components/Icons';
+import { FloorDecor, NodeDecor, PATH_OFFSETS, PathLink, SandFloor, SwimmingFish, themeFor, Waves } from '../components/PathDecor';
 import { Mascot } from '../components/Mascot';
 import { PracticeSetView, type SetHost } from '../components/practice/PracticeSetView';
 import { askQuestions, ensureLesson, makePlacement, makeProposal, makeReview, makeStageTest, reviseProposal, useSkillTask } from '../lib/skillRun';
@@ -11,6 +12,7 @@ import {
   addLesson,
   canReview,
   lessonDone,
+  lessonStars,
   mastered,
   moveLesson,
   nextLesson,
@@ -23,7 +25,7 @@ import {
   type Skill,
   type Stage,
 } from '../lib/skills';
-import { DOMAIN_LABEL, type PracticeSet, type ProblemProgress } from '../lib/practice';
+import { DOMAIN_LABEL, problemCount, solvedCount, type PracticeSet, type ProblemProgress } from '../lib/practice';
 import { addCards, addCourse, addDeck, addWorkspace, addXp, deleteSkill, getState, updateSkill, useData } from '../lib/store';
 
 /** Saves a task as a flashcard into the deck „{Skill} – Karten“ (made the first time). */
@@ -300,6 +302,12 @@ function Path({ skill }: { skill: Skill }) {
   const p = skillProgress(skill);
   const next = nextLesson(skill);
   const reached = reachedStage(skill);
+  const stars = skill.stages.reduce((sum, st) => sum + st.lessons.reduce((a, l) => a + lessonStars(l), 0), 0);
+  const currentRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!view) currentRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [view]);
+  let offIndex = 0;
 
   if (view?.kind === 'lesson') return <LessonView skill={skill} lessonId={view.id} onBack={() => setView(null)} onOpen={(lid) => setView({ kind: 'lesson', id: lid })} />;
   if (view?.kind === 'test') return <StageTestView skill={skill} stageId={view.stageId} onBack={() => setView(null)} />;
@@ -346,34 +354,121 @@ function Path({ skill }: { skill: Skill }) {
           <CardContent text={skill.plan.approach} />
         </details>
       )}
-      {skill.stages.map((st, si) => (
-        <section key={st.id} className={'panel skill-stage' + (st.passed ? ' passed' : '')}>
-          <div className="row-gap">
-            <h2 className="grow">
-              {si + 1}. {st.name} {st.passed && <span className="badge ok">erreicht</span>}
-            </h2>
-          </div>
-          {st.goal && <p className="muted small">{st.goal}</p>}
-          <ol className="skill-lessons">
-            {st.lessons.map((l) => (
-              <li key={l.id}>
-                <button type="button" className={'skill-lesson' + (lessonDone(l) ? ' done' : '') + (next?.lesson.id === l.id ? ' next' : '')} onClick={() => setView({ kind: 'lesson', id: l.id })}>
-                  <span className="skill-dot">{lessonDone(l) ? <IconCheck size={13} /> : ''}</span>
-                  <span className="grow">
-                    <b>{l.title}</b>
-                    <small className="muted">{l.known ? 'kannst du schon' : l.set ? `${l.set.progress.filter((x) => x.solved).length}/${l.set.progress.length} gelöst` : l.goal}</small>
+      <div className="path-summary">
+        <span>
+          <b>
+            {p.done} / {p.total}
+          </b>{' '}
+          Lektionen geschafft
+        </span>
+        <span className="path-stars">
+          <IconStar size={16} /> {stars} / {p.total * 3}
+        </span>
+      </div>
+      <div className="path skill-path">
+        {skill.stages.map((st, si) => {
+          const theme = themeFor(si);
+          const doneHere = st.lessons.filter(lessonDone).length;
+          const ready = stageReady(st);
+          // the stage test is the trophy at the end; Pip waits there once all lessons of the stage are done
+          const testCurrent = ready && !st.passed && !next;
+          let prevOff: number | null = null;
+          const nodes = [
+            ...st.lessons.map((l) => ({ key: l.id, lesson: l as Lesson | null })),
+            { key: st.id + ':test', lesson: null as Lesson | null },
+          ];
+          return (
+            <section
+              key={st.id}
+              className="path-unit scene"
+              style={{ ['--scene-top' as string]: theme.top, ['--scene-bottom' as string]: theme.bottom, ['--scene-accent' as string]: theme.accent }}
+            >
+              <Waves color="var(--scene-wave)" />
+              <span className="scene-bubbles" aria-hidden="true">
+                <i />
+                <i />
+                <i />
+                <i />
+                <i />
+              </span>
+              <header className="unit-banner">
+                <span className="unit-no">{st.passed ? <IconTrophy size={18} /> : si + 1}</span>
+                <span className="grow">
+                  <b>
+                    {st.name} {st.passed && <span className="badge ok">erreicht</span>}
+                  </b>
+                  <small>
+                    {st.goal ? st.goal + ' · ' : ''}
+                    {doneHere} von {st.lessons.length} geschafft
+                  </small>
+                  <span className="unit-progress">
+                    <i style={{ width: `${(doneHere / Math.max(1, st.lessons.length)) * 100}%` }} />
                   </span>
-                </button>
-              </li>
-            ))}
-          </ol>
-          {stageReady(st) && (
-            <button type="button" className={'btn sm ' + (st.passed ? 'ghost' : 'primary')} onClick={() => setView({ kind: 'test', stageId: st.id })}>
-              {st.passed ? 'Stufentest wiederholen' : `Stufentest „${st.name}“`}
-            </button>
-          )}
-        </section>
-      ))}
+                </span>
+              </header>
+              <div className="unit-nodes">
+                {nodes.map((n, k) => {
+                  const l = n.lesson;
+                  const state = l
+                    ? lessonDone(l)
+                      ? 'done'
+                      : next?.lesson.id === l.id
+                        ? 'current'
+                        : 'open'
+                    : st.passed
+                      ? 'done'
+                      : testCurrent
+                        ? 'current'
+                        : ready
+                          ? 'open'
+                          : 'locked';
+                  const off = PATH_OFFSETS[offIndex++ % PATH_OFFSETS.length];
+                  const dx = prevOff === null ? null : prevOff - off;
+                  prevOff = off;
+                  const mascotSide = off > 0 ? 'left' : 'right';
+                  let decoSide: 'left' | 'right' = off > 0 ? 'left' : off < 0 ? 'right' : k % 2 ? 'left' : 'right';
+                  if (state === 'current') decoSide = mascotSide === 'left' ? 'right' : 'left';
+                  const Icon = !l ? (state === 'locked' ? IconLock : IconTrophy) : state === 'done' ? IconCheck : IconStar;
+                  const nStars = l ? lessonStars(l) : 0;
+                  const sub = l ? (l.known ? 'kannst du schon' : l.set ? `${solvedCount(l.set)}/${problemCount(l.set)} gelöst` : '') : st.passed ? 'bestanden' : ready ? 'Stufentest' : 'erst alle Lektionen';
+                  return (
+                    <div key={n.key} className={`path-node-wrap ${state}`} style={{ transform: `translateX(${off}px)`, animationDelay: `${Math.min(offIndex, 24) * 45}ms`, zIndex: 200 - k }}>
+                      {dx !== null && <PathLink dx={dx} height={state === 'current' ? 88 : 58} done={state === 'done' || state === 'current'} />}
+                      <NodeDecor theme={theme} index={k + si * 2} side={decoSide} />
+                      {state === 'current' && <span className="node-bubble">{l ? 'Start' : 'Test!'}</span>}
+                      {state === 'current' && <Mascot className={`node-mascot ${mascotSide}`} mood="wave" size={64} />}
+                      <button
+                        ref={state === 'current' ? currentRef : undefined}
+                        type="button"
+                        className={`path-node ${l ? 'lesson' : 'final'} ${state}`}
+                        disabled={state === 'locked'}
+                        onClick={() => setView(l ? { kind: 'lesson', id: l.id } : { kind: 'test', stageId: st.id })}
+                        aria-label={`${l ? l.title : 'Stufentest ' + st.name}${state === 'locked' ? ' (gesperrt)' : state === 'done' && l ? ` (${nStars} Sterne)` : ''}`}
+                      >
+                        <Icon size={l ? 28 : 30} />
+                      </button>
+                      <span className="node-label">
+                        {l ? l.title : `Stufentest`}
+                        {sub && <small className="node-sub">{sub}</small>}
+                      </span>
+                      {state === 'done' && l && (
+                        <span className="node-stars" aria-hidden="true">
+                          {[1, 2, 3].map((s) => (
+                            <IconStar key={s} size={14} className={s <= nStars ? 'on' : ''} />
+                          ))}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <SwimmingFish seed={si} />
+              <SandFloor />
+              <FloorDecor />
+            </section>
+          );
+        })}
+      </div>
       {confirm && (
         <ConfirmModal
           title="Skill löschen?"

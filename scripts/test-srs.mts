@@ -1577,6 +1577,14 @@ console.log('To-do-Seite: Schnelleingabe, Wiederholen, Unteraufgaben');
   ok(sp.user.includes('THEMA: Varianz') && sp.system.includes('Gymnasium') && parseSimpler({ intro: '- einfach' })!.intro === '- einfach' && parseSimpler({}) === null, '„Einfacher erklären“: Anfrage und Antwort');
 }
 
+console.log('Skills-Lernpfad: Sterne');
+{
+  const { lessonStars } = await import('../src/lib/skills');
+  const set = (solved: number, total: number) => ({ tasks: Array.from({ length: total }, () => ({ type: 'calc', q: 'x' })), progress: Array.from({ length: total }, (_, i) => ({ solved: i < solved })) }) as any;
+  ok(lessonStars({ id: 'a', title: 'a', goal: '', known: true }) === 3 && lessonStars({ id: 'a', title: 'a', goal: '' }) === 0, 'kannst du schon = 3 Sterne, ohne Aufgaben = 0');
+  ok([lessonStars({ id: 'a', title: 'a', goal: '', set: set(10, 10) }), lessonStars({ id: 'a', title: 'a', goal: '', set: set(9, 10) }), lessonStars({ id: 'a', title: 'a', goal: '', set: set(8, 10) }), lessonStars({ id: 'a', title: 'a', goal: '', set: set(5, 10) })].join() === '3,2,1,0', 'alles / 90 % / 80 % / halb gelöst');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

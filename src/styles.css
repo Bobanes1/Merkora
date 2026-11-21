@@ -9614,3 +9614,7 @@ html.phone .tool-win.minimized {
 html.phone .todo-details { padding-left: 12px; }
 html.phone .todo-undo { bottom: 84px; }
 html.phone .todos-bar .input.sm { flex: 1; min-width: 120px; }
+
+/* ---------- skills learning path (same scene as the deck path) ---------- */
+.node-label .node-sub { display: block; font-size: 0.72rem; font-weight: 500; opacity: 0.75; margin-top: 1px; }
+.skill-path .unit-banner .badge { margin-left: 6px; vertical-align: middle; }

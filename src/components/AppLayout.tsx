@@ -281,9 +281,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
           <NavLink to="/skills" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             <IconPractice /> Skills
           </NavLink>
-          <NavLink to="/todos" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-            <IconChecklist /> To-dos
-          </NavLink>
           <NavLink to="/calendar" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             <IconCalendar /> Prüfungen
           </NavLink>

@@ -11,6 +11,8 @@ export const PATH_THEMES: PathTheme[] = [
   { name: 'Tiefsee', top: '#dfe9ff', bottom: '#c3d4fb', accent: '#3d63c9', deco: ['jelly', 'bubbles', 'seaweed', 'shell', 'jelly', 'coral'] },
 ];
 export const themeFor = (unitIndex: number) => PATH_THEMES[unitIndex % PATH_THEMES.length];
+/** Sideways offsets (px) of the nodes, so the path winds left and right. */
+export const PATH_OFFSETS = [0, 56, 84, 56, 0, -56, -84, -56];
 
 const Fish = ({ c1 = '#ff9f43', c2 = '#ffd166' }: { c1?: string; c2?: string }) => (
   <svg viewBox="0 0 64 40" width="54" height="34">

@@ -20,13 +20,13 @@ import {
   type PathNode,
 } from '../../lib/path';
 import { comfort, Confetti, Mascot, praise } from '../../components/Mascot';
-import { FloorDecor, NodeDecor, PathLink, SandFloor, SwimmingFish, themeFor, Waves } from '../../components/PathDecor';
+import { FloorDecor, NodeDecor, PATH_OFFSETS, PathLink, SandFloor, SwimmingFish, themeFor, Waves } from '../../components/PathDecor';
 import { addXp, logReview, reviewCard, savePathResult, setDailyGoal, useData, type Deck } from '../../lib/store';
 import type { Rating } from '../../lib/srs';
 import { cardBackText, cardFrontText } from '../../lib/content';
 
 const HEARTS = 3;
-const OFFSETS = [0, 56, 84, 56, 0, -56, -84, -56];
+const OFFSETS = PATH_OFFSETS;
 
 // ---------- header with XP, streak and goal ----------
 export function GameBar() {

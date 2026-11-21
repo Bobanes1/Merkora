@@ -214,6 +214,13 @@ Kein "example". 8 Aufgaben. ${JSON_ONLY}`,
 /** A set counts as mastered at 80 % solved. */
 export const mastered = (set?: PracticeSet) => !!set && problemCount(set) > 0 && solvedCount(set) / problemCount(set) >= 0.8;
 export const lessonDone = (l: Lesson) => !!l.known || mastered(l.set);
+/** Stars for a finished lesson on the path: 3 = all solved (or „kannst du schon“), 2 = from 90 %, 1 = done (80 %). */
+export function lessonStars(l: Lesson): number {
+  if (l.known) return 3;
+  if (!l.set || !problemCount(l.set)) return 0;
+  const share = solvedCount(l.set) / problemCount(l.set);
+  return share >= 1 ? 3 : share >= 0.9 ? 2 : share >= 0.8 ? 1 : 0;
+}
 /** The lesson that is next: the first one not done (lessons marked „kannst du schon“ are skipped). */
 export function nextLesson(skill: Skill): { stage: Stage; lesson: Lesson } | null {
   for (const stage of skill.stages) for (const lesson of stage.lessons) if (!lessonDone(lesson)) return { stage, lesson };
