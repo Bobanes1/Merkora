@@ -10320,3 +10320,9 @@ html.phone .undo-toast {
 :root[data-theme='dark'] .rate.easy {
   color: #9cbcf0;
 }
+
+/* ---------- to-do list: thin line icons next to the text ---------- */
+.todo-meta > span { display: inline-flex; align-items: center; gap: 3px; }
+.todo-meta svg { flex: none; opacity: 0.85; }
+.todo-chips .chip { display: inline-flex; align-items: center; gap: 4px; }
+.todo-actions .icon-btn svg { display: block; }

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Mascot } from '../components/Mascot';
 import { Confetti } from '../components/Mascot';
 import { Link, useSearchParams } from 'react-router-dom';
-import { IconCheck, IconPlay, IconPlus, IconSparkle, IconTrash } from '../components/Icons';
+import { IconArrowDown, IconArrowUp, IconCalendar, IconCheck, IconChecklist, IconClock, IconFlag, IconHash, IconNote, IconPlay, IconPlus, IconRepeat, IconSparkle, IconTarget, IconTimer, IconTrash } from '../components/Icons';
 import { isLeech } from '../lib/cardLinks';
 import { pomodoro, usePomodoro, usePomodoroMeta } from '../lib/pomodoro';
 import { addTodo, deckUrl, deleteTodo, toggleTodo, updateTodo, useData } from '../lib/store';
@@ -257,7 +257,7 @@ export default function Todos() {
       {sections.length === 0 && (
         <div className="empty">
           <Mascot mood={view === 'today' ? 'cheer' : 'idle'} size={84} />
-          <b>{view === 'done' ? 'Noch nichts erledigt.' : view === 'today' ? 'Für heute ist nichts offen. 🎉' : 'Keine To-dos.'}</b>
+          <b>{view === 'done' ? 'Noch nichts erledigt.' : view === 'today' ? 'Für heute ist nichts offen.' : 'Keine To-dos.'}</b>
           {view === 'today' && counts.all > 0 && (
             <button type="button" className="link-btn" onClick={() => setView('all')}>
               Alle {counts.all} offenen ansehen
@@ -348,12 +348,12 @@ function QuickAdd({ inputRef, deckId }: { inputRef: React.RefObject<HTMLInputEle
         </button>
       </div>
       <div className="todo-chips">
-        {final.due && <span className="chip on">📅 {dueText(final.due)}{final.time ? ` · ${final.time}` : ''}</span>}
-        {!final.due && final.time && <span className="chip on">🕑 {final.time}</span>}
-        {final.priority && <span className={'chip on prio-' + final.priority}>! {PRIORITY_LABEL[final.priority]}</span>}
-        {deck && <span className="chip on"># {deck.name}</span>}
-        {final.minutes && <span className="chip on">⏱ {final.minutes} Min.</span>}
-        {final.repeat && <span className="chip on">↻ {REPEAT_LABEL[final.repeat]}</span>}
+        {final.due && <span className="chip on"><IconCalendar size={13} /> {dueText(final.due)}{final.time ? ` · ${final.time}` : ''}</span>}
+        {!final.due && final.time && <span className="chip on"><IconClock size={13} /> {final.time}</span>}
+        {final.priority && <span className={'chip on prio-' + final.priority}><IconFlag size={13} /> {PRIORITY_LABEL[final.priority]}</span>}
+        {deck && <span className="chip on"><IconHash size={13} /> {deck.name}</span>}
+        {final.minutes && <span className="chip on"><IconTimer size={13} /> {final.minutes} Min.</span>}
+        {final.repeat && <span className="chip on"><IconRepeat size={13} /> {REPEAT_LABEL[final.repeat]}</span>}
         <button type="button" className="link-btn small" onClick={() => setMore(!more)}>
           {more ? 'Weniger' : 'Datum, Priorität, Wiederholen …'}
         </button>
@@ -440,13 +440,13 @@ function TodoRow(p: {
           <span className="todo-text">{t.text}</span>
           <span className="todo-meta">
             {t.priority && <span className={'prio-dot prio-' + t.priority} title={'Priorität: ' + PRIORITY_LABEL[t.priority]} />}
-            {t.due && <span className={overdue ? 'bad' : ''}>📅 {dueText(t.due)}{t.time ? ` ${t.time}` : ''}</span>}
-            {t.repeat && <span title={REPEAT_LABEL[t.repeat]}>↻</span>}
-            {sub && <span>☑ {sub.done}/{sub.total}</span>}
-            {t.minutes && <span>⏱ {t.minutes} Min.</span>}
-            {deck && <span># {deck.name}</span>}
-            {exam && <span>🎓 {exam.title}</span>}
-            {t.note && <span title={t.note}>📝</span>}
+            {t.due && <span className={overdue ? 'bad' : ''}><IconCalendar size={12} /> {dueText(t.due)}{t.time ? ` ${t.time}` : ''}</span>}
+            {t.repeat && <span title={REPEAT_LABEL[t.repeat]} aria-label={REPEAT_LABEL[t.repeat]}><IconRepeat size={12} /></span>}
+            {sub && <span><IconChecklist size={12} /> {sub.done}/{sub.total}</span>}
+            {t.minutes && <span><IconTimer size={12} /> {t.minutes} Min.</span>}
+            {deck && <span><IconHash size={12} /> {deck.name}</span>}
+            {exam && <span><IconTarget size={12} /> {exam.title}</span>}
+            {t.note && <span title={t.note} aria-label="Notiz"><IconNote size={12} /></span>}
           </span>
         </button>
         <span className="todo-actions">
@@ -456,10 +456,10 @@ function TodoRow(p: {
             </button>
           )}
           <button type="button" className="icon-btn sm" aria-label="Nach oben" onClick={() => p.onMove(-1)}>
-            ▲
+            <IconArrowUp size={13} />
           </button>
           <button type="button" className="icon-btn sm" aria-label="Nach unten" onClick={() => p.onMove(1)}>
-            ▼
+            <IconArrowDown size={13} />
           </button>
         </span>
       </div>
