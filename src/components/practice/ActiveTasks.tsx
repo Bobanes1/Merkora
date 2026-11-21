@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { CardContent } from '../CardContent';
 import { IconArrowDown, IconArrowUp, IconGrip } from '../Icons';
 import { completeJson, LANG_RULE } from '../../lib/ai';
@@ -8,7 +8,7 @@ import {
   checkCloze,
   checkMulti,
   checkOrder,
-  dropIndex,
+  slotFor,
   clozeParts,
   parseCaseGrade,
   shuffled,
@@ -33,7 +33,46 @@ export function OrderTaskView({ ctx, task }: { ctx: TaskCtx; task: OrderTask }) 
   const [marks, setMarks] = useState<boolean[] | null>(prog.solved ? task.items.map(() => true) : null);
   const [drag, setDrag] = useState<number | null>(null);
   const listRef = useRef<HTMLOListElement>(null);
+  // Smooth movement: the dragged item follows the pointer exactly (transform), the others glide to their new
+  // places (FLIP: remember where they were, jump to the new place, then animate the difference away).
+  const prevTops = useRef(new Map<string, number>());
+  const pointerY = useRef(0);
+  const grabDy = useRef(0);
+  const dragKey = useRef<string | null>(null);
+  const calm = () => document.documentElement.classList.contains('no-anim') || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const items = () => (listRef.current ? ([...listRef.current.children] as HTMLElement[]) : []);
+  const rememberTops = () => {
+    prevTops.current.clear();
+    for (const el of items()) if (el.dataset.k !== dragKey.current) prevTops.current.set(el.dataset.k ?? '', el.getBoundingClientRect().top);
+  };
+  const placeDragged = () => {
+    const el = items().find((x) => x.dataset.k === dragKey.current);
+    if (!el || !listRef.current) return;
+    const natural = listRef.current.getBoundingClientRect().top + el.offsetTop;
+    el.style.transform = `translateY(${pointerY.current - grabDy.current - natural}px) scale(1.02)`;
+  };
+  useLayoutEffect(() => {
+    if (prevTops.current.size) {
+      const glide = !calm();
+      for (const el of items()) {
+        const prev = prevTops.current.get(el.dataset.k ?? '');
+        if (prev === undefined) continue;
+        el.style.transition = 'none';
+        el.style.transform = '';
+        const delta = prev - el.getBoundingClientRect().top;
+        if (!delta || !glide) continue;
+        el.style.transform = `translateY(${delta}px)`;
+        void el.offsetHeight; // apply the jump before animating back
+        el.style.transition = 'transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1)';
+        el.style.transform = '';
+      }
+      prevTops.current.clear();
+    }
+    if (dragKey.current) placeDragged();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [list]);
   const move = (from: number, to: number) => {
+    rememberTops();
     setList((cur) => {
       if (to < 0 || to >= cur.length || from === to) return cur;
       const next = [...cur];
@@ -53,6 +92,11 @@ export function OrderTaskView({ ctx, task }: { ctx: TaskCtx; task: OrderTask }) 
     // on touch screens only the grip starts a drag, so the page can still be scrolled
     if (e.pointerType !== 'mouse' && !target.closest('.order-grip')) return;
     e.preventDefault();
+    const el = e.currentTarget;
+    dragKey.current = el.dataset.k ?? null;
+    pointerY.current = e.clientY;
+    grabDy.current = e.clientY - el.getBoundingClientRect().top;
+    el.style.transition = 'none';
     dragFrom.current = k;
     setDrag(k);
   };
@@ -62,12 +106,20 @@ export function OrderTaskView({ ctx, task }: { ctx: TaskCtx; task: OrderTask }) 
       const from = dragFrom.current;
       if (from === null || !listRef.current) return;
       e.preventDefault();
-      const rects = ([...listRef.current.children] as HTMLElement[]).map((el) => el.getBoundingClientRect());
-      const to = dropIndex(rects, e.clientY);
-      if (to !== from) {
-        move(from, to);
-        dragFrom.current = to;
-        setDrag(to);
+      pointerY.current = e.clientY;
+      placeDragged();
+      // the item moves to where its middle is: past the middle of a neighbour → swap
+      const all = items();
+      const me = all.find((x) => x.dataset.k === dragKey.current);
+      if (me) {
+        const top = listRef.current.getBoundingClientRect().top;
+        const others = all.filter((x) => x !== me).map((x) => top + x.offsetTop + x.offsetHeight / 2);
+        const to = slotFor(others, e.clientY - grabDy.current + me.offsetHeight / 2);
+        if (to !== from) {
+          move(from, to);
+          dragFrom.current = to;
+          setDrag(to);
+        }
       }
       // near the window edge the page scrolls along (long lists on the phone)
       const edge = 56;
@@ -75,6 +127,13 @@ export function OrderTaskView({ ctx, task }: { ctx: TaskCtx; task: OrderTask }) 
       else if (e.clientY > window.innerHeight - edge) window.scrollBy(0, 12);
     };
     const onEnd = () => {
+      // the item settles into its place
+      const el = items().find((x) => x.dataset.k === dragKey.current);
+      if (el) {
+        el.style.transition = calm() ? 'none' : 'transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1)';
+        el.style.transform = '';
+      }
+      dragKey.current = null;
       dragFrom.current = null;
       setDrag(null);
     };
@@ -105,6 +164,7 @@ export function OrderTaskView({ ctx, task }: { ctx: TaskCtx; task: OrderTask }) 
         {list.map((item, k) => (
           <li
             key={item}
+            data-k={item}
             className={'order-item' + (marks ? (marks[k] ? ' ok' : ' bad') : '') + (drag === k ? ' dragging' : '')}
             onPointerDown={(e) => startDrag(e, k)}
           >

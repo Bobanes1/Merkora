@@ -1675,6 +1675,13 @@ console.log('Sortieren per Ziehen');
   ok(dropIndex(rects, 155) === 1 && dropIndex(rects, 215) === 2, 'in der Lücke zählt der Platz darunter');
 }
 
+console.log('Sortieren: weiches Ziehen');
+{
+  const { slotFor } = await import('../src/lib/tasks');
+  const mids = [125, 185, 245];
+  ok(slotFor(mids, 50) === 0 && slotFor(mids, 130) === 1 && slotFor(mids, 300) === 3, 'Platz nach der Mitte der Nachbarn – ganz oben bis ganz unten');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

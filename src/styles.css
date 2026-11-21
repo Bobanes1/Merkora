@@ -10329,11 +10329,12 @@ html.phone .undo-toast {
 
 /* ---------- order tasks: drag to sort ---------- */
 .order-help { margin: 0 0 6px; }
-.order-item { touch-action: auto; user-select: none; transition: box-shadow 0.15s, transform 0.15s, background 0.15s; }
+.order-list { position: relative; }
+.order-item { position: relative; touch-action: auto; user-select: none; transition: box-shadow 0.2s, background 0.2s, border-color 0.2s; will-change: transform; }
 .order-grip { flex: none; display: grid; place-items: center; width: 28px; height: 32px; margin-left: -4px; color: var(--muted); cursor: grab; touch-action: none; border-radius: 8px; }
 .order-grip:hover { background: var(--white); color: var(--ink); }
 .order-list.is-dragging, .order-list.is-dragging .order-item { cursor: grabbing; }
-.order-item.dragging { opacity: 1; background: var(--white); border-color: var(--primary); box-shadow: 0 10px 24px -8px rgba(0, 0, 0, 0.3); transform: scale(1.02); position: relative; z-index: 2; }
+.order-item.dragging { opacity: 1; background: var(--white); border-color: var(--primary); box-shadow: 0 16px 32px -10px rgba(0, 0, 0, 0.35); z-index: 5; }
 .order-btns .icon-btn svg { display: block; }
 
 /* ---------- lessons: „Grundlagen“ before the explanation ---------- */

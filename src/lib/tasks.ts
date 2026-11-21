@@ -177,3 +177,13 @@ export function dropIndex(rects: { top: number; bottom: number }[], y: number): 
   for (let k = 0; k < rects.length; k++) if (y <= rects[k].bottom) return k;
   return rects.length - 1;
 }
+
+/**
+ * Smooth dragging: the place of the dragged item = how many of the other items have their middle above
+ * the dragged item's middle (`mids` in list order, without the dragged one). Pure – tested.
+ */
+export function slotFor(mids: number[], center: number): number {
+  let n = 0;
+  for (const m of mids) if (m < center) n++;
+  return n;
+}
