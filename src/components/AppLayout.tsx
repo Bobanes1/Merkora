@@ -45,59 +45,25 @@ import { fmtClock, usePomodoro } from '../lib/pomodoro';
 import { remaining } from '../lib/pomodoroRule';
 import { toolWindows, useToolWindows } from '../lib/toolWindows';
 
-/** Collapsible Merkora Toolbar menu in the left sidebar. */
+/** „Merkora Tools“ in the sidebar: one plain entry; it shows the running timer or the open to-dos. */
 function SidebarToolbar({ onNavigate }: { onNavigate: () => void }) {
-  const [expanded, setExpanded] = useState(true);
-  const wins = useToolWindows();
   const p = usePomodoro();
   const openTodos = useStore((s) => (s.data.todos ?? []).filter((t) => !t.doneAt).length);
-  const { pathname } = useLocation();
   const pomoClock = p.running ? fmtClock(remaining(p, Date.now())) : null;
-
   return (
-    <div className="sidebar-toolbar">
-      <div className="toolbar-head">
-        <NavLink to="/tools" onClick={onNavigate} className={({ isActive }) => `nav-link toolbar-main ${isActive ? 'active' : ''}`}>
-          <IconTools size={17} /> Merkora Tools
-        </NavLink>
-        <button
-          type="button"
-          className="toolbar-toggle"
-          aria-label={expanded ? 'Toolbar zuklappen' : 'Toolbar aufklappen'}
-          aria-expanded={expanded}
-          onClick={() => setExpanded((v) => !v)}
-        >
-          {expanded ? <IconChevronDown size={14} /> : <IconChevron size={14} />}
-        </button>
-      </div>
-      {expanded && (
-        <div className="toolbar-items" role="menu" aria-label="Merkora Toolbar">
-          <button
-            type="button"
-            className={`toolbar-btn ${wins.pomodoro.open ? 'active' : ''} ${p.running ? 'running' : ''}`}
-            onClick={() => (toolWindows.toggle('pomodoro'), onNavigate())}
-            title="Pomodoro-Timer als Popup öffnen"
-          >
-            <IconTimer size={15} />
-            <span>Pomodoro-Timer</span>
-            {pomoClock && <span className="pill-count pomo-pill">{pomoClock}</span>}
-          </button>
-          <Link to="/todos" onClick={onNavigate} className={`toolbar-btn ${pathname === '/todos' ? 'soft-on' : ''}`} title="To-do-Liste öffnen">
-            <IconChecklist size={15} />
-            <span>To-do-Liste</span>
-            {openTodos > 0 && <span className="pill-count soft">{openTodos}</span>}
-          </Link>
-          <Link
-            to="/tools?tab=plan"
-            onClick={onNavigate}
-            className={`toolbar-btn ${pathname === '/tools' ? 'soft-on' : ''}`}
-            title="Arbeitsplanung starten"
-          >
-            <IconSparkle size={15} />
-            <span>Arbeitsplanung</span>
-          </Link>
-        </div>
-      )}
+    <div className="nav-main nav-tools-wrap">
+      <NavLink to="/tools" onClick={onNavigate} className={({ isActive }) => `nav-link nav-c-tools ${isActive ? 'active' : ''}`}>
+        <IconTools /> <span className="grow">Merkora Tools</span>
+        {pomoClock ? (
+          <span className="pill-count pomo-pill" title="Pomodoro läuft">{pomoClock}</span>
+        ) : (
+          openTodos > 0 && (
+            <span className="pill-count soft" title={`${openTodos} offene To-dos`}>
+              {openTodos}
+            </span>
+          )
+        )}
+      </NavLink>
     </div>
   );
 }

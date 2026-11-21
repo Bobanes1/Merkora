@@ -132,7 +132,7 @@ export default function DeckPage() {
             <button
               type="button"
               className="btn ghost sm"
-              onClick={() => navigate(`/todos?deck=${deck.id}`)}
+              onClick={() => navigate(`/tools?tab=todos&deck=${deck.id}`)}
               title={todos ? `${todos} offene${todos === 1 ? 's' : ''} To-do${todos === 1 ? '' : 's'} – in Merkora Tools` : 'To-do zu diesem Deck anlegen'}
             >
               <IconCheck size={14} /> {todos ? `${todos} To-do${todos === 1 ? '' : 's'}` : 'To-do'}
@@ -248,7 +248,7 @@ export default function DeckPage() {
             <button type="button" onClick={() => (setMenu(false), setChat(true))}>
               <IconChat size={20} /> Tutor Pip fragen
             </button>
-            <button type="button" onClick={() => (setMenu(false), navigate(`/todos?deck=${deck.id}`))}>
+            <button type="button" onClick={() => (setMenu(false), navigate(`/tools?tab=todos&deck=${deck.id}`))}>
               <IconCheck size={20} /> {todos ? `To-dos (${todos} offen) – neues anlegen` : 'To-do anlegen'}
             </button>
             {exam ? (

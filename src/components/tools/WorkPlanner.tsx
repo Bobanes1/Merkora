@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { aiReady, completeJson } from '../../lib/ai';
 import { examDecks } from '../../lib/exams';
 import { pomodoro } from '../../lib/pomodoro';
 import { addTodo, dueCards, updateTodo, useStore } from '../../lib/store';
-import { sortTodos } from '../../lib/todos';
+import { planCandidates, todayPlan, type Todo } from '../../lib/todos';
 import { toolWindows } from '../../lib/toolWindows';
-import { dayKey } from '../../lib/util';
+import { DAY, dayKey } from '../../lib/util';
 import {
   buildWorkPlan,
   examSoonDecks,
@@ -19,7 +19,7 @@ import {
   type PlanTaskStep,
   type TaskSize,
 } from '../../lib/workPlan';
-import { IconCheck, IconChecklist, IconPlay, IconPlus, IconSparkle, IconTrash } from '../Icons';
+import { IconCalendar, IconCheck, IconChecklist, IconClock, IconFlag, IconPlay, IconPlus, IconSparkle, IconTimer, IconTrash } from '../Icons';
 
 const TIME_PRESETS = [
   { label: '30 Min', min: 30 },
@@ -126,12 +126,55 @@ export function WorkPlanner() {
   const examSoon = useMemo(() => examSoonDecks(data.exams ?? [], (e) => examDecks(data, e).map((d) => d.id)), [data]);
   const effTasks = useMemo(() => tasks.map((t) => (t.deckId && examSoon.has(t.deckId) ? { ...t, important: true } : t)), [tasks, examSoon]);
 
-  // Open to-dos (today, overdue, without date) – taking them over keeps the link to the to-do
-  const todoChoices = useMemo(() => {
-    const taken = new Set(tasks.map((t) => t.todoId).filter(Boolean));
-    const today = dayKey(Date.now());
-    return sortTodos((data.todos ?? []).filter((t) => !t.doneAt && !taken.has(t.id) && (!t.due || t.due <= today))).slice(0, 8);
-  }, [data.todos, tasks]);
+  // The to-do list as a checklist: checked = in the plan (the link to the to-do stays)
+  const candidates = useMemo(() => planCandidates(data.todos ?? []), [data.todos]);
+  const inPlan = useMemo(() => new Map(tasks.filter((t) => t.todoId).map((t) => [t.todoId!, t.id])), [tasks]);
+  const fromTodo = (t: Todo) => addTask({ title: t.text, size: sizeFor(t.minutes), motivation: 2, important: t.priority === 'high', deckId: t.deckId, todoId: t.id });
+  const toggleTodoInPlan = (t: Todo) => {
+    const id = inPlan.get(t.id);
+    if (id) removeTask(id);
+    else fromTodo(t);
+  };
+  const takeToday = () => candidates.today.filter((t) => !inPlan.has(t.id)).forEach(fromTodo);
+  const [showLater, setShowLater] = useState(false);
+
+  // „Tag planen“ from the to-do list: take over today's to-dos once
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    if (params.get('from') !== 'today') return;
+    takeToday();
+    setParams({ tab: 'plan' }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // to-dos checked off (or deleted) in the meantime leave the plan by themselves
+  const [removedDone, setRemovedDone] = useState(0);
+  useEffect(() => {
+    const byId = new Map((data.todos ?? []).map((t) => [t.id, t]));
+    const gone = tasks.filter((t) => t.todoId && (!byId.has(t.todoId) || byId.get(t.todoId)!.doneAt));
+    if (!gone.length) return;
+    setTasks((list) => list.filter((t) => !gone.some((g) => g.id === t.id)));
+    setRemovedDone((n) => n + gone.length);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.todos]);
+
+  // today's plan that is already in the to-do list
+  const today = useMemo(() => todayPlan(data.todos ?? []), [data.todos]);
+  const replan = () => {
+    if (!today) return;
+    clearAll();
+    today.steps.filter((t) => !t.doneAt).forEach(fromTodo);
+  };
+
+  // parked tasks: on to tomorrow's to-do list
+  const parkForTomorrow = (list: PlanInputTask[]) => {
+    const tomorrow = dayKey(Date.now() + DAY);
+    for (const p of list) {
+      if (p.todoId) updateTodo(p.todoId, { due: tomorrow, phase: undefined, order: undefined, time: undefined });
+      else addTodo({ text: p.title, deckId: p.deckId, due: tomorrow, ...(p.important ? { priority: 'high' as const } : {}) });
+      removeTask(p.id);
+    }
+  };
 
   // Quick suggestions from decks with due cards & skills
   const quickSuggestions = useMemo(() => {
@@ -213,11 +256,33 @@ export function WorkPlanner() {
       pomodoro.startForTodo(ids[0].id, Math.min(ids[0].minutes, taskSteps[0]?.minutes ?? ids[0].minutes));
       toolWindows.open('pomodoro');
     }
-    navigate(`/todos?plan=${ids.length}`);
+    navigate(`/tools?tab=todos&plan=${ids.length}`);
   };
 
   return (
     <div className="wp">
+      {today && (
+        <div className="wp-today" role="status">
+          <span className="grow">
+            <b>Dein Plan für heute</b>
+            <small>
+              {today.done} von {today.total} erledigt{today.endsAt ? ` · bis ca. ${today.endsAt}` : ''}
+              {today.done < today.total ? ` · als Nächstes: ${today.steps.find((t) => !t.doneAt)?.text}` : ' – geschafft!'}
+            </small>
+            <span className="wp-today-bar" aria-hidden="true">
+              <i style={{ width: `${Math.round((today.done / today.total) * 100)}%` }} />
+            </span>
+          </span>
+          {today.done < today.total && (
+            <button type="button" className="btn ghost sm" onClick={replan} title="Die offenen Schritte von heute neu ordnen">
+              Neu planen
+            </button>
+          )}
+          <button type="button" className="btn outline sm" onClick={() => navigate('/tools?tab=todos')}>
+            <IconChecklist size={14} /> Zur To-do-Liste
+          </button>
+        </div>
+      )}
       <div className="wp-grid">
         <section className="panel wp-setup">
           <h2>1. Zeit & Aufgaben</h2>
@@ -267,27 +332,55 @@ export function WorkPlanner() {
             </label>
           </div>
 
-          {todoChoices.length > 0 && (
-            <div className="wp-quick">
-              <small className="muted">
-                <IconChecklist size={13} /> Aus deinen To-dos (heute, überfällig, ohne Datum):
-              </small>
-              <div className="chips">
-                {todoChoices.map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    className={`chip ${t.priority === 'high' ? 'prio-high' : ''}`}
-                    title={t.minutes ? `${t.minutes} Min. geplant` : undefined}
-                    onClick={() =>
-                      addTask({ title: t.text, size: sizeFor(t.minutes), motivation: 2, important: t.priority === 'high', deckId: t.deckId, todoId: t.id })
-                    }
-                  >
-                    + {t.text}
-                    {t.minutes ? ` · ${t.minutes} Min.` : ''}
+          {candidates.today.length + candidates.later.length > 0 && (
+            <div className="wp-todos">
+              <div className="wp-todos-head">
+                <b>
+                  <IconChecklist size={15} /> Aus deiner To-do-Liste
+                </b>
+                {candidates.today.some((t) => !inPlan.has(t.id)) && (
+                  <button type="button" className="btn ghost sm" onClick={takeToday}>
+                    Alle von heute übernehmen
                   </button>
-                ))}
+                )}
               </div>
+              {candidates.today.length > 0 && <small className="muted">Heute & überfällig</small>}
+              <ul className="wp-todo-list">
+                {[...candidates.today, ...(showLater ? candidates.later : [])].map((t, k) => (
+                  <li key={t.id} className={k === candidates.today.length ? 'wp-later-start' : ''}>
+                    <label className="check-row">
+                      <input type="checkbox" checked={inPlan.has(t.id)} onChange={() => toggleTodoInPlan(t)} />
+                      <span className="grow">{t.text}</span>
+                      <span className="wp-todo-meta">
+                        {t.priority === 'high' && <IconFlag size={12} />}
+                        {t.time && (
+                          <>
+                            <IconClock size={12} /> {t.time}
+                          </>
+                        )}
+                        {t.minutes && (
+                          <>
+                            <IconTimer size={12} /> {t.minutes} Min.
+                          </>
+                        )}
+                      </span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+              {candidates.later.length > 0 && (
+                <button type="button" className="link-btn small" onClick={() => setShowLater(!showLater)}>
+                  {showLater ? 'Spätere ausblenden' : `Ohne Datum / später (${candidates.later.length}) anzeigen`}
+                </button>
+              )}
+              {removedDone > 0 && (
+                <small className="muted wp-removed">
+                  {removedDone} erledigt – aus dem Plan genommen.{' '}
+                  <button type="button" className="link-btn small" onClick={() => setRemovedDone(0)}>
+                    OK
+                  </button>
+                </small>
+              )}
             </div>
           )}
 
@@ -502,6 +595,9 @@ export function WorkPlanner() {
                       <li key={p.id}>{p.title}</li>
                     ))}
                   </ul>
+                  <button type="button" className="btn outline sm" onClick={() => parkForTomorrow(plan.parked)}>
+                    <IconCalendar size={14} /> Auf morgen legen
+                  </button>
                 </div>
               )}
 

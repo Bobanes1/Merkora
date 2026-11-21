@@ -43,7 +43,7 @@ export function PhoneNav({ onSearch, onNewDeck }: { onSearch: () => void; onNewD
             <button type="button" onClick={() => (setMore(false), toolWindows.open('pomodoro'))}>
               <IconTimer size={20} /> Pomodoro-Timer (Popup)
             </button>
-            <button type="button" onClick={() => go('/todos')}>
+            <button type="button" onClick={() => go('/tools?tab=todos')}>
               <IconChecklist size={20} /> To-dos
             </button>
             <button type="button" onClick={() => (setMore(false), onSearch())}>

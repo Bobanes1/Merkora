@@ -236,7 +236,7 @@ export default function Dashboard() {
                 <span className="btn primary sm">{pathDeck.p.done ? 'Weiterspielen' : 'Starten'}</span>
               </Link>
             )}
-            <Link to="/todos" className="path-cta todo-cta">
+            <Link to="/tools?tab=todos" className="path-cta todo-cta">
               <span className="path-cta-icon">
                 <IconChecklist size={22} />
               </span>

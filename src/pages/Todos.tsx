@@ -75,7 +75,7 @@ function PlanNext({ todos, today, handedOver, onStart }: { todos: Todo[]; today:
 }
 
 /** The to-do list as its own page: quick entry, views, details, sub-tasks, repeating, bulk actions, undo, keyboard. */
-export default function Todos() {
+export default function Todos({ embedded = false }: { embedded?: boolean }) {
   const data = useData();
   const [params] = useSearchParams();
   const all = data.todos ?? [];
@@ -180,13 +180,18 @@ export default function Todos() {
   });
 
   return (
-    <div className="page todos-page">
-      <header className="page-head">
-        <h1>To-dos</h1>
-        <p className="muted">
+    <div className={embedded ? 'todos-page embedded' : 'page todos-page'}>
+      <header className={embedded ? 'todos-head' : 'page-head'}>
+        {!embedded && <h1>To-dos</h1>}
+        <p className="muted grow">
           Deine Aufgaben rund ums Lernen. {counts.all} offen · {counts.today} heute oder überfällig · Tastatur: <kbd>N</kbd> neu, <kbd>↑</kbd>
           <kbd>↓</kbd> wählen, <kbd>Leertaste</kbd> erledigt, <kbd>Enter</kbd> Details
         </p>
+        {counts.all > 0 && (
+          <Link to="/tools?tab=plan&from=today" className="btn outline sm" title="Die To-dos von heute in der Arbeitsplanung zu einem Ablauf mit Pausen ordnen">
+            <IconSparkle size={14} /> Tag planen
+          </Link>
+        )}
       </header>
 
       {party > 0 && <Confetti key={party} count={60} />}

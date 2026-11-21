@@ -252,3 +252,39 @@ export function plannedDays<T extends { due?: string; doneAt?: number }>(todos: 
   }
   return out;
 }
+
+/**
+ * The to-dos the Arbeitsplanung offers as a checklist: first today's and overdue ones, then the ones without
+ * a date or for later. Done ones are left out. Pure – tested.
+ */
+export function planCandidates<T extends Pick<Todo, 'due' | 'doneAt' | 'order' | 'priority' | 'createdAt'>>(todos: T[], now = Date.now()): { today: T[]; later: T[] } {
+  const today = dayKey(now);
+  const open = todos.filter((t) => !t.doneAt);
+  return {
+    today: sortTodos(open.filter((t) => !!t.due && t.due <= today)),
+    later: sortTodos(open.filter((t) => !t.due || t.due > today)),
+  };
+}
+
+/**
+ * Today's plan from the Arbeitsplanung (to-dos for today with a phase): how many are done and until when it runs.
+ * Null when nothing is planned for today. Pure – tested.
+ */
+export function todayPlan<T extends Pick<Todo, 'due' | 'doneAt' | 'phase' | 'time' | 'minutes' | 'order' | 'priority' | 'createdAt'>>(
+  todos: T[],
+  now = Date.now(),
+): { steps: T[]; done: number; total: number; endsAt?: string } | null {
+  const today = dayKey(now);
+  const dayStart = startOfDay(now);
+  const steps = sortTodos(todos.filter((t) => t.phase && t.due === today && (!t.doneAt || t.doneAt >= dayStart)));
+  if (!steps.length) return null;
+  const done = steps.filter((t) => t.doneAt).length;
+  // the end: the latest planned start plus its minutes
+  let end = -1;
+  for (const t of steps) {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(t.time ?? '');
+    if (m) end = Math.max(end, +m[1] * 60 + +m[2] + (t.minutes ?? 0));
+  }
+  const endsAt = end >= 0 ? `${String(Math.floor(Math.min(end, 1439) / 60)).padStart(2, '0')}:${String(Math.min(end, 1439) % 60).padStart(2, '0')}` : undefined;
+  return { steps, done, total: steps.length, endsAt };
+}

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import SyncCallback from './pages/SyncCallback';
 import { AppLayout } from './components/AppLayout';
 import { ConsentBanner } from './components/Consent';
@@ -13,7 +13,6 @@ import Settings from './pages/Settings';
 import CalendarPage from './pages/Calendar';
 import Stats from './pages/Stats';
 import Skills from './pages/Skills';
-import Todos from './pages/Todos';
 import SkillPage from './pages/SkillPage';
 import Tools from './pages/Tools';
 import Setup from './pages/Setup';
@@ -39,6 +38,14 @@ function useMotionSetting() {
   }, [on]);
 }
 
+/** The to-do list lives in Merkora Tools now; old links (also with ?deck= or ?plan=) land in that tab. */
+function TodosRedirect() {
+  const { search } = useLocation();
+  const q = new URLSearchParams(search);
+  q.set('tab', 'todos');
+  return <Navigate to={'/tools?' + q.toString()} replace />;
+}
+
 export default function App() {
   useMotionSetting();
   useApplyTheme();
@@ -61,7 +68,7 @@ export default function App() {
         <Route path="/calendar" element={<AppLayout><CalendarPage /></AppLayout>} />
         <Route path="/stats" element={<AppLayout><Stats /></AppLayout>} />
         <Route path="/skills" element={<AppLayout><Skills /></AppLayout>} />
-        <Route path="/todos" element={<AppLayout><Todos /></AppLayout>} />
+        <Route path="/todos" element={<TodosRedirect />} />
         <Route path="/skills/:id" element={<AppLayout><SkillPage /></AppLayout>} />
         <Route path="/tools" element={<AppLayout><Tools /></AppLayout>} />
         <Route path="/sync-callback" element={<SyncCallback />} />

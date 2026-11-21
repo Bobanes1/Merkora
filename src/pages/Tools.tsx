@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { JavaSetup } from '../components/JavaSetup';
-import { Link, Navigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { CodeEditor } from '../components/CodeEditor';
 import { IconChecklist, IconPlay, IconPopout, IconSparkle, IconTimer } from '../components/Icons';
 import { Lab, LAB_DEFAULTS, LAB_TITLES } from '../components/labs/Labs';
 import { Piano } from '../components/practice/MusicTask';
 import { PomodoroTool } from '../components/tools/PomodoroTool';
 import { WorkPlanner } from '../components/tools/WorkPlanner';
+import Todos from './Todos';
 import { buildHarness, localJava, runJavaLocal, runJavaOnline } from '../lib/javaRun';
 import { setSettings } from '../lib/store';
 import { toolWindows } from '../lib/toolWindows';
@@ -15,6 +16,7 @@ type Tab = 'plan' | 'todos' | 'pomodoro' | 'labs' | 'piano' | 'java';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'plan', label: 'Arbeitsplanung' },
+  { id: 'todos', label: 'To-do-Liste' },
   { id: 'pomodoro', label: 'Pomodoro-Timer' },
   { id: 'labs', label: 'Mathe-Labore' },
   { id: 'piano', label: 'Klavier' },
@@ -28,8 +30,6 @@ const TABS: { id: Tab; label: string }[] = [
 export default function Tools() {
   const [params, setParams] = useSearchParams();
   const raw = params.get('tab') as Tab | null;
-  // the to-do list has its own page now
-  if ((raw as string) === 'todos') return <Navigate to="/todos" replace />;
   const tab: Tab = raw && TABS.some((t) => t.id === raw) ? raw : 'plan';
   const setTab = (id: Tab) => setParams({ tab: id }, { replace: true });
 
@@ -39,14 +39,6 @@ export default function Tools() {
         <div>
           <h1>Merkora Tools</h1>
           <p className="muted">Arbeitsplanung, Fokus-Timer, To-dos und Werkzeuge zum freien Ausprobieren – alles an einem Ort.</p>
-        </div>
-        <div className="row-gap">
-          <button type="button" className="btn outline sm" onClick={() => toolWindows.open('pomodoro')}>
-            <IconTimer size={15} /> Pomodoro-Popup
-          </button>
-          <Link to="/todos" className="btn outline sm">
-            <IconChecklist size={15} /> To-do-Liste
-          </Link>
         </div>
       </div>
 
@@ -59,6 +51,8 @@ export default function Tools() {
       </div>
 
       {tab === 'plan' && <WorkPlanner />}
+
+      {tab === 'todos' && <Todos embedded />}
 
       {tab === 'pomodoro' && (
         <section className="panel tools-pomo-panel">

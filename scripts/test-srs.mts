@@ -1682,6 +1682,30 @@ console.log('Sortieren: weiches Ziehen');
   ok(slotFor(mids, 50) === 0 && slotFor(mids, 130) === 1 && slotFor(mids, 300) === 3, 'Platz nach der Mitte der Nachbarn – ganz oben bis ganz unten');
 }
 
+console.log('Arbeitsplanung ↔ To-do-Liste');
+{
+  const T = await import('../src/lib/todos');
+  const now = new Date(2026, 10, 21, 10, 0).getTime();
+  const todos = [
+    { id: 'a', text: 'Heute', due: '2026-11-21', createdAt: 1 },
+    { id: 'b', text: 'Überfällig', due: '2026-11-19', createdAt: 2, priority: 'high' as const },
+    { id: 'c', text: 'Ohne Datum', createdAt: 3 },
+    { id: 'd', text: 'Morgen', due: '2026-11-22', createdAt: 4 },
+    { id: 'e', text: 'Erledigt', due: '2026-11-21', createdAt: 5, doneAt: now - 1000 },
+  ];
+  const c = T.planCandidates(todos, now);
+  ok(c.today.map((t) => t.id).join() === 'b,a' && c.later.map((t) => t.id).join() === 'c,d', 'Checkliste: heute & überfällig zuerst (wichtige oben), dann ohne Datum / später, Erledigte nicht');
+  const plan = [
+    { id: '1', due: '2026-11-21', phase: 'start' as const, order: 0, time: '14:00', minutes: 15, createdAt: 1, doneAt: now - 500 },
+    { id: '2', due: '2026-11-21', phase: 'main' as const, order: 1, time: '14:15', minutes: 45, createdAt: 2 },
+    { id: '3', due: '2026-11-21', phase: 'end' as const, order: 2, time: '15:05', minutes: 20, createdAt: 3 },
+    { id: '4', due: '2026-11-21', createdAt: 4 },
+  ];
+  const p = T.todayPlan(plan, now)!;
+  ok(p.total === 3 && p.done === 1 && p.endsAt === '15:25' && p.steps[0].id === '1', 'Plan von heute: 1 von 3 erledigt, bis 15:25');
+  ok(T.todayPlan([{ id: 'x', due: '2026-11-21', createdAt: 1 }], now) === null, 'ohne geplante Schritte kein Plan');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));
