@@ -9,7 +9,7 @@ export function PhoneNav({ onSearch, onNewDeck }: { onSearch: () => void; onNewD
   const [more, setMore] = useState(false);
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const inMore = pathname.startsWith('/stats') || pathname.startsWith('/settings') || pathname.startsWith('/tools');
+  const inMore = pathname.startsWith('/stats') || pathname.startsWith('/settings');
   const go = (to: string) => {
     setMore(false);
     navigate(to);
@@ -26,7 +26,7 @@ export function PhoneNav({ onSearch, onNewDeck }: { onSearch: () => void; onNewD
         {item('/dashboard', 'Start', <IconHome size={22} />, 1)}
         {item('/library', 'Bibliothek', <IconLibrary size={22} />, 2)}
         {item('/skills', 'Skills', <IconPractice size={22} />, 3)}
-        {item('/calendar', 'Prüfungen', <IconCalendar size={22} />, 4)}
+        {item('/tools', 'Tools', <IconTools size={22} />, 4)}
         <button type="button" className={'pn-item' + (inMore || more ? ' on' : '')} aria-expanded={more} onClick={() => setMore(true)}>
           <span className="pn-dots" aria-hidden="true">
             •••
@@ -37,14 +37,11 @@ export function PhoneNav({ onSearch, onNewDeck }: { onSearch: () => void; onNewD
       {more && (
         <Sheet title="Mehr" onClose={() => setMore(false)}>
           <div className="sheet-list">
-            <button type="button" onClick={() => go('/tools')}>
-              <IconTools size={20} /> Merkora Tools & Arbeitsplanung
-            </button>
-            <button type="button" onClick={() => (setMore(false), toolWindows.open('pomodoro'))}>
-              <IconTimer size={20} /> Pomodoro-Timer (Popup)
+            <button type="button" onClick={() => go('/tools?tab=exams')}>
+              <IconCalendar size={20} /> Prüfungen
             </button>
             <button type="button" onClick={() => go('/tools?tab=todos')}>
-              <IconChecklist size={20} /> To-dos
+              <IconChecklist size={20} /> To-do-Liste
             </button>
             <button type="button" onClick={() => (setMore(false), onSearch())}>
               <IconSearch size={20} /> Suchen

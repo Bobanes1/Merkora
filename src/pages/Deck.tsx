@@ -121,7 +121,7 @@ export default function DeckPage() {
               </button>
             )}
             {exam ? (
-              <Link to="/calendar" className="exam-chip" title={`${exam.title} · zu den Prüfungen`}>
+              <Link to="/tools?tab=exams" className="exam-chip" title={`${exam.title} · zu den Prüfungen`}>
                 <IconCalendar size={14} /> {countdownText(exam)}
               </Link>
             ) : (
@@ -252,7 +252,7 @@ export default function DeckPage() {
               <IconCheck size={20} /> {todos ? `To-dos (${todos} offen) – neues anlegen` : 'To-do anlegen'}
             </button>
             {exam ? (
-              <Link to="/calendar" onClick={() => setMenu(false)}>
+              <Link to="/tools?tab=exams" onClick={() => setMenu(false)}>
                 <IconCalendar size={20} /> {exam.title} · {countdownText(exam)}
               </Link>
             ) : (

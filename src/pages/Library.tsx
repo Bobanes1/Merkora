@@ -604,7 +604,7 @@ function CourseView({
           <div className="cstat">
             <small>Prüfungstermin</small>
             {exam ? (
-              <Link to="/calendar" className="cstat-val">
+              <Link to="/tools?tab=exams" className="cstat-val">
                 {exam.title} · {countdownText(exam)}
               </Link>
             ) : (

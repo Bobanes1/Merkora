@@ -18,7 +18,7 @@ export function checkExamReminders(now = Date.now()) {
     }
     const when = n === 0 ? 'heute' : n === 1 ? 'morgen' : 'in einer Woche';
     const text = `Prüfung „${e.title}“ ist ${when}${e.time ? ` um ${e.time} Uhr` : ''}.`;
-    pushToast({ text, ok: true, to: '/calendar', toLabel: 'Zum Kalender', sticky: true });
+    pushToast({ text, ok: true, to: '/tools?tab=exams', toLabel: 'Zu den Prüfungen', sticky: true });
     if (document.visibilityState === 'hidden' || !document.hasFocus()) void notify('Merkora – Prüfung', text);
   }
 }

@@ -97,7 +97,7 @@ function ExamCard({ exam, onEdit, onDelete, onPractice }: { exam: Exam; onEdit: 
   );
 }
 
-export default function CalendarPage() {
+export default function CalendarPage({ embedded = false }: { embedded?: boolean }) {
   const data = useData();
   const [month, setMonth] = useState(() => {
     const d = new Date();
@@ -145,10 +145,10 @@ export default function CalendarPage() {
   if (practice) return <div className="page">{<StudySession title={practice.title} items={practice.items} onExit={() => setPractice(null)} />}</div>;
 
   return (
-    <div className="page">
-      <header className="page-head">
+    <div className={embedded ? 'calendar-embedded' : 'page'}>
+      <header className={embedded ? 'todos-head' : 'page-head'}>
         <div className="page-title">
-          <h1>Prüfungen</h1>
+          {!embedded && <h1>Prüfungen</h1>}
           <p className="page-intro">Trag deine Prüfungstermine ein – Merkora plant, welche Karten bis dahin drankommen, und du kannst Probeprüfungen schreiben.</p>
         </div>
         <div className="row-gap">

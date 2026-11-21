@@ -10385,3 +10385,14 @@ html.phone .undo-toast {
 .wp-later-start { border-top: 1px dashed var(--line); margin-top: 4px; padding-top: 4px; }
 .wp-removed { display: block; }
 .wp-parked .btn { margin-top: 8px; }
+
+/* ---------- Merkora Tools: Prüfungen tab, area picker on the phone ---------- */
+[data-mode='exams'], .mode-exams { --mode: var(--m-exam); }
+.calendar-embedded { display: grid; gap: 12px; }
+.tools-picker { display: flex; align-items: center; gap: 12px; width: 100%; margin-bottom: 14px; padding: 10px 14px; border-radius: var(--r-lg); border: 2px solid var(--mode); background: var(--mode-soft); color: var(--mode-ink); text-align: left; }
+.tools-picker .grow { display: grid; line-height: 1.2; }
+.tools-picker small { font-size: 0.72rem; opacity: 0.8; }
+.tools-picker b { font-size: 1.05rem; }
+.tools-picker-icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: var(--mode); color: #fff; flex: none; }
+.sheet-list button[class*='mode-'] svg { color: var(--mode-ink); }
+.sheet-list button[class*='mode-'].on { background: var(--mode-soft); color: var(--mode-ink); font-weight: 700; }

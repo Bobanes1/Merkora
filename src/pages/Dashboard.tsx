@@ -261,7 +261,7 @@ export default function Dashboard() {
               </Link>
             )}
             {phone && exams[0] && (
-              <Link to="/calendar" className="phone-exam">
+              <Link to="/tools?tab=exams" className="phone-exam">
                 <IconCalendar size={16} />
                 <span className="grow">
                   <b>{exams[0].title}</b>
@@ -281,7 +281,7 @@ export default function Dashboard() {
                     <button type="button" className="btn ghost sm" onClick={() => setExam(true)}>
                       <IconPlus size={14} /> Prüfung eintragen
                     </button>
-                    <Link to="/calendar" className="small-link">
+                    <Link to="/tools?tab=exams" className="small-link">
                       Alle Prüfungen
                     </Link>
                   </span>
@@ -292,7 +292,7 @@ export default function Dashboard() {
                   const f = examForecast(examCards(data, e), data.reviews, examAt(e));
                   return (
                     <Fragment key={e.id}>
-                    <Link to="/calendar" className="dash-exam">
+                    <Link to="/tools?tab=exams" className="dash-exam">
                       <b>{e.title}</b>
                       <span className="pill-count">{countdownText(e)}</span>
                       <span className="bar">
@@ -465,7 +465,7 @@ function MiniCalendar() {
         </button>
         <b>{month.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}</b>
         <span className="grow" />
-        <Link to="/calendar" className="small-link">
+        <Link to="/tools?tab=exams" className="small-link">
           Öffnen
         </Link>
       </div>
@@ -484,7 +484,7 @@ function MiniCalendar() {
           const learned = studied.get(k) ?? 0;
           const tip = [ex, learned ? `gelernt: ${learned} ${learned === 1 ? 'Karte' : 'Karten'}` : ''].filter(Boolean).join(' · ');
           return (
-            <Link key={k} to="/calendar" className={`mcal-day ${k === today ? 'today' : ''} ${ex ? 'exam' : ''} ${learned ? 'studied' : ''}`} title={tip}>
+            <Link key={k} to="/tools?tab=exams" className={`mcal-day ${k === today ? 'today' : ''} ${ex ? 'exam' : ''} ${learned ? 'studied' : ''}`} title={tip}>
               {i + 1}
             </Link>
           );

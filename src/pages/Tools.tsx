@@ -2,7 +2,10 @@ import { useState } from 'react';
 import { JavaSetup } from '../components/JavaSetup';
 import { useSearchParams } from 'react-router-dom';
 import { CodeEditor } from '../components/CodeEditor';
-import { IconChecklist, IconPlay, IconPopout, IconSparkle, IconTimer } from '../components/Icons';
+import { IconCalendar, IconChart, IconChecklist, IconChevronDown, IconCode, IconMusic, IconPlay, IconPopout, IconSparkle, IconTimer } from '../components/Icons';
+import { Sheet } from '../components/Sheet';
+import { usePhone } from '../lib/phone';
+import CalendarPage from './Calendar';
 import { Lab, LAB_DEFAULTS, LAB_TITLES } from '../components/labs/Labs';
 import { Piano } from '../components/practice/MusicTask';
 import { PomodoroTool } from '../components/tools/PomodoroTool';
@@ -12,16 +15,48 @@ import { buildHarness, localJava, runJavaLocal, runJavaOnline } from '../lib/jav
 import { setSettings } from '../lib/store';
 import { toolWindows } from '../lib/toolWindows';
 
-type Tab = 'plan' | 'todos' | 'pomodoro' | 'labs' | 'piano' | 'java';
+type Tab = 'plan' | 'todos' | 'exams' | 'pomodoro' | 'labs' | 'piano' | 'java';
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'plan', label: 'Arbeitsplanung' },
-  { id: 'todos', label: 'To-do-Liste' },
-  { id: 'pomodoro', label: 'Pomodoro-Timer' },
-  { id: 'labs', label: 'Mathe-Labore' },
-  { id: 'piano', label: 'Klavier' },
-  { id: 'java', label: 'Java-Spielwiese' },
+const TABS: { id: Tab; label: string; icon: (p: { size?: number }) => JSX.Element }[] = [
+  { id: 'plan', label: 'Arbeitsplanung', icon: IconSparkle },
+  { id: 'todos', label: 'To-do-Liste', icon: IconChecklist },
+  { id: 'exams', label: 'Prüfungen', icon: IconCalendar },
+  { id: 'pomodoro', label: 'Pomodoro-Timer', icon: IconTimer },
+  { id: 'labs', label: 'Mathe-Labore', icon: IconChart },
+  { id: 'piano', label: 'Klavier', icon: IconMusic },
+  { id: 'java', label: 'Java-Spielwiese', icon: IconCode },
 ];
+
+/** Phone: the areas as a dropdown (a button with the current area; the list opens as a sheet). */
+function ToolPicker({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
+  const [open, setOpen] = useState(false);
+  const cur = TABS.find((t) => t.id === tab)!;
+  return (
+    <>
+      <button type="button" className={`tools-picker mode-${cur.id}`} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(true)}>
+        <span className="tools-picker-icon">
+          <cur.icon size={18} />
+        </span>
+        <span className="grow">
+          <small>Bereich</small>
+          <b>{cur.label}</b>
+        </span>
+        <IconChevronDown size={18} />
+      </button>
+      {open && (
+        <Sheet title="Merkora Tools" onClose={() => setOpen(false)}>
+          <div className="sheet-list" role="listbox" aria-label="Bereich wählen">
+            {TABS.map((t) => (
+              <button key={t.id} type="button" role="option" aria-selected={t.id === tab} className={`mode-${t.id} ${t.id === tab ? 'on' : ''}`} onClick={() => (setTab(t.id), setOpen(false))}>
+                <t.icon size={20} /> {t.label}
+              </button>
+            ))}
+          </div>
+        </Sheet>
+      )}
+    </>
+  );
+}
 
 /**
  * Merkora Tools: central home for Arbeitsplanung, To-do-Liste, Pomodoro-Timer
@@ -32,27 +67,34 @@ export default function Tools() {
   const raw = params.get('tab') as Tab | null;
   const tab: Tab = raw && TABS.some((t) => t.id === raw) ? raw : 'plan';
   const setTab = (id: Tab) => setParams({ tab: id }, { replace: true });
+  const phone = usePhone();
 
   return (
     <div className="page tools-page" data-mode={tab}>
       <div className="page-head">
         <div>
           <h1>Merkora Tools</h1>
-          <p className="muted">Arbeitsplanung, Fokus-Timer, To-dos und Werkzeuge zum freien Ausprobieren – alles an einem Ort.</p>
+          <p className="muted">Arbeitsplanung, To-dos, Prüfungen, Fokus-Timer und Werkzeuge zum freien Ausprobieren – alles an einem Ort.</p>
         </div>
       </div>
 
-      <div className="seg wrap tools-tabs" role="tablist" aria-label="Tools-Bereiche">
-        {TABS.map((t) => (
-          <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} className={`mode-${t.id} ${tab === t.id ? 'on' : ''}`} onClick={() => setTab(t.id)}>
-            {t.label}
-          </button>
-        ))}
-      </div>
+      {phone ? (
+        <ToolPicker tab={tab} setTab={setTab} />
+      ) : (
+        <div className="seg wrap tools-tabs" role="tablist" aria-label="Tools-Bereiche">
+          {TABS.map((t) => (
+            <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} className={`mode-${t.id} ${tab === t.id ? 'on' : ''}`} onClick={() => setTab(t.id)}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {tab === 'plan' && <WorkPlanner />}
 
       {tab === 'todos' && <Todos embedded />}
+
+      {tab === 'exams' && <CalendarPage embedded />}
 
       {tab === 'pomodoro' && (
         <section className="panel tools-pomo-panel">

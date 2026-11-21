@@ -134,7 +134,7 @@ export function TodoTool({ compact = false }: { compact?: boolean }) {
                 </Link>
               )}
               {exam && !deck && (
-                <Link to="/calendar" className="todo-tag">
+                <Link to="/tools?tab=exams" className="todo-tag">
                   {exam.title}
                 </Link>
               )}
