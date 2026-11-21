@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Confetti } from '../components/Mascot';
 import { Link, useSearchParams } from 'react-router-dom';
 import { IconCheck, IconPlay, IconPlus, IconSparkle, IconTrash } from '../components/Icons';
 import { isLeech } from '../lib/cardLinks';
@@ -89,6 +90,7 @@ export default function Todos() {
   const [undo, setUndo] = useState<{ text: string; run: () => void } | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout>>();
   const addRef = useRef<HTMLInputElement>(null);
+  const [party, setParty] = useState(0);
 
   const offerUndo = (text: string, run: () => void) => {
     clearTimeout(undoTimer.current);
@@ -127,6 +129,8 @@ export default function Todos() {
   const check = (t: Todo) => {
     const wasDone = !!t.doneAt;
     const next = toggleTodo(t.id);
+    // the last open to-do of today checked off: a little party
+    if (!wasDone && t.due && t.due <= today && !all.some((x) => x.id !== t.id && !x.doneAt && x.due && x.due <= today)) setParty(Date.now());
     if (!wasDone) offerUndo(`„${t.text}“ erledigt${next ? ' – nächstes Mal ist schon eingeplant' : ''}`, () => (toggleTodo(t.id), next && deleteTodo(next)));
   };
   const remove = (ids: string[]) => {
@@ -184,6 +188,7 @@ export default function Todos() {
         </p>
       </header>
 
+      {party > 0 && <Confetti key={party} count={60} />}
       <PlanNext todos={all} today={today} handedOver={Number(params.get('plan')) || 0} onStart={startTimer} />
 
       <QuickAdd inputRef={addRef} deckId={deckFilter} />

@@ -14,8 +14,8 @@ export function PhoneNav({ onSearch, onNewDeck }: { onSearch: () => void; onNewD
     setMore(false);
     navigate(to);
   };
-  const item = (to: string, label: string, icon: JSX.Element, end = false) => (
-    <NavLink to={to} end={end} className={({ isActive }) => 'pn-item' + (isActive ? ' on' : '')}>
+  const item = (to: string, label: string, icon: JSX.Element, c: number, end = false) => (
+    <NavLink to={to} end={end} className={({ isActive }) => `pn-item nav-c${c}` + (isActive ? ' on' : '')}>
       {icon}
       <span>{label}</span>
     </NavLink>
@@ -23,10 +23,10 @@ export function PhoneNav({ onSearch, onNewDeck }: { onSearch: () => void; onNewD
   return (
     <>
       <nav className="phone-nav" aria-label="Hauptnavigation">
-        {item('/dashboard', 'Start', <IconHome size={22} />)}
-        {item('/library', 'Bibliothek', <IconLibrary size={22} />)}
-        {item('/skills', 'Skills', <IconPractice size={22} />)}
-        {item('/calendar', 'Prüfungen', <IconCalendar size={22} />)}
+        {item('/dashboard', 'Start', <IconHome size={22} />, 1)}
+        {item('/library', 'Bibliothek', <IconLibrary size={22} />, 2)}
+        {item('/skills', 'Skills', <IconPractice size={22} />, 3)}
+        {item('/calendar', 'Prüfungen', <IconCalendar size={22} />, 4)}
         <button type="button" className={'pn-item' + (inMore || more ? ' on' : '')} aria-expanded={more} onClick={() => setMore(true)}>
           <span className="pn-dots" aria-hidden="true">
             •••

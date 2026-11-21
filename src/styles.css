@@ -5,6 +5,9 @@
   --ink: #002a29;
   --primary: #09817e;
   --primary-hover: #076a68;
+  --primary-deep: #055654;
+  --primary-2: #029390;
+  --primary-light: #1abbb7;
   --primary-soft: #dff3f2;
   --bg: #f9fafb;
   --line: #ebebeb;
@@ -3089,7 +3092,7 @@ a.deck-row:hover {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #029390, #09817e);
+  background: linear-gradient(135deg, var(--primary-2), var(--primary));
   color: #fff;
   font-weight: 800;
   font-family: var(--font-display);
@@ -3102,7 +3105,7 @@ a.deck-row:hover {
   padding: 14px 16px;
   margin-bottom: 16px;
   border-radius: var(--r-xl);
-  background: linear-gradient(110deg, #09817e, #029390);
+  background: linear-gradient(110deg, var(--primary), var(--primary-2));
   color: #fff;
 }
 .path-cta b {
@@ -3169,9 +3172,9 @@ a.deck-row:hover {
   padding: 14px 18px;
   margin-bottom: 20px;
   border-radius: var(--r-xl);
-  background: linear-gradient(110deg, #09817e, #029390);
+  background: linear-gradient(110deg, var(--primary), var(--primary-2));
   color: #fff;
-  box-shadow: 0 4px 0 #055654;
+  box-shadow: 0 4px 0 var(--primary-deep);
 }
 .unit-banner b {
   font-family: var(--font-display);
@@ -3205,7 +3208,7 @@ a.deck-row:hover {
   justify-content: center;
   color: #fff;
   background: var(--primary);
-  box-shadow: 0 6px 0 #055654;
+  box-shadow: 0 6px 0 var(--primary-deep);
   transition: transform 0.1s, box-shadow 0.1s;
 }
 .path-node:hover:not(:disabled) {
@@ -3213,7 +3216,7 @@ a.deck-row:hover {
 }
 .path-node:active:not(:disabled) {
   transform: translateY(4px);
-  box-shadow: 0 2px 0 #055654;
+  box-shadow: 0 2px 0 var(--primary-deep);
 }
 .path-node.done {
   background: #f2b84b;
@@ -3238,7 +3241,7 @@ a.deck-row:hover {
 }
 .path-node.current {
   animation: bob 1.6s ease-in-out infinite;
-  outline: 6px solid rgba(16, 114, 111, 0.18);
+  outline: 6px solid color-mix(in srgb, var(--primary) 18%, transparent);
   outline-offset: 4px;
 }
 @keyframes bob {
@@ -5217,8 +5220,8 @@ a.deck-row:hover {
   padding: 22px 26px 22px 18px;
   border-radius: 22px;
   color: #fff;
-  background: radial-gradient(120% 140% at 0% 0%, #1abbb7 0%, #09817e 48%, #076a68 100%);
-  box-shadow: 0 14px 34px -18px rgba(9, 129, 126, 0.7);
+  background: radial-gradient(120% 140% at 0% 0%, var(--primary-light) 0%, var(--primary) 48%, var(--primary-hover) 100%);
+  box-shadow: 0 14px 34px -18px color-mix(in srgb, var(--primary) 70%, transparent);
   overflow: hidden;
 }
 .hero-banner::after {
@@ -5515,7 +5518,7 @@ a.deck-row:hover {
   border-radius: 50%;
   background: var(--primary);
   color: #fff;
-  box-shadow: 0 6px 14px -6px rgba(9, 129, 126, 0.7);
+  box-shadow: 0 6px 14px -6px color-mix(in srgb, var(--primary) 70%, transparent);
 }
 .new-deck-btn:hover {
   background: var(--primary-soft);
@@ -6092,13 +6095,13 @@ a.deck-row:hover {
 }
 .scene .path-node.current {
   outline: none;
-  box-shadow: 0 6px 0 #055654, 0 0 0 8px color-mix(in srgb, var(--scene-accent) 22%, transparent),
+  box-shadow: 0 6px 0 var(--primary-deep), 0 0 0 8px color-mix(in srgb, var(--scene-accent) 22%, transparent),
     0 0 26px 6px color-mix(in srgb, var(--scene-accent) 45%, transparent);
   animation: bob 1.6s ease-in-out infinite, glow 2.4s ease-in-out infinite;
 }
 @keyframes glow {
   50% {
-    box-shadow: 0 6px 0 #055654, 0 0 0 12px color-mix(in srgb, var(--scene-accent) 14%, transparent),
+    box-shadow: 0 6px 0 var(--primary-deep), 0 0 0 12px color-mix(in srgb, var(--scene-accent) 14%, transparent),
       0 0 34px 10px color-mix(in srgb, var(--scene-accent) 55%, transparent);
   }
 }
@@ -9632,3 +9635,305 @@ html.phone .todos-bar .input.sm { flex: 1; min-width: 120px; }
 .plan-next { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 10px 14px; border-radius: var(--r-md); background: var(--primary-soft); border: 1px solid var(--primary); }
 .plan-next .grow { min-width: 0; }
 .plan-next small { display: block; color: var(--muted); }
+
+/* =====================================================================
+   Farbwelten (settings.palette → <html data-palette>) and playful style
+   --c1 … --c6: strong accent colours (white text on them stays readable);
+   --cN-soft: tinted background, --cN-ink: text/icon colour on that background.
+   ===================================================================== */
+:root {
+  /* „Klassisch“ – calm turquoise family (also the fallback) */
+  --c1: #09817e;
+  --c2: #0b7470;
+  --c3: #087a8a;
+  --c4: #2f7d6b;
+  --c5: #0d7f6c;
+  --c6: #3d6f7a;
+}
+:root[data-palette='bunt'] {
+  --c1: #d63d4a; /* coral */
+  --c2: #1d68b6; /* sky */
+  --c3: #7445d6; /* violet */
+  --c4: #a66300; /* sun */
+  --c5: #0b7d56; /* mint */
+  --c6: #c0347f; /* pink */
+}
+:root[data-palette='ozean'] {
+  --c1: #1f6fc2;
+  --c2: #0b7f8a;
+  --c3: #4b55c9;
+  --c4: #0b7d56;
+  --c5: #2b6fa8;
+  --c6: #6a4fc4;
+}
+:root[data-palette='sonne'] {
+  --c1: #c2410c;
+  --c2: #a66300;
+  --c3: #d63d4a;
+  --c4: #9a5b00;
+  --c5: #b45309;
+  --c6: #c0347f;
+}
+:root[data-palette='beere'] {
+  --c1: #b8327a;
+  --c2: #7445d6;
+  --c3: #d63d4a;
+  --c4: #9d3fb8;
+  --c5: #c0347f;
+  --c6: #5b4bc4;
+}
+/* the main colour of each world (Bunt keeps Merkora's turquoise) */
+:root[data-palette='ozean'] { --primary: #1f6fc2; }
+:root[data-palette='sonne'] { --primary: #b4540a; }
+:root[data-palette='beere'] { --primary: #b8327a; }
+:root[data-palette='ozean'],
+:root[data-palette='sonne'],
+:root[data-palette='beere'] {
+  --primary-hover: color-mix(in srgb, var(--primary) 84%, #000);
+  --primary-deep: color-mix(in srgb, var(--primary) 66%, #000);
+  --primary-2: color-mix(in srgb, var(--primary) 80%, #fff);
+  --primary-light: color-mix(in srgb, var(--primary) 55%, #fff);
+  --primary-soft: color-mix(in srgb, var(--primary) 12%, #fff);
+  --primary-ink: color-mix(in srgb, var(--primary) 70%, #000);
+  --line-strong: color-mix(in srgb, var(--primary) 38%, #fff);
+  --tint: color-mix(in srgb, var(--primary) 5%, #fff);
+}
+:root[data-theme='dark'][data-palette='ozean'],
+:root[data-theme='dark'][data-palette='sonne'],
+:root[data-theme='dark'][data-palette='beere'] {
+  --primary: color-mix(in srgb, var(--c1) 94%, #fff);
+  --primary-hover: color-mix(in srgb, var(--c1) 84%, #fff);
+  --primary-soft: color-mix(in srgb, var(--c1) 24%, #0b1313);
+  --primary-ink: color-mix(in srgb, var(--c1) 45%, #fff);
+  --line-strong: color-mix(in srgb, var(--c1) 45%, #0b1313);
+  --tint: color-mix(in srgb, var(--c1) 10%, #0b1313);
+}
+/* derived accent tints, light and dark */
+:root {
+  --c1-soft: color-mix(in srgb, var(--c1) 13%, #fff);
+  --c2-soft: color-mix(in srgb, var(--c2) 13%, #fff);
+  --c3-soft: color-mix(in srgb, var(--c3) 13%, #fff);
+  --c4-soft: color-mix(in srgb, var(--c4) 13%, #fff);
+  --c5-soft: color-mix(in srgb, var(--c5) 13%, #fff);
+  --c6-soft: color-mix(in srgb, var(--c6) 13%, #fff);
+  --c1-ink: color-mix(in srgb, var(--c1) 78%, #000);
+  --c2-ink: color-mix(in srgb, var(--c2) 78%, #000);
+  --c3-ink: color-mix(in srgb, var(--c3) 78%, #000);
+  --c4-ink: color-mix(in srgb, var(--c4) 78%, #000);
+  --c5-ink: color-mix(in srgb, var(--c5) 78%, #000);
+  --c6-ink: color-mix(in srgb, var(--c6) 78%, #000);
+}
+:root[data-theme='dark'] {
+  --c1-soft: color-mix(in srgb, var(--c1) 26%, #0b1313);
+  --c2-soft: color-mix(in srgb, var(--c2) 26%, #0b1313);
+  --c3-soft: color-mix(in srgb, var(--c3) 26%, #0b1313);
+  --c4-soft: color-mix(in srgb, var(--c4) 26%, #0b1313);
+  --c5-soft: color-mix(in srgb, var(--c5) 26%, #0b1313);
+  --c6-soft: color-mix(in srgb, var(--c6) 26%, #0b1313);
+  --c1-ink: color-mix(in srgb, var(--c1) 45%, #fff);
+  --c2-ink: color-mix(in srgb, var(--c2) 45%, #fff);
+  --c3-ink: color-mix(in srgb, var(--c3) 45%, #fff);
+  --c4-ink: color-mix(in srgb, var(--c4) 45%, #fff);
+  --c5-ink: color-mix(in srgb, var(--c5) 45%, #fff);
+  --c6-ink: color-mix(in srgb, var(--c6) 45%, #fff);
+}
+
+/* ---------- navigation: every area its own colour ---------- */
+.nav-c1 { --nc: var(--c1); --nc-soft: var(--c1-soft); --nc-ink: var(--c1-ink); }
+.nav-c2 { --nc: var(--c2); --nc-soft: var(--c2-soft); --nc-ink: var(--c2-ink); }
+.nav-c3 { --nc: var(--c3); --nc-soft: var(--c3-soft); --nc-ink: var(--c3-ink); }
+.nav-c4 { --nc: var(--c4); --nc-soft: var(--c4-soft); --nc-ink: var(--c4-ink); }
+.nav-c5 { --nc: var(--c5); --nc-soft: var(--c5-soft); --nc-ink: var(--c5-ink); }
+.nav-c6 { --nc: var(--c6); --nc-soft: var(--c6-soft); --nc-ink: var(--c6-ink); }
+:root:not([data-palette='klassisch']) .nav-link[class*='nav-c'] svg {
+  box-sizing: content-box;
+  padding: 5px;
+  border-radius: 10px;
+  background: var(--nc-soft);
+  color: var(--nc-ink);
+}
+:root:not([data-palette='klassisch']) .nav-link[class*='nav-c'] {
+  padding-left: 6px;
+}
+:root:not([data-palette='klassisch']) .nav-link[class*='nav-c'].active {
+  background: var(--nc-soft);
+  color: var(--nc-ink);
+}
+:root:not([data-palette='klassisch']) .nav-link[class*='nav-c'].active svg {
+  background: var(--nc);
+  color: #fff;
+}
+:root:not([data-palette='klassisch']) .pn-item[class*='nav-c'].on {
+  color: var(--nc-ink);
+}
+:root:not([data-palette='klassisch']) .pn-item[class*='nav-c'].on svg {
+  color: var(--nc-ink);
+}
+
+/* ---------- start page: each call-to-action in its own colour ---------- */
+:root:not([data-palette='klassisch']) .path-cta {
+  --cta: var(--c2);
+  background: linear-gradient(110deg, var(--cta), color-mix(in srgb, var(--cta) 72%, #fff));
+}
+:root:not([data-palette='klassisch']) .path-cta.todo-cta { --cta: var(--c5); }
+:root:not([data-palette='klassisch']) .path-cta.skill-cta { --cta: var(--c3); }
+:root:not([data-palette='klassisch']) .path-cta .path-cta-icon {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+:root:not([data-palette='klassisch']) .path-cta .btn.outline {
+  border-color: rgba(255, 255, 255, 0.6);
+  color: #fff;
+  background: transparent;
+}
+
+/* ---------- library: courses get a stable accent colour ---------- */
+.course-card[style*='--acc'] {
+  border-top: 4px solid var(--acc);
+}
+.course-card[style*='--acc'] .course-icon {
+  background: color-mix(in srgb, var(--acc) 15%, transparent);
+  color: var(--acc);
+}
+:root[data-theme='dark'] .course-card[style*='--acc'] .course-icon {
+  color: color-mix(in srgb, var(--acc) 45%, #fff);
+}
+.course-card[style*='--acc'] .bar i {
+  background: var(--acc);
+}
+
+/* ---------- page titles: three colourful dots ---------- */
+:root:not([data-palette='klassisch']) .page-head h1::after {
+  content: '';
+  display: inline-block;
+  width: 30px;
+  height: 8px;
+  margin-left: 10px;
+  vertical-align: middle;
+  background: radial-gradient(circle at 4px 4px, var(--c1) 3.5px, transparent 4px), radial-gradient(circle at 15px 4px, var(--c4) 3.5px, transparent 4px),
+    radial-gradient(circle at 26px 4px, var(--c3) 3.5px, transparent 4px);
+}
+
+/* ---------- settings: colour world picker ---------- */
+.palette-title {
+  margin: 16px 0 8px;
+  font-size: 0.95rem;
+}
+.palette-pick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.palette-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 2px solid var(--line);
+  background: var(--white);
+  font-weight: 600;
+}
+.palette-opt.on {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary-ink);
+}
+.palette-dots {
+  display: inline-flex;
+}
+.palette-dots i {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  margin-left: -4px;
+  border: 2px solid var(--white);
+}
+.palette-dots i:first-child {
+  margin-left: 0;
+}
+.palette-opt[data-preview='bunt'] i:nth-child(1) { background: #09817e; }
+.palette-opt[data-preview='bunt'] i:nth-child(2) { background: #d63d4a; }
+.palette-opt[data-preview='bunt'] i:nth-child(3) { background: #a66300; }
+.palette-opt[data-preview='bunt'] i:nth-child(4) { background: #7445d6; }
+.palette-opt[data-preview='ozean'] i:nth-child(1) { background: #1f6fc2; }
+.palette-opt[data-preview='ozean'] i:nth-child(2) { background: #0b7f8a; }
+.palette-opt[data-preview='ozean'] i:nth-child(3) { background: #4b55c9; }
+.palette-opt[data-preview='ozean'] i:nth-child(4) { background: #0d8a5f; }
+.palette-opt[data-preview='sonne'] i:nth-child(1) { background: #b4540a; }
+.palette-opt[data-preview='sonne'] i:nth-child(2) { background: #a66300; }
+.palette-opt[data-preview='sonne'] i:nth-child(3) { background: #d63d4a; }
+.palette-opt[data-preview='sonne'] i:nth-child(4) { background: #c0347f; }
+.palette-opt[data-preview='beere'] i:nth-child(1) { background: #b8327a; }
+.palette-opt[data-preview='beere'] i:nth-child(2) { background: #7445d6; }
+.palette-opt[data-preview='beere'] i:nth-child(3) { background: #d63d4a; }
+.palette-opt[data-preview='beere'] i:nth-child(4) { background: #5b4bc4; }
+.palette-opt[data-preview='klassisch'] i:nth-child(1) { background: #09817e; }
+.palette-opt[data-preview='klassisch'] i:nth-child(2) { background: #0b7470; }
+.palette-opt[data-preview='klassisch'] i:nth-child(3) { background: #1abbb7; }
+.palette-opt[data-preview='klassisch'] i:nth-child(4) { background: #dff3f2; }
+
+/* ---------- playful shapes (all colour worlds except Klassisch) ---------- */
+:root:not([data-palette='klassisch']) {
+  --r-sm: 9px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 22px;
+}
+:root:not([data-palette='klassisch']) .btn {
+  border-radius: 12px;
+  font-weight: 600;
+}
+:root:not([data-palette='klassisch']) .btn.primary {
+  box-shadow: 0 3px 0 var(--primary-deep);
+}
+:root:not([data-palette='klassisch']) .btn.primary:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 var(--primary-deep);
+}
+:root:not([data-palette='klassisch']) .chip {
+  border-radius: 999px;
+}
+:root:not([data-palette='klassisch']) .bar,
+:root:not([data-palette='klassisch']) .bar i {
+  border-radius: 999px;
+}
+
+/* ---------- playful motion (only with „Verspielte Effekte“ and without reduced motion) ---------- */
+@media (prefers-reduced-motion: no-preference) {
+  :root:not(.no-anim):not([data-palette='klassisch']) .btn.primary {
+    transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.12s, background 0.15s;
+  }
+  :root:not(.no-anim):not([data-palette='klassisch']) .btn.primary:hover:not(:disabled) {
+    transform: translateY(-1px) scale(1.02);
+  }
+  :root:not(.no-anim) .nav-link[class*='nav-c']:hover svg {
+    animation: nav-wiggle 0.45s ease-in-out;
+  }
+  :root:not(.no-anim) .bar i {
+    transition: width 0.7s cubic-bezier(0.34, 1.4, 0.64, 1);
+  }
+  :root:not(.no-anim) .todo-row.done .todo-check {
+    animation: check-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  :root:not(.no-anim) .palette-opt:hover .palette-dots i {
+    animation: dot-hop 0.4s ease-in-out;
+  }
+  :root:not(.no-anim) .palette-opt:hover .palette-dots i:nth-child(2) { animation-delay: 0.05s; }
+  :root:not(.no-anim) .palette-opt:hover .palette-dots i:nth-child(3) { animation-delay: 0.1s; }
+  :root:not(.no-anim) .palette-opt:hover .palette-dots i:nth-child(4) { animation-delay: 0.15s; }
+}
+@keyframes nav-wiggle {
+  25% { transform: rotate(-10deg); }
+  50% { transform: rotate(8deg) scale(1.08); }
+  75% { transform: rotate(-4deg); }
+}
+@keyframes check-pop {
+  0% { transform: scale(0.6); }
+  60% { transform: scale(1.25); }
+  100% { transform: scale(1); }
+}
+@keyframes dot-hop {
+  50% { transform: translateY(-4px); }
+}

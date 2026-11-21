@@ -74,3 +74,10 @@ export function download(filename: string, text: string | Blob, type = 'applicat
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+/** A stable accent colour (1–6, CSS --c1 … --c6) for a deck, course or anything with an id. */
+export function accentFor(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return (h % 6) + 1;
+}

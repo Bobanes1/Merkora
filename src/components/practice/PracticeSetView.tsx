@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { CardContent } from '../CardContent';
 import { CodeEditor } from '../CodeEditor';
+import { Confetti } from '../Mascot';
 import { IconCheck, IconClose, IconPlay, IconPlus } from '../Icons';
 import { Lab } from '../labs/Labs';
 import { completeJson, gradeAnswer } from '../../lib/ai';
@@ -36,6 +37,8 @@ export function PracticeSetView({ set, host, head, onDone }: { set: PracticeSet;
   const [i, setI] = useState(firstOpen < 0 ? 0 : firstOpen);
   const [steps, setSteps] = useState(0);
   const done = solvedCount(set);
+  // confetti only when the last task is solved here, not when an already solved set is opened again
+  const [startDone] = useState(done);
   const t = tasks[i];
   const ctx: TaskCtx = { set, i, prog: set.progress[i] ?? { tries: 0, hints: 0 }, host, onNext: () => setI((x) => Math.min(n - 1, x + 1)) };
   return (
@@ -69,6 +72,7 @@ export function PracticeSetView({ set, host, head, onDone }: { set: PracticeSet;
         {t?.type === 'case' && <CaseTaskView key={set.id + i} ctx={ctx} task={t} />}
         {t?.type === 'music' && <MusicTaskView key={set.id + i} ctx={ctx} task={t} />}
         {done === n && (onDone ?? <p className="form-ok">Alle Aufgaben gelöst – stark!</p>)}
+        {done === n && startDone < n && <Confetti count={50} />}
       </section>
     </>
   );

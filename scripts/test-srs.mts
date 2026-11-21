@@ -1613,6 +1613,17 @@ console.log('Arbeitsplanung: Blöcke, feste Minuten, Uhrzeiten, Prüfungen');
   ok(soon.has('bio') && !soon.has('chem') && !soon.has('alt'), 'Prüfung in 3 Tagen macht das Deck wichtig');
 }
 
+console.log('Farbwelten');
+{
+  const { accentFor } = await import('../src/lib/util');
+  const seen = new Set(Array.from({ length: 60 }, (_, i) => accentFor('deck' + i)));
+  ok(accentFor('abc') === accentFor('abc') && seen.size === 6 && [...seen].every((n) => n >= 1 && n <= 6), 'Akzentfarbe pro Deck: immer gleich, alle 6 Farben kommen vor');
+  const { normalize } = await import('../src/lib/store');
+  const old = normalize({ decks: [], settings: { theme: 'dark' } } as any);
+  const kept = normalize({ decks: [], settings: { palette: 'beere' } } as any);
+  ok(old.settings.palette === 'bunt' && old.settings.theme === 'dark' && kept.settings.palette === 'beere', 'alte Daten bekommen „Bunt“, gewählte Farbwelt bleibt');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

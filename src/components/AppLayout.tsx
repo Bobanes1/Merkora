@@ -272,22 +272,22 @@ export function AppLayout({ children }: { children: ReactNode }) {
           <kbd>Strg K</kbd>
         </button>
         <div className="nav-main">
-          <NavLink to="/dashboard" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+          <NavLink to="/dashboard" className={({ isActive }) => `nav-link nav-c1 ${isActive ? 'active' : ''}`}>
             <IconHome /> Start
           </NavLink>
-          <NavLink to="/library" end className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+          <NavLink to="/library" end className={({ isActive }) => `nav-link nav-c2 ${isActive ? 'active' : ''}`}>
             <IconLibrary /> Bibliothek
           </NavLink>
-          <NavLink to="/skills" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+          <NavLink to="/skills" className={({ isActive }) => `nav-link nav-c3 ${isActive ? 'active' : ''}`}>
             <IconPractice /> Skills
           </NavLink>
-          <NavLink to="/calendar" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+          <NavLink to="/calendar" className={({ isActive }) => `nav-link nav-c4 ${isActive ? 'active' : ''}`}>
             <IconCalendar /> Prüfungen
           </NavLink>
-          <NavLink to="/stats" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+          <NavLink to="/stats" className={({ isActive }) => `nav-link nav-c5 ${isActive ? 'active' : ''}`}>
             <IconChart /> Statistik
           </NavLink>
-          <NavLink to="/settings" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+          <NavLink to="/settings" className={({ isActive }) => `nav-link nav-c6 ${isActive ? 'active' : ''}`}>
             <IconSettings /> Einstellungen
           </NavLink>
         </div>

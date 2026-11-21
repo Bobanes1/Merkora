@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { Palette } from '../lib/store';
 import { Link } from 'react-router-dom';
 import { ManagePrivacy, PrivacyText } from '../components/Consent';
 import { IconDownload, IconEye, IconEyeOff, IconUpload } from '../components/Icons';
@@ -63,6 +64,14 @@ function SettingsNav() {
 }
 import { checkForUpdate, installUpdate, useUpdate } from '../lib/update';
 
+
+const PALETTES: [Palette, string][] = [
+  ['bunt', 'Bunt'],
+  ['ozean', 'Ozean'],
+  ['sonne', 'Sonne'],
+  ['beere', 'Beere'],
+  ['klassisch', 'Klassisch'],
+];
 
 export default function Settings() {
   const settings = useStore((s) => s.data.settings);
@@ -307,9 +316,31 @@ export default function Settings() {
             </button>
           ))}
         </div>
+        <h3 className="palette-title">Farbwelt</h3>
+        <div className="palette-pick" role="radiogroup" aria-label="Farbwelt">
+          {PALETTES.map(([v, label]) => (
+            <button
+              key={v}
+              type="button"
+              role="radio"
+              aria-checked={(settings.palette ?? 'bunt') === v}
+              className={`palette-opt ${(settings.palette ?? 'bunt') === v ? 'on' : ''}`}
+              data-preview={v}
+              onClick={() => setSettings({ palette: v })}
+            >
+              <span className="palette-dots" aria-hidden="true">
+                <i />
+                <i />
+                <i />
+                <i />
+              </span>
+              {label}
+            </button>
+          ))}
+        </div>
         <label className="check-row">
           <input type="checkbox" checked={settings.animations} onChange={(e) => setSettings({ animations: e.target.checked })} />
-          <span>Pip, Flo und die Animationen beim Lernen anzeigen (Konfetti, Sterne, Karten-Drehungen).</span>
+          <span>Verspielte Effekte: Pip, Flo, Konfetti, Sterne, hüpfende Knöpfe und Karten-Drehungen.</span>
         </label>
       </section>
       </div>

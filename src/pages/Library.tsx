@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { accentFor } from '../lib/util';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { CreateWithAI } from '../components/CreateWithAI';
 import { Mastery } from '../components/Mastery';
@@ -333,7 +334,7 @@ function CourseCard({ course, ws, setDialog }: { course: Course; ws: Workspace; 
   const due = sum.due;
   const exam = upcomingExams(data).find((e) => decks.some((d) => examCovers(e, d)));
   return (
-    <div className="course-card">
+    <div className="course-card" style={{ ['--acc' as string]: `var(--c${accentFor(course.id)})` }}>
       <Link to={`/library/${ws.slug}/${course.slug}`} className="course-card-link">
         <span className="course-icon">
           <IconFolder size={22} />
