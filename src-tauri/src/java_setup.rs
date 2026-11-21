@@ -1,0 +1,240 @@
+//! Built-in Java: Merkora downloads an official JDK (Eclipse Temurin 21 from adoptium.net) into its own
+//! data folder – no admin rights, no change to the system PATH, removable at any time.
+//! The archive is checked against Adoptium's SHA-256 checksum before it is unpacked.
+
+use serde::Serialize;
+use std::path::{Path, PathBuf};
+
+/// Adoptium's API: the newest Temurin 21 (long-term support) for this computer.
+const API: &str = "https://api.adoptium.net/v3/assets/latest/21/hotspot";
+/// Only Adoptium's own release downloads are accepted.
+const ALLOWED: &str = "https://github.com/adoptium/";
+
+/// Folder of the built-in JDK (inside Merkora's data folder).
+pub fn jdk_root() -> Option<PathBuf> {
+    std::env::var_os("MERKORA_DATA_DIR").map(|d| PathBuf::from(d).join("java"))
+}
+
+/// java(.exe) of the built-in JDK, if it is installed.
+pub fn bundled_java() -> Option<PathBuf> {
+    find_java(&jdk_root()?, 0)
+}
+
+/// Finds bin/java(.exe) in an unpacked JDK (Windows/Linux: jdk-21…/bin, macOS: jdk-21…/Contents/Home/bin).
+pub fn find_java(dir: &Path, depth: u32) -> Option<PathBuf> {
+    let exe = if cfg!(windows) { "java.exe" } else { "java" };
+    let here = dir.join("bin").join(exe);
+    if here.is_file() {
+        return Some(here);
+    }
+    if depth >= 4 {
+        return None;
+    }
+    let mut dirs: Vec<PathBuf> = std::fs::read_dir(dir).ok()?.flatten().map(|e| e.path()).filter(|p| p.is_dir()).collect();
+    dirs.sort();
+    dirs.iter().find_map(|p| find_java(p, depth + 1))
+}
+
+/// Adoptium's names for this operating system and processor.
+pub fn platform(os: &str, arch: &str) -> Result<(&'static str, &'static str), String> {
+    let o = match os {
+        "windows" => "windows",
+        "macos" => "mac",
+        "linux" => "linux",
+        _ => return Err("Für dieses System gibt es kein eingebautes Java.".into()),
+    };
+    let a = match arch {
+        "x86_64" => "x64",
+        "aarch64" => "aarch64",
+        _ => return Err("Für diesen Prozessor gibt es kein eingebautes Java.".into()),
+    };
+    Ok((o, a))
+}
+
+#[derive(Serialize, Clone)]
+pub struct JavaOffer {
+    pub version: String,
+    /// Download size in bytes.
+    pub size: u64,
+    #[serde(skip)]
+    pub link: String,
+    #[serde(skip)]
+    pub checksum: String,
+    #[serde(skip)]
+    pub name: String,
+}
+
+/// Reads the API answer (pure – tested).
+pub fn parse_offer(json: &str) -> Result<JavaOffer, String> {
+    let v: serde_json::Value = serde_json::from_str(json).map_err(|_| "Unerwartete Antwort von adoptium.net.".to_string())?;
+    let a = v.get(0).ok_or("Kein passendes Java gefunden.")?;
+    let pkg = &a["binary"]["package"];
+    let link = pkg["link"].as_str().unwrap_or_default().to_string();
+    let checksum = pkg["checksum"].as_str().unwrap_or_default().to_lowercase();
+    let name = pkg["name"].as_str().unwrap_or_default().to_string();
+    if !link.starts_with(ALLOWED) || link.contains("..") || checksum.len() != 64 || !(name.ends_with(".zip") || name.ends_with(".tar.gz")) {
+        return Err("Die Download-Angaben von adoptium.net sehen nicht wie erwartet aus.".into());
+    }
+    Ok(JavaOffer {
+        version: a["version"]["openjdk_version"].as_str().or(a["release_name"].as_str()).unwrap_or("21").to_string(),
+        size: pkg["size"].as_u64().unwrap_or(0),
+        link,
+        checksum,
+        name,
+    })
+}
+
+pub async fn offer(client: &reqwest::Client) -> Result<JavaOffer, String> {
+    let (os, arch) = platform(std::env::consts::OS, std::env::consts::ARCH)?;
+    let url = format!("{API}?architecture={arch}&image_type=jdk&os={os}&vendor=eclipse");
+    let res = client.get(&url).send().await.map_err(|e| format!("adoptium.net ist nicht erreichbar: {e}"))?;
+    if !res.status().is_success() {
+        return Err(format!("adoptium.net antwortet nicht ({}).", res.status()));
+    }
+    parse_offer(&res.text().await.map_err(|e| e.to_string())?)
+}
+
+/// Unpacks the checked archive into `dest` (zip on Windows, tar.gz on macOS/Linux).
+pub fn unpack(archive: &Path, name: &str, dest: &Path) -> Result<(), String> {
+    std::fs::create_dir_all(dest).map_err(|e| e.to_string())?;
+    let file = std::fs::File::open(archive).map_err(|e| e.to_string())?;
+    if name.ends_with(".zip") {
+        let mut zip = zip::ZipArchive::new(file).map_err(|e| format!("Archiv beschädigt: {e}"))?;
+        zip.extract(dest).map_err(|e| format!("Entpacken fehlgeschlagen: {e}"))?;
+    } else {
+        #[cfg(desktop)]
+        {
+            let gz = flate2::read::GzDecoder::new(std::io::BufReader::new(file));
+            tar::Archive::new(gz).unpack(dest).map_err(|e| format!("Entpacken fehlgeschlagen: {e}"))?;
+        }
+        #[cfg(mobile)]
+        {
+            let _ = file;
+            return Err("Auf dem Handy gibt es kein eingebautes Java.".into());
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn platform_names() {
+        assert_eq!(platform("windows", "x86_64").unwrap(), ("windows", "x64"));
+        assert_eq!(platform("macos", "aarch64").unwrap(), ("mac", "aarch64"));
+        assert!(platform("android", "aarch64").is_err());
+    }
+
+    #[test]
+    fn offer_only_from_adoptium() {
+        let good = r#"[{"binary":{"package":{"link":"https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.5%2B11/OpenJDK21U-jdk_x64_windows_hotspot_21.0.5_11.zip","checksum":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","size":191000000,"name":"OpenJDK21U-jdk_x64_windows_hotspot_21.0.5_11.zip"}},"version":{"openjdk_version":"21.0.5+11-LTS"}}]"#;
+        let o = parse_offer(good).unwrap();
+        assert_eq!(o.version, "21.0.5+11-LTS");
+        assert_eq!(o.size, 191000000);
+        assert_eq!(o.checksum.len(), 64);
+        let evil = good.replace("https://github.com/adoptium/", "https://example.com/");
+        assert!(parse_offer(&evil).is_err());
+        assert!(parse_offer("[]").is_err());
+    }
+
+    #[test]
+    fn finds_java_in_unpacked_folder() {
+        let dir = std::env::temp_dir().join(format!("merkora-jdk-test-{}", std::process::id()));
+        let bin = dir.join("jdk-21").join("Contents").join("Home").join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let exe = bin.join(if cfg!(windows) { "java.exe" } else { "java" });
+        std::fs::write(&exe, b"").unwrap();
+        assert_eq!(find_java(&dir, 0), Some(exe));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+/// Downloads Java, checks the SHA-256 checksum, unpacks it next to the old one and swaps it in.
+/// `progress` gets 0–0.9 while downloading, then 0.92 (unpacking) and 1.0.
+#[cfg(desktop)]
+pub async fn install(client: &reqwest::Client, progress: impl Fn(f64)) -> Result<(), String> {
+    use sha2::Digest;
+    use std::io::Write;
+    let o = offer(client).await?;
+    let root = jdk_root().ok_or("Kein Datenordner gefunden.")?;
+    let parent = root.parent().ok_or("Kein Datenordner gefunden.")?.to_path_buf();
+    std::fs::create_dir_all(&parent).map_err(|e| e.to_string())?;
+    let archive = parent.join(format!("java-download-{}", o.name));
+    progress(0.0);
+    let mut res = client.get(&o.link).send().await.map_err(|e| format!("Download fehlgeschlagen: {e}"))?;
+    if !res.status().is_success() {
+        return Err(format!("Download fehlgeschlagen ({}).", res.status()));
+    }
+    let total = res.content_length().filter(|n| *n > 0).unwrap_or(o.size);
+    let mut file = std::io::BufWriter::new(std::fs::File::create(&archive).map_err(|e| e.to_string())?);
+    let mut hash = sha2::Sha256::new();
+    let (mut got, mut last) = (0u64, 0u64);
+    loop {
+        let chunk = match res.chunk().await {
+            Ok(Some(c)) => c,
+            Ok(None) => break,
+            Err(e) => {
+                drop(file);
+                let _ = std::fs::remove_file(&archive);
+                return Err(format!("Download abgebrochen: {e}"));
+            }
+        };
+        hash.update(&chunk);
+        file.write_all(&chunk).map_err(|e| e.to_string())?;
+        got += chunk.len() as u64;
+        if total > 0 && (got - last) * 100 >= total {
+            last = got;
+            progress(0.9 * got as f64 / total as f64);
+        }
+    }
+    file.flush().map_err(|e| e.to_string())?;
+    drop(file);
+    if format!("{:x}", hash.finalize()) != o.checksum {
+        let _ = std::fs::remove_file(&archive);
+        return Err("Die Prüfsumme stimmt nicht – der Download ist beschädigt. Bitte nochmal versuchen.".into());
+    }
+    progress(0.92);
+    let name = o.name.clone();
+    tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
+        let fresh = parent.join("java-new");
+        let _ = std::fs::remove_dir_all(&fresh);
+        let r = unpack(&archive, &name, &fresh);
+        let _ = std::fs::remove_file(&archive);
+        r?;
+        if find_java(&fresh, 0).is_none() {
+            let _ = std::fs::remove_dir_all(&fresh);
+            return Err("Im Download wurde kein Java gefunden.".into());
+        }
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::rename(&fresh, &root).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    progress(1.0);
+    Ok(())
+}
+
+/// Real download (≈ 200 MB) into a temp folder, then `java -version`. Run with: cargo test --lib real_java_install -- --ignored
+#[cfg(all(test, desktop))]
+mod net_tests {
+    #[test]
+    #[ignore]
+    fn real_java_install() {
+        let dir = std::env::temp_dir().join(format!("merkora-java-install-{}", std::process::id()));
+        std::env::set_var("MERKORA_DATA_DIR", &dir);
+        tauri::async_runtime::block_on(super::install(&crate::CLIENT, |p| eprintln!("progress {:.0} %", p * 100.0))).unwrap();
+        let java = super::bundled_java().expect("java installed");
+        let out = std::process::Command::new(&java).arg("-version").output().unwrap();
+        let text = String::from_utf8_lossy(&out.stderr).to_string();
+        eprintln!("{text}");
+        assert!(text.contains("21."));
+        // a real program in the single-file launcher, like Merkora runs it
+        let src = dir.join("MerkoraTest.java");
+        std::fs::write(&src, "class MerkoraTest { public static void main(String[] a) { System.out.println(6 * 7); } }").unwrap();
+        let run = std::process::Command::new(&java).arg("MerkoraTest.java").current_dir(&dir).output().unwrap();
+        assert_eq!(String::from_utf8_lossy(&run.stdout).trim(), "42");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

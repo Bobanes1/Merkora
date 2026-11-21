@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { JavaSetup } from '../components/JavaSetup';
 import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { CodeEditor } from '../components/CodeEditor';
 import { IconChecklist, IconPlay, IconPopout, IconSparkle, IconTimer } from '../components/Icons';
@@ -146,7 +147,7 @@ function JavaPlayground() {
       let r = (await localJava()) ? await runJavaLocal(src) : 'no-java';
       if (r === 'no-java') {
         if (!online) {
-          setOut('Auf diesem Gerät gibt es kein Java. Mit „Online ausführen“ schickt Merkora nur den Code an wandbox.org.');
+          setOut('Auf diesem Gerät gibt es noch kein Java. Installiere es oben mit einem Klick – oder nutze „Online ausführen“ (dann schickt Merkora nur den Code an wandbox.org).');
           return;
         }
         r = await runJavaOnline(src);
@@ -160,6 +161,7 @@ function JavaPlayground() {
   };
   return (
     <div className="tool">
+      <JavaSetup />
       <CodeEditor value={code} onChange={setCode} />
       <div className="row-gap">
         <button type="button" className="btn primary" onClick={() => void run()} disabled={busy}>

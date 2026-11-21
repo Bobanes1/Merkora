@@ -3,6 +3,7 @@ import { CardContent } from '../CardContent';
 import { CodeEditor } from '../CodeEditor';
 import { Confetti } from '../Mascot';
 import { Markdown } from '../Markdown';
+import { JavaSetup } from '../JavaSetup';
 import { IconCheck, IconClose, IconPlay, IconPlus, IconSparkle } from '../Icons';
 import { Lab } from '../labs/Labs';
 import { completeJson, gradeAnswer } from '../../lib/ai';
@@ -399,6 +400,7 @@ function CodeTask({ ctx, p }: { ctx: TaskCtx; p: JavaProblem }) {
     <div className="practice-task">
       <h3>{p.title}</h3>
       <CardContent text={p.task} className="practice-problem" />
+      {java === null && <JavaSetup compact onReady={(v) => (setJava(v), setAskOnline(null))} />}
       <CodeEditor value={code} onChange={setCode} label={`Code für ${p.title}`} />
       <div className="row-gap">
         <button type="button" className="btn primary" onClick={() => go('test')} disabled={!!running}>
@@ -416,17 +418,12 @@ function CodeTask({ ctx, p }: { ctx: TaskCtx; p: JavaProblem }) {
         <div className="practice-consent">
           <p>
             <b>Code online ausführen?</b> Auf diesem Gerät gibt es kein Java. Merkora kann deinen Code an den kostenlosen Dienst <b>wandbox.org</b> schicken und
-            dort ausführen – nur den Code, keine Lerndaten.
+            dort ausführen – nur den Code, keine Lerndaten. Schneller geht es mit Java direkt in Merkora (Knopf oben, nur am PC).
           </p>
           <div className="row-gap">
             <button type="button" className="btn primary sm" onClick={() => (setSettings({ onlineCodeOk: true }), setAskOnline(null), void exec(askOnline, true))}>
               Erlauben und ausführen
             </button>
-            {java !== undefined && (
-              <button type="button" className="btn outline sm" onClick={() => openExternal('https://adoptium.net/de/temurin/releases/')}>
-                Java kostenlos installieren
-              </button>
-            )}
             <button type="button" className="btn ghost sm" onClick={() => setAskOnline(null)}>
               Abbrechen
             </button>

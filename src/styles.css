@@ -10345,3 +10345,13 @@ html.phone .undo-toast {
 .practice-theory[open] > summary { margin-bottom: 8px; }
 .practice-theory h3 { font-size: 1rem; margin: 12px 0 4px; color: var(--primary-ink); }
 .redo-lesson { margin-top: 8px; }
+
+/* ---------- built-in Java ---------- */
+.java-setup { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 0 0 10px; padding: 10px 14px; border-radius: var(--r-md); border: 1px solid var(--line-strong); background: var(--primary-soft); }
+.java-setup .grow { display: grid; gap: 2px; min-width: 220px; }
+.java-setup small { color: var(--muted); }
+.java-setup .err-msg { color: var(--danger); }
+.java-setup.ready { background: var(--ok-soft); border-color: transparent; color: var(--ok-ink); }
+.java-setup.busy { display: grid; gap: 6px; }
+.java-bar { display: block; height: 8px; border-radius: 999px; background: var(--white); overflow: hidden; }
+.java-bar i { display: block; height: 100%; border-radius: 999px; background: var(--primary); transition: width 0.3s; }

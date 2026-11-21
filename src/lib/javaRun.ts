@@ -138,3 +138,37 @@ export async function runJavaOnline(code: string, stdin = ''): Promise<RunResult
     via: 'online',
   };
 }
+
+// ---------- built-in Java (PC): one click, no admin rights, stays inside Merkora's data folder ----------
+/** Can this device get the built-in Java? (desktop app only) */
+export async function canInstallJava(): Promise<boolean> {
+  const { inTauri, isAndroid } = await import('./desktop');
+  return inTauri && !isAndroid;
+}
+/** Version and download size of the Java Merkora would install. */
+export async function javaOffer(): Promise<{ version: string; size: number }> {
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke('java_offer');
+}
+/** Is Merkora's own Java installed? */
+export async function javaBuiltin(): Promise<boolean> {
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<boolean>('java_builtin').catch(() => false);
+}
+/** Downloads and installs Java; `onProgress` gets 0–1. Returns the installed version. */
+export async function installJava(onProgress: (p: number) => void): Promise<string> {
+  const { invoke } = await import('@tauri-apps/api/core');
+  const { listen } = await import('@tauri-apps/api/event');
+  const off = await listen<number>('java-progress', (e) => onProgress(e.payload));
+  try {
+    return await invoke<string>('java_install');
+  } finally {
+    off();
+  }
+}
+export async function uninstallJava(): Promise<void> {
+  const { invoke } = await import('@tauri-apps/api/core');
+  await invoke('java_uninstall');
+}
+/** „205 MB“ */
+export const sizeText = (bytes: number) => (bytes >= 1e6 ? `${Math.round(bytes / 1e6)} MB` : `${Math.max(1, Math.round(bytes / 1e3))} KB`);

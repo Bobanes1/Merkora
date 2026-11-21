@@ -2,6 +2,7 @@
 
 mod anki;
 mod export;
+mod java_setup;
 mod server;
 mod storage;
 
@@ -372,9 +373,12 @@ struct JavaRun {
     compile_error: bool,
 }
 
-/// The java program: JAVA_HOME/bin/java if set, else "java" from PATH.
+/// The java program: Merkora's built-in JDK, else JAVA_HOME/bin/java if set, else "java" from PATH.
 #[cfg(desktop)]
 fn java_exe() -> std::path::PathBuf {
+    if let Some(p) = java_setup::bundled_java() {
+        return p;
+    }
     if let Ok(home) = std::env::var("JAVA_HOME") {
         let p = std::path::Path::new(&home).join("bin").join(if cfg!(windows) { "java.exe" } else { "java" });
         if p.is_file() {
@@ -757,6 +761,10 @@ pub fn run() {
             open_media_file,
             run_java,
             java_available,
+            java_offer,
+            java_builtin,
+            java_install,
+            java_uninstall,
             smoke_info,
             smoke_done,
             save_download,
@@ -858,4 +866,76 @@ pub fn run() {
             storage::flush_types();
         }
     });
+}
+
+// ---------- built-in Java (desktop): install Temurin 21 into Merkora's data folder ----------
+static JAVA_INSTALLING: AtomicBool = AtomicBool::new(false);
+
+/// Version and download size of the Java Merkora would install.
+#[tauri::command]
+async fn java_offer() -> Result<java_setup::JavaOffer, String> {
+    #[cfg(mobile)]
+    {
+        Err("Auf dem Handy gibt es kein eingebautes Java.".into())
+    }
+    #[cfg(desktop)]
+    {
+        java_setup::offer(&CLIENT).await
+    }
+}
+
+/// Is Merkora's own Java installed (and not just a system Java)?
+#[tauri::command]
+fn java_builtin() -> bool {
+    #[cfg(desktop)]
+    {
+        java_setup::bundled_java().is_some()
+    }
+    #[cfg(mobile)]
+    {
+        false
+    }
+}
+
+/// Downloads, checks (SHA-256) and unpacks Java; reports progress as "java-progress" (0–1). Returns the version.
+#[tauri::command]
+async fn java_install(app: AppHandle) -> Result<String, String> {
+    #[cfg(mobile)]
+    {
+        let _ = app;
+        Err("Auf dem Handy gibt es kein eingebautes Java.".into())
+    }
+    #[cfg(desktop)]
+    {
+        if JAVA_INSTALLING.swap(true, Ordering::SeqCst) {
+            return Err("Java wird schon installiert.".into());
+        }
+        let r = java_install_inner(&app).await;
+        JAVA_INSTALLING.store(false, Ordering::SeqCst);
+        r
+    }
+}
+
+#[cfg(desktop)]
+async fn java_install_inner(app: &AppHandle) -> Result<String, String> {
+    java_setup::install(&CLIENT, |p| {
+        let _ = app.emit("java-progress", p);
+    })
+    .await?;
+    java_available().await.ok_or_else(|| "Java wurde installiert, startet aber nicht.".to_string())
+}
+
+/// Removes Merkora's own Java again (a system Java is not touched).
+#[tauri::command]
+async fn java_uninstall() -> Result<(), String> {
+    #[cfg(desktop)]
+    {
+        if let Some(root) = java_setup::jdk_root() {
+            tauri::async_runtime::spawn_blocking(move || std::fs::remove_dir_all(&root).or_else(|e| if e.kind() == std::io::ErrorKind::NotFound { Ok(()) } else { Err(e) }))
+                .await
+                .map_err(|e| e.to_string())?
+                .map_err(|e| format!("Konnte Java nicht entfernen: {e}"))?;
+        }
+    }
+    Ok(())
 }
