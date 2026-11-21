@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { watchLevelUps } from './lib/uiSound';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import SyncCallback from './pages/SyncCallback';
 import { AppLayout } from './components/AppLayout';
@@ -47,6 +48,7 @@ function TodosRedirect() {
 
 export default function App() {
   useMotionSetting();
+  useEffect(() => watchLevelUps(), []);
   useApplyTheme();
   const trayOnClose = useStore((s) => s.data.settings.trayOnClose);
   useEffect(() => {

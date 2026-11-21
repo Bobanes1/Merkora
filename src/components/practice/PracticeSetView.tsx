@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { playUi } from '../../lib/uiSound';
 import { CardContent } from '../CardContent';
 import { CodeEditor } from '../CodeEditor';
 import { Confetti } from '../Mascot';
@@ -219,6 +220,12 @@ export function TaskFooter({ ctx, solution, card, canShow }: { ctx: TaskCtx; sol
 
 /** Right / wrong message after checking. */
 export function Verdict({ ok, text }: { ok: boolean | null; text?: string }) {
+  // only for a fresh answer – not when an already solved task is opened again
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) return void (first.current = false);
+    if (ok !== null) playUi(ok ? 'right' : 'wrong');
+  }, [ok]);
   if (ok === null) return null;
   return ok ? (
     <p className="form-ok">

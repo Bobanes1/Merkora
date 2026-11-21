@@ -204,6 +204,9 @@ export type Settings = {
   theme: 'system' | 'light' | 'dark';
   /** Colour world: the main colour plus six accent colours ("bunt" by default). */
   palette?: Palette;
+  /** Subtle sounds (checking off, right/wrong, level up) and their volume 0–1. */
+  uiSounds?: boolean;
+  soundVolume?: number;
   /** Glass look: sidebar, bars and windows slightly see-through (on by default). */
   glass?: boolean;
   /** The short introduction with Pip was finished or skipped. */

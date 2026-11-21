@@ -10648,3 +10648,58 @@ html.phone .cover-icons { grid-template-columns: repeat(4, 1fr); }
 .flashcard[data-swipe='left']::after { content: 'Nochmal'; left: 16px; background: #c93545; }
 .flashcard[data-swipe='right'] { box-shadow: 0 0 0 3px #0b7d56, var(--shadow-lg); }
 .flashcard[data-swipe='left'] { box-shadow: 0 0 0 3px #c93545, var(--shadow-lg); }
+
+/* =====================================================================
+   Step 3: sounds (Merkora Tools › Klänge), mini player, sound settings
+   ===================================================================== */
+:root { --m-sounds: #0a7799; }
+[data-mode='sounds'], .mode-sounds { --mode: var(--m-sounds); }
+.sounds { display: grid; gap: 14px; }
+.sounds .panel { margin-bottom: 0; }
+.sounds-now { display: grid; gap: 12px; }
+.sounds-now.on { background: linear-gradient(135deg, color-mix(in srgb, var(--m-sounds) 14%, var(--white)), color-mix(in srgb, #4b55c9 10%, var(--white))); border-color: color-mix(in srgb, var(--m-sounds) 35%, transparent); }
+.sounds-now-main { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.sounds-now-main .grow { display: grid; gap: 2px; min-width: 180px; flex: 1; }
+.sounds-master { display: flex; gap: 10px; align-items: center; }
+.sounds-master input, .sound-card input[type='range'], .sound-volume-row input { flex: 1; accent-color: var(--m-sounds); }
+.sound-volume-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 4px 0 8px 28px; }
+.sounds-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.sound-preset { display: inline-flex; align-items: center; }
+.sound-preset .chip { display: inline-flex; gap: 6px; align-items: center; }
+.sounds-save { margin-top: 10px; }
+.sounds-save .input { flex: 1; min-width: 0; }
+.sound-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+.sound-card { --sc: var(--m-sounds); display: grid; gap: 8px; padding: 10px 12px; border-radius: var(--r-lg); border: 1px solid var(--line); background: var(--white); transition: border-color 0.2s, box-shadow 0.2s, background 0.2s; }
+.sound-card.g-natur { --sc: #0b7d56; }
+.sound-card.g-rauschen { --sc: #55657a; }
+.sound-card.g-musik { --sc: #7445d6; }
+.sound-card.on { border-color: var(--sc); background: color-mix(in srgb, var(--sc) 10%, var(--white)); box-shadow: 0 10px 24px -14px color-mix(in srgb, var(--sc) 70%, transparent); }
+.sound-toggle { display: flex; gap: 10px; align-items: center; width: 100%; padding: 0; border: 0; background: none; color: inherit; text-align: left; }
+.sound-toggle .grow { display: grid; gap: 1px; min-width: 0; }
+.sound-toggle small { color: var(--muted); font-size: 0.78rem; }
+.sound-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; flex: none; background: color-mix(in srgb, var(--sc) 14%, transparent); color: color-mix(in srgb, var(--sc) 80%, var(--ink)); }
+.sound-card.on .sound-icon { background: linear-gradient(135deg, var(--sc), color-mix(in srgb, var(--sc) 70%, var(--grad-end))); color: #fff; }
+.sound-state { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); color: var(--sc); flex: none; }
+:root[data-theme='dark'] .sound-icon { color: color-mix(in srgb, var(--sc) 50%, #fff); }
+
+/* equalizer bars (move only while something plays) */
+.sounds-eq { display: inline-flex; gap: 3px; align-items: flex-end; height: 22px; flex: none; }
+.sounds-eq i { width: 4px; height: 30%; border-radius: 2px; background: var(--m-sounds); }
+.sounds-eq.small { height: 14px; gap: 2px; }
+.sounds-eq.small i { width: 3px; }
+@media (prefers-reduced-motion: no-preference) {
+  :root:not(.no-anim) .sounds-now.on .sounds-eq i,
+  :root:not(.no-anim) .mini-player:not(.paused) .sounds-eq i { animation: eq 0.9s ease-in-out infinite alternate; }
+  :root:not(.no-anim) .sounds-eq i:nth-child(2) { animation-delay: 0.2s; }
+  :root:not(.no-anim) .sounds-eq i:nth-child(3) { animation-delay: 0.4s; }
+  :root:not(.no-anim) .sounds-eq i:nth-child(4) { animation-delay: 0.1s; }
+}
+@keyframes eq { from { height: 25%; } to { height: 100%; } }
+
+/* mini player */
+.mini-player { display: flex; gap: 6px; align-items: center; margin: 6px 2px; padding: 6px 8px; border-radius: 12px; background: color-mix(in srgb, var(--m-sounds) 12%, var(--white)); border: 1px solid color-mix(in srgb, var(--m-sounds) 30%, transparent); font-size: 0.82rem; }
+.mini-player-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: color-mix(in srgb, var(--m-sounds) 70%, var(--ink)); }
+:root[data-theme='dark'] .mini-player-name { color: color-mix(in srgb, var(--m-sounds) 40%, #fff); }
+.mini-player.phone { position: fixed; left: 12px; right: 12px; bottom: calc(70px + env(safe-area-inset-bottom)); z-index: 39; margin: 0; box-shadow: var(--shadow-lg); }
+html.glass .mini-player.phone { background: color-mix(in srgb, var(--white) 78%, transparent); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
+html.phone.learning .mini-player.phone { display: none; }

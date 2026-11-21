@@ -1,8 +1,9 @@
 import { useState } from 'react';
+import { SoundsTool } from '../components/tools/SoundsTool';
 import { JavaSetup } from '../components/JavaSetup';
 import { useSearchParams } from 'react-router-dom';
 import { CodeEditor } from '../components/CodeEditor';
-import { IconCalendar, IconChart, IconChecklist, IconChevronDown, IconCode, IconMusic, IconPlay, IconPopout, IconSparkle, IconTimer } from '../components/Icons';
+import { IconCalendar, IconChart, IconHeadphones, IconChecklist, IconChevronDown, IconCode, IconMusic, IconPlay, IconPopout, IconSparkle, IconTimer } from '../components/Icons';
 import { Sheet } from '../components/Sheet';
 import { usePhone } from '../lib/phone';
 import CalendarPage from './Calendar';
@@ -15,13 +16,14 @@ import { buildHarness, localJava, runJavaLocal, runJavaOnline } from '../lib/jav
 import { setSettings } from '../lib/store';
 import { toolWindows } from '../lib/toolWindows';
 
-type Tab = 'plan' | 'todos' | 'exams' | 'pomodoro' | 'labs' | 'piano' | 'java';
+type Tab = 'plan' | 'todos' | 'exams' | 'pomodoro' | 'sounds' | 'labs' | 'piano' | 'java';
 
 const TABS: { id: Tab; label: string; icon: (p: { size?: number }) => JSX.Element }[] = [
   { id: 'plan', label: 'Arbeitsplanung', icon: IconSparkle },
   { id: 'todos', label: 'To-do-Liste', icon: IconChecklist },
   { id: 'exams', label: 'Prüfungen', icon: IconCalendar },
   { id: 'pomodoro', label: 'Pomodoro-Timer', icon: IconTimer },
+  { id: 'sounds', label: 'Klänge', icon: IconHeadphones },
   { id: 'labs', label: 'Mathe-Labore', icon: IconChart },
   { id: 'piano', label: 'Klavier', icon: IconMusic },
   { id: 'java', label: 'Java-Spielwiese', icon: IconCode },
@@ -95,6 +97,8 @@ export default function Tools() {
       {tab === 'todos' && <Todos embedded />}
 
       {tab === 'exams' && <CalendarPage embedded />}
+
+      {tab === 'sounds' && <SoundsTool />}
 
       {tab === 'pomodoro' && (
         <section className="panel tools-pomo-panel">

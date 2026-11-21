@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import { playUi } from '../../lib/uiSound';
 import { IconPlay, IconPlus, IconShuffle, IconSparkle } from '../../components/Icons';
 import { CardContent, lookOf } from '../../components/CardContent';
 import { Confetti, Mascot, praise, type Mood } from '../../components/Mascot';
@@ -165,6 +166,7 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
   const rate = useCallback(
     (r: Rating) => {
       if (!card) return;
+      if (r > 1) playUi('tick');
       // Practice mode only moves the schedule for cards that are actually due.
       const scheduled = mode === 'due' || card.srs.due <= Date.now();
       let at: number;

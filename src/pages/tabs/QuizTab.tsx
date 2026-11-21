@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { playUi } from '../../lib/uiSound';
 import { CostHint } from '../../components/CostHint';
 import { estimate } from '../../lib/costs';
 import { materialFrom } from '../../lib/ai';
@@ -145,7 +146,7 @@ export default function QuizTab({ deck }: { deck: Deck }) {
                 key={k}
                 className={`option ${state}`}
                 disabled={picked !== undefined}
-                onClick={() => setAnswers({ ...answers, [index]: k })}
+                onClick={() => (playUi(k === q.answer ? 'right' : 'wrong'), setAnswers({ ...answers, [index]: k }))}
               >
                 <span className="opt-letter">{'ABCD'[k] ?? k + 1}</span>
                 {o}

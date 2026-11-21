@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { playUi } from '../lib/uiSound';
 import { Link, useLocation } from 'react-router-dom';
 import { ManagePrivacy, PrivacyText } from '../components/Consent';
 import { IconDownload, IconEye, IconEyeOff, IconUpload } from '../components/Icons';
@@ -344,6 +345,19 @@ export default function Settings() {
           <input type="checkbox" checked={settings.glass !== false} onChange={(e) => setSettings({ glass: e.target.checked })} />
           <span>Glas-Optik: Seitenleiste, Leisten und Fenster leicht durchscheinend.</span>
         </label>
+        <label className="check-row">
+          <input type="checkbox" checked={settings.uiSounds !== false} onChange={(e) => setSettings({ uiSounds: e.target.checked })} />
+          <span>Dezente Töne beim Abhaken, bei richtigen und falschen Antworten und beim Stufen-Aufstieg.</span>
+        </label>
+        {settings.uiSounds !== false && (
+          <label className="sound-volume-row">
+            <span className="muted small">Lautstärke der Töne</span>
+            <input type="range" min={0.1} max={1} step={0.05} value={settings.soundVolume ?? 0.5} onChange={(e) => setSettings({ soundVolume: Number(e.target.value) })} />
+            <button type="button" className="btn ghost sm" onClick={() => playUi('right')}>
+              Probehören
+            </button>
+          </label>
+        )}
       </section>
       </div>
 

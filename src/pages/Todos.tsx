@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { playUi } from '../lib/uiSound';
 import { Mascot } from '../components/Mascot';
 import { Confetti } from '../components/Mascot';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -129,6 +130,7 @@ export default function Todos({ embedded = false }: { embedded?: boolean }) {
   // ---------- actions ----------
   const check = (t: Todo) => {
     const wasDone = !!t.doneAt;
+    if (!wasDone) playUi('tick');
     const next = toggleTodo(t.id);
     // the last open to-do of today checked off: a little party
     if (!wasDone && t.due && t.due <= today && !all.some((x) => x.id !== t.id && !x.doneAt && x.due && x.due <= today)) setParty(Date.now());

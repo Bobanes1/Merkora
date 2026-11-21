@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { MiniPlayer } from './MiniPlayer';
 import { Tour } from './Tour';
 import { UndoToast } from './UndoToast';
 import { Link, NavLink, useLocation } from 'react-router-dom';
@@ -264,6 +265,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </NavLink>
         </div>
         <SidebarToolbar onNavigate={close} />
+        <MiniPlayer onNavigate={close} />
         <div className="nav-section">Meine Kurse</div>
         <Tree onNavigate={close} />
         <JobsIndicator />
@@ -285,6 +287,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       {search && <SearchPalette onClose={() => setSearch(false)} />}
       <UndoToast />
       <Tour />
+      {phone && <MiniPlayer phone />}
       {phone && <PhoneNav onSearch={() => setSearch(true)} onNewDeck={() => setNewDeck(true)} />}
       <ToolWindows />
       <main className="app-main" data-area={areaOf(pathname)}>
