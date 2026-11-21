@@ -1,5 +1,5 @@
 import { useEffect, useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
-import { toolWindows, type ToolWindowId, type ToolWindowState } from '../../lib/toolWindows';
+import { clampPos, toolWindows, type ToolWindowId, type ToolWindowState } from '../../lib/toolWindows';
 import { IconClose, IconMinus } from '../Icons';
 
 type Props = {
@@ -21,6 +21,17 @@ export function FloatingWindow({ id, win, title, badge, icon, defaultPos, width 
   const ref = useRef<HTMLDivElement>(null);
   const drag = useRef<{ dx: number; dy: number } | null>(null);
 
+  // safety net: releasing the mouse anywhere ends a drag
+  useEffect(() => {
+    const end = () => (drag.current = null);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('blur', end);
+    return () => {
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('blur', end);
+    };
+  }, []);
+
   useEffect(() => {
     const onResize = () => {
       if (win.x == null || win.y == null || !ref.current) return;
@@ -37,33 +48,40 @@ export function FloatingWindow({ id, win, title, badge, icon, defaultPos, width 
 
   if (!win.open) return null;
 
-  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if ((e.target as HTMLElement).closest('button')) return;
+  // Dragging by the title bar. The pointer is captured by the title bar itself (not the whole window), so
+  // move and release always reach these handlers; any end of the gesture stops dragging.
+  const onPointerDown = (e: ReactPointerEvent<HTMLElement>) => {
+    if ((e.target as HTMLElement).closest('button') || (e.pointerType === 'mouse' && e.button !== 0)) return;
     toolWindows.focus(id);
     const el = ref.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
     drag.current = { dx: e.clientX - rect.left, dy: e.clientY - rect.top };
-    el.setPointerCapture(e.pointerId);
-  };
-
-  const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (!drag.current || !ref.current) return;
-    const rect = ref.current.getBoundingClientRect();
-    const maxX = Math.max(8, window.innerWidth - rect.width - 8);
-    const maxY = Math.max(8, window.innerHeight - 48);
-    const nx = Math.min(Math.max(8, e.clientX - drag.current.dx), maxX);
-    const ny = Math.min(Math.max(8, e.clientY - drag.current.dy), maxY);
-    toolWindows.move(id, nx, ny);
-  };
-
-  const onPointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (!drag.current) return;
-    drag.current = null;
     try {
-      ref.current?.releasePointerCapture(e.pointerId);
+      e.currentTarget.setPointerCapture(e.pointerId);
     } catch {
-      /* ignore */
+      /* not supported: the window listener below still ends the drag */
+    }
+    e.preventDefault();
+  };
+
+  const onPointerMove = (e: ReactPointerEvent<HTMLElement>) => {
+    if (!drag.current || !ref.current) return;
+    // the button is no longer pressed (release happened outside the window): stop
+    if (e.pointerType === 'mouse' && e.buttons === 0) return stopDrag();
+    const rect = ref.current.getBoundingClientRect();
+    const p = clampPos(e.clientX - drag.current.dx, e.clientY - drag.current.dy, rect.width, window.innerWidth, window.innerHeight);
+    toolWindows.move(id, p.x, p.y);
+  };
+
+  const stopDrag = (e?: ReactPointerEvent<HTMLElement>) => {
+    drag.current = null;
+    if (e) {
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {
+        /* already released */
+      }
     }
   };
 
@@ -90,7 +108,9 @@ export function FloatingWindow({ id, win, title, badge, icon, defaultPos, width 
         className="tool-win-head"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
+        onPointerUp={stopDrag}
+        onPointerCancel={stopDrag}
+        onLostPointerCapture={() => (drag.current = null)}
       >
         <span className="tool-win-title">
           {icon}

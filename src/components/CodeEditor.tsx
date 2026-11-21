@@ -9,6 +9,7 @@ import { usePhone } from '../lib/phone';
  */
 export function CodeEditor({ value, onChange, label = 'Code' }: { value: string; onChange: (v: string) => void; label?: string }) {
   const ref = useRef<HTMLTextAreaElement>(null);
+  const hl = useRef<HTMLPreElement>(null);
   const phone = usePhone();
   const lines = value.split('\n').length;
 
@@ -57,13 +58,20 @@ export function CodeEditor({ value, onChange, label = 'Code' }: { value: string;
       </div>
       <div className="code-area">
         {/* the highlighted copy behind the transparent text field */}
-        <pre className="code-hl" aria-hidden="true" dangerouslySetInnerHTML={{ __html: highlightJava(value) + '\n' }} />
+        <pre ref={hl} className="code-hl" aria-hidden="true" dangerouslySetInnerHTML={{ __html: highlightJava(value) + '\n' }} />
         <textarea
           ref={ref}
           className="code-input"
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={onKeyDown}
+          onScroll={(e) => {
+            // the highlighted copy scrolls along, so text and cursor stay on top of each other
+            if (hl.current) {
+              hl.current.scrollTop = e.currentTarget.scrollTop;
+              hl.current.scrollLeft = e.currentTarget.scrollLeft;
+            }
+          }}
           spellCheck={false}
           autoCapitalize="off"
           autoCorrect="off"

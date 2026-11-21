@@ -27,9 +27,11 @@ import { DOMAIN_LABEL, type PracticeSet, type ProblemProgress } from '../lib/pra
 import { addCards, addCourse, addDeck, addWorkspace, addXp, deleteSkill, getState, updateSkill, useData } from '../lib/store';
 
 /** Saves a task as a flashcard into the deck „{Skill} – Karten“ (made the first time). */
-function cardHost(skill: Skill, progress: SetHost['progress']): SetHost {
+function cardHost(skill: Skill, progress: SetHost['progress'], updateSet?: SetHost['updateSet']): SetHost {
   return {
     progress,
+    updateSet,
+    level: skill.level,
     saveCard: (front, back, html) => {
       const name = `${skill.title} – Karten`;
       const d = getState().data;
@@ -143,7 +145,11 @@ function Planner({ skill }: { skill: Skill }) {
             <div className="practice">
               <PracticeSetView
                 set={skill.plan.placement}
-                host={cardHost(skill, (i, patch) => updateSkill(skill.id, (s) => ({ plan: { ...s.plan, placement: s.plan.placement && patchSet(s.plan.placement, i, patch) } })))}
+                host={cardHost(
+                  skill,
+                  (i, patch) => updateSkill(skill.id, (s) => ({ plan: { ...s.plan, placement: s.plan.placement && patchSet(s.plan.placement, i, patch) } })),
+                  (patch) => updateSkill(skill.id, (s) => ({ plan: { ...s.plan, placement: s.plan.placement && { ...s.plan.placement, ...patch } } })),
+                )}
                 head={<p className="muted small">Einstufung – löse, was du kannst; überspringe, was du nicht weißt.</p>}
                 onDone={<p className="form-ok">Fertig – jetzt plant Pip deinen Lernpfad.</p>}
               />
@@ -397,6 +403,7 @@ function LessonView({ skill, lessonId, onBack, onOpen }: { skill: Skill; lessonI
   const after = all[all.findIndex((l) => l.id === lessonId) + 1];
   const host = cardHost(skill, (i, patch) =>
     updateSkill(skill.id, (s) => ({ stages: s.stages.map((st) => ({ ...st, lessons: st.lessons.map((l) => (l.id === lessonId && l.set ? { ...l, set: patchSet(l.set, i, patch) } : l)) })) })),
+    (patch) => updateSkill(skill.id, (s) => ({ stages: s.stages.map((st) => ({ ...st, lessons: st.lessons.map((l) => (l.id === lessonId && l.set ? { ...l, set: { ...l.set, ...patch } } : l)) })) })),
   );
   return (
     <div className="practice">
@@ -474,7 +481,11 @@ function ReviewView({ skill, onBack }: { skill: Skill; onBack: () => void }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const host = cardHost(skill, (i, patch) => updateSkill(skill.id, (s) => ({ review: s.review && patchSet(s.review, i, patch) })));
+  const host = cardHost(
+    skill,
+    (i, patch) => updateSkill(skill.id, (s) => ({ review: s.review && patchSet(s.review, i, patch) })),
+    (patch) => updateSkill(skill.id, (s) => ({ review: s.review && { ...s.review, ...patch } })),
+  );
   return (
     <div className="practice">
       <button type="button" className="btn ghost sm" onClick={onBack}>

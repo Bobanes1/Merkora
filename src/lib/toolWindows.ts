@@ -60,6 +60,13 @@ export const toolWindows = {
   },
 };
 
+/** A window position kept on screen (8 px margin; the title bar always stays reachable). Pure – tested. */
+export function clampPos(x: number, y: number, width: number, viewW: number, viewH: number): { x: number; y: number } {
+  const maxX = Math.max(8, viewW - width - 8);
+  const maxY = Math.max(8, viewH - 48);
+  return { x: Math.min(Math.max(8, x), maxX), y: Math.min(Math.max(8, y), maxY) };
+}
+
 export function useToolWindows(): WindowsMap {
   return useSyncExternalStore(
     (l) => {

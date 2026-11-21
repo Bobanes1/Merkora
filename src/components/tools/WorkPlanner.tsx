@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { aiReady, completeJson } from '../../lib/ai';
 import { pomodoro } from '../../lib/pomodoro';
 import { addTodo, dueCards, useStore } from '../../lib/store';
@@ -34,6 +35,7 @@ type AiTips = { tips?: { title: string; reason: string }[]; summary?: string };
  * 4) Transfer straight into the To-do list (and optionally start Pomodoro right away).
  */
 export function WorkPlanner() {
+  const navigate = useNavigate();
   const data = useStore((s) => s.data);
   const canAi = useStore((s) => aiReady(s, 'chat'));
 
@@ -157,7 +159,7 @@ export function WorkPlanner() {
       }),
     );
     setSavedNotice(`${created.length} Aufgabe${created.length === 1 ? '' : 'n'} in deine To-do-Liste für heute übernommen.`);
-    toolWindows.open('todos');
+    navigate('/todos');
     if (startFirstTimer && created[0]) {
       pomodoro.startForTodo(created[0].id, created[0].minutes);
       toolWindows.open('pomodoro');

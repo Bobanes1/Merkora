@@ -33,6 +33,8 @@ export type PracticeSet = {
   topic: string;
   intro: string;
   example?: { problem: string; steps: string[]; answer?: string; code?: string };
+  /** The explanation once more, even simpler („Einfacher erklären“). */
+  simple?: { intro: string; example?: { problem: string; steps: string[]; answer?: string } };
   /** All tasks (new sets). */
   tasks?: Task[];
   /** Only in sets from v0.9.5 (see taskList). */
@@ -284,10 +286,42 @@ export function taskRules(kind: PracticeKind): string {
 }
 
 /** The common frame: explanation, worked example, then tasks that get harder. */
+/** How explanations are written: simple, everyday example first, every technical term explained at once. */
+export const PLAIN_RULE = `Erklärungen ("intro", "example", "hints") schreibst du EINFACH – so, dass jemand ohne Vorwissen sofort folgen kann:
+- Kurze Sätze (höchstens etwa 15 Wörter), ein Gedanke pro Satz, Du-Form.
+- Zuerst ein Alltagsbeispiel, dann erst der Fachbegriff. Jeden Fachbegriff sofort in Klammern erklären, z. B. "Erwartungswert (= was im Schnitt herauskommt)".
+- Keine Formel ohne einen Satz, der in Worten sagt, was sie bedeutet; Variablen in Worten benennen ("n = Anzahl Versuche").
+- "intro": 3–6 kurze Stichpunkte als Markdown-Liste ("- …"), kein langer Fließtext.
+- "example.steps": jeder Schritt ein kurzer Satz plus warum ("weil …").
+- Lieber zu einfach als zu schwer – die Tiefe kommt durch die Aufgaben.`;
+
 export function setFrame(kind: PracticeKind) {
-  return `Format: {"kind":"${kind === 'auto' ? 'math|java|law|music|language|general' : kind}","topic":"…","intro":"kurze, anschauliche Erklärung des Kerngedankens (3–6 Sätze)","example":{"problem":"…","steps":["Schritt 1 …","Schritt 2 …"],"answer":"…","code":"(nur bei Programmieren)"},"problems":[…],"labs":[…]}
+  return `${PLAIN_RULE}
+Format: {"kind":"${kind === 'auto' ? 'math|java|law|music|language|general' : kind}","topic":"…","intro":"- Stichpunkt 1\\n- Stichpunkt 2 …","example":{"problem":"…","steps":["Schritt 1 …","Schritt 2 …"],"answer":"…","code":"(nur bei Programmieren)"},"problems":[…],"labs":[…]}
 ${taskRules(kind)}
 Steigere die Schwierigkeit langsam: zuerst verstehen, dann anwenden, dann selbst lösen. Hinweise ("hints") helfen schrittweise, ohne die Lösung zu verraten.`;
+}
+
+/** „Einfacher erklären“: the explanation of a set once more, even simpler, with another everyday example. */
+export function simplerPrompt(set: PracticeSet, level = ''): Prompt {
+  return {
+    system: `Du erklärst ein Thema noch einmal VIEL einfacher – für jemanden, dem die erste Erklärung zu schwer war${level ? ` (Niveau: ${level})` : ''}. ${LANG_RULE}
+${PLAIN_RULE}
+Nutze ein anderes, sehr anschauliches Alltagsbeispiel und einen Bild-Vergleich ("Stell dir vor …"). Dann ein ganz einfaches Beispiel mit kleinen Schritten.
+Format: {"intro":"- …\\n- …","example":{"problem":"…","steps":["…"],"answer":"…"}}
+Antworte ausschließlich mit gültigem JSON.`,
+    user: `THEMA: ${set.topic}\n\nBISHERIGE ERKLÄRUNG:\n${set.intro}${set.example ? `\n\nBISHERIGES BEISPIEL:\n${set.example.problem}\n${set.example.steps.join('\n')}` : ''}`,
+    maxTokens: 1800,
+    json: true,
+  };
+}
+export function parseSimpler(raw: unknown): PracticeSet['simple'] | null {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const intro = s(r.intro, 3000);
+  if (!intro) return null;
+  const ex = (r.example ?? null) as Record<string, unknown> | null;
+  const example = ex && s(ex.problem) ? { problem: s(ex.problem), steps: arr(ex.steps, 10), answer: s(ex.answer) || undefined } : undefined;
+  return { intro, ...(example ? { example } : {}) };
 }
 
 /** The instruction for a practice set from deck material. */

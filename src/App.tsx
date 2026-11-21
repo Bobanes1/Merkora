@@ -13,6 +13,7 @@ import Settings from './pages/Settings';
 import CalendarPage from './pages/Calendar';
 import Stats from './pages/Stats';
 import Skills from './pages/Skills';
+import Todos from './pages/Todos';
 import SkillPage from './pages/SkillPage';
 import Tools from './pages/Tools';
 import Setup from './pages/Setup';
@@ -60,6 +61,7 @@ export default function App() {
         <Route path="/calendar" element={<AppLayout><CalendarPage /></AppLayout>} />
         <Route path="/stats" element={<AppLayout><Stats /></AppLayout>} />
         <Route path="/skills" element={<AppLayout><Skills /></AppLayout>} />
+        <Route path="/todos" element={<AppLayout><Todos /></AppLayout>} />
         <Route path="/skills/:id" element={<AppLayout><SkillPage /></AppLayout>} />
         <Route path="/tools" element={<AppLayout><Tools /></AppLayout>} />
         <Route path="/sync-callback" element={<SyncCallback />} />

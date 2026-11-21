@@ -10,7 +10,7 @@ import { newSrs, schedule, setSchedulerOptions, type Rating, type Srs } from './
 import { dayKey, uid, uniqueSlug } from './util';
 import type { Diagram } from './diagram';
 import type { AskSide } from './askSide';
-import type { Todo } from './todos';
+import { nextDue, type Todo } from './todos';
 import { moveCardsIn } from './moveCards';
 
 export type Provider = 'openai' | 'anthropic' | 'gemini' | 'openrouter' | 'custom';
@@ -859,9 +859,16 @@ export function addTodo(t: Omit<Todo, 'id' | 'createdAt'>): Todo {
 export function updateTodo(id: string, patch: Partial<Todo>) {
   update((d) => ({ ...d, todos: (d.todos ?? []).map((t) => (t.id === id ? { ...t, ...patch, updatedAt: Date.now() } : t)) }));
 }
-export function toggleTodo(id: string) {
+/** Checks a to-do off (or opens it again). A repeating one gets its next copy; returns that copy's id. */
+export function toggleTodo(id: string): string | undefined {
   const t = getState().data.todos?.find((x) => x.id === id);
-  if (t) updateTodo(id, { doneAt: t.doneAt ? undefined : Date.now() });
+  if (!t) return;
+  updateTodo(id, { doneAt: t.doneAt ? undefined : Date.now() });
+  if (!t.doneAt && t.repeat) {
+    const { id: _id, createdAt: _c, doneAt: _d, updatedAt: _u, order: _o, ...rest } = t;
+    void _id, _c, _d, _u, _o;
+    return addTodo({ ...rest, due: nextDue(t.due, t.repeat), subtasks: t.subtasks?.map((s) => ({ ...s, done: false })) }).id;
+  }
 }
 export function deleteTodo(id: string) {
   update((d) => ({ ...d, todos: (d.todos ?? []).filter((t) => t.id !== id), deleted: tomb(d, [id]) }));

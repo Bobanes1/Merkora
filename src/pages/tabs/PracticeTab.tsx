@@ -47,6 +47,7 @@ export default function PracticeTab({ deck }: { deck: Deck }) {
       progress: (i, patch) =>
         updateDeck(deck.id, (d) => ({ practice: (d.practice ?? []).map((s) => (s.id === open.id ? { ...s, progress: s.progress.map((p, k) => (k === i ? { ...p, ...patch } : p)) } : s)) })),
       saveCard: (front, back, html) => (addCards(deck.id, [{ front, back, ...(html ? { html: true } : {}) }]), 'Als Karte gespeichert'),
+      updateSet: (patch) => updateDeck(deck.id, (d) => ({ practice: (d.practice ?? []).map((s) => (s.id === open.id ? { ...s, ...patch } : s)) })),
     };
     return (
       <div className="practice">

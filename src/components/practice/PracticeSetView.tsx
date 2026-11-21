@@ -3,10 +3,10 @@ import { CardContent } from '../CardContent';
 import { CodeEditor } from '../CodeEditor';
 import { IconCheck, IconClose, IconPlay, IconPlus } from '../Icons';
 import { Lab } from '../labs/Labs';
-import { gradeAnswer } from '../../lib/ai';
+import { completeJson, gradeAnswer } from '../../lib/ai';
 import { openExternal } from '../../lib/desktop';
 import { buildHarness, harnessOffset, localJava, mapErrors, parseResults, runJavaLocal, runJavaOnline, type RunResult, type TestResult } from '../../lib/javaRun';
-import { checkAnswer, DOMAIN_LABEL, problemCount, solvedCount, taskList, type JavaProblem, type MathProblem, type PracticeSet, type ProblemProgress } from '../../lib/practice';
+import { checkAnswer, parseSimpler, simplerPrompt, DOMAIN_LABEL, problemCount, solvedCount, taskList, type JavaProblem, type MathProblem, type PracticeSet, type ProblemProgress } from '../../lib/practice';
 import { setSettings, useStore } from '../../lib/store';
 import { CaseTaskView, ClassifyTaskView, ClozeTaskView, MultiTaskView, OrderTaskView } from './ActiveTasks';
 import { MusicTaskView } from './MusicTask';
@@ -19,6 +19,10 @@ export type SetHost = {
   progress: (i: number, patch: Partial<ProblemProgress>) => void;
   /** Saves a task as a flashcard (front/back, HTML or plain). Returns a short note to show. */
   saveCard: (front: string, back: string, html?: boolean) => string;
+  /** Changes the set itself (e.g. stores the simpler explanation). */
+  updateSet?: (patch: Partial<PracticeSet>) => void;
+  /** Education level of the person (for simpler explanations). */
+  level?: string;
 };
 
 /** Shared by all task views: progress of this task, saving it, going on. */
@@ -40,31 +44,7 @@ export function PracticeSetView({ set, host, head, onDone }: { set: PracticeSet;
         {head}
         <span className={'badge ' + set.kind}>{DOMAIN_LABEL[set.kind] ?? 'Übung'}</span>
         <h2>{set.topic}</h2>
-        {set.intro && <CardContent text={set.intro} className="practice-intro" />}
-        {set.example && (
-          <div className="practice-example">
-            <b>Beispiel</b>
-            <CardContent text={set.example.problem} />
-            {set.example.code && <pre className="code" dangerouslySetInnerHTML={{ __html: esc(set.example.code) }} />}
-            {set.example.steps.slice(0, steps).map((s, k) => (
-              <div key={k} className="practice-step">
-                <span>{k + 1}</span>
-                <CardContent text={s} />
-              </div>
-            ))}
-            {steps < set.example.steps.length ? (
-              <button type="button" className="btn outline sm" onClick={() => setSteps((x) => x + 1)}>
-                {steps ? 'Nächster Schritt' : 'Lösungsweg zeigen'} ({steps}/{set.example.steps.length})
-              </button>
-            ) : (
-              set.example.answer && (
-                <p>
-                  <b>Ergebnis:</b> <CardContent text={set.example.answer} className="inline" />
-                </p>
-              )
-            )}
-          </div>
-        )}
+        <Explanation set={set} host={host} steps={steps} setSteps={setSteps} />
       </section>
       {set.labs.map((l, k) => (
         <Lab key={k} spec={l} />
@@ -90,6 +70,81 @@ export function PracticeSetView({ set, host, head, onDone }: { set: PracticeSet;
         {t?.type === 'music' && <MusicTaskView key={set.id + i} ctx={ctx} task={t} />}
         {done === n && (onDone ?? <p className="form-ok">Alle Aufgaben gelöst – stark!</p>)}
       </section>
+    </>
+  );
+}
+
+/** The explanation and worked example – or the simpler version („Einfacher erklären“). */
+function Explanation({ set, host, steps, setSteps }: { set: PracticeSet; host: SetHost; steps: number; setSteps: (f: (x: number) => number) => void }) {
+  const [original, setOriginal] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const simple = !original && set.simple;
+  const intro = simple ? set.simple!.intro : set.intro;
+  const example = simple ? set.simple!.example : set.example;
+  const code = !simple ? set.example?.code : undefined;
+  const simplify = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      const p = simplerPrompt(set, host.level);
+      const r = parseSimpler(await completeJson(p.system, p.user, p.maxTokens));
+      if (!r) throw new Error('Die KI hat keine einfachere Erklärung geliefert. Bitte nochmal versuchen.');
+      host.updateSet?.({ simple: r });
+      setOriginal(false);
+      setSteps(() => 0);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      {intro && (
+        <div className="practice-intro">
+          {simple && <span className="badge ok">einfacher erklärt</span>}
+          <CardContent text={intro} />
+        </div>
+      )}
+      {example && (
+        <div className="practice-example">
+          <b>Beispiel</b>
+          <CardContent text={example.problem} />
+          {code && <pre className="code" dangerouslySetInnerHTML={{ __html: esc(code) }} />}
+          {example.steps.slice(0, steps).map((s, k) => (
+            <div key={k} className="practice-step">
+              <span>{k + 1}</span>
+              <CardContent text={s} />
+            </div>
+          ))}
+          {steps < example.steps.length ? (
+            <button type="button" className="btn outline sm" onClick={() => setSteps((x) => x + 1)}>
+              {steps ? 'Nächster Schritt' : 'Lösungsweg zeigen'} ({steps}/{example.steps.length})
+            </button>
+          ) : (
+            example.answer && (
+              <p>
+                <b>Ergebnis:</b> <CardContent text={example.answer} className="inline" />
+              </p>
+            )
+          )}
+        </div>
+      )}
+      {host.updateSet && (
+        <div className="row-gap">
+          {set.simple ? (
+            <button type="button" className="btn ghost sm" onClick={() => (setOriginal(!original), setSteps(() => 0))}>
+              {original ? 'Einfache Erklärung zeigen' : 'Original zeigen'}
+            </button>
+          ) : (
+            <button type="button" className="btn outline sm" onClick={() => void simplify()} disabled={busy}>
+              {busy ? 'Pip erklärt es einfacher …' : '🙂 Einfacher erklären'}
+            </button>
+          )}
+          {error && <span className="form-error small">{error}</span>}
+        </div>
+      )}
     </>
   );
 }

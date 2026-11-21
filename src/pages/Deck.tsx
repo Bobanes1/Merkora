@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ChatPanel } from '../components/ChatPanel';
 import { ExamDialog } from '../components/ExamDialog';
 import { countdownText, nextExamForDeck } from '../lib/exams';
@@ -62,7 +62,7 @@ export default function DeckPage() {
   const barTab = tab === 'mastery' ? 'learn' : tab;
   const setTab = (t: TabId) => setParams({ tab: t });
   const [examDialog, setExamDialog] = useState(false);
-  const [todoDialog, setTodoDialog] = useState(false);
+  const navigate = useNavigate();
   const [moreTabs, setMoreTabs] = useState(false);
   const [menu, setMenu] = useState(false);
 
@@ -132,7 +132,7 @@ export default function DeckPage() {
             <button
               type="button"
               className="btn ghost sm"
-              onClick={() => setTodoDialog(true)}
+              onClick={() => navigate(`/todos?deck=${deck.id}`)}
               title={todos ? `${todos} offene${todos === 1 ? 's' : ''} To-do${todos === 1 ? '' : 's'} – in Merkora Tools` : 'To-do zu diesem Deck anlegen'}
             >
               <IconCheck size={14} /> {todos ? `${todos} To-do${todos === 1 ? '' : 's'}` : 'To-do'}
@@ -248,7 +248,7 @@ export default function DeckPage() {
             <button type="button" onClick={() => (setMenu(false), setChat(true))}>
               <IconChat size={20} /> Tutor Pip fragen
             </button>
-            <button type="button" onClick={() => (setMenu(false), setTodoDialog(true))}>
+            <button type="button" onClick={() => (setMenu(false), navigate(`/todos?deck=${deck.id}`))}>
               <IconCheck size={20} /> {todos ? `To-dos (${todos} offen) – neues anlegen` : 'To-do anlegen'}
             </button>
             {exam ? (
@@ -265,15 +265,6 @@ export default function DeckPage() {
       )}
       {chat && <ChatPanel deck={deck} onClose={() => setChat(false)} />}
       {examDialog && <ExamDialog presetDeckId={deck.id} onClose={() => setExamDialog(false)} />}
-      {todoDialog && (
-        <PromptModal
-          title="To-do zu diesem Deck"
-          label={`Was steht bei „${deck.name}“ an? (erscheint auf der Startseite)`}
-          confirm="Hinzufügen"
-          onSubmit={(text) => addTodo({ text, deckId: deck.id })}
-          onClose={() => setTodoDialog(false)}
-        />
-      )}
     </div>
   );
 }

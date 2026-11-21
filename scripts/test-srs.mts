@@ -1550,6 +1550,33 @@ console.log('Skills: Speichern und Laden');
   ok(loaded.skills?.length === 1 && loaded.skills[0].id === 's1' && (loaded.decks[0] as any).practice?.[0].id === 'p', 'Skills und Deck-Aufgaben überstehen das Neuladen');
 }
 
+console.log('To-do-Seite: Schnelleingabe, Wiederholen, Unteraufgaben');
+{
+  const T = await import('../src/lib/todos');
+  const now = new Date(2026, 10, 21, 10, 0).getTime(); // Sa, 21.11.2026
+  const decks = [{ id: 'b', name: 'Biologie' }, { id: 'z', name: 'Zelle und Gewebe' }];
+  const q = T.parseQuickTodo('Zusammenfassung schreiben morgen 14:00 !hoch #Biologie 30min', decks, now);
+  ok(q.text === 'Zusammenfassung schreiben' && q.due === '2026-11-22' && q.time === '14:00' && q.priority === 'high' && q.deckId === 'b' && q.minutes === 30, 'Schnelleingabe erkennt Datum, Uhrzeit, Priorität, Deck, Dauer: ' + JSON.stringify(q));
+  ok(T.parseQuickTodo('Karten lernen am Mo', decks, now).due === '2026-11-23' && T.parseQuickTodo('Abgabe 24.12.', decks, now).due === '2026-12-24' && T.parseQuickTodo('Rückblick 3.1.', decks, now).due === '2027-01-03', 'Wochentag und Datum (auch nächstes Jahr)');
+  ok(T.parseQuickTodo('Wiederholen jede Woche 1,5h', decks, now).repeat === 'weekly' && T.parseQuickTodo('Wiederholen jede Woche 1,5h', decks, now).minutes === 90 && T.parseQuickTodo('Vokabeln täglich 9 uhr', decks, now).time === '09:00', 'Wiederholen, Dauer in Stunden, Uhrzeit mit „uhr“');
+  ok(T.parseQuickTodo('Mitose #Zelle und Gewebe wiederholen', decks, now).deckId === 'z' && T.parseQuickTodo('Mitose #Zelle und Gewebe wiederholen', decks, now).text === 'Mitose wiederholen', 'Deck mit mehreren Wörtern');
+  ok(T.parseQuickTodo('Termin 99:99 #unbekannt', decks, now).text === 'Termin 99:99 #unbekannt', 'Unbekanntes bleibt im Text');
+  ok(T.nextDue('2026-11-20', 'daily') === '2026-11-21' && T.nextDue('2026-11-20', 'weekdays') === '2026-11-23' && T.nextDue('2026-11-20', 'weekly') === '2026-11-27', 'nächstes Datum: täglich, werktags (Fr → Mo), wöchentlich');
+  ok(T.nextDue('2026-01-31', 'monthly') === '2026-02-28' && T.nextDue('2026-12-15', 'monthly') === '2027-01-15', 'monatlich, auch am Monatsende und Jahreswechsel');
+  ok(JSON.stringify(T.subtaskProgress({ subtasks: [{ id: 'a', text: 'a', done: true }, { id: 'b', text: 'b' }] })) === '{"done":1,"total":2}' && T.subtaskProgress({}) === null, 'Fortschritt der Unteraufgaben');
+  const sorted = T.sortTodos([{ createdAt: 1, priority: 'low' as const }, { createdAt: 2, priority: 'high' as const }, { createdAt: 3, order: 0 }]);
+  ok(sorted[0].createdAt === 3 && sorted[1].priority === 'high', 'Sortierung: eigene Reihenfolge, dann Priorität');
+  ok(T.plannedDays([{ due: '2026-11-22' }, { due: '2026-11-22', doneAt: 1 }], now, 3)[1].items.length === 1, 'Geplant: Tage mit offenen To-dos');
+
+  const { clampPos } = await import('../src/lib/toolWindows');
+  ok(JSON.stringify(clampPos(-50, 9999, 300, 1200, 800)) === '{"x":8,"y":752}' && JSON.stringify(clampPos(100, 100, 300, 1200, 800)) === '{"x":100,"y":100}', 'Fenster bleiben sichtbar');
+
+  const { setFrame, PLAIN_RULE, simplerPrompt, parseSimpler } = await import('../src/lib/practice');
+  ok(setFrame('math').startsWith(PLAIN_RULE) && PLAIN_RULE.includes('Alltagsbeispiel'), 'einfache Sprache in jeder Aufgaben-Anfrage');
+  const sp = simplerPrompt({ topic: 'Varianz', intro: 'x', example: { problem: 'p', steps: ['s'] } } as any, 'Gymnasium');
+  ok(sp.user.includes('THEMA: Varianz') && sp.system.includes('Gymnasium') && parseSimpler({ intro: '- einfach' })!.intro === '- einfach' && parseSimpler({}) === null, '„Einfacher erklären“: Anfrage und Antwort');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

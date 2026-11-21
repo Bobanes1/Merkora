@@ -80,16 +80,11 @@ function SidebarToolbar({ onNavigate }: { onNavigate: () => void }) {
             <span>Pomodoro-Timer</span>
             {pomoClock && <span className="pill-count pomo-pill">{pomoClock}</span>}
           </button>
-          <button
-            type="button"
-            className={`toolbar-btn ${wins.todos.open ? 'active' : ''}`}
-            onClick={() => (toolWindows.toggle('todos'), onNavigate())}
-            title="To-do-Liste als Popup öffnen"
-          >
+          <Link to="/todos" onClick={onNavigate} className={`toolbar-btn ${pathname === '/todos' ? 'soft-on' : ''}`} title="To-do-Liste öffnen">
             <IconChecklist size={15} />
             <span>To-do-Liste</span>
             {openTodos > 0 && <span className="pill-count soft">{openTodos}</span>}
-          </button>
+          </Link>
           <Link
             to="/tools?tab=plan"
             onClick={onNavigate}
@@ -285,6 +280,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </NavLink>
           <NavLink to="/skills" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             <IconPractice /> Skills
+          </NavLink>
+          <NavLink to="/todos" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            <IconChecklist /> To-dos
           </NavLink>
           <NavLink to="/calendar" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             <IconCalendar /> Prüfungen

@@ -9543,3 +9543,74 @@ html.phone .tool-win.minimized {
   margin: 0;
 }
 
+
+/* code editor: text field, highlighted copy and line numbers share exactly the same metrics,
+   so the cursor always sits on the line you see (line height in pixels, no bold, no ligatures) */
+:root { --code-font: ui-monospace, 'Cascadia Mono', 'Cascadia Code', Consolas, 'DejaVu Sans Mono', 'Courier New', monospace; --code-size: 13px; --code-line: 20px; }
+.code-gutter, .code-hl, .code-input {
+  font-family: var(--code-font) !important;
+  font-size: var(--code-size) !important;
+  line-height: var(--code-line) !important;
+  font-weight: 400 !important;
+  letter-spacing: 0 !important;
+  word-spacing: 0 !important;
+  font-variant-ligatures: none;
+  font-feature-settings: 'liga' 0, 'calt' 0;
+  tab-size: 4;
+  -moz-tab-size: 4;
+  text-rendering: optimizeSpeed;
+}
+.code-gutter { padding: 10px 6px 10px 10px; }
+.code-gutter span { display: block; height: var(--code-line); }
+.code-hl, .code-input { padding: 10px 12px !important; border: 0 !important; margin: 0 !important; box-sizing: border-box; white-space: pre !important; overflow-wrap: normal !important; word-break: normal !important; }
+.code-input { -webkit-appearance: none; appearance: none; border-radius: 0; box-shadow: none !important; }
+.code-hl .tk-kw { font-weight: 400; }
+.code-hl * { font: inherit; }
+
+/* ---------- to-do page ---------- */
+.todos-page { display: grid; gap: 12px; }
+.todos-page > * { min-width: 0; }
+.todos-page kbd { font-size: 0.75rem; padding: 0 4px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-2); }
+.todo-quick .input-row .input { flex: 1; min-width: 0; }
+.todo-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
+.todo-fields { display: flex; flex-wrap: wrap; gap: 8px 12px; margin-top: 8px; }
+.todo-fields label { display: grid; gap: 2px; font-size: 0.8rem; color: var(--muted); }
+.todos-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.todos-bar .input.sm { width: auto; min-width: 140px; }
+.todos-bar input[type='search'] { flex: 1; min-width: 160px; }
+.seg-count { font-size: 0.75rem; opacity: 0.7; margin-left: 2px; }
+.todos-bulk { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 12px; border-radius: var(--r-md); background: var(--primary-soft); }
+.btn.danger { color: var(--danger); }
+.todo-section h2 { display: flex; gap: 8px; align-items: baseline; font-size: 1rem; margin: 0 0 8px; }
+.todo-section.t-overdue h2 { color: var(--danger); }
+.todo-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.todo-row { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface-2); border-left: 4px solid transparent; }
+.todo-row.prio-high { border-left-color: var(--danger); }
+.todo-row.prio-mid { border-left-color: var(--warn-ink); }
+.todo-row.prio-low { border-left-color: var(--line-strong); }
+.todo-row.focused { box-shadow: 0 0 0 2px var(--primary-soft); border-color: var(--primary); }
+.todo-row.done .todo-text { text-decoration: line-through; color: var(--muted); }
+.todo-line { display: flex; align-items: center; gap: 8px; padding: 6px 8px; }
+.todo-select { flex: none; opacity: 0.35; }
+.todo-row:hover .todo-select, .todo-select:checked { opacity: 1; }
+.todo-line .todo-check { flex: none; }
+.todo-main { flex: 1; min-width: 0; display: grid; gap: 2px; text-align: left; background: none; border: 0; color: inherit; cursor: pointer; padding: 2px 0; }
+.todo-main .todo-text { overflow-wrap: anywhere; }
+.todo-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 0.78rem; color: var(--muted); }
+.todo-meta .bad { color: var(--danger); font-weight: 600; }
+.prio-dot { width: 8px; height: 8px; border-radius: 50%; align-self: center; }
+.prio-dot.prio-high, .chip.prio-high { background: var(--danger); color: var(--white); border-color: var(--danger); }
+.prio-dot.prio-mid { background: var(--warn-ink); }
+.prio-dot.prio-low { background: var(--line-strong); }
+.todo-actions { display: flex; gap: 2px; flex: none; }
+.todo-actions .icon-btn.on { color: var(--primary); }
+.todo-details { display: grid; gap: 8px; padding: 8px 12px 12px 44px; border-top: 1px solid var(--line); }
+.todo-subs { display: grid; gap: 4px; }
+.todo-sub { display: flex; gap: 6px; align-items: center; }
+.todo-sub .input { flex: 1; }
+.todo-sub.done .input { text-decoration: line-through; color: var(--muted); }
+.todo-undo { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 60; display: flex; gap: 12px; align-items: center; padding: 10px 14px; border-radius: var(--r-md); background: var(--ink); color: var(--white); box-shadow: var(--shadow-pop); max-width: calc(100vw - 32px); }
+.todo-cta .path-cta-icon { background: var(--ok-soft); color: var(--ok-ink); }
+html.phone .todo-details { padding-left: 12px; }
+html.phone .todo-undo { bottom: 84px; }
+html.phone .todos-bar .input.sm { flex: 1; min-width: 120px; }

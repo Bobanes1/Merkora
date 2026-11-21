@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { CodeEditor } from '../components/CodeEditor';
 import { IconChecklist, IconPlay, IconPopout, IconSparkle, IconTimer } from '../components/Icons';
 import { Lab, LAB_DEFAULTS, LAB_TITLES } from '../components/labs/Labs';
 import { Piano } from '../components/practice/MusicTask';
 import { PomodoroTool } from '../components/tools/PomodoroTool';
-import { TodoTool } from '../components/tools/TodoTool';
 import { WorkPlanner } from '../components/tools/WorkPlanner';
 import { buildHarness, localJava, runJavaLocal, runJavaOnline } from '../lib/javaRun';
 import { setSettings } from '../lib/store';
@@ -15,7 +14,6 @@ type Tab = 'plan' | 'todos' | 'pomodoro' | 'labs' | 'piano' | 'java';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'plan', label: 'Arbeitsplanung' },
-  { id: 'todos', label: 'To-do-Liste' },
   { id: 'pomodoro', label: 'Pomodoro-Timer' },
   { id: 'labs', label: 'Mathe-Labore' },
   { id: 'piano', label: 'Klavier' },
@@ -29,6 +27,8 @@ const TABS: { id: Tab; label: string }[] = [
 export default function Tools() {
   const [params, setParams] = useSearchParams();
   const raw = params.get('tab') as Tab | null;
+  // the to-do list has its own page now
+  if ((raw as string) === 'todos') return <Navigate to="/todos" replace />;
   const tab: Tab = raw && TABS.some((t) => t.id === raw) ? raw : 'plan';
   const setTab = (id: Tab) => setParams({ tab: id }, { replace: true });
 
@@ -43,9 +43,9 @@ export default function Tools() {
           <button type="button" className="btn outline sm" onClick={() => toolWindows.open('pomodoro')}>
             <IconTimer size={15} /> Pomodoro-Popup
           </button>
-          <button type="button" className="btn outline sm" onClick={() => toolWindows.open('todos')}>
-            <IconChecklist size={15} /> To-do-Popup
-          </button>
+          <Link to="/todos" className="btn outline sm">
+            <IconChecklist size={15} /> To-do-Liste
+          </Link>
         </div>
       </div>
 
@@ -58,26 +58,6 @@ export default function Tools() {
       </div>
 
       {tab === 'plan' && <WorkPlanner />}
-
-      {tab === 'todos' && (
-        <section className="panel">
-          <div className="panel-head">
-            <div>
-              <h2>To-do-Liste</h2>
-              <p className="muted small">Deine Aufgaben – inklusive geplanter Blöcke aus der Arbeitsplanung.</p>
-            </div>
-            <div className="row-gap">
-              <button type="button" className="btn ghost sm" onClick={() => setTab('plan')}>
-                <IconSparkle size={14} /> Arbeitsplanung
-              </button>
-              <button type="button" className="btn outline sm" onClick={() => toolWindows.open('todos')}>
-                <IconPopout size={14} /> Als Popup öffnen
-              </button>
-            </div>
-          </div>
-          <TodoTool />
-        </section>
-      )}
 
       {tab === 'pomodoro' && (
         <section className="panel tools-pomo-panel">

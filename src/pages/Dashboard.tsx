@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { AnkiImport } from '../components/AnkiImport';
 import { CreateWithAI } from '../components/CreateWithAI';
 import { ExamDialog } from '../components/ExamDialog';
-import { IconCalendar, IconCards, IconChevron, IconFlame, IconPlay, IconPlus, IconSparkle, IconStar, IconTarget, IconSearch, IconUpload, IconPractice } from '../components/Icons';
+import { IconCalendar, IconCards, IconChevron, IconFlame, IconPlay, IconPlus, IconSparkle, IconStar, IconTarget, IconSearch, IconUpload, IconPractice, IconChecklist } from '../components/Icons';
 import { nextLesson } from '../lib/skills';
 import { FoldPanel } from '../components/FoldPanel';
 import { Mascot } from '../components/Mascot';
@@ -137,6 +137,9 @@ export default function Dashboard() {
   // the skill used last (active ones only)
   const lastSkill = [...(data.skills ?? [])].filter((s) => s.status === 'active').sort((a, b) => b.updatedAt - a.updatedAt)[0];
   const skillNext = lastSkill ? { skill: lastSkill, lesson: nextLesson(lastSkill)?.lesson.title } : null;
+  // to-dos of today (and overdue ones) for the line on the start page
+  const todayKey = dayKey(Date.now());
+  const todosToday = (data.todos ?? []).filter((t) => !t.doneAt && t.due && t.due <= todayKey);
   const cardGoal = data.settings.cardGoal ?? 50;
   const minuteGoal = data.settings.minuteGoal ?? 60;
   const deckSort = data.settings.homeDeckSort ?? 'due';
@@ -233,6 +236,16 @@ export default function Dashboard() {
                 <span className="btn primary sm">{pathDeck.p.done ? 'Weiterspielen' : 'Starten'}</span>
               </Link>
             )}
+            <Link to="/todos" className="path-cta todo-cta">
+              <span className="path-cta-icon">
+                <IconChecklist size={22} />
+              </span>
+              <span className="grow">
+                <b>To-dos{todosToday.length ? `: ${todosToday.length} für heute` : ''}</b>
+                <small>{todosToday.length ? todosToday.slice(0, 3).map((t) => t.text).join(' · ') : 'Nichts fällig – plane deine nächsten Schritte'}</small>
+              </span>
+              <span className="btn outline sm">Öffnen</span>
+            </Link>
             {skillNext && (
               <Link to={`/skills/${skillNext.skill.id}`} className="path-cta skill-cta">
                 <span className="path-cta-icon">
