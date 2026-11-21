@@ -3,7 +3,8 @@ import { Aquarium } from '../components/Aquarium';
 import { Link } from 'react-router-dom';
 import { groupTotals, levelCounts, masteryPercent, statsTree, streak, type DeckStat, type StatTotals } from '../lib/stats';
 import { deckUrl, dueCards, setSettings, useData } from '../lib/store';
-import { IconCards, IconChevronDown, IconFolder } from '../components/Icons';
+import { IconCards, IconChevronDown, IconFlame, IconFolder } from '../components/Icons';
+import { bestStreakAll, skillDays } from '../lib/skills';
 import { DAY, dayKey, startOfDay } from '../lib/util';
 import { WeekReview } from '../components/WeekReview';
 
@@ -213,6 +214,8 @@ export default function Stats() {
         </div>
       </section>
 
+      <SkillWeek />
+
       <section className="panel">
         <div className="panel-head">
           <h2>Lernzeit pro Tag</h2>
@@ -333,5 +336,44 @@ export default function Stats() {
       </section>
       {tip.node}
     </div>
+  );
+}
+
+/** Skills: solved tasks of the last 7 days and the best current skill streak. */
+function SkillWeek() {
+  const skills = useData().skills ?? [];
+  if (!skills.length) return null;
+  const days = skillDays(skills, 7);
+  const max = Math.max(1, ...days.map((d) => d.tasks));
+  const best = bestStreakAll(skills);
+  const total = days.reduce((a, d) => a + d.tasks, 0);
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2>Skills</h2>
+        <small className={best ? 'sg-streak on' : 'muted'}>
+          {best ? (
+            <>
+              <IconFlame size={13} /> beste Serie: {best} {best === 1 ? 'Tag' : 'Tage'}
+            </>
+          ) : (
+            'Erreiche das Tagesziel eines Skills, um eine Serie zu starten'
+          )}
+        </small>
+      </div>
+      <p className="muted small">{total} gelöste Aufgaben in den letzten 7 Tagen</p>
+      <div className="forecast week" role="img" aria-label="Gelöste Skill-Aufgaben der letzten 7 Tage">
+        {days.map((d) => (
+          <div key={d.t} className="fc-col" title={`${d.tasks} Aufgaben`}>
+            <i style={{ height: `${(d.tasks / max) * 100}%` }} className={d.tasks ? '' : 'zero'} />
+          </div>
+        ))}
+      </div>
+      <div className="fc-axis">
+        {days.map((d) => (
+          <small key={d.t}>{new Date(d.t).toLocaleDateString('de-DE', { weekday: 'short' })}</small>
+        ))}
+      </div>
+    </section>
   );
 }

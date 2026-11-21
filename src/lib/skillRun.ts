@@ -210,11 +210,13 @@ export function makeStageSheet(id: string, stageId: string) {
   });
 }
 
-export function makeReview(id: string) {
+/** A mixed review – or, with lesson ids, a training of just those (weak) topics. */
+export function makeReview(id: string, focusIds?: string[]) {
   return run(id + ':review', async () => {
     const s = skill(id);
     if (!s) return;
-    const set = setOf(await ask(reviewPrompt(s)));
-    updateSkill(id, { review: set });
+    const focus = focusIds?.length ? s.stages.flatMap((st) => st.lessons).filter((l) => focusIds.includes(l.id)) : undefined;
+    const set = setOf(await ask(reviewPrompt(s, focus)));
+    updateSkill(id, { review: set, reviewFocus: focus?.map((l) => l.title) });
   });
 }

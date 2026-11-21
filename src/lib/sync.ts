@@ -448,6 +448,13 @@ function mergeSet(a?: PracticeSet, b?: PracticeSet): PracticeSet | undefined {
   return { ...a, progress: a.progress.map((x, i) => { const y = b.progress[i]; return y ? { solved: x.solved || y.solved, tries: Math.max(x.tries, y.tries), hints: Math.max(x.hints, y.hints), shown: x.shown || y.shown } : x; }) };
 }
 /** A skill changed on two devices: the newer plan wins, lessons and tests keep the progress of both. */
+const mergeDays = (a?: Record<string, number>, b?: Record<string, number>) => {
+  if (!a && !b) return undefined;
+  const out = { ...(a ?? {}) };
+  for (const [k, n] of Object.entries(b ?? {})) out[k] = Math.max(n, out[k] ?? 0);
+  return out;
+};
+
 export function mergeSkill(a: Skill, b: Skill): Skill {
   const newer = b.updatedAt > a.updatedAt ? b : a;
   const older = newer === a ? b : a;
@@ -457,6 +464,8 @@ export function mergeSkill(a: Skill, b: Skill): Skill {
     ...newer,
     plan: { ...older.plan, ...newer.plan },
     review: mergeSet(newer.review, older.review),
+    // solved tasks per day: the higher count of each day (learning on two devices loses nothing)
+    activity: mergeDays(older.activity, newer.activity),
     stages: newer.stages.map((st) => ({
       ...st,
       test: mergeSet(st.test, oldStages.get(st.id)?.test),

@@ -10,7 +10,7 @@ import { AnkiImport } from '../components/AnkiImport';
 import { CreateWithAI } from '../components/CreateWithAI';
 import { ExamDialog } from '../components/ExamDialog';
 import { IconCalendar, IconCards, IconChevron, IconFlame, IconPlay, IconPlus, IconSparkle, IconStar, IconTarget, IconSearch, IconUpload, IconPractice, IconChecklist } from '../components/Icons';
-import { nextLesson } from '../lib/skills';
+import { nextLesson, skillStreak, skillToday } from '../lib/skills';
 import { FoldPanel } from '../components/FoldPanel';
 import { Mascot } from '../components/Mascot';
 import { usePhone } from '../lib/phone';
@@ -266,6 +266,8 @@ export default function Dashboard() {
                   <b>Weiterüben: {skillNext.skill.title}</b>
                   <small>
                     {skillNext.lesson ? `Lektion: ${skillNext.lesson}` : 'Alle Lektionen geschafft – Stufentest wartet'}
+                    {` · heute ${skillToday(skillNext.skill).done}/${skillToday(skillNext.skill).goal}`}
+                    {skillStreak(skillNext.skill) > 0 && ` · Serie ${skillStreak(skillNext.skill)}`}
                   </small>
                 </span>
                 <span className="btn outline sm">Üben</span>

@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { attachSkillFiles } from '../lib/deckFiles';
 import { Link, useNavigate } from 'react-router-dom';
-import { IconClose, IconNote, IconSparkle, IconUpload } from '../components/Icons';
+import { IconClose, IconFlame, IconNote, IconSparkle, IconUpload } from '../components/Icons';
 import { NoKeyNotice } from '../components/NoKey';
 import { hasKey } from '../lib/ai';
 import { MATERIAL_ACCEPT, readFileText } from '../lib/files';
 import { DOMAIN_LABEL } from '../lib/practice';
 import { startSkill } from '../lib/skillRun';
-import { nextLesson, skillProgress } from '../lib/skills';
+import { nextLesson, skillProgress, skillStreak, skillToday } from '../lib/skills';
 import { setSettings, useData } from '../lib/store';
 import type { Skill } from '../lib/skills';
 
@@ -138,9 +138,27 @@ function SkillTile({ skill }: { skill: Skill }) {
             <i style={{ width: `${Math.round(p.share * 100)}%` }} />
           </span>
           {next && <small>Weiter: {next.lesson.title}</small>}
+          <SkillTileGoal skill={skill} />
         </>
       )}
     </Link>
   );
 }
 
+
+/** Today's goal and the streak on a skill tile. */
+function SkillTileGoal({ skill }: { skill: Skill }) {
+  const t = skillToday(skill);
+  const streak = skillStreak(skill);
+  if (!t.done && !streak) return null;
+  return (
+    <small className={'tile-goal' + (t.reached ? ' reached' : '')}>
+      {streak > 0 && (
+        <span className="sg-streak on">
+          <IconFlame size={12} /> {streak}
+        </span>
+      )}
+      heute {t.done}/{t.goal}
+    </small>
+  );
+}

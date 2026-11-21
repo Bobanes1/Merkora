@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { minutesPerLesson, openLessons, planLessons, remainingText, skillComplete, type Skill } from '../lib/skills';
+import { GOALS, minutesPerLesson, openLessons, planLessons, remainingText, skillComplete, skillStreak, skillToday, type Skill } from '../lib/skills';
 import { addTodo, getState, updateSkill } from '../lib/store';
 import { playUi } from '../lib/uiSound';
 import { dayKey } from '../lib/util';
-import { IconCalendar, IconTrophy } from './Icons';
+import { IconCalendar, IconCheck, IconFlame, IconTrophy } from './Icons';
 import { Confetti, Mascot } from './Mascot';
 
 /** Remaining time and an optional target date; „In To-dos planen“ spreads the open lessons over the days until then. */
@@ -89,6 +89,63 @@ export function SkillCelebration({ skill }: { skill: Skill }) {
           Weiter
         </button>
       </div>
+    </div>
+  );
+}
+
+/** Today's goal as a small ring („4/6 Aufgaben“) and the streak of this skill; a click chooses the goal. */
+export function SkillGoal({ skill, compact = false }: { skill: Skill; compact?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const t = skillToday(skill);
+  const streak = skillStreak(skill);
+  const share = Math.min(1, t.done / t.goal);
+  const R = compact ? 9 : 13;
+  const C = 2 * Math.PI * R;
+  const size = (R + 3) * 2;
+  return (
+    <div className={`skill-goal ${compact ? 'compact' : ''} ${t.reached ? 'reached' : ''}`}>
+      <button
+        type="button"
+        className="skill-goal-btn"
+        onClick={() => !compact && setOpen(!open)}
+        aria-expanded={compact ? undefined : open}
+        title={compact ? 'Tagesziel dieses Skills' : 'Tagesziel ändern'}
+      >
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
+          <circle cx={size / 2} cy={size / 2} r={R} className="sg-track" />
+          <circle cx={size / 2} cy={size / 2} r={R} className="sg-fill" strokeDasharray={C} strokeDashoffset={C * (1 - share)} transform={`rotate(-90 ${size / 2} ${size / 2})`} />
+        </svg>
+        <span className="sg-text">
+          {t.reached ? (
+            <b>
+              <IconCheck size={13} /> Tagesziel geschafft
+            </b>
+          ) : (
+            <b>
+              Heute {t.done}/{t.goal} Aufgaben
+            </b>
+          )}
+          <small className={streak ? 'sg-streak on' : 'sg-streak'}>
+            <IconFlame size={13} /> {streak ? `Serie ${streak} ${streak === 1 ? 'Tag' : 'Tage'}` : 'Noch keine Serie'}
+          </small>
+        </span>
+      </button>
+      {open && (
+        <div className="skill-goal-pick" role="radiogroup" aria-label="Tagesziel">
+          {GOALS.map((g) => (
+            <button
+              key={g.n}
+              type="button"
+              role="radio"
+              aria-checked={t.goal === g.n}
+              className={'chip' + (t.goal === g.n ? ' on' : '')}
+              onClick={() => (updateSkill(skill.id, { dailyGoal: g.n }), setOpen(false))}
+            >
+              {g.label} · {g.n} Aufgaben{g.hint ? ` (${g.hint})` : ''}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

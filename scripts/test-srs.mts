@@ -1772,6 +1772,41 @@ console.log('Skills: Bilder, Fehler erklären, Projekt, Zeitplan, Abschluss');
   ok(A.unlockedBy(zero).includes('goldfish'), 'geschaffter Skill: Goldfisch im Aquarium');
 }
 
+console.log('Skills: Tagesziel, Serie, Kompetenz-Karte');
+{
+  const S = await import('../src/lib/skills');
+  const U = await import('../src/lib/util');
+  const now = new Date('2026-11-21T15:00:00').getTime();
+  const day = (k: number) => U.dayKey(U.startOfDay(now) - k * U.DAY + 3 * 3600_000);
+  const set = (progress: any[]) => ({ id: 'x', createdAt: 1, kind: 'math', topic: 'T', intro: '', labs: [], tasks: progress.map(() => ({ type: 'calc', problem: 'p', answer: { type: 'number', value: '1' }, hints: [], steps: [] })), progress }) as any;
+  const base = { id: 'k', stages: [] } as any;
+  const before = set([{ tries: 0, hints: 0 }, { tries: 1, hints: 0, solved: true }]);
+  const r1 = S.recordSolved(base, before, 0, { solved: true, tries: 1 }, now);
+  ok(r1.activity?.[U.dayKey(now)] === 1, 'neu gelöste Aufgabe zählt für heute');
+  ok(!S.recordSolved(base, before, 1, { solved: true }, now).activity && !S.recordSolved(base, before, 0, { tries: 1 }, now).activity, 'schon gelöste oder falsche Aufgaben zählen nicht doppelt');
+  const sk = { ...base, activity: { [day(0)]: 2, [day(1)]: 6, [day(2)]: 7, [day(4)]: 9 } };
+  ok(S.skillToday(sk, now).done === 2 && S.skillToday(sk, now).goal === 6 && !S.skillToday(sk, now).reached, 'Tagesziel: Standard 6 Aufgaben');
+  ok(S.skillStreak(sk, now) === 2, 'Serie läuft ab gestern weiter, solange heute noch nicht geschafft: ' + S.skillStreak(sk, now));
+  ok(S.skillStreak({ ...sk, activity: { ...sk.activity, [day(0)]: 6 } }, now) === 3, 'heute geschafft → Serie +1');
+  ok(S.skillStreak({ ...sk, dailyGoal: 3 }, now) === 0 || S.skillStreak({ ...sk, dailyGoal: 2 }, now) === 3, 'Ziel-Stufe wirkt auf die Serie');
+  ok(S.skillStreak({ ...base, activity: { [day(2)]: 9 } }, now) === 0, 'Lücke bricht die Serie');
+  ok(S.skillDays([sk], 7, now).length === 7 && S.skillDays([sk], 7, now)[6].tasks === 2 && S.skillDays([sk], 7, now)[5].tasks === 6, 'Statistik: Aufgaben der letzten 7 Tage');
+
+  ok(S.taskScore({ tries: 1, hints: 0, solved: true }) === 1 && S.taskScore({ tries: 3, hints: 0, solved: true }) === 0.7 && S.taskScore({ tries: 2, hints: 1, solved: true }) === 0.5 && S.taskScore({ tries: 1, hints: 0, solved: true, shown: true }) === 0.2 && S.taskScore({ tries: 2, hints: 0 }) === 0, 'Kompetenz pro Aufgabe');
+  const L = (id: string, progress: any[] | null, known = false) => ({ id, title: id, goal: '', ...(known ? { known } : {}), ...(progress ? { set: set(progress) } : {}) });
+  const good = [{ tries: 1, hints: 0, solved: true }, { tries: 1, hints: 0, solved: true }];
+  const weak = [{ tries: 3, hints: 2 }, { tries: 2, hints: 1, solved: true }];
+  const mid = [{ tries: 1, hints: 0, solved: true }, { tries: 2, hints: 1, solved: true }, { tries: 2, hints: 0, solved: true }];
+  const skill = { ...base, stages: [{ id: 's1', name: 'A', goal: '', lessons: [L('gut', good), L('schwach', weak), L('mittel', mid), L('neu', null), L('kann', null, true)] }] } as any;
+  const rows = S.competenceMap(skill)[0].rows.map((r) => r.state).join(',');
+  ok(rows === 'good,weak,ok,new,skipped', 'Kompetenz-Karte: Zustände ' + rows);
+  const withTest = { ...skill, stages: [{ ...skill.stages[0], test: set([{ tries: 1, hints: 0, solved: true }, { tries: 1, hints: 0, solved: true }]) }] };
+  ok(S.competenceMap(withTest)[0].rows[1].share > S.competenceMap(skill)[0].rows[1].share, 'guter Stufentest hebt die Themen der Stufe');
+  ok(S.weakLessons(skill).map((l) => l.id).join(',') === 'schwach,mittel', 'Schwachstellen: nur versuchte, schwächste zuerst');
+  const fp = S.reviewPrompt({ ...skill, topic: 'T', title: 'T', domain: 'math', levels: [], targetLevel: 0, level: 'x', plan: {}, status: 'active', createdAt: 1, updatedAt: 1 } as any, [skill.stages[0].lessons[1]]);
+  ok(fp.system.includes('Schwachstellen-Training') && fp.user.includes('UNSICHERE THEMEN: schwach') && !fp.user.includes('gut ('), 'Schwachstellen-Training fragt nur die schwachen Themen ab');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

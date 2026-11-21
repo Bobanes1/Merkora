@@ -5,7 +5,8 @@
  * Pure – tested in scripts/test-srs.mts. Running the AI requests: lib/skillRun.ts.
  */
 import { FORMULA_RULE, LANG_RULE, type Prompt } from './ai';
-import { FIGURE_RULE, problemCount, setFrame, solvedCount, toDomain, type Domain, type PracticeSet } from './practice';
+import { FIGURE_RULE, problemCount, setFrame, solvedCount, toDomain, type Domain, type PracticeSet, type ProblemProgress } from './practice';
+import { DAY, dayKey, startOfDay } from './util';
 import { spreadClip } from './sample';
 import type { DeckFile } from './store';
 import type { CaseGrade, CaseTask } from './tasks';
@@ -53,6 +54,10 @@ export type Skill = {
   targetDate?: string;
   /** When the completion was celebrated (once). */
   celebrated?: number;
+  /** Solved tasks per day (dayKey → count) – for the daily goal and the streak of this skill. */
+  activity?: Record<string, number>;
+  /** Tasks per day for the daily goal (default 6 ≈ one lesson). */
+  dailyGoal?: number;
   status: 'planning' | 'active';
   plan: {
     questions?: PlanQuestion[];
@@ -65,6 +70,8 @@ export type Skill = {
   stages: Stage[];
   /** The latest mixed review (tasks across finished lessons). */
   review?: PracticeSet;
+  /** When the review is a training of weak topics: their titles. */
+  reviewFocus?: string[];
   createdAt: number;
   updatedAt: number;
 };
@@ -251,7 +258,17 @@ Keine Erklärung nötig ("intro" 1 Satz, kein "example"). 8 Aufgaben. ${JSON_ONL
   };
 }
 
-export function reviewPrompt(skill: Skill): Prompt {
+export function reviewPrompt(skill: Skill, focus?: Lesson[]): Prompt {
+  if (focus?.length)
+    return {
+      system: `Du erstellst ein Schwachstellen-Training: Aufgaben nur zu den Themen, bei denen die Person noch unsicher ist. Beginne mit einer etwas leichteren Aufgabe, steigere dann, und decke jedes Thema ab. ${kindRule(skill)}
+Kein "example". 6 Aufgaben. ${JSON_ONLY}`,
+      user: `${context(skill)}
+
+UNSICHERE THEMEN: ${focus.map((l) => `${l.title} (${l.goal})`).join('; ')}`,
+      maxTokens: 8000,
+      json: true,
+    };
   const done = skill.stages.flatMap((st) => st.lessons).filter(lessonDone);
   return {
     system: `Du erstellst eine gemischte Wiederholung: Aufgaben quer durch bereits gelernte Lektionen, damit nichts vergessen wird (verteiltes Üben). ${kindRule(skill)}
@@ -399,3 +416,97 @@ export function planLessons(count: number, from: string, until: string, perDay =
 }
 /** The whole skill is done: every stage up to the target is passed. */
 export const skillComplete = (skill: Skill) => skill.status === 'active' && skill.stages.length > 0 && skill.stages.every((st) => st.passed);
+
+// ---------- daily goal and streak ----------
+export const GOALS = [
+  { n: 3, label: 'Locker' },
+  { n: 6, label: 'Normal', hint: '≈ 1 Lektion' },
+  { n: 12, label: 'Intensiv' },
+];
+export const goalOf = (skill: Skill) => Math.max(1, skill.dailyGoal ?? 6);
+
+/** Counts a task as solved today – only when it was not solved before (no double counting). */
+export function recordSolved(skill: Skill, before: PracticeSet | undefined, i: number, patch: Partial<ProblemProgress>, now = Date.now()): Partial<Skill> {
+  if (!patch.solved || !before || before.progress[i]?.solved) return {};
+  const k = dayKey(now);
+  return { activity: { ...(skill.activity ?? {}), [k]: (skill.activity?.[k] ?? 0) + 1 } };
+}
+export function skillToday(skill: Skill, now = Date.now()) {
+  const goal = goalOf(skill);
+  const done = skill.activity?.[dayKey(now)] ?? 0;
+  return { done, goal, reached: done >= goal };
+}
+/** Days in a row with the daily goal reached; today counts once it is reached, before that the streak runs from yesterday. */
+export function skillStreak(skill: Skill, now = Date.now()) {
+  const goal = goalOf(skill);
+  const has = (t: number) => (skill.activity?.[dayKey(t)] ?? 0) >= goal;
+  const prev = (t: number) => startOfDay(t - DAY / 2);
+  let day = startOfDay(now);
+  if (!has(day)) day = prev(day);
+  let n = 0;
+  while (has(day)) {
+    n++;
+    day = prev(day);
+  }
+  return n;
+}
+export const bestStreakAll = (skills: Skill[], now = Date.now()) => skills.reduce((m, sk) => Math.max(m, skillStreak(sk, now)), 0);
+/** Solved skill tasks per day over the last n days (all skills together, oldest first). */
+export function skillDays(skills: Skill[], n: number, now = Date.now()) {
+  const out: { t: number; tasks: number }[] = [];
+  let t = startOfDay(now);
+  for (let k = 0; k < n; k++) {
+    out.unshift({ t, tasks: skills.reduce((a, sk) => a + (sk.activity?.[dayKey(t)] ?? 0), 0) });
+    t = startOfDay(t - DAY / 2);
+  }
+  return out;
+}
+
+// ---------- competence map ----------
+/** How well one task went: first try without help 1, with retries/hints less, solution shown 0.2, unsolved 0. */
+export function taskScore(p: ProblemProgress): number {
+  if (p.solved) {
+    if (p.shown) return 0.2;
+    if (p.tries <= 1 && !p.hints) return 1;
+    if (p.hints) return 0.5;
+    return 0.7;
+  }
+  return p.shown ? 0.2 : 0;
+}
+const attempted = (p?: ProblemProgress) => !!p && (p.tries > 0 || p.solved || p.shown);
+/** Competence of a set from the tasks you tried. */
+export function setCompetence(set?: PracticeSet): { share: number; attempted: number } {
+  const tried = (set?.progress ?? []).filter(attempted);
+  if (!tried.length) return { share: 0, attempted: 0 };
+  return { share: tried.reduce((a, p) => a + taskScore(p), 0) / tried.length, attempted: tried.length };
+}
+export type CompetenceState = 'good' | 'ok' | 'weak' | 'new' | 'skipped';
+export type CompetenceRow = { lesson: Lesson; share: number; state: CompetenceState };
+export function competenceState(share: number): CompetenceState {
+  return share >= 0.8 ? 'good' : share >= 0.55 ? 'ok' : 'weak';
+}
+/** Per stage, per lesson: how well it sits. A stage test you took is averaged in (it covers the whole stage). */
+export function competenceMap(skill: Skill): { stage: Stage; rows: CompetenceRow[] }[] {
+  return skill.stages.map((stage) => {
+    const test = setCompetence(stage.test);
+    return {
+      stage,
+      rows: stage.lessons.map((lesson): CompetenceRow => {
+        if (lesson.known) return { lesson, share: 1, state: 'skipped' };
+        const c = setCompetence(lesson.set);
+        if (!c.attempted) return { lesson, share: 0, state: 'new' };
+        const share = test.attempted ? (c.share * 2 + test.share) / 3 : c.share;
+        return { lesson, share, state: competenceState(share) };
+      }),
+    };
+  });
+}
+/** The weakest lessons you already tried (for a focused training), at most 3. */
+export function weakLessons(skill: Skill, max = 3): Lesson[] {
+  return competenceMap(skill)
+    .flatMap((g) => g.rows)
+    .filter((r) => r.state === 'weak' || r.state === 'ok')
+    .sort((a, b) => a.share - b.share)
+    .slice(0, max)
+    .map((r) => r.lesson);
+}

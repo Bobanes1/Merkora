@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { SkillCelebration, SkillSchedule } from '../components/SkillSchedule';
+import { SkillCelebration, SkillGoal, SkillSchedule } from '../components/SkillSchedule';
+import { SkillCompetence } from '../components/SkillCompetence';
+import { playUi } from '../lib/uiSound';
 import { ProjectView, SheetView } from '../components/SkillStageExtras';
 import { SkillMaterial } from '../components/SkillMaterial';
 import { undoable } from '../lib/undo';
@@ -21,7 +23,9 @@ import {
   moveLesson,
   nextLesson,
   reachedStage,
+  recordSolved,
   removeLesson,
+  skillToday,
   skillProgress,
   stageReady,
   toggleKnown,
@@ -55,6 +59,23 @@ function cardHost(skill: Skill, progress: SetHost['progress'], updateSet?: SetHo
 
 /** Updates the progress of one task inside a set that sits somewhere in the skill. */
 const patchSet = (set: PracticeSet, i: number, patch: Partial<ProblemProgress>): PracticeSet => ({ ...set, progress: set.progress.map((p, k) => (k === i ? { ...p, ...patch } : p)) });
+
+/**
+ * Wraps a progress update: a newly solved task counts for today's goal and the streak of the skill,
+ * brings 5 XP, and reaching the daily goal plays a little fanfare.
+ */
+function tracked(skillId: string, setIn: (s: Skill) => PracticeSet | undefined, progress: SetHost['progress']): SetHost['progress'] {
+  return (i, patch) => {
+    const s = getState().data.skills?.find((x) => x.id === skillId);
+    const rec = s ? recordSolved(s, setIn(s), i, patch) : {};
+    progress(i, patch);
+    if (!s || !rec.activity) return;
+    const before = skillToday(s);
+    updateSkill(skillId, { activity: rec.activity });
+    addXp(5);
+    if (!before.reached && before.done + 1 >= before.goal) playUi('level');
+  };
+}
 
 export default function SkillPage() {
   const { id = '' } = useParams();
@@ -332,6 +353,7 @@ function Path({ skill }: { skill: Skill }) {
           {p.done} von {p.total} Lektionen{p.skipped ? ` · ${p.skipped} übersprungen` : ''} · erreicht: {reached >= 0 ? skill.stages[reached].name : 'noch keine Stufe'} · Ziel: {skill.levels[skill.targetLevel] ?? '–'}
         </p>
         <SkillSchedule skill={skill} />
+        <SkillGoal skill={skill} />
         <span className="bar skill-bar" aria-hidden="true">
           <i style={{ width: `${Math.round(p.share * 100)}%` }} />
         </span>
@@ -362,6 +384,7 @@ function Path({ skill }: { skill: Skill }) {
           <CardContent text={skill.plan.approach} />
         </details>
       )}
+      <SkillCompetence skill={skill} onOpen={(lid) => setView({ kind: 'lesson', id: lid })} onTrain={() => setView({ kind: 'review' })} />
       <SkillCelebration skill={skill} />
       <SkillMaterial skill={skill} />
       <div className="path-summary">
@@ -537,8 +560,8 @@ function LessonView({ skill, lessonId, onBack, onOpen }: { skill: Skill; lessonI
   const { lesson } = found;
   const all = skill.stages.flatMap((st) => st.lessons);
   const after = all[all.findIndex((l) => l.id === lessonId) + 1];
-  const host = cardHost(skill, (i, patch) =>
-    updateSkill(skill.id, (s) => ({ stages: s.stages.map((st) => ({ ...st, lessons: st.lessons.map((l) => (l.id === lessonId && l.set ? { ...l, set: patchSet(l.set, i, patch) } : l)) })) })),
+  const host = cardHost(skill, tracked(skill.id, (s) => s.stages.flatMap((st) => st.lessons).find((l) => l.id === lessonId)?.set, (i, patch) =>
+    updateSkill(skill.id, (s) => ({ stages: s.stages.map((st) => ({ ...st, lessons: st.lessons.map((l) => (l.id === lessonId && l.set ? { ...l, set: patchSet(l.set, i, patch) } : l)) })) }))),
     (patch) => updateSkill(skill.id, (s) => ({ stages: s.stages.map((st) => ({ ...st, lessons: st.lessons.map((l) => (l.id === lessonId && l.set ? { ...l, set: { ...l.set, ...patch } } : l)) })) })),
   );
   return (
@@ -552,7 +575,12 @@ function LessonView({ skill, lessonId, onBack, onOpen }: { skill: Skill; lessonI
         <PracticeSetView
           set={lesson.set}
           host={host}
-          head={<p className="muted small">Lektion: {lesson.title}</p>}
+          head={
+            <div className="lesson-head">
+              <p className="muted small grow">Lektion: {lesson.title}</p>
+              <SkillGoal skill={skill} compact />
+            </div>
+          }
           onDone={
             <div className="row-gap">
               <p className="form-ok grow">Lektion geschafft!</p>
@@ -586,7 +614,7 @@ function StageTestView({ skill, stageId, onBack }: { skill: Skill; stageId: stri
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stageId]);
   if (!stage) return null;
-  const host = cardHost(skill, (i, patch) =>
+  const host = cardHost(skill, tracked(skill.id, (s) => s.stages.find((st) => st.id === stageId)?.test, (i, patch) =>
     updateSkill(skill.id, (s) => ({
       stages: s.stages.map((st) => {
         if (st.id !== stageId || !st.test) return st;
@@ -595,7 +623,7 @@ function StageTestView({ skill, stageId, onBack }: { skill: Skill; stageId: stri
         if (now && !st.passed) addXp(50);
         return { ...st, test, ...(now ? { passed: true } : {}) };
       }),
-    })),
+    }))),
   );
   return (
     <div className="practice">
@@ -606,7 +634,12 @@ function StageTestView({ skill, stageId, onBack }: { skill: Skill; stageId: stri
       <Failed error={t.error} retry={() => void makeStageTest(skill.id, stageId)} />
       {stage.test && (
         <>
-          <PracticeSetView set={stage.test} host={host} head={<p className="muted small">Stufentest: {stage.name} – ab 80 % richtig ist die Stufe erreicht.</p>} onDone={<p className="form-ok">Stufe „{stage.name}“ erreicht! +50 XP</p>} />
+          <PracticeSetView set={stage.test} host={host} head={
+                <div className="lesson-head">
+                  <p className="muted small grow">Stufentest: {stage.name} – ab 80 % richtig ist die Stufe erreicht.</p>
+                  <SkillGoal skill={skill} compact />
+                </div>
+              } onDone={<p className="form-ok">Stufe „{stage.name}“ erreicht! +50 XP</p>} />
           <button type="button" className="btn ghost sm" onClick={() => void makeStageTest(skill.id, stageId)} disabled={t.busy}>
             Neuen Stufentest erstellen
           </button>
@@ -620,7 +653,7 @@ function ReviewView({ skill, onBack }: { skill: Skill; onBack: () => void }) {
   const t = useSkillTask(skill.id + ':review');
   const [fresh, setFresh] = useState(false);
   useEffect(() => {
-    if (!skill.review || skill.review.progress.every((p) => p.solved)) {
+    if (!t.busy && (!skill.review || skill.review.progress.every((p) => p.solved))) {
       setFresh(true);
       void makeReview(skill.id);
     }
@@ -628,7 +661,7 @@ function ReviewView({ skill, onBack }: { skill: Skill; onBack: () => void }) {
   }, []);
   const host = cardHost(
     skill,
-    (i, patch) => updateSkill(skill.id, (s) => ({ review: s.review && patchSet(s.review, i, patch) })),
+    tracked(skill.id, (s) => s.review, (i, patch) => updateSkill(skill.id, (s) => ({ review: s.review && patchSet(s.review, i, patch) }))),
     (patch) => updateSkill(skill.id, (s) => ({ review: s.review && { ...s.review, ...patch } })),
   );
   return (
@@ -638,7 +671,18 @@ function ReviewView({ skill, onBack }: { skill: Skill; onBack: () => void }) {
       </button>
       {(t.busy || (fresh && !skill.review)) && <Busy text="Pip mischt Aufgaben aus deinen Lektionen …" />}
       <Failed error={t.error} retry={() => void makeReview(skill.id)} />
-      {skill.review && !t.busy && <PracticeSetView set={skill.review} host={host} head={<p className="muted small">Gemischte Wiederholung</p>} />}
+      {skill.review && !t.busy && (
+        <PracticeSetView
+          set={skill.review}
+          host={host}
+          head={
+            <div className="lesson-head">
+              <p className="muted small grow">{skill.reviewFocus?.length ? `Schwachstellen-Training: ${skill.reviewFocus.join(', ')}` : 'Gemischte Wiederholung'}</p>
+              <SkillGoal skill={skill} compact />
+            </div>
+          }
+        />
+      )}
     </div>
   );
 }
