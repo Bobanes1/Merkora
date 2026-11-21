@@ -7,7 +7,7 @@ import { CodeEditor } from '../CodeEditor';
 import { Confetti } from '../Mascot';
 import { Markdown } from '../Markdown';
 import { JavaSetup } from '../JavaSetup';
-import { IconCheck, IconClose, IconPlay, IconPlus, IconSparkle } from '../Icons';
+import { IconBulb, IconCheck, IconChevron, IconClose, IconPlay, IconPlus, IconSparkle } from '../Icons';
 import { Lab } from '../labs/Labs';
 import { completeJson, gradeAnswer } from '../../lib/ai';
 import { openExternal } from '../../lib/desktop';
@@ -32,7 +32,7 @@ export type SetHost = {
 };
 
 /** Shared by all task views: progress of this task, saving it, going on. */
-export type TaskCtx = { set: PracticeSet; i: number; prog: ProblemProgress; host: SetHost; onNext: () => void };
+export type TaskCtx = { set: PracticeSet; i: number; prog: ProblemProgress; host: SetHost; onNext: () => void; isLast: boolean };
 
 /** A practice set: explanation, worked example, labs, then the tasks one after another. */
 export function PracticeSetView({ set, host, head, onDone }: { set: PracticeSet; host: SetHost; head?: ReactNode; onDone?: ReactNode }) {
@@ -45,7 +45,7 @@ export function PracticeSetView({ set, host, head, onDone }: { set: PracticeSet;
   // confetti only when the last task is solved here, not when an already solved set is opened again
   const [startDone] = useState(done);
   const t = tasks[i];
-  const ctx: TaskCtx = { set, i, prog: set.progress[i] ?? { tries: 0, hints: 0 }, host, onNext: () => setI((x) => Math.min(n - 1, x + 1)) };
+  const ctx: TaskCtx = { set, i, prog: set.progress[i] ?? { tries: 0, hints: 0 }, host, onNext: () => setI((x) => Math.min(n - 1, x + 1)), isLast: i >= n - 1 };
   return (
     <>
       <section className="panel">
@@ -169,6 +169,25 @@ function Explanation({ set, host, steps, setSteps }: { set: PracticeSet; host: S
   );
 }
 
+/** „Prüfen“ – and once the answer is right, the same button takes you on to the next task. */
+export function CheckButton({ ctx, right, onCheck, disabled, busy }: { ctx: TaskCtx; right: boolean; onCheck: () => void; disabled?: boolean; busy?: boolean }) {
+  if (right)
+    return ctx.isLast ? (
+      <button type="button" className="btn primary" disabled>
+        <IconCheck size={15} /> Gelöst
+      </button>
+    ) : (
+      <button type="button" className="btn primary next-btn" onClick={ctx.onNext}>
+        Weiter <IconChevron size={15} />
+      </button>
+    );
+  return (
+    <button type="button" className="btn primary" onClick={onCheck} disabled={disabled || busy}>
+      {busy ? 'Wird geprüft …' : 'Prüfen'}
+    </button>
+  );
+}
+
 export function Hints({ hints, used, onMore }: { hints: string[]; used: number; onMore: () => void }) {
   if (!hints.length) return null;
   return (
@@ -180,7 +199,7 @@ export function Hints({ hints, used, onMore }: { hints: string[]; used: number; 
       ))}
       {used < hints.length && (
         <button type="button" className="btn ghost sm" onClick={onMore}>
-          💡 {used ? 'Noch ein Hinweis' : 'Hinweis'} ({used}/{hints.length})
+          <IconBulb size={15} /> {used ? 'Noch ein Hinweis' : 'Hinweis'} ({used}/{hints.length})
         </button>
       )}
     </div>
@@ -188,7 +207,7 @@ export function Hints({ hints, used, onMore }: { hints: string[]; used: number; 
 }
 
 /** The row under every task: show solution, save as card, next task. */
-export function TaskFooter({ ctx, solution, card, canShow }: { ctx: TaskCtx; solution?: ReactNode; card: () => [string, string, boolean?]; canShow?: boolean }) {
+export function TaskFooter({ ctx, solution, card, canShow, noNext }: { ctx: TaskCtx; solution?: ReactNode; card: () => [string, string, boolean?]; canShow?: boolean; noNext?: boolean }) {
   const [show, setShow] = useState(!!ctx.prog.shown);
   const [note, setNote] = useState('');
   const [why, setWhy] = useState<'' | 'busy' | string>('');
@@ -245,7 +264,7 @@ export function TaskFooter({ ctx, solution, card, canShow }: { ctx: TaskCtx; sol
         >
           <IconPlus size={14} /> {note || 'Als Karte speichern'}
         </button>
-        {ctx.prog.solved && (
+        {ctx.prog.solved && !noNext && (
           <button type="button" className="btn outline sm" onClick={ctx.onNext}>
             Nächste Aufgabe ›
           </button>
@@ -327,14 +346,12 @@ function CalcTask({ ctx, p }: { ctx: TaskCtx; p: MathProblem }) {
               className="input"
               value={input}
               onChange={(e) => (setInput(e.target.value), setResult(null))}
-              onKeyDown={(e) => e.key === 'Enter' && void check()}
+              onKeyDown={(e) => e.key === 'Enter' && (result === 'right' ? ctx.isLast || ctx.onNext() : void check())}
               placeholder={p.answer.type === 'expr' ? 'Formel in x, z. B. 2*x+3' : p.answer.type === 'fraction' ? 'z. B. 3/8 oder 0,375' : 'Zahl, z. B. 0,27 oder 27 %'}
               inputMode={p.answer.type === 'expr' ? 'text' : 'decimal'}
             />
           )}
-          <button type="button" className="btn primary" onClick={() => void check()} disabled={busy || !input.trim()}>
-            {busy ? 'Wird geprüft …' : 'Prüfen'}
-          </button>
+          <CheckButton ctx={ctx} right={result === 'right'} onCheck={() => void check()} disabled={!input.trim()} busy={busy} />
         </div>
       )}
       {p.answer.type === 'expr' && input.trim() && <CardContent text={`Vorschau: \\( ${input.replace(/\*/g, ' \\cdot ')} \\)`} className="muted small" />}
@@ -344,7 +361,7 @@ function CalcTask({ ctx, p }: { ctx: TaskCtx; p: MathProblem }) {
         <Verdict ok={result === null ? null : result === 'right'} text={feedback + (result === 'wrong' && prog.tries >= 2 && prog.hints < p.hints.length ? ' Ein Hinweis hilft vielleicht.' : '')} />
       )}
       <Hints hints={p.hints} used={prog.hints} onMore={() => host.progress(i, { hints: prog.hints + 1 })} />
-      <TaskFooter
+      <TaskFooter noNext={p.answer.type !== 'choice'}
         ctx={ctx}
         solution={
           <ol className="practice-steps">

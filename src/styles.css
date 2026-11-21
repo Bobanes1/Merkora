@@ -11053,3 +11053,17 @@ html.glass .pip-tip-bubble { background: color-mix(in srgb, var(--white) 86%, tr
     width: 300px;
   }
 }
+
+/* practice: the check button turns into „Weiter“; hint button with a line icon */
+.btn.next-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  animation: next-pop 0.25s ease-out;
+}
+@keyframes next-pop {
+  from { transform: scale(0.94); opacity: 0.6; }
+  to { transform: none; opacity: 1; }
+}
+:root.no-anim .btn.next-btn { animation: none; }
+.practice-hints .btn svg { color: var(--warn-ink, currentColor); }

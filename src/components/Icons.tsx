@@ -307,3 +307,4 @@ export const IconSidebar = mk(
     <path d="M9 4v16" />
   </>,
 );
+export const IconBulb = mk(<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.7.6 1.1 1.3 1.1 2.1V16h5v-.1c0-.8.4-1.5 1.1-2.1A6 6 0 0 0 12 3z" />);

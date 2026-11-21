@@ -19,7 +19,7 @@ import {
   type MultiTask,
   type OrderTask,
 } from '../../lib/tasks';
-import { Hints, TaskFooter, Verdict, type TaskCtx } from './PracticeSetView';
+import { CheckButton, Hints, TaskFooter, Verdict, type TaskCtx } from './PracticeSetView';
 
 const seedOf = (s: string) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
 /** Points with a German decimal comma (4,5). */
@@ -185,14 +185,12 @@ export function OrderTaskView({ ctx, task }: { ctx: TaskCtx; task: OrderTask }) 
         ))}
       </ol>
       <div className="row-gap">
-        <button type="button" className="btn primary" onClick={check}>
-          Prüfen
-        </button>
+        <CheckButton ctx={ctx} right={right} onCheck={check} />
       </div>
       <Verdict ok={marks ? right : null} text={marks && !right ? `${marks.filter(Boolean).length} von ${marks.length} stehen richtig.` : ''} />
       {right && <Explain text={task.explain} />}
       <Hints hints={task.hints} used={prog.hints} onMore={() => host.progress(i, { hints: prog.hints + 1 })} />
-      <TaskFooter
+      <TaskFooter noNext
         ctx={ctx}
         solution={
           <ol className="practice-steps">
@@ -244,15 +242,13 @@ export function ClassifyTaskView({ ctx, task }: { ctx: TaskCtx; task: ClassifyTa
         ))}
       </div>
       <div className="row-gap">
-        <button type="button" className="btn primary" onClick={check} disabled={chosen.some((c) => c < 0)}>
-          Prüfen
-        </button>
-        {chosen.some((c) => c < 0) && <span className="muted small">Ordne zuerst alles zu.</span>}
+        <CheckButton ctx={ctx} right={right} onCheck={check} disabled={chosen.some((c) => c < 0)} />
+        {!right && chosen.some((c) => c < 0) && <span className="muted small">Ordne zuerst alles zu.</span>}
       </div>
       <Verdict ok={marks ? right : null} text={marks && !right ? `${marks.filter(Boolean).length} von ${marks.length} richtig zugeordnet.` : ''} />
       {right && <Explain text={task.explain} />}
       <Hints hints={task.hints} used={prog.hints} onMore={() => host.progress(i, { hints: prog.hints + 1 })} />
-      <TaskFooter
+      <TaskFooter noNext
         ctx={ctx}
         solution={
           <ul className="practice-steps">
@@ -296,7 +292,7 @@ export function ClozeTaskView({ ctx, task }: { ctx: TaskCtx; task: ClozeTask }) 
               size={Math.max(6, (task.gaps[p]?.[0]?.length ?? 6) + 2)}
               aria-label={`Lücke ${p + 1}`}
               onChange={(e) => (setGiven((g) => g.map((x, j) => (j === p ? e.target.value : x))), setMarks(null))}
-              onKeyDown={(e) => e.key === 'Enter' && check()}
+              onKeyDown={(e) => e.key === 'Enter' && (right ? ctx.isLast || ctx.onNext() : check())}
               autoCapitalize="off"
               spellCheck={false}
             />
@@ -304,14 +300,12 @@ export function ClozeTaskView({ ctx, task }: { ctx: TaskCtx; task: ClozeTask }) 
         )}
       </div>
       <div className="row-gap">
-        <button type="button" className="btn primary" onClick={check} disabled={given.every((g) => !g.trim())}>
-          Prüfen
-        </button>
+        <CheckButton ctx={ctx} right={right} onCheck={check} disabled={given.every((g) => !g.trim())} />
       </div>
       <Verdict ok={marks ? right : null} text={marks && !right ? `${marks.filter(Boolean).length} von ${marks.length} Lücken richtig.` : ''} />
       {right && <Explain text={task.explain} />}
       <Hints hints={task.hints} used={prog.hints} onMore={() => host.progress(i, { hints: prog.hints + 1 })} />
-      <TaskFooter
+      <TaskFooter noNext
         ctx={ctx}
         solution={<p className="practice-steps">{clozeParts(task.text).map((p) => (typeof p === 'string' ? p : `[${task.gaps[p][0]}]`)).join('')}</p>}
         card={() => [task.prompt + '\n\n' + task.text.replace(/\{\{(\d+)\}\}/g, '___'), clozeParts(task.text).map((p) => (typeof p === 'string' ? p : task.gaps[p][0])).join('')]}
@@ -344,14 +338,12 @@ export function MultiTaskView({ ctx, task }: { ctx: TaskCtx; task: MultiTask }) 
         ))}
       </div>
       <div className="row-gap">
-        <button type="button" className="btn primary" onClick={check} disabled={!chosen.length}>
-          Prüfen
-        </button>
+        <CheckButton ctx={ctx} right={result === true} onCheck={check} disabled={!chosen.length} />
       </div>
       <Verdict ok={result} text={result === false ? `Es sind ${task.correct.length} richtige Antworten.` : ''} />
       {result && <Explain text={task.explain} />}
       <Hints hints={task.hints} used={prog.hints} onMore={() => host.progress(i, { hints: prog.hints + 1 })} />
-      <TaskFooter
+      <TaskFooter noNext
         ctx={ctx}
         solution={
           <ul className="practice-steps">

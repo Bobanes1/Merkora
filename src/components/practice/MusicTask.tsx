@@ -21,7 +21,7 @@ import {
 import { playNote, playNotes, playRhythm } from '../../lib/musicAudio';
 import type { MusicTask } from '../../lib/tasks';
 import { shuffled } from '../../lib/tasks';
-import { Hints, TaskFooter, Verdict, type TaskCtx } from './PracticeSetView';
+import { CheckButton, Hints, TaskFooter, Verdict, type TaskCtx } from './PracticeSetView';
 
 const PC_NAMES = ['C', 'Cis', 'D', 'Dis', 'E', 'F', 'Fis', 'G', 'Gis', 'A', 'B', 'H'];
 const seedOf = (s: string) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
@@ -211,9 +211,7 @@ export function MusicTaskView({ ctx, task }: { ctx: TaskCtx; task: MusicTask }) 
             <button type="button" className="btn ghost sm" onClick={() => (setPlayed([]), setResult(null))} disabled={!played.length}>
               Zurücksetzen
             </button>
-            <button type="button" className="btn primary" disabled={!played.length} onClick={() => finish(m.mode === 'build-chord' ? checkChord(target, played) : checkScale(target, played))}>
-              Prüfen
-            </button>
+            <CheckButton ctx={ctx} right={result === true} disabled={!played.length} onCheck={() => finish(m.mode === 'build-chord' ? checkChord(target, played) : checkScale(target, played))} />
           </div>
         </>
       )}
@@ -222,9 +220,7 @@ export function MusicTaskView({ ctx, task }: { ctx: TaskCtx; task: MusicTask }) 
           <Staff notes={target} clef={m.clef} />
           <div className="input-row">
             <input className="input" value={input} onChange={(e) => (setInput(e.target.value), setResult(null))} onKeyDown={(e) => e.key === 'Enter' && input.trim() && finish(checkNoteName(target[0], input))} placeholder="Name der Note, z. B. Fis" />
-            <button type="button" className="btn primary" disabled={!input.trim()} onClick={() => finish(checkNoteName(target[0], input))}>
-              Prüfen
-            </button>
+            <CheckButton ctx={ctx} right={result === true} disabled={!input.trim()} onCheck={() => finish(checkNoteName(target[0], input))} />
             <button type="button" className="btn ghost" onClick={() => playNote(midiOf(target[0]))}>
               🔊
             </button>
