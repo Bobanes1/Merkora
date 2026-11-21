@@ -107,8 +107,8 @@ function SkillTile({ skill }: { skill: Skill }) {
   const p = skillProgress(skill);
   const next = nextLesson(skill);
   return (
-    <Link to={`/skills/${skill.id}`} className="skill-tile">
-      <span className={'badge ' + skill.domain}>{DOMAIN_LABEL[skill.domain]}</span>
+    <Link to={`/skills/${skill.id}`} className="skill-tile" data-domain={skill.domain}>
+      <span className={'badge ' + skill.domain} data-domain={skill.domain}>{DOMAIN_LABEL[skill.domain]}</span>
       <b>{skill.title}</b>
       {skill.status === 'planning' ? (
         <small className="muted">Lernpfad wird geplant …</small>

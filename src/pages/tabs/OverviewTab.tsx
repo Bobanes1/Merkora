@@ -41,7 +41,7 @@ export default function OverviewTab({ deck, onOpen }: { deck: Deck; onOpen: (tab
       </div>
       <div className="ov-grid">
         {modes.map((m) => (
-          <button key={m.id} type="button" className={'ov-tile' + (m.main ? ' main' : '')} onClick={() => onOpen(m.id)}>
+          <button key={m.id} type="button" className={`ov-tile mode-${m.id}` + (m.main ? ' main' : '')} onClick={() => onOpen(m.id)}>
             <m.icon size={22} />
             <b>{m.label}</b>
             <small>{m.sub}</small>

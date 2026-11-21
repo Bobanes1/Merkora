@@ -10144,3 +10144,179 @@ html.phone .undo-toast {
   gap: 8px;
   align-items: center;
 }
+
+/* =====================================================================
+   Mode colours: every mode / tool / skill domain has its own fixed colour.
+   --mode (strong, white text on it), --mode-soft (tint), --mode-ink (text on tint)
+   ===================================================================== */
+:root {
+  --m-cards: #2563c9;
+  --m-learn: #08807c;
+  --m-mastery: #2f8a3a;
+  --m-path: #0a7799;
+  --m-match: #b8510b;
+  --m-quiz: #7445d6;
+  --m-practice: #4b55c9;
+  --m-exam: #c93545;
+  --m-summary: #9a6400;
+  --m-mindmap: #c0347f;
+  --m-source: #55657a;
+  --m-plan: #4b55c9;
+  --m-pomodoro: #d1453b;
+  --m-labs: #2f8a3a;
+  --m-piano: #c0347f;
+  --m-java: #b8510b;
+  --d-math: #2563c9;
+  --d-java: #b8510b;
+  --d-law: #7445d6;
+  --d-music: #c0347f;
+  --d-language: #1d68b6;
+  --d-general: #08807c;
+}
+[data-mode='cards'], .mode-cards { --mode: var(--m-cards); }
+[data-mode='learn'], .mode-learn { --mode: var(--m-learn); }
+[data-mode='mastery'], .mode-mastery { --mode: var(--m-mastery); }
+[data-mode='path'], .mode-path { --mode: var(--m-path); }
+[data-mode='match'], .mode-match { --mode: var(--m-match); }
+[data-mode='quiz'], .mode-quiz { --mode: var(--m-quiz); }
+[data-mode='practice'], .mode-practice { --mode: var(--m-practice); }
+[data-mode='exam'], .mode-exam { --mode: var(--m-exam); }
+[data-mode='summary'], .mode-summary { --mode: var(--m-summary); }
+[data-mode='mindmap'], .mode-mindmap { --mode: var(--m-mindmap); }
+[data-mode='source'], .mode-source { --mode: var(--m-source); }
+[data-mode='plan'], .mode-plan { --mode: var(--m-plan); }
+[data-mode='pomodoro'], .mode-pomodoro { --mode: var(--m-pomodoro); }
+[data-mode='labs'], .mode-labs { --mode: var(--m-labs); }
+[data-mode='piano'], .mode-piano { --mode: var(--m-piano); }
+[data-mode='java'], .mode-java { --mode: var(--m-java); }
+[data-domain='math'] { --mode: var(--d-math); }
+[data-domain='java'] { --mode: var(--d-java); }
+[data-domain='law'] { --mode: var(--d-law); }
+[data-domain='music'] { --mode: var(--d-music); }
+[data-domain='language'] { --mode: var(--d-language); }
+[data-domain='general'] { --mode: var(--d-general); }
+[data-mode], [class*='mode-'], [data-domain] {
+  --mode-soft: color-mix(in srgb, var(--mode) 12%, #fff);
+  --mode-ink: color-mix(in srgb, var(--mode) 80%, #000);
+}
+:root[data-theme='dark'] [data-mode], :root[data-theme='dark'] [class*='mode-'], :root[data-theme='dark'] [data-domain] {
+  --mode-soft: color-mix(in srgb, var(--mode) 24%, #0b1313);
+  --mode-ink: color-mix(in srgb, var(--mode) 45%, #fff);
+}
+/* inside a mode, the mode colour is the main colour: buttons, bars, chips, selections … */
+.deck-layout[data-mode] .tab-body,
+.deck-layout[data-mode] .learn-switch,
+.tools-page[data-mode] > :not(.page-head):not(.tools-tabs),
+.skill-page[data-domain] {
+  --primary: var(--mode);
+  --primary-hover: color-mix(in srgb, var(--mode) 84%, #000);
+  --primary-deep: color-mix(in srgb, var(--mode) 64%, #000);
+  --primary-2: color-mix(in srgb, var(--mode) 80%, #fff);
+  --primary-light: color-mix(in srgb, var(--mode) 55%, #fff);
+  --primary-soft: var(--mode-soft);
+  --primary-ink: var(--mode-ink);
+  --line-strong: color-mix(in srgb, var(--mode) 40%, #fff);
+  --tint: color-mix(in srgb, var(--mode) 5%, #fff);
+}
+:root[data-theme='dark'] .deck-layout[data-mode] .tab-body,
+:root[data-theme='dark'] .deck-layout[data-mode] .learn-switch,
+:root[data-theme='dark'] .tools-page[data-mode] > :not(.page-head):not(.tools-tabs),
+:root[data-theme='dark'] .skill-page[data-domain] {
+  --primary: var(--mode);
+  --primary-hover: color-mix(in srgb, var(--mode) 85%, #fff);
+  --line-strong: color-mix(in srgb, var(--mode) 45%, #0b1313);
+  --tint: color-mix(in srgb, var(--mode) 10%, #0b1313);
+}
+/* a thin coloured stripe over the mode's content */
+.deck-layout[data-mode] .tab-body {
+  border-top: 4px solid var(--mode);
+  border-radius: 4px 4px 0 0;
+  padding-top: 14px;
+}
+
+/* ---------- deck tabs: icon in the mode colour, the active tab filled ---------- */
+.tab[class*='mode-'] svg {
+  color: var(--mode-ink);
+}
+.tab[class*='mode-'].on {
+  color: var(--mode-ink);
+  border-bottom-color: var(--mode);
+  background: var(--mode-soft);
+  border-radius: 10px 10px 0 0;
+}
+.tab[class*='mode-']:hover:not(.on) {
+  background: color-mix(in srgb, var(--mode-soft) 60%, transparent);
+  border-radius: 10px 10px 0 0;
+}
+.sheet-list button[class*='mode-'] svg {
+  color: var(--mode-ink);
+}
+.sheet-list button[class*='mode-'].on {
+  background: var(--mode-soft);
+  color: var(--mode-ink);
+}
+.learn-switch button[class*='mode-'].on {
+  color: var(--mode-ink);
+}
+
+/* ---------- deck overview tiles ---------- */
+.ov-tile[class*='mode-'] {
+  border-left: 5px solid var(--mode);
+}
+.ov-tile[class*='mode-'] svg {
+  box-sizing: content-box;
+  padding: 6px;
+  border-radius: 10px;
+  background: var(--mode-soft);
+  color: var(--mode-ink);
+}
+.ov-tile[class*='mode-']:hover {
+  border-color: var(--mode);
+  background: var(--mode-soft);
+}
+.ov-tile.main[class*='mode-'] {
+  background: var(--mode);
+  border-color: var(--mode);
+}
+.ov-tile.main[class*='mode-'] svg {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+/* ---------- Merkora Tools tabs ---------- */
+.tools-tabs button[class*='mode-'] {
+  color: var(--mode-ink);
+}
+.tools-tabs button[class*='mode-'].on {
+  background: var(--mode);
+  color: #fff;
+}
+.tool-win[data-mode] .tool-win-head {
+  background: var(--mode-soft);
+  color: var(--mode-ink);
+}
+
+/* ---------- skills: domain colours ---------- */
+.badge[data-domain] {
+  background: var(--mode-soft);
+  color: var(--mode-ink);
+}
+.skill-tile[data-domain] {
+  border-left: 5px solid var(--mode);
+}
+.skill-tile[data-domain]:hover {
+  border-color: var(--mode);
+  background: var(--mode-soft);
+}
+.skill-page[data-domain] .skill-head h1 {
+  color: var(--mode-ink);
+}
+
+/* ---------- learning: the answer buttons keep their meaning colours ---------- */
+.rate.easy {
+  background: color-mix(in srgb, #2563c9 12%, var(--white));
+  color: #1d4ea0;
+}
+:root[data-theme='dark'] .rate.easy {
+  color: #9cbcf0;
+}

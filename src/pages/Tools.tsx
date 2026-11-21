@@ -33,7 +33,7 @@ export default function Tools() {
   const setTab = (id: Tab) => setParams({ tab: id }, { replace: true });
 
   return (
-    <div className="page tools-page">
+    <div className="page tools-page" data-mode={tab}>
       <div className="page-head">
         <div>
           <h1>Merkora Tools</h1>
@@ -51,7 +51,7 @@ export default function Tools() {
 
       <div className="seg wrap tools-tabs" role="tablist" aria-label="Tools-Bereiche">
         {TABS.map((t) => (
-          <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'on' : ''} onClick={() => setTab(t.id)}>
+          <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} className={`mode-${t.id} ${tab === t.id ? 'on' : ''}`} onClick={() => setTab(t.id)}>
             {t.label}
           </button>
         ))}

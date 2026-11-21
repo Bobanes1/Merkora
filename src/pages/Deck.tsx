@@ -86,7 +86,7 @@ export default function DeckPage() {
   const todos = (data.todos ?? []).filter((t) => t.deckId === deck.id && !t.doneAt).length;
 
   return (
-    <div className={`deck-layout ${chat ? 'with-chat' : ''}`}>
+    <div className={`deck-layout ${chat ? 'with-chat' : ''}`} data-mode={tab === 'overview' ? undefined : tab}>
       <div className="deck-main">
         {phone ? (
           <div className="deck-top phone-deck-top">
@@ -152,7 +152,7 @@ export default function DeckPage() {
               <span>Übersicht</span>
             </button>
             {TABS.filter((t) => (PHONE_TABS as readonly string[]).includes(t.id)).map((t) => (
-              <button key={t.id} type="button" role="tab" aria-selected={barTab === t.id} className={`tab ${barTab === t.id ? 'on' : ''}`} onClick={() => setTab(t.id)}>
+              <button key={t.id} type="button" role="tab" aria-selected={barTab === t.id} className={`tab mode-${t.id} ${barTab === t.id ? 'on' : ''}`} onClick={() => setTab(t.id)}>
                 <span>{t.label}</span>
               </button>
             ))}
@@ -175,7 +175,7 @@ export default function DeckPage() {
                   type="button"
                   role="tab"
                   aria-selected={barTab === t.id}
-                  className={`tab ${barTab === t.id ? 'on' : ''}`}
+                  className={`tab mode-${t.id} ${barTab === t.id ? 'on' : ''}`}
                   onClick={() => setTab(t.id)}
                 >
                   <t.icon size={14} />
@@ -192,7 +192,7 @@ export default function DeckPage() {
         {barTab === 'learn' && !phone && (
           <div className="seg compact learn-switch" role="radiogroup" aria-label="Ansicht">
             {LEARN_VIEWS.map((v) => (
-              <button key={v.id} type="button" role="radio" aria-checked={tab === v.id} className={tab === v.id ? 'on' : ''} onClick={() => setTab(v.id)}>
+              <button key={v.id} type="button" role="radio" aria-checked={tab === v.id} className={`mode-${v.id} ${tab === v.id ? 'on' : ''}`} onClick={() => setTab(v.id)}>
                 <v.icon size={13} /> {v.label}
               </button>
             ))}
@@ -235,7 +235,7 @@ export default function DeckPage() {
         <Sheet title="Weitere Ansichten" onClose={() => setMoreTabs(false)}>
           <div className="sheet-list">
             {[...TABS.filter((t) => !(PHONE_TABS as readonly string[]).includes(t.id)), ...LEARN_VIEWS.filter((v) => v.id !== 'learn')].map((t) => (
-              <button key={t.id} type="button" className={tab === t.id ? 'on' : ''} onClick={() => (setMoreTabs(false), setTab(t.id as TabId))}>
+              <button key={t.id} type="button" className={`mode-${t.id} ${tab === t.id ? 'on' : ''}`} onClick={() => (setMoreTabs(false), setTab(t.id as TabId))}>
                 <t.icon size={20} /> {t.label}
               </button>
             ))}

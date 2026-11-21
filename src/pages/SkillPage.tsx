@@ -66,7 +66,7 @@ export default function SkillPage() {
         </Link>
       </div>
     );
-  return <div className="page skill-page">{skill.status === 'planning' ? <Planner skill={skill} /> : <Path skill={skill} />}</div>;
+  return <div className="page skill-page" data-domain={skill.domain}>{skill.status === 'planning' ? <Planner skill={skill} /> : <Path skill={skill} />}</div>;
 }
 
 function Busy({ text }: { text: string }) {
@@ -320,7 +320,7 @@ function Path({ skill }: { skill: Skill }) {
         ‹ Skills
       </Link>
       <header className="page-head skill-head">
-        <span className={'badge ' + skill.domain}>{DOMAIN_LABEL[skill.domain]}</span>
+        <span className={'badge ' + skill.domain} data-domain={skill.domain}>{DOMAIN_LABEL[skill.domain]}</span>
         <h1>{skill.title}</h1>
         <p className="muted">
           {p.done} von {p.total} Lektionen · erreicht: {reached >= 0 ? skill.stages[reached].name : 'noch keine Stufe'} · Ziel: {skill.levels[skill.targetLevel] ?? '–'}

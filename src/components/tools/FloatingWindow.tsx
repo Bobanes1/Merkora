@@ -100,6 +100,7 @@ export function FloatingWindow({ id, win, title, badge, icon, defaultPos, width 
     <section
       ref={ref}
       className={`tool-win ${win.minimized ? 'minimized' : ''}`}
+      data-mode={id}
       style={style}
       aria-label={title}
       onMouseDown={() => toolWindows.focus(id)}
