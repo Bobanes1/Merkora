@@ -238,3 +238,24 @@ mod net_tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
+
+/// Every command the app registers must also be allowed for the window (build.rs list + desktop capabilities),
+/// otherwise it fails at runtime with „not allowed by ACL“.
+#[cfg(test)]
+mod acl_tests {
+    #[test]
+    fn every_command_is_allowed() {
+        let lib = include_str!("lib.rs");
+        let build = include_str!("../build.rs");
+        let caps = include_str!("../capabilities/default.json");
+        let start = lib.find("generate_handler![").expect("handler list") + "generate_handler![".len();
+        let list = &lib[start..start + lib[start..].find(']').unwrap()];
+        let names: Vec<&str> = list.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+        assert!(names.len() > 20);
+        for n in names {
+            let n = n.rsplit("::").next().unwrap();
+            assert!(build.contains(&format!("\"{n}\"")), "{n} fehlt in build.rs");
+            assert!(caps.contains(&format!("\"allow-{}\"", n.replace('_', "-"))), "allow-{n} fehlt in capabilities/default.json");
+        }
+    }
+}

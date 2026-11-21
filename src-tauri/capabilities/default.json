@@ -53,7 +53,11 @@
     "allow-download-apk",
     "allow-open-media-file",
     "allow-run-java",
-    "allow-java-available"
+    "allow-java-available",
+    "allow-java-offer",
+    "allow-java-builtin",
+    "allow-java-install",
+    "allow-java-uninstall"
   ],
   "platforms": [
     "windows",
