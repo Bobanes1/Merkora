@@ -10799,3 +10799,34 @@ html.glass .pip-tip-bubble { background: color-mix(in srgb, var(--white) 86%, tr
 .code-area { overflow-x: auto; overflow-y: hidden; }
 .code-input { resize: none !important; overflow: hidden !important; min-height: calc(8 * var(--code-line) + 20px); max-width: none; }
 .code-hl { overflow: visible !important; right: auto; min-width: 100%; }
+
+/* ---------- compact Pomodoro pop-up ---------- */
+.pomo-tool.compact { gap: 8px; padding: 2px 0; }
+.pomo-tool.compact .pomo-ring-wrap { margin: 0 auto; }
+.pomo-tool.compact .pomo-big-clock { font-size: 22px; }
+.pomo-tool.compact .pomo-ring-center small { font-size: 10px; }
+.pomo-tool.compact .pomo-controls { gap: 4px; justify-content: center; }
+.pomo-tool.compact .pomo-controls .btn { height: 32px; padding: 0 10px; }
+.pomo-tool.compact .pomo-presets { gap: 4px; }
+.pomo-tool.compact .pomo-presets .chip { padding: 2px 8px; font-size: 0.75rem; }
+.pomo-tool.compact .pomo-active-task, .pomo-tool.compact .pomo-task-pick { font-size: 0.82rem; }
+.tool-win[data-mode='pomodoro'] .tool-win-body { padding: 10px 12px 12px; }
+
+/* ---------- aquarium in the start page column: use the whole width ---------- */
+.aquarium-widget { display: grid !important; gap: 8px; width: 100%; }
+.aquarium-widget .aquarium { width: 100%; }
+.aquarium.compact .aq-tank { height: auto; aspect-ratio: 16 / 10; width: 100%; }
+.aq-count { font-size: 0.78rem; color: var(--muted); }
+
+/* learning path: lessons you already know are „übersprungen“ – not a finished level */
+.path-node.skipped,
+.scene .path-node.skipped {
+  background: #8fa3b8;
+  box-shadow: 0 6px 0 #6b7f94;
+  color: #fff;
+  opacity: 0.85;
+}
+:root[data-theme='dark'] .scene .path-node.skipped { background: #4d5f73; box-shadow: 0 6px 0 #35444f; }
+.path-node-wrap.skipped .node-label { opacity: 0.8; }
+.path-node-wrap.skipped .node-label small { font-style: italic; }
+.aquarium-widget { grid-template-columns: minmax(0, 1fr); justify-content: stretch !important; align-items: stretch !important; }

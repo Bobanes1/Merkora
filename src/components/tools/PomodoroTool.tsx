@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { fmtClock, pomodoro, usePomodoro, usePomodoroMeta } from '../../lib/pomodoro';
 import { MIN, remaining } from '../../lib/pomodoroRule';
 import { toggleTodo, useStore } from '../../lib/store';
-import { IconCheck, IconPause, IconPlay, IconRefresh, IconSpeaker } from '../Icons';
+import { IconCheck, IconMore, IconPause, IconPlay, IconRefresh, IconSkip, IconSpeaker } from '../Icons';
 
 const PRESETS = [
   { label: '15 / 3', work: 15, brk: 3 },
@@ -21,6 +21,9 @@ export function PomodoroTool({ compact = false }: { compact?: boolean }) {
   const activeTodo = meta.activeTodoId ? todos.find((t) => t.id === meta.activeTodoId) : undefined;
 
   const [editDur, setEditDur] = useState(false);
+  // compact (pop-up window): only ring and buttons; tasks and durations folded away
+  const [more, setMore] = useState(false);
+  const showExtras = !compact || more;
   const [workIn, setWorkIn] = useState(String(meta.workMin));
   const [brkIn, setBrkIn] = useState(String(meta.breakMin));
 
@@ -28,7 +31,7 @@ export function PomodoroTool({ compact = false }: { compact?: boolean }) {
   const totalMs = (p.phase === 'work' ? meta.workMin : meta.breakMin) * MIN;
   const pct = totalMs > 0 ? Math.max(0, Math.min(1, 1 - left / totalMs)) : 0;
 
-  const size = compact ? 156 : 196;
+  const size = compact ? 112 : 196;
   const r = (size - 16) / 2;
   const c = 2 * Math.PI * r;
 
@@ -41,6 +44,7 @@ export function PomodoroTool({ compact = false }: { compact?: boolean }) {
 
   return (
     <div className={`pomo-tool ${p.phase} ${p.running ? 'running' : ''} ${compact ? 'compact' : ''}`}>
+      {!compact && (
       <div className="pomo-phase-tabs" role="tablist" aria-label="Pomodoro-Phase">
         <button
           type="button"
@@ -61,16 +65,17 @@ export function PomodoroTool({ compact = false }: { compact?: boolean }) {
           Pause
         </button>
       </div>
+      )}
 
       <div className="pomo-ring-wrap">
         <svg className="pomo-ring" width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
-          <circle className="pomo-ring-bg" cx={size / 2} cy={size / 2} r={r} strokeWidth="8" fill="none" />
+          <circle className="pomo-ring-bg" cx={size / 2} cy={size / 2} r={r} strokeWidth={compact ? 6 : 8} fill="none" />
           <circle
             className="pomo-ring-fg"
             cx={size / 2}
             cy={size / 2}
             r={r}
-            strokeWidth="8"
+            strokeWidth={compact ? 6 : 8}
             fill="none"
             strokeDasharray={c}
             strokeDashoffset={c * (1 - pct)}
@@ -89,12 +94,17 @@ export function PomodoroTool({ compact = false }: { compact?: boolean }) {
 
       <div className="pomo-controls">
         {p.running ? (
-          <button type="button" className="btn primary" onClick={pomodoro.pause}>
-            <IconPause size={15} /> Pausieren
+          <button type="button" className="btn primary" onClick={pomodoro.pause} aria-label="Pausieren" title="Pausieren">
+            <IconPause size={15} />{compact ? '' : ' Pausieren'}
           </button>
         ) : (
-          <button type="button" className="btn primary" onClick={pomodoro.start}>
-            <IconPlay size={14} /> Starten
+          <button type="button" className="btn primary" onClick={pomodoro.start} aria-label="Starten" title="Starten">
+            <IconPlay size={14} />{compact ? '' : ' Starten'}
+          </button>
+        )}
+        {compact && (
+          <button type="button" className="btn ghost" aria-label={p.phase === 'work' ? 'Zur Pause wechseln' : 'Zur Lernzeit wechseln'} title={p.phase === 'work' ? 'Pause' : 'Lernzeit'} onClick={() => pomodoro.setPhase(p.phase === 'work' ? 'break' : 'work')}>
+            <IconSkip size={15} />
           </button>
         )}
         <button type="button" className="btn ghost" aria-label="Zurücksetzen" title="Zurücksetzen" onClick={pomodoro.reset}>
@@ -109,9 +119,14 @@ export function PomodoroTool({ compact = false }: { compact?: boolean }) {
         >
           <IconSpeaker size={15} />
         </button>
+        {compact && (
+          <button type="button" className={more ? 'btn ghost on' : 'btn ghost'} aria-expanded={more} aria-label="Mehr" title="Aufgabe und Dauer" onClick={() => setMore((v) => !v)}>
+            <IconMore size={15} />
+          </button>
+        )}
       </div>
 
-      {activeTodo && !activeTodo.doneAt ? (
+      {showExtras && (activeTodo && !activeTodo.doneAt ? (
         <div className="pomo-active-task">
           <button
             type="button"
@@ -155,8 +170,9 @@ export function PomodoroTool({ compact = false }: { compact?: boolean }) {
             </select>
           </div>
         )
-      )}
+      ))}
 
+      {showExtras && (
       <div className="pomo-presets">
         {PRESETS.map((pr) => (
           <button
@@ -180,8 +196,9 @@ export function PomodoroTool({ compact = false }: { compact?: boolean }) {
           Eigene
         </button>
       </div>
+      )}
 
-      {editDur && (
+      {showExtras && editDur && (
         <div className="pomo-custom">
           <label>
             <span>Lernen</span>

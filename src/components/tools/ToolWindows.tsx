@@ -24,7 +24,7 @@ export function ToolWindows() {
         badge={pomoBadge}
         icon={<IconTimer size={15} />}
         defaultPos={{ right: 24, bottom: 24 }}
-        width={310}
+        width={236}
       >
         <PomodoroTool compact />
       </FloatingWindow>

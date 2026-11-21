@@ -204,6 +204,11 @@ export function Aquarium({ compact = false }: { compact?: boolean }) {
         <span className="aq-sand" aria-hidden="true" />
         {!inside.length && <p className="aq-empty">Noch leer – lerne deine erste Karte, dann zieht die erste Muschel ein.</p>}
       </div>
+      {compact && (
+        <span className="aq-count">
+          {inside.length} von {AQUA_ITEMS.length} Bewohnern
+        </span>
+      )}
       {!compact && (
         <>
           <p className="muted small">

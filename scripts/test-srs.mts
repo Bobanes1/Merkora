@@ -1522,7 +1522,7 @@ console.log('Skills: Lernpfad planen und lernen');
   ok(S.lessonDone(skill.stages[0].lessons[0]) && S.lessonDone(skill.stages[0].lessons[1]) && !S.lessonDone(skill.stages[0].lessons[2]), 'Lektion geschafft ab 80 % (oder „kann ich schon“)');
   ok(S.nextLesson(skill)!.lesson.id === 'l3' && S.lessonAfter(skill, 'l3')!.lesson.id === 'l4', 'nächste Lektion und die, die im Hintergrund vorbereitet wird');
   const pr = S.skillProgress(skill);
-  ok(pr.done === 2 && pr.total === 5, 'Fortschritt des Skills');
+  ok(pr.done === 1 && pr.skipped === 1 && pr.total === 4, 'Fortschritt des Skills: übersprungene Lektionen zählen weder als geschafft noch als offen');
   ok(!S.stageReady(skill.stages[0]) && !S.canReview(skill), 'Stufentest erst nach allen Lektionen, Wiederholung erst nach 2 geübten');
   skill.stages[0].lessons[2].set = set(5, 5);
   ok(S.stageReady(skill.stages[0]) && S.canReview(skill) && S.reachedStage(skill) === -1, 'Stufe bereit für den Test');
@@ -1581,7 +1581,7 @@ console.log('Skills-Lernpfad: Sterne');
 {
   const { lessonStars } = await import('../src/lib/skills');
   const set = (solved: number, total: number) => ({ tasks: Array.from({ length: total }, () => ({ type: 'calc', q: 'x' })), progress: Array.from({ length: total }, (_, i) => ({ solved: i < solved })) }) as any;
-  ok(lessonStars({ id: 'a', title: 'a', goal: '', known: true }) === 3 && lessonStars({ id: 'a', title: 'a', goal: '' }) === 0, 'kannst du schon = 3 Sterne, ohne Aufgaben = 0');
+  ok(lessonStars({ id: 'a', title: 'a', goal: '', known: true }) === 0 && lessonStars({ id: 'a', title: 'a', goal: '' }) === 0, 'kannst du schon = übersprungen, keine Sterne; ohne Aufgaben = 0');
   ok([lessonStars({ id: 'a', title: 'a', goal: '', set: set(10, 10) }), lessonStars({ id: 'a', title: 'a', goal: '', set: set(9, 10) }), lessonStars({ id: 'a', title: 'a', goal: '', set: set(8, 10) }), lessonStars({ id: 'a', title: 'a', goal: '', set: set(5, 10) })].join() === '3,2,1,0', 'alles / 90 % / 80 % / halb gelöst');
 }
 

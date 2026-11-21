@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { CardContent } from '../components/CardContent';
 import { ConfirmModal } from '../components/Modal';
 import { CostHint } from '../components/CostHint';
-import { IconArrowDown, IconArrowUp, IconCheck, IconLock, IconPlus, IconSparkle, IconStar, IconTrash, IconTrophy } from '../components/Icons';
+import { IconArrowDown, IconArrowUp, IconCheck, IconSkip, IconLock, IconPlus, IconSparkle, IconStar, IconTrash, IconTrophy } from '../components/Icons';
 import { FloorDecor, NodeDecor, PATH_OFFSETS, PathLink, SandFloor, SwimmingFish, themeFor, Waves } from '../components/PathDecor';
 import { Mascot } from '../components/Mascot';
 import { PracticeSetView, type SetHost } from '../components/practice/PracticeSetView';
@@ -323,7 +323,7 @@ function Path({ skill }: { skill: Skill }) {
         <span className={'badge ' + skill.domain} data-domain={skill.domain}>{DOMAIN_LABEL[skill.domain]}</span>
         <h1>{skill.title}</h1>
         <p className="muted">
-          {p.done} von {p.total} Lektionen · erreicht: {reached >= 0 ? skill.stages[reached].name : 'noch keine Stufe'} · Ziel: {skill.levels[skill.targetLevel] ?? '–'}
+          {p.done} von {p.total} Lektionen{p.skipped ? ` · ${p.skipped} übersprungen` : ''} · erreicht: {reached >= 0 ? skill.stages[reached].name : 'noch keine Stufe'} · Ziel: {skill.levels[skill.targetLevel] ?? '–'}
         </p>
         <span className="bar skill-bar" aria-hidden="true">
           <i style={{ width: `${Math.round(p.share * 100)}%` }} />
@@ -361,6 +361,7 @@ function Path({ skill }: { skill: Skill }) {
             {p.done} / {p.total}
           </b>{' '}
           Lektionen geschafft
+          {p.skipped > 0 && <small className="muted"> · {p.skipped} übersprungen</small>}
         </span>
         <span className="path-stars">
           <IconStar size={16} /> {stars} / {p.total * 3}
@@ -369,7 +370,9 @@ function Path({ skill }: { skill: Skill }) {
       <div className="path skill-path">
         {skill.stages.map((st, si) => {
           const theme = themeFor(si);
-          const doneHere = st.lessons.filter(lessonDone).length;
+          const toLearn = st.lessons.filter((l) => !l.known);
+          const doneHere = toLearn.filter(lessonDone).length;
+          const skippedHere = st.lessons.length - toLearn.length;
           const ready = stageReady(st);
           // the stage test is the trophy at the end; Pip waits there once all lessons of the stage are done
           const testCurrent = ready && !st.passed && !next;
@@ -400,10 +403,11 @@ function Path({ skill }: { skill: Skill }) {
                   </b>
                   <small>
                     {st.goal ? st.goal + ' · ' : ''}
-                    {doneHere} von {st.lessons.length} geschafft
+                    {skippedHere ? `${skippedHere} übersprungen · ` : ''}
+                    {doneHere} von {toLearn.length} geschafft
                   </small>
                   <span className="unit-progress">
-                    <i style={{ width: `${(doneHere / Math.max(1, st.lessons.length)) * 100}%` }} />
+                    <i style={{ width: `${toLearn.length ? (doneHere / toLearn.length) * 100 : 100}%` }} />
                   </span>
                 </span>
               </header>
@@ -411,7 +415,9 @@ function Path({ skill }: { skill: Skill }) {
                 {nodes.map((n, k) => {
                   const l = n.lesson;
                   const state = l
-                    ? lessonDone(l)
+                    ? l.known
+                      ? 'skipped'
+                      : lessonDone(l)
                       ? 'done'
                       : next?.lesson.id === l.id
                         ? 'current'
@@ -429,9 +435,9 @@ function Path({ skill }: { skill: Skill }) {
                   const mascotSide = off > 0 ? 'left' : 'right';
                   let decoSide: 'left' | 'right' = off > 0 ? 'left' : off < 0 ? 'right' : k % 2 ? 'left' : 'right';
                   if (state === 'current') decoSide = mascotSide === 'left' ? 'right' : 'left';
-                  const Icon = !l ? (state === 'locked' ? IconLock : IconTrophy) : state === 'done' ? IconCheck : IconStar;
+                  const Icon = !l ? (state === 'locked' ? IconLock : IconTrophy) : state === 'skipped' ? IconSkip : state === 'done' ? IconCheck : IconStar;
                   const nStars = l ? lessonStars(l) : 0;
-                  const sub = l ? (l.known ? 'kannst du schon' : l.set ? `${solvedCount(l.set)}/${problemCount(l.set)} gelöst` : '') : st.passed ? 'bestanden' : ready ? 'Stufentest' : 'erst alle Lektionen';
+                  const sub = l ? (l.known ? 'übersprungen – kannst du schon' : l.set ? `${solvedCount(l.set)}/${problemCount(l.set)} gelöst` : '') : st.passed ? 'bestanden' : ready ? 'Stufentest' : 'erst alle Lektionen';
                   return (
                     <div key={n.key} className={`path-node-wrap ${state}`} style={{ transform: `translateX(${off}px)`, animationDelay: `${Math.min(offIndex, 24) * 45}ms`, zIndex: 200 - k }}>
                       {dx !== null && <PathLink dx={dx} height={state === 'current' ? 88 : 58} done={state === 'done' || state === 'current'} />}

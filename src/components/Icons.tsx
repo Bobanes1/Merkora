@@ -300,3 +300,4 @@ export const IconMore = mk(
     <circle cx="19" cy="12" r="1.6" />
   </>,
 );
+export const IconSkip = mk(<path d="M5 6l7 6-7 6zM13 6l7 6-7 6z" />);

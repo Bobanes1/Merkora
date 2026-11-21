@@ -236,8 +236,10 @@ Kein "example". 8 Aufgaben. ${JSON_ONLY}`,
 export const mastered = (set?: PracticeSet) => !!set && problemCount(set) > 0 && solvedCount(set) / problemCount(set) >= 0.8;
 export const lessonDone = (l: Lesson) => !!l.known || mastered(l.set);
 /** Stars for a finished lesson on the path: 3 = all solved (or „kannst du schon“), 2 = from 90 %, 1 = done (80 %). */
+/** A lesson you said you already know: skipped – it does not count as learned. */
+export const lessonSkipped = (l: Lesson) => !!l.known;
 export function lessonStars(l: Lesson): number {
-  if (l.known) return 3;
+  if (l.known) return 0;
   if (!l.set || !problemCount(l.set)) return 0;
   const share = solvedCount(l.set) / problemCount(l.set);
   return share >= 1 ? 3 : share >= 0.9 ? 2 : share >= 0.8 ? 1 : 0;
@@ -255,8 +257,11 @@ export function lessonAfter(skill: Skill, lessonId: string): { stage: Stage; les
 }
 export function skillProgress(skill: Skill) {
   const all = skill.stages.flatMap((st) => st.lessons);
-  const done = all.filter(lessonDone).length;
-  return { done, total: all.length, share: all.length ? done / all.length : 0 };
+  // skipped lessons („kannst du schon“) are neither learned nor still to do
+  const skipped = all.filter(lessonSkipped).length;
+  const done = all.filter((l) => !l.known && lessonDone(l)).length;
+  const total = all.length - skipped;
+  return { done, skipped, total, share: total ? done / total : skipped ? 1 : 0 };
 }
 /** A level test is open when every lesson of the level is done. */
 export const stageReady = (st: Stage) => st.lessons.every(lessonDone);
