@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import { highlightJava } from '../lib/javaHighlight';
 import { usePhone } from '../lib/phone';
 
@@ -12,6 +12,20 @@ export function CodeEditor({ value, onChange, label = 'Code' }: { value: string;
   const hl = useRef<HTMLPreElement>(null);
   const phone = usePhone();
   const lines = value.split('\n').length;
+
+  // The text field always has exactly the size of the code (height and width), so it never scrolls by itself –
+  // otherwise the cursor and the coloured text behind it drift apart. The whole editor scrolls sideways instead.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const area = el.parentElement;
+    el.style.height = '0px';
+    el.style.width = '0px';
+    el.style.height = `${el.scrollHeight}px`;
+    el.style.width = `${Math.max(area?.clientWidth ?? 0, el.scrollWidth)}px`;
+    el.scrollTop = 0;
+    el.scrollLeft = 0;
+  }, [value]);
 
   /** Replaces the selection with `text` (keeps undo working where the browser allows it). */
   const insert = (text: string) => {
@@ -66,10 +80,11 @@ export function CodeEditor({ value, onChange, label = 'Code' }: { value: string;
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={onKeyDown}
           onScroll={(e) => {
-            // the highlighted copy scrolls along, so text and cursor stay on top of each other
-            if (hl.current) {
-              hl.current.scrollTop = e.currentTarget.scrollTop;
-              hl.current.scrollLeft = e.currentTarget.scrollLeft;
+            // never scroll inside the field (it is as big as the code) – if a browser tries, back to the start
+            const el = e.currentTarget;
+            if (el.scrollTop || el.scrollLeft) {
+              el.scrollTop = 0;
+              el.scrollLeft = 0;
             }
           }}
           spellCheck={false}

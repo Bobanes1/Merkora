@@ -10794,3 +10794,8 @@ html.glass .pip-tip-bubble { background: color-mix(in srgb, var(--white) 86%, tr
 @keyframes hs-fish { to { transform: translateX(-30px); } }
 @keyframes hs-rays { to { opacity: 0.55; } }
 @keyframes hs-glow { 50% { opacity: 0.2; } }
+
+/* code editor: the text field grows with the code and never scrolls by itself (cursor and colours stay together) */
+.code-area { overflow-x: auto; overflow-y: hidden; }
+.code-input { resize: none !important; overflow: hidden !important; min-height: calc(8 * var(--code-line) + 20px); max-width: none; }
+.code-hl { overflow: visible !important; right: auto; min-width: 100%; }
