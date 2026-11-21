@@ -346,6 +346,10 @@ export default function Settings() {
           <span>Glas-Optik: Seitenleiste, Leisten und Fenster leicht durchscheinend.</span>
         </label>
         <label className="check-row">
+          <input type="checkbox" checked={settings.pipTips !== false} onChange={(e) => setSettings({ pipTips: e.target.checked })} />
+          <span>Pip-Tipps: ab und zu ein kurzer Tipp passend zur Seite.</span>
+        </label>
+        <label className="check-row">
           <input type="checkbox" checked={settings.uiSounds !== false} onChange={(e) => setSettings({ uiSounds: e.target.checked })} />
           <span>Dezente Töne beim Abhaken, bei richtigen und falschen Antworten und beim Stufen-Aufstieg.</span>
         </label>

@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { PipTip } from './PipTip';
 import { MiniPlayer } from './MiniPlayer';
 import { Tour } from './Tour';
 import { UndoToast } from './UndoToast';
@@ -286,6 +287,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       {aiCourse && <CreateWithAI courseId={aiCourse} onClose={() => setAiCourse(null)} onBack={() => (setAiCourse(null), setNewDeck(true))} />}
       {search && <SearchPalette onClose={() => setSearch(false)} />}
       <UndoToast />
+      <PipTip area={areaOf(pathname)} />
       <Tour />
       {phone && <MiniPlayer phone />}
       {phone && <PhoneNav onSearch={() => setSearch(true)} onNewDeck={() => setNewDeck(true)} />}

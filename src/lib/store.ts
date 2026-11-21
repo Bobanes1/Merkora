@@ -186,6 +186,8 @@ export type Game = {
   minutesByDay?: Record<string, number>;
   /** Mastery per deck, one snapshot per day (for the weekly review). */
   masterySnaps?: Record<string, Record<string, number>>;
+  /** Aquarium: unlocked inhabitants (id → time). */
+  aquarium?: Record<string, number>;
   /** Week (its Sunday) whose review was closed. */
   weekSeen?: string;
 };
@@ -207,6 +209,8 @@ export type Settings = {
   /** Subtle sounds (checking off, right/wrong, level up) and their volume 0–1. */
   uiSounds?: boolean;
   soundVolume?: number;
+  /** Pip shows a short tip per page now and then (on by default). */
+  pipTips?: boolean;
   /** Glass look: sidebar, bars and windows slightly see-through (on by default). */
   glass?: boolean;
   /** The short introduction with Pip was finished or skipped. */

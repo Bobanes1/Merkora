@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { watchAquarium } from './components/Aquarium';
 import { watchLevelUps } from './lib/uiSound';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import SyncCallback from './pages/SyncCallback';
@@ -48,7 +49,7 @@ function TodosRedirect() {
 
 export default function App() {
   useMotionSetting();
-  useEffect(() => watchLevelUps(), []);
+  useEffect(() => (watchLevelUps(), watchAquarium()), []);
   useApplyTheme();
   const trayOnClose = useStore((s) => s.data.settings.trayOnClose);
   useEffect(() => {

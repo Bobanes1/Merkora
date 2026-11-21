@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Aquarium } from '../components/Aquarium';
 import { Link } from 'react-router-dom';
 import { groupTotals, levelCounts, masteryPercent, statsTree, streak, type DeckStat, type StatTotals } from '../lib/stats';
 import { deckUrl, dueCards, setSettings, useData } from '../lib/store';
@@ -26,6 +27,10 @@ const fmtDay = (t: number) => new Date(t).toLocaleDateString('de-DE', { weekday:
 
 export default function Stats() {
   const data = useData();
+  // /stats#aquarium (from the start page or a „new inhabitant“ message) jumps to the aquarium
+  useEffect(() => {
+    if (window.location.hash === '#aquarium') window.setTimeout(() => document.getElementById('aquarium')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
+  }, []);
   useEffect(() => {
     document.title = 'Statistik – Merkora';
   }, []);
@@ -169,6 +174,14 @@ export default function Stats() {
       </div>
 
       <WeekReview always />
+
+      <section className="panel aquarium-panel" id="aquarium">
+        <div className="panel-head">
+          <h2>Dein Aquarium</h2>
+          <small className="muted">für jeden Lernerfolg zieht jemand Neues ein</small>
+        </div>
+        <Aquarium />
+      </section>
 
       <section className="panel">
         <div className="panel-head">

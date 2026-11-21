@@ -1718,6 +1718,27 @@ console.log('Gestaltung: Tageszeit, Pflanze, Deck-Cover');
   ok(own.color === 3 && own.pattern === 'waves' && own.icon === 'flask' && bad.color === a.color && bad.pattern === a.pattern && bad.icon === 'cards', 'eigenes Cover gilt, ungültige Werte fallen aufs automatische zurück');
 }
 
+console.log('Aquarium und Pip-Tipps');
+{
+  const A = await import('../src/lib/aquarium');
+  const zero = { cards: 0, streak: 0, minutes: 0, decksMastered: 0, pathStars: 0, skillLessons: 0, mockPassed: 0, todosDone: 0, xp: 0 };
+  ok(A.unlockedBy(zero).length === 0, 'ohne Lernen ist das Aquarium leer');
+  const some = { ...zero, cards: 120, streak: 3, todosDone: 10 };
+  const u = A.unlockedBy(some);
+  ok(['shell', 'weed', 'starfish', 'clownfish', 'crab'].every((id) => u.includes(id)) && !u.includes('bluefish') && !u.includes('seahorse'), 'Bewohner nach klaren Regeln: ' + u.join(','));
+  const blue = A.AQUA_ITEMS.find((i) => i.id === 'bluefish')!;
+  ok(Math.round(A.progressOf(blue, some) * 100) === 48 && new Set(A.AQUA_ITEMS.map((i) => i.id)).size === A.AQUA_ITEMS.length, 'Fortschritt zum nächsten Bewohner (120 von 250 Karten)');
+  const { aquaStats } = await import('../src/lib/aquarium');
+  const s = aquaStats({ decks: [], reviews: [{ cardId: 'a', at: Date.now() }, { cardId: 'a', at: Date.now() }, { cardId: 'b', at: Date.now() }], game: { xpByDay: {}, dailyGoal: 50 }, todos: [{ doneAt: 1 }, {}], skills: [] } as any);
+  ok(s.cards === 2 && s.todosDone === 1, 'Zahlen aus dem Lernstand (verschiedene Karten, erledigte To-dos)');
+
+  const T = await import('../src/lib/pipTips');
+  const first = T.pickTip('library', {}, '2026-11-21')!;
+  ok(first.text === T.PIP_TIPS.library[0] && T.pickTip('library', first.mem, '2026-11-21') === null, 'höchstens ein Tipp pro Bereich und Tag');
+  const next = T.pickTip('library', first.mem, '2026-11-22')!;
+  ok(next.text === T.PIP_TIPS.library[1] && T.pickTip('nirgends', {}, '2026-11-21') === null, 'am nächsten Tag der nächste Tipp; Bereiche ohne Tipps bleiben still');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

@@ -10703,3 +10703,71 @@ html.phone .cover-icons { grid-template-columns: repeat(4, 1fr); }
 .mini-player.phone { position: fixed; left: 12px; right: 12px; bottom: calc(70px + env(safe-area-inset-bottom)); z-index: 39; margin: 0; box-shadow: var(--shadow-lg); }
 html.glass .mini-player.phone { background: color-mix(in srgb, var(--white) 78%, transparent); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
 html.phone.learning .mini-player.phone { display: none; }
+
+/* =====================================================================
+   Step 4: aquarium, Pip tips
+   ===================================================================== */
+.aquarium { display: grid; gap: 10px; }
+.aq-tank {
+  position: relative;
+  height: 260px;
+  border-radius: var(--r-xl);
+  overflow: hidden;
+  background: linear-gradient(180deg, #7fd3ee 0%, #2f8fd0 55%, #1d5fa8 100%);
+  box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.35), 0 16px 32px -18px rgba(29, 95, 168, 0.7);
+}
+:root[data-theme='dark'] .aq-tank { background: linear-gradient(180deg, #1f5f86 0%, #163f6e 55%, #0f2547 100%); }
+.aquarium.compact .aq-tank { height: 120px; }
+.aq-light { position: absolute; inset: 0; background: repeating-linear-gradient(105deg, rgba(255, 255, 255, 0.14) 0 18px, transparent 18px 70px); mix-blend-mode: soft-light; }
+.aq-sand { position: absolute; left: 0; right: 0; bottom: 0; height: 16%; background: radial-gradient(120% 100% at 50% 100%, #f3e3b5 60%, #e8d297 100%); }
+.aq-item { position: absolute; width: 15%; max-width: 86px; min-width: 38px; transform: translate(-50%, -50%); z-index: 1; }
+.aquarium.compact .aq-item { width: 13%; min-width: 26px; }
+.aq-item.ground { z-index: 2; transform: translate(-50%, -100%); }
+.aq-creature { display: block; width: 100%; height: auto; overflow: visible; }
+.aq-empty { position: absolute; inset: auto 12px 22% 12px; margin: 0; text-align: center; color: #fff; font-weight: 600; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); }
+.aq-bubbles i { position: absolute; bottom: 14%; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, 0.7); opacity: 0; }
+.aq-bubbles i:nth-child(1) { left: 18%; }
+.aq-bubbles i:nth-child(2) { left: 43%; width: 6px; height: 6px; }
+.aq-bubbles i:nth-child(3) { left: 68%; }
+.aq-bubbles i:nth-child(4) { left: 88%; width: 5px; height: 5px; }
+@media (prefers-reduced-motion: no-preference) {
+  :root:not(.no-anim) .aq-item.swim { animation: aq-swim 14s ease-in-out infinite alternate; }
+  :root:not(.no-anim) .aq-item.float { animation: aq-float 6s ease-in-out infinite alternate; }
+  :root:not(.no-anim) .aq-bubbles i { animation: aq-bubble 6s ease-in infinite; }
+  :root:not(.no-anim) .aq-bubbles i:nth-child(2) { animation-delay: 1.5s; }
+  :root:not(.no-anim) .aq-bubbles i:nth-child(3) { animation-delay: 3s; }
+  :root:not(.no-anim) .aq-bubbles i:nth-child(4) { animation-delay: 4.2s; }
+}
+@keyframes aq-swim {
+  0% { transform: translate(-50%, -50%); }
+  45% { transform: translate(calc(-50% + 40px), calc(-50% - 8px)); }
+  50% { transform: translate(calc(-50% + 40px), calc(-50% - 8px)) scaleX(-1); }
+  95% { transform: translate(calc(-50% - 30px), calc(-50% + 6px)) scaleX(-1); }
+  100% { transform: translate(calc(-50% - 30px), calc(-50% + 6px)); }
+}
+@keyframes aq-float { to { transform: translate(-50%, calc(-50% - 14px)); } }
+@keyframes aq-bubble {
+  0% { transform: translateY(0); opacity: 0; }
+  10% { opacity: 1; }
+  100% { transform: translateY(-220px); opacity: 0; }
+}
+.aq-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.aq-list li { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border-radius: var(--r-md); border: 1px dashed var(--line); }
+.aq-list .aq-creature { width: 48px; flex: none; }
+.aq-creature.locked { filter: grayscale(1) brightness(0.4); opacity: 0.35; }
+:root[data-theme='dark'] .aq-creature.locked { filter: grayscale(1) brightness(1.6); opacity: 0.25; }
+.aq-list .grow { display: grid; gap: 3px; min-width: 0; }
+.aq-list small { color: var(--muted); font-size: 0.78rem; }
+.aq-list .bar { height: 5px; }
+.aquarium-widget { display: grid; gap: 6px; color: inherit; text-decoration: none; }
+.aquarium-widget small { color: var(--muted); font-weight: 600; }
+
+/* Pip tips */
+.pip-tip { position: fixed; right: 20px; bottom: 20px; z-index: 70; display: flex; gap: 8px; align-items: flex-end; max-width: min(380px, calc(100vw - 32px)); }
+.pip-tip-bubble { position: relative; padding: 12px 14px; border-radius: 16px 16px 4px 16px; background: var(--white); border: 1px solid var(--line); box-shadow: var(--shadow-pop); }
+.pip-tip-bubble p { margin: 0 0 8px; }
+html.phone .pip-tip { right: 12px; bottom: calc(80px + env(safe-area-inset-bottom)); }
+html.glass .pip-tip-bubble { background: color-mix(in srgb, var(--white) 86%, transparent); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+@media (prefers-reduced-motion: no-preference) {
+  :root:not(.no-anim) .pip-tip { animation: fade-up 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+}

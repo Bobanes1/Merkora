@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Aquarium } from '../components/Aquarium';
 import { GoalRing } from '../components/GoalRing';
 import { HeroScene } from '../components/HeroScene';
 import { DeckCoverOf } from '../components/DeckCover';
@@ -422,6 +423,10 @@ export default function Dashboard() {
         <div className="widget goal-widget">
           <GoalRing cards={cardsToday} cardGoal={cardGoal} minutes={minutesToday} minuteGoal={minuteGoal} />
         </div>
+        <Link to="/stats#aquarium" className="widget aquarium-widget" title="Dein Aquarium ansehen">
+          <small>Dein Aquarium</small>
+          <Aquarium compact />
+        </Link>
         <MiniCalendar />
       </aside>
       )}
