@@ -2,7 +2,8 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { CardContent } from '../CardContent';
 import { CodeEditor } from '../CodeEditor';
 import { Confetti } from '../Mascot';
-import { IconCheck, IconClose, IconPlay, IconPlus } from '../Icons';
+import { Markdown } from '../Markdown';
+import { IconCheck, IconClose, IconPlay, IconPlus, IconSparkle } from '../Icons';
 import { Lab } from '../labs/Labs';
 import { completeJson, gradeAnswer } from '../../lib/ai';
 import { openExternal } from '../../lib/desktop';
@@ -105,6 +106,16 @@ function Explanation({ set, host, steps, setSteps }: { set: PracticeSet; host: S
   };
   return (
     <>
+      {set.theory && (
+        <details className="practice-theory" open={!set.progress.some((p) => p.solved)}>
+          <summary>
+            <b>Grundlagen</b> <span className="muted small">zuerst verstehen – dann geht’s los</span>
+          </summary>
+          <div className="md">
+            <Markdown text={set.theory} />
+          </div>
+        </details>
+      )}
       {intro && (
         <div className="practice-intro">
           {simple && <span className="badge ok">einfacher erklärt</span>}
@@ -143,7 +154,7 @@ function Explanation({ set, host, steps, setSteps }: { set: PracticeSet; host: S
             </button>
           ) : (
             <button type="button" className="btn outline sm" onClick={() => void simplify()} disabled={busy}>
-              {busy ? 'Pip erklärt es einfacher …' : '🙂 Einfacher erklären'}
+              <IconSparkle size={14} /> {busy ? 'Pip erklärt es einfacher …' : 'Einfacher erklären'}
             </button>
           )}
           {error && <span className="form-error small">{error}</span>}

@@ -1655,6 +1655,18 @@ console.log('Rückgängig und KI-Fortschritt');
   ok(prog.total === 1 && prog.share > 0.2 && prog.share < 0.5, 'Gesamtfortschritt eines laufenden Auftrags: ' + prog.share.toFixed(2));
 }
 
+console.log('Anfänger-Lektionen: Grundlagen zuerst');
+{
+  const { beginnerRule } = await import('../src/lib/skills');
+  const { parsePractice } = await import('../src/lib/practice');
+  const java = { domain: 'java' } as any, math = { domain: 'math' } as any;
+  ok(beginnerRule(java, 0, 0).includes('"theory"') && beginnerRule(java, 0, 0).includes('"code"-Aufgaben') && beginnerRule(java, 0, 0).includes('nichts installieren'), 'erste Java-Lektion: Grundlagen und eigene kleine Programme');
+  ok(beginnerRule(math, 0, 1).includes('Pflichtfeld "theory"') && !beginnerRule(math, 0, 1).includes('"code"-Aufgaben'), 'erste Mathe-Lektion: Grundlagen, keine Code-Aufgaben');
+  ok(!beginnerRule(math, 2, 9).includes('Pflichtfeld'), 'spätere Lektion: Grundlagen nur wenn nötig');
+  const set = parsePractice({ kind: 'java', topic: 'Start', theory: '### Worum geht\'s?\nText', intro: '- a', problems: [{ type: 'order', prompt: 'p', items: ['a', 'b', 'c'] }] }, 'x', 1);
+  ok(!!set && set.theory!.startsWith('### Worum'), 'Grundlagen werden übernommen');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

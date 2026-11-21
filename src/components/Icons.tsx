@@ -275,3 +275,13 @@ export const IconFlag = mk(<path d="M5 21V4M5 4h11l-2 4 2 4H5" />);
 export const IconHash = mk(<path d="M9 4 7 20M17 4l-2 16M4 9h16M3 15h16" />);
 export const IconArrowUp = mk(<path d="M12 19V5M6 11l6-6 6 6" />);
 export const IconArrowDown = mk(<path d="M12 5v14M6 13l6 6 6-6" />);
+export const IconGrip = mk(
+  <>
+    <circle cx="9" cy="6" r="1.2" />
+    <circle cx="15" cy="6" r="1.2" />
+    <circle cx="9" cy="12" r="1.2" />
+    <circle cx="15" cy="12" r="1.2" />
+    <circle cx="9" cy="18" r="1.2" />
+    <circle cx="15" cy="18" r="1.2" />
+  </>,
+);

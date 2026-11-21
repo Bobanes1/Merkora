@@ -33,6 +33,8 @@ export type PracticeSet = {
   topic: string;
   intro: string;
   example?: { problem: string; steps: string[]; answer?: string; code?: string };
+  /** „Grundlagen“ before the explanation: what it is about, a picture in the head, the key terms (Markdown). */
+  theory?: string;
   /** The explanation once more, even simpler („Einfacher erklären“). */
   simple?: { intro: string; example?: { problem: string; steps: string[]; answer?: string } };
   /** All tasks (new sets). */
@@ -174,7 +176,7 @@ export function parsePractice(json: unknown, id: string, now: number): PracticeS
   const labs = (Array.isArray(r.labs) ? r.labs : []).map(parseLab).filter((l): l is LabSpec => !!l).slice(0, 4);
   const tasks = (Array.isArray(r.problems ?? r.tasks) ? ((r.problems ?? r.tasks) as unknown[]) : []).map(parseTask).filter((t): t is Task => !!t).slice(0, 15);
   if (!tasks.length) return null;
-  return { id, createdAt: now, kind, topic: s(r.topic, 80) || 'Übung', intro: s(r.intro, 3000), ...(example?.problem ? { example } : {}), labs, tasks, progress: tasks.map(() => ({ tries: 0, hints: 0 })) };
+  return { id, createdAt: now, kind, topic: s(r.topic, 80) || 'Übung', intro: s(r.intro, 3000), ...(s(r.theory, 8000) ? { theory: s(r.theory, 8000) } : {}), ...(example?.problem ? { example } : {}), labs, tasks, progress: tasks.map(() => ({ tries: 0, hints: 0 })) };
 }
 
 // ---------- checking answers ----------

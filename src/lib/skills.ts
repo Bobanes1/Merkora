@@ -177,15 +177,36 @@ export const toggleKnown = (stages: Stage[], lessonId: string): Stage[] =>
   stages.map((st) => ({ ...st, lessons: st.lessons.map((l) => (l.id === lessonId ? { ...l, known: !l.known } : l)) }));
 
 // ---------- learning ----------
+/**
+ * Beginner lessons (first stage, or the first three lessons): theory first, every term explained before it is used,
+ * and – when programming – mostly small programs to write yourself instead of questions about tools.
+ */
+export function beginnerRule(skill: Skill, stageIndex: number, lessonIndex: number): string {
+  const beginner = stageIndex === 0 || lessonIndex < 3;
+  if (!beginner) return 'Wenn in dieser Lektion neue Grundbegriffe vorkommen, erkläre sie kurz in "theory" (Markdown); sonst lass "theory" weg.';
+  const code =
+    skill.domain === 'java'
+      ? `
+PROGRAMMIER-ANFÄNGER: Die Person hat vielleicht noch nie programmiert. Werkzeuge (JDK, Compiler, IDE, Kommandozeile) erklärst du höchstens kurz mit Alltagsvergleich – frag sie NICHT ab. In Merkora läuft der Code direkt in der App, man muss nichts installieren.
+Mindestens die Hälfte der Aufgaben sind "code"-Aufgaben, bei denen man selbst ein kleines, lauffähiges Programm schreibt – ganz klein anfangen (z. B. den eigenen Namen ausgeben, zwei Zahlen addieren), immer mit Startcode und klarer Anleitung, welche Zeile man ändert.`
+      : '';
+  return `ANFÄNGER-LEKTION – setze KEIN Vorwissen voraus.
+Pflichtfeld "theory" (Markdown, etwa 150–350 Wörter), VOR der kurzen Erklärung:
+"### Worum geht's?" (2–3 Sätze) · "### Stell dir vor …" (ein Bild/Vergleich aus dem Alltag) · "### Die wichtigen Begriffe" (Liste: **Begriff** – einfache Erklärung in einem Satz) · "### Was du gleich machst" (1–2 Sätze).
+Jeder Begriff, der in "intro", im Beispiel oder in den Aufgaben vorkommt, muss vorher in "theory" erklärt sein. Die ersten Aufgaben sind sehr leicht (Erfolgserlebnis), danach selbst etwas tun.${code}`;
+}
+
 export function lessonPrompt(skill: Skill, stage: Stage, lesson: Lesson, count = 6): Prompt {
   const all = skill.stages.flatMap((st) => st.lessons);
   const i = all.findIndex((l) => l.id === lesson.id);
+  const stageIndex = skill.stages.findIndex((st) => st.id === stage.id);
   const before = all.slice(0, Math.max(0, i)).map((l) => l.title);
   return {
     system: `Du bist ein geduldiger Tutor. Du erstellst eine Lektion, in der man durch eigenes Tun lernt: kurze Erklärung, ein durchgerechnetes Beispiel, dann ${count} Aufgaben, die man selbst löst. ${kindRule(skill)}
+${beginnerRule(skill, stageIndex, i)}
 ${JSON_ONLY}`,
     user: `${context(skill)}\n\nSTUFE: ${stage.name} – ${stage.goal}\nLEKTION ${i + 1} von ${all.length}: ${lesson.title} – Ziel: ${lesson.goal}${before.length ? `\nVorher gelernt: ${before.slice(-8).join('; ')}` : ''}`,
-    maxTokens: Math.min(16000, 2000 + count * (skill.domain === 'java' || skill.domain === 'law' ? 900 : 600)),
+    maxTokens: Math.min(16000, 3000 + count * (skill.domain === 'java' || skill.domain === 'law' ? 900 : 600)),
     json: true,
   };
 }

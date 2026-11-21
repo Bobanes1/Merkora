@@ -140,6 +140,11 @@ export function ensureLesson(id: string, lessonId: string) {
     if (next) void run(id + ':' + next.lesson.id, async () => ensureLessonQuiet(id, next.lesson.id));
   });
 }
+/** Makes a lesson again (new explanation and tasks) – its progress starts over. */
+export function redoLesson(id: string, lessonId: string) {
+  updateSkill(id, (x) => ({ stages: x.stages.map((st) => ({ ...st, lessons: st.lessons.map((l) => (l.id === lessonId ? { ...l, set: undefined } : l)) })) }));
+  return ensureLesson(id, lessonId);
+}
 async function ensureLessonQuiet(id: string, lessonId: string) {
   const s = skill(id);
   const stage = s?.stages.find((st) => st.lessons.some((l) => l.id === lessonId));

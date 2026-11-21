@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { CardContent } from '../CardContent';
+import { IconArrowDown, IconArrowUp, IconGrip } from '../Icons';
 import { completeJson, LANG_RULE } from '../../lib/ai';
 import {
   caseGradePrompt,
@@ -30,6 +31,42 @@ export function OrderTaskView({ ctx, task }: { ctx: TaskCtx; task: OrderTask }) 
   const [list, setList] = useState(() => (prog.solved ? task.items : shuffled(task.items, seedOf(ctx.set.id) + i)));
   const [marks, setMarks] = useState<boolean[] | null>(prog.solved ? task.items.map(() => true) : null);
   const [drag, setDrag] = useState<number | null>(null);
+  const listRef = useRef<HTMLOListElement>(null);
+  // dragging with the mouse, a finger or a pen: the item follows the pointer and swaps places on the way
+  const dragFrom = useRef<number | null>(null);
+  const startDrag = (e: ReactPointerEvent<HTMLLIElement>, k: number) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('button')) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    // on touch screens only the grip starts a drag, so the page can still be scrolled
+    if (e.pointerType !== 'mouse' && !target.closest('.order-grip')) return;
+    e.preventDefault();
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      /* no capture possible: the item still follows while the pointer is over the list */
+    }
+    dragFrom.current = k;
+    setDrag(k);
+  };
+  const dragMove = (e: ReactPointerEvent<HTMLLIElement>) => {
+    const from = dragFrom.current;
+    if (from === null || !listRef.current) return;
+    const items = [...listRef.current.children] as HTMLElement[];
+    const to = items.findIndex((el) => {
+      const r = el.getBoundingClientRect();
+      return e.clientY >= r.top && e.clientY <= r.bottom;
+    });
+    if (to >= 0 && to !== from) {
+      move(from, to);
+      dragFrom.current = to;
+      setDrag(to);
+    }
+  };
+  const endDrag = () => {
+    dragFrom.current = null;
+    setDrag(null);
+  };
   const move = (from: number, to: number) => {
     if (to < 0 || to >= list.length || from === to) return;
     const next = [...list];
@@ -47,25 +84,29 @@ export function OrderTaskView({ ctx, task }: { ctx: TaskCtx; task: OrderTask }) 
   return (
     <div className="practice-task">
       <CardContent text={task.prompt} className="practice-problem" />
-      <ol className="order-list">
+      <p className="muted small order-help">Zum Sortieren ziehen – oder mit den Pfeilen verschieben.</p>
+      <ol className={'order-list' + (drag !== null ? ' is-dragging' : '')} ref={listRef}>
         {list.map((item, k) => (
           <li
             key={item}
             className={'order-item' + (marks ? (marks[k] ? ' ok' : ' bad') : '') + (drag === k ? ' dragging' : '')}
-            draggable
-            onDragStart={() => setDrag(k)}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={() => (drag !== null && move(drag, k), setDrag(null))}
-            onDragEnd={() => setDrag(null)}
+            onPointerDown={(e) => startDrag(e, k)}
+            onPointerMove={dragMove}
+            onPointerUp={endDrag}
+            onPointerCancel={endDrag}
+            onLostPointerCapture={endDrag}
           >
+            <span className="order-grip" aria-hidden="true">
+              <IconGrip size={18} />
+            </span>
             <span className="order-n">{k + 1}</span>
             <CardContent text={item} className="grow" />
             <span className="order-btns">
               <button type="button" className="icon-btn" aria-label="Nach oben" onClick={() => move(k, k - 1)} disabled={k === 0}>
-                ▲
+                <IconArrowUp size={16} />
               </button>
               <button type="button" className="icon-btn" aria-label="Nach unten" onClick={() => move(k, k + 1)} disabled={k === list.length - 1}>
-                ▼
+                <IconArrowDown size={16} />
               </button>
             </span>
           </li>

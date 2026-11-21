@@ -4,11 +4,11 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { CardContent } from '../components/CardContent';
 import { ConfirmModal } from '../components/Modal';
 import { CostHint } from '../components/CostHint';
-import { IconCheck, IconLock, IconPlus, IconSparkle, IconStar, IconTrash, IconTrophy } from '../components/Icons';
+import { IconArrowDown, IconArrowUp, IconCheck, IconLock, IconPlus, IconSparkle, IconStar, IconTrash, IconTrophy } from '../components/Icons';
 import { FloorDecor, NodeDecor, PATH_OFFSETS, PathLink, SandFloor, SwimmingFish, themeFor, Waves } from '../components/PathDecor';
 import { Mascot } from '../components/Mascot';
 import { PracticeSetView, type SetHost } from '../components/practice/PracticeSetView';
-import { askQuestions, ensureLesson, makePlacement, makeProposal, makeReview, makeStageTest, reviseProposal, useSkillTask } from '../lib/skillRun';
+import { askQuestions, ensureLesson, redoLesson, makePlacement, makeProposal, makeReview, makeStageTest, reviseProposal, useSkillTask } from '../lib/skillRun';
 import {
   addLesson,
   canReview,
@@ -248,10 +248,10 @@ function Proposal({ skill }: { skill: Skill }) {
                   <input type="checkbox" checked={!!l.known} onChange={() => setStages(toggleKnown(skill.stages, l.id))} /> kann ich schon
                 </label>
                 <button type="button" className="icon-btn" aria-label="Nach oben" disabled={k === 0} onClick={() => setStages(moveLesson(skill.stages, l.id, -1))}>
-                  ▲
+                  <IconArrowUp size={14} />
                 </button>
                 <button type="button" className="icon-btn" aria-label="Nach unten" disabled={k === st.lessons.length - 1} onClick={() => setStages(moveLesson(skill.stages, l.id, 1))}>
-                  ▼
+                  <IconArrowDown size={14} />
                 </button>
                 <button type="button" className="icon-btn" aria-label="Lektion entfernen" onClick={() => setStages(removeLesson(skill.stages, l.id))}>
                   <IconTrash size={14} />
@@ -524,6 +524,15 @@ function LessonView({ skill, lessonId, onBack, onOpen }: { skill: Skill; lessonI
             </div>
           }
         />
+      )}
+      {lesson.set && !lesson.set.theory && (
+        <p className="muted small redo-lesson">
+          Zu schwer zum Einstieg?{' '}
+          <button type="button" className="link-btn" onClick={() => void redoLesson(skill.id, lessonId)} disabled={t.busy}>
+            Lektion neu erstellen – mit Grundlagen zuerst
+          </button>{' '}
+          (dein Fortschritt in dieser Lektion beginnt neu)
+        </p>
       )}
     </div>
   );
