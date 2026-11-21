@@ -11,7 +11,7 @@ export function Mastery({ pct, size = 40 }: { pct: number; size?: number }) {
           cy={size / 2}
           r={r}
           fill="none"
-          stroke="var(--primary)"
+          stroke={pct >= 80 ? 'var(--chart-2)' : pct >= 40 ? 'var(--chart-1)' : 'var(--chart-4)'}
           strokeWidth={size < 30 ? 3 : 4}
           strokeLinecap="round"
           strokeDasharray={`${(c * pct) / 100} ${c}`}

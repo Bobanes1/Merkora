@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Palette } from '../lib/store';
 import { Link, useLocation } from 'react-router-dom';
 import { ManagePrivacy, PrivacyText } from '../components/Consent';
 import { IconDownload, IconEye, IconEyeOff, IconUpload } from '../components/Icons';
@@ -86,13 +85,6 @@ function useSettingsSearch(query: string, deps: unknown[]) {
 import { checkForUpdate, installUpdate, useUpdate } from '../lib/update';
 
 
-const PALETTES: [Palette, string][] = [
-  ['bunt', 'Bunt'],
-  ['ozean', 'Ozean'],
-  ['sonne', 'Sonne'],
-  ['beere', 'Beere'],
-  ['klassisch', 'Klassisch'],
-];
 
 export default function Settings() {
   const settings = useStore((s) => s.data.settings);
@@ -340,28 +332,6 @@ export default function Settings() {
               className={`seg-btn ${(settings.theme ?? 'system') === v ? 'on' : ''}`}
               onClick={() => setSettings({ theme: v })}
             >
-              {label}
-            </button>
-          ))}
-        </div>
-        <h3 className="palette-title">Farbwelt</h3>
-        <div className="palette-pick" role="radiogroup" aria-label="Farbwelt">
-          {PALETTES.map(([v, label]) => (
-            <button
-              key={v}
-              type="button"
-              role="radio"
-              aria-checked={(settings.palette ?? 'bunt') === v}
-              className={`palette-opt ${(settings.palette ?? 'bunt') === v ? 'on' : ''}`}
-              data-preview={v}
-              onClick={() => setSettings({ palette: v })}
-            >
-              <span className="palette-dots" aria-hidden="true">
-                <i />
-                <i />
-                <i />
-                <i />
-              </span>
               {label}
             </button>
           ))}

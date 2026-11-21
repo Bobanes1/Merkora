@@ -168,6 +168,13 @@ function SaveState() {
   );
 }
 
+/** Which area a page belongs to (colour, background and header picture of the area). */
+export function areaOf(pathname: string): string {
+  if (pathname.startsWith('/library/') && pathname.split('/').filter(Boolean).length >= 4) return 'deck';
+  for (const a of ['library', 'skills', 'tools', 'stats', 'settings']) if (pathname.startsWith('/' + a)) return a;
+  return 'start';
+}
+
 export function AppLayout({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [newDeck, setNewDeck] = useState(false);
@@ -280,7 +287,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       <Tour />
       {phone && <PhoneNav onSearch={() => setSearch(true)} onNewDeck={() => setNewDeck(true)} />}
       <ToolWindows />
-      <main className="app-main">
+      <main className="app-main" data-area={areaOf(pathname)}>
         <FocusBar />
         {isAndroid ? <ApkUpdateNotice /> : <UpdateNotice />}
         <MasterySnapshots />
