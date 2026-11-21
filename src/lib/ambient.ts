@@ -56,13 +56,40 @@ export function audioContext(): AudioContext | null {
   if (ctx.state === 'suspended') void ctx.resume();
   return ctx;
 }
+/** Measures what comes out: loudness, peaks and where the sound sits in pitch (for checks and the level display). */
+let meter: AnalyserNode | null = null;
+export function outputLevels(): { rms: number; peak: number; centroid: number } | null {
+  if (!meter || !ctx) return null;
+  const wave = new Float32Array(meter.fftSize);
+  meter.getFloatTimeDomainData(wave);
+  let sum = 0;
+  let peak = 0;
+  for (const v of wave) {
+    sum += v * v;
+    peak = Math.max(peak, Math.abs(v));
+  }
+  const spec = new Float32Array(meter.frequencyBinCount);
+  meter.getFloatFrequencyData(spec);
+  let num = 0;
+  let den = 0;
+  spec.forEach((db, i) => {
+    const p = Math.pow(10, db / 10);
+    num += p * ((i * ctx!.sampleRate) / meter!.fftSize);
+    den += p;
+  });
+  return { rms: Math.sqrt(sum / wave.length), peak, centroid: den ? num / den : 0 };
+}
+
 function masterOut(): GainNode | null {
   const c = audioContext();
   if (!c) return null;
   if (!master) {
     master = c.createGain();
     master.gain.value = state.master;
-    master.connect(c.destination);
+    meter = c.createAnalyser();
+    meter.fftSize = 4096;
+    master.connect(meter);
+    meter.connect(c.destination);
     // a small reverb (two feedback delays through a soft filter) for the music
     reverbIn = c.createGain();
     reverbIn.gain.value = 0.35;
@@ -186,6 +213,128 @@ function tone(c: AudioContext, out: AudioNode, at: number, freq: number, vol: nu
 }
 const midi = (n: number) => 440 * Math.pow(2, (n - 69) / 12);
 
+/** Left/right placement (−1 … 1); without a StereoPanner in the browser simply in the middle. */
+function panned(c: AudioContext, out: AudioNode, pan: number): AudioNode {
+  if (typeof c.createStereoPanner !== 'function') return out;
+  const p = c.createStereoPanner();
+  p.pan.value = Math.max(-1, Math.min(1, pan));
+  p.connect(out);
+  return p;
+}
+/** A value that wanders slowly and randomly (smoothed) – makes a loop sound alive instead of mechanical. */
+function wander(c: AudioContext, param: AudioParam, min: number, max: number, everySec: number, smooth: number) {
+  param.setValueAtTime(rnd(min, max), c.currentTime);
+  const t = window.setInterval(() => param.setTargetAtTime(rnd(min, max), c.currentTime, smooth), everySec * 1000);
+  return () => window.clearInterval(t);
+}
+/** How many random events happen in `dt` seconds at `rate` per second (Poisson) – irregular like in nature. */
+function poisson(rate: number, dt: number): number {
+  let n = 0;
+  let t = 0;
+  for (;;) {
+    t += -Math.log(1 - Math.random()) / rate;
+    if (t > dt) return n;
+    n++;
+  }
+}
+
+/** Fire: a very short click from burning wood; a „pop“ is lower, a bit longer and throws a few sparks after it. */
+function crackle(c: AudioContext, out: AudioNode, at: number, vol: number, pop: boolean) {
+  const src = c.createBufferSource();
+  src.buffer = noise('white');
+  const hp = filter(c, 'highpass', pop ? rnd(500, 1100) : rnd(1800, 5000), 0.7);
+  const g = c.createGain();
+  const dur = pop ? rnd(0.012, 0.035) : rnd(0.0015, 0.007);
+  g.gain.setValueAtTime(vol, at);
+  g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+  src.connect(hp);
+  hp.connect(g);
+  g.connect(out);
+  src.start(at, Math.random() * 3);
+  src.stop(at + dur + 0.01);
+  if (pop) for (let k = Math.floor(rnd(2, 6)); k > 0; k--) crackle(c, out, at + rnd(0.01, 0.15), vol * rnd(0.08, 0.3), false);
+}
+
+/** Brook: one tiny air bubble in water – a short tone whose pitch rises quickly (that is the „gurgle“). */
+function bubble(c: AudioContext, out: AudioNode, at: number, f: number, vol: number) {
+  const dur = 0.01 + 12 / f;
+  const o = c.createOscillator();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(f, at);
+  o.frequency.exponentialRampToValueAtTime(f * rnd(1.5, 2.4), at + dur);
+  const g = c.createGain();
+  g.gain.setValueAtTime(0, at);
+  g.gain.linearRampToValueAtTime(vol, at + 0.0015);
+  g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+  o.connect(g);
+  g.connect(out);
+  o.start(at);
+  o.stop(at + dur + 0.01);
+}
+
+/** Birds: one tone with a pitch curve, soft envelope and a little vibrato. */
+function birdNote(c: AudioContext, out: AudioNode, at: number, curve: number[], dur: number, vol: number, vib = 0) {
+  const o = c.createOscillator();
+  o.type = 'sine';
+  o.frequency.setValueCurveAtTime(Float32Array.from(curve), at, dur);
+  if (vib) {
+    const m = c.createOscillator();
+    m.frequency.value = rnd(25, 60);
+    const mg = c.createGain();
+    mg.gain.value = vib;
+    m.connect(mg);
+    mg.connect(o.frequency);
+    m.start(at);
+    m.stop(at + dur + 0.02);
+  }
+  const g = c.createGain();
+  const a = Math.min(0.02, dur / 4);
+  g.gain.setValueAtTime(0, at);
+  g.gain.linearRampToValueAtTime(vol, at + a);
+  g.gain.setValueAtTime(vol, at + dur - a);
+  g.gain.linearRampToValueAtTime(0, at + dur);
+  o.connect(g);
+  g.connect(out);
+  o.start(at);
+  o.stop(at + dur + 0.02);
+}
+type Bird = { kind: 'trill' | 'whistle' | 'chirps' | 'call'; base: number; out: AudioNode; vol: number; next: number };
+/** Sings one phrase of this bird; returns how long it lasts. */
+function sing(c: AudioContext, b: Bird, at: number): number {
+  const f = b.base * rnd(0.96, 1.04);
+  if (b.kind === 'trill') {
+    // fast warbling: many short notes, slowly falling
+    const n = Math.floor(rnd(10, 22));
+    for (let k = 0; k < n; k++) {
+      const p = f * (1 - (k / n) * 0.18);
+      birdNote(c, b.out, at + k * 0.045, [p * 1.08, p, p * 1.05], 0.03, b.vol * rnd(0.7, 1), p * 0.05);
+    }
+    return n * 0.045;
+  }
+  if (b.kind === 'whistle') {
+    // a clear two- or three-tone whistle, gently slurred
+    const tones = Math.random() < 0.5 ? [f, f * 1.26, f * 1.12] : [f * 1.2, f, f * 0.9, f * 1.05];
+    const dur = rnd(0.35, 0.6);
+    birdNote(c, b.out, at, tones, dur, b.vol, f * 0.008);
+    if (Math.random() < 0.5) birdNote(c, b.out, at + dur + 0.12, tones, dur * 0.9, b.vol * 0.85, f * 0.008);
+    return dur * 2.2;
+  }
+  if (b.kind === 'chirps') {
+    // a series of quick chirps, each falling, the series getting lower
+    const n = Math.floor(rnd(3, 7));
+    let t = at;
+    for (let k = 0; k < n; k++) {
+      const p = f * (1 - k * 0.05);
+      birdNote(c, b.out, t, [p * 1.45, p * 1.1, p * 0.92], rnd(0.05, 0.08), b.vol * rnd(0.75, 1));
+      t += rnd(0.09, 0.15);
+    }
+    return t - at;
+  }
+  // call: two short rising notes („zi-zi“)
+  for (let k = 0; k < 2; k++) birdNote(c, b.out, at + k * 0.16, [f * 0.9, f * 1.25], 0.09, b.vol);
+  return 0.35;
+}
+
 function build(id: SoundId, c: AudioContext, out: GainNode): () => void {
   const stops: (() => void)[] = [];
   const keep = (n: AudioScheduledSourceNode) => stops.push(() => n.stop());
@@ -251,31 +400,58 @@ function build(id: SoundId, c: AudioContext, out: GainNode): () => void {
       break;
     }
     case 'stream': {
-      const bp = filter(c, 'bandpass', 1800, 0.9);
-      bp.connect(out);
-      keep(loopNoise(c, 'white', bp));
-      keep(lfo(c, 5.3, 500, bp.frequency));
-      keep(lfo(c, 0.7, 300, bp.frequency));
+      // the soft rushing of flowing water, never quite the same
+      const bed = filter(c, 'bandpass', 900, 0.5);
+      const bg = c.createGain();
+      bg.gain.value = 0.25;
+      bed.connect(bg);
+      bg.connect(out);
+      keep(loopNoise(c, 'pink', bed));
+      stops.push(wander(c, bed.frequency, 600, 1300, 0.7, 0.5));
+      stops.push(wander(c, bg.gain, 0.16, 0.3, 0.8, 0.5));
+      // the gurgling: 30–60 tiny bubbles per second, spread left and right; bigger bubbles are lower and louder
+      let flow = 45;
       stops.push(
         every(() => {
           const t = c.currentTime;
-          if (Math.random() < 0.5) burst(c, out, t + Math.random() * 0.1, rnd(0.02, 0.05), rnd(900, 2200), rnd(0.03, 0.07));
+          if (Math.random() < 0.04) flow = rnd(30, 60);
+          for (let k = poisson(flow, 0.1); k > 0; k--) {
+            const f = Math.exp(rnd(Math.log(350), Math.log(1900)));
+            const vol = Math.min(0.09, rnd(0.012, 0.04) * Math.sqrt(1200 / f));
+            bubble(c, panned(c, out, rnd(-0.8, 0.8)), t + Math.random() * 0.1, f, vol);
+          }
         }),
       );
       break;
     }
     case 'fire': {
-      const lp = filter(c, 'lowpass', 500);
-      const g = c.createGain();
-      g.gain.value = 0.7;
-      lp.connect(g);
-      g.connect(out);
-      keep(loopNoise(c, 'brown', lp));
+      // the body of the flames: a deep, softly breathing roar
+      const roarLp = filter(c, 'lowpass', 260);
+      const roar = c.createGain();
+      roar.gain.value = 0.25;
+      roarLp.connect(roar);
+      roar.connect(out);
+      keep(loopNoise(c, 'brown', roarLp));
+      stops.push(wander(c, roar.gain, 0.12, 0.35, 0.35, 0.25));
+      stops.push(wander(c, roarLp.frequency, 180, 420, 0.5, 0.3));
+      // the faint hiss of hot gas
+      const hissBp = filter(c, 'bandpass', 3500, 0.6);
+      const hiss = c.createGain();
+      hiss.gain.value = 0.05;
+      hissBp.connect(hiss);
+      hiss.connect(out);
+      keep(loopNoise(c, 'pink', hissBp));
+      stops.push(wander(c, hiss.gain, 0.02, 0.08, 0.6, 0.4));
+      // crackling: very short clicks at irregular times, sometimes in bunches – mostly quiet, now and then a loud pop
+      let flare = 1;
       stops.push(
         every(() => {
           const t = c.currentTime;
-          const n = Math.random() < 0.15 ? 4 : Math.random() < 0.5 ? 1 : 0;
-          for (let k = 0; k < n; k++) burst(c, out, t + Math.random() * 0.1, rnd(0.004, 0.02), rnd(1500, 5000), rnd(0.08, 0.25));
+          if (Math.random() < 0.05) flare = rnd(0.4, 3);
+          for (let k = poisson(9 * flare, 0.1); k > 0; k--) {
+            const loud = Math.pow(Math.random(), 3);
+            crackle(c, panned(c, out, rnd(-0.6, 0.6)), t + Math.random() * 0.1, 0.06 + 0.85 * loud, loud > 0.55);
+          }
         }),
       );
       break;
@@ -292,35 +468,40 @@ function build(id: SoundId, c: AudioContext, out: GainNode): () => void {
       break;
     }
     case 'birds': {
-      const bed = filter(c, 'lowpass', 1200);
-      const bg = c.createGain();
-      bg.gain.value = 0.12;
-      bed.connect(bg);
-      bg.connect(out);
-      keep(loopNoise(c, 'pink', bed));
-      let next = c.currentTime + 0.5;
+      // a quiet forest: soft air and now and then rustling leaves
+      const air = filter(c, 'lowpass', 700);
+      const ag = c.createGain();
+      ag.gain.value = 0.035;
+      air.connect(ag);
+      ag.connect(out);
+      keep(loopNoise(c, 'pink', air));
+      const leaves = filter(c, 'bandpass', 2600, 0.7);
+      const lg = c.createGain();
+      leaves.connect(lg);
+      lg.connect(out);
+      keep(loopNoise(c, 'pink', leaves));
+      stops.push(wander(c, lg.gain, 0, 0.025, 1.2, 0.8));
+      // four birds of different kinds, some near, some far away (quieter, muffled, more echo), each in its own place
+      const kinds: Bird['kind'][] = ['trill', 'whistle', 'chirps', 'call'];
+      const birds: Bird[] = kinds.map((kind, k) => {
+        const near = k % 2 === 0;
+        const lp = filter(c, 'lowpass', near ? 9000 : 3800);
+        const place = panned(c, out, (k % 2 ? -1 : 1) * rnd(0.3, 0.85));
+        lp.connect(place);
+        if (!near) lp.connect(reverbIn!);
+        return { kind, base: kind === 'whistle' ? rnd(2000, 2900) : rnd(2900, 4600), out: lp, vol: near ? 0.16 : 0.06, next: c.currentTime + rnd(0.3, 4) };
+      });
       stops.push(
         every(() => {
-          if (c.currentTime < next) return;
-          // a little phrase of 2–5 chirps
-          const base = rnd(2200, 3800);
-          const n = Math.floor(rnd(2, 6));
-          let at = c.currentTime + 0.05;
-          for (let k = 0; k < n; k++) {
-            const o = c.createOscillator();
-            const g = c.createGain();
-            o.frequency.setValueAtTime(base * rnd(0.9, 1.1), at);
-            o.frequency.exponentialRampToValueAtTime(base * rnd(1.3, 1.7), at + 0.07);
-            g.gain.setValueAtTime(0, at);
-            g.gain.linearRampToValueAtTime(0.07, at + 0.01);
-            g.gain.exponentialRampToValueAtTime(0.0001, at + 0.09);
-            o.connect(g);
-            g.connect(out);
-            o.start(at);
-            o.stop(at + 0.12);
-            at += rnd(0.1, 0.2);
+          const now = c.currentTime;
+          for (const b of birds) {
+            if (now < b.next) continue;
+            const len = sing(c, b, now + 0.05);
+            b.next = now + len + rnd(1.5, 7);
+            // sometimes another bird answers soon after
+            const other = birds[Math.floor(Math.random() * birds.length)];
+            if (other !== b && Math.random() < 0.3) other.next = Math.min(other.next, now + len + rnd(0.3, 1));
           }
-          next = c.currentTime + rnd(1.2, 4.5);
         }),
       );
       break;
@@ -413,7 +594,7 @@ function build(id: SoundId, c: AudioContext, out: GainNode): () => void {
 }
 
 /** Loudness of each sound at volume 1 (so the mix stays balanced). */
-const LEVEL: Record<SoundId, number> = { rain: 0.9, storm: 0.9, ocean: 0.9, stream: 0.7, fire: 0.9, wind: 0.8, birds: 1, brown: 0.6, pink: 0.45, white: 0.25, pad: 1, piano: 1, bowls: 1 };
+const LEVEL: Record<SoundId, number> = { rain: 0.9, storm: 0.9, ocean: 0.9, stream: 2.4, fire: 0.9, wind: 0.8, birds: 1, brown: 0.6, pink: 0.45, white: 0.25, pad: 1, piano: 1, bowls: 1 };
 
 function startVoice(id: SoundId, vol: number) {
   const c = audioContext();
@@ -527,3 +708,6 @@ export function mixLabel(mix: Mix): string {
   const names = SOUNDS.filter((s) => mix[s.id] !== undefined).map((s) => s.label);
   return names.length > 2 ? `${names.slice(0, 2).join(' + ')} + ${names.length - 2}` : names.join(' + ');
 }
+
+/** For checks in the browser console: window.merkoraSound.levels() while something plays. */
+if (typeof window !== 'undefined') (window as unknown as { merkoraSound?: unknown }).merkoraSound = { levels: outputLevels, toggle: toggleSound, stop: stopAll };
