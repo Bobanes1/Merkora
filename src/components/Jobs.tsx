@@ -4,6 +4,7 @@ import { askNotifications, canSurviveClose, dismissToast, getToasts, JOB_LABEL, 
 import { deckUrl, getState, removeJob, useStore, type Job, type JobKind } from '../lib/store';
 import { IconBell, IconCheck, IconClose, IconSparkle } from './Icons';
 import { Mascot } from './Mascot';
+import { etaText, JOB_STEPS, jobStep, overallProgress } from '../lib/jobProgress';
 
 export function useJob(deckId: string, kind: JobKind): Job | undefined {
   return useStore((s) => {
@@ -121,6 +122,14 @@ export function JobsIndicator() {
     return () => document.removeEventListener('mousedown', h);
   }, [open]);
   const running = jobs.filter(isActive);
+  // the estimates move on every few seconds while something runs
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!running.length) return;
+    const t = setInterval(() => setNow(Date.now()), 5000);
+    return () => clearInterval(t);
+  }, [running.length]);
+  const prog = overallProgress(jobs, now);
   const recent = [...jobs].sort((a, b) => b.createdAt - a.createdAt).slice(0, 8);
   if (!recent.length) return null;
   return (
@@ -129,8 +138,16 @@ export function JobsIndicator() {
         <span className="job-spinner small" aria-hidden="true">
           {running.length ? <IconSparkle size={14} /> : <IconCheck size={14} />}
         </span>
-        <span>{running.length ? `${running.length} KI-Auftrag${running.length > 1 ? 'e' : ''} läuft` : 'KI-Aufträge'}</span>
+        <span className="grow">
+          {running.length ? `${running.length} KI-Auftrag${running.length > 1 ? 'e' : ''} läuft` : 'KI-Aufträge'}
+          {running.length > 0 && (
+            <span className="jobs-progress" aria-label={`etwa ${Math.round(prog.share * 100)} % geschafft`}>
+              <i style={{ width: `${Math.round(prog.share * 100)}%` }} />
+            </span>
+          )}
+        </span>
       </button>
+      {running.length > 0 && !open && <small className="jobs-hint">Du kannst währenddessen ganz normal weiterarbeiten.</small>}
       {open && (
         <div className="jobs-pop">
           <b>Hintergrund-Aufträge</b>
@@ -147,8 +164,21 @@ export function JobsIndicator() {
                   ) : (
                     j.title
                   )}
+                  {isActive(j) && (
+                    <span className="job-steps" aria-label={`Schritt ${jobStep(j) + 1} von 3: ${JOB_STEPS[jobStep(j)]}`}>
+                      {JOB_STEPS.map((label, k) => (
+                        <span key={label} className={k < jobStep(j) ? 'done' : k === jobStep(j) ? 'now' : ''}>
+                          {label}
+                        </span>
+                      ))}
+                    </span>
+                  )}
                   <small>
-                    {j.status === 'done' ? 'fertig' : j.status === 'error' ? `Fehler: ${j.error}` : j.mode === 'tab' ? 'läuft in diesem Fenster' : 'läuft beim Anbieter'}
+                    {j.status === 'done'
+                      ? 'fertig'
+                      : j.status === 'error'
+                        ? `Fehler: ${j.error}`
+                        : `${etaText(j, jobs, now)} · ${j.mode === 'tab' ? 'läuft in diesem Fenster' : 'läuft beim Anbieter – auch wenn du die App schließt'}`}
                   </small>
                 </span>
                 {!isActive(j) && (

@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { Mascot } from '../components/Mascot';
+import { undoable } from '../lib/undo';
 import { accentFor } from '../lib/util';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { CreateWithAI } from '../components/CreateWithAI';
@@ -134,7 +136,10 @@ export default function Library() {
       ) : (
         <>
           <header className="page-head">
-            <h1>{workspace?.name ?? 'Bibliothek'}</h1>
+            <div className="page-title">
+              <h1>{workspace?.name ?? 'Bibliothek'}</h1>
+              {!workspace && <p className="page-intro">Deine Kurse und Decks mit allen Karteikarten – hier legst du neue an, sortierst sie und startest das Lernen.</p>}
+            </div>
             <div className="row-gap">
               {!phone && (
               <div className="seg view-toggle" role="radiogroup" aria-label="Ansicht">
@@ -179,7 +184,7 @@ export default function Library() {
                     <button type="button" className="icon-btn" aria-label="Workspace umbenennen" onClick={() => setDialog({ kind: 'rename-ws', ws: w })}>
                       <IconEdit size={16} />
                     </button>
-                    <button type="button" className="icon-btn" aria-label="Workspace löschen" onClick={() => setDialog({ kind: 'del-ws', ws: w })}>
+                    <button type="button" className="icon-btn" aria-label="Workspace löschen" onClick={() => undoable(`Workspace „${w.name}“ gelöscht`, () => (deleteWorkspace(w.id), workspace?.id === w.id && navigate('/library')))}>
                       <IconTrash size={16} />
                     </button>
                   </div>
@@ -363,7 +368,7 @@ function CourseCard({ course, ws, setDialog }: { course: Course; ws: Workspace; 
         <button type="button" className="icon-btn" aria-label="Kurs umbenennen" onClick={() => setDialog({ kind: 'rename-course', course })}>
           <IconEdit size={15} />
         </button>
-        <button type="button" className="icon-btn" aria-label="Kurs löschen" onClick={() => setDialog({ kind: 'del-course', course })}>
+        <button type="button" className="icon-btn" aria-label="Kurs löschen" onClick={() => undoable(`Kurs „${course.name}“ gelöscht`, () => deleteCourse(course.id))}>
           <IconTrash size={15} />
         </button>
       </div>
@@ -466,7 +471,7 @@ function CourseList({ courses, ws, setDialog }: { courses: Course[]; ws: Workspa
                 <button type="button" className="icon-btn" aria-label="Kurs umbenennen" onClick={() => setDialog({ kind: 'rename-course', course: c })}>
                   <IconEdit size={15} />
                 </button>
-                <button type="button" className="icon-btn" aria-label="Kurs löschen" onClick={() => setDialog({ kind: 'del-course', course: c })}>
+                <button type="button" className="icon-btn" aria-label="Kurs löschen" onClick={() => undoable(`Kurs „${c.name}“ gelöscht`, () => deleteCourse(c.id))}>
                   <IconTrash size={15} />
                 </button>
               </span>
@@ -568,7 +573,7 @@ function CourseView({
           <button type="button" className="icon-btn" aria-label="Umbenennen" onClick={() => setDialog({ kind: 'rename-deck', id: d.id, name: d.name })}>
             <IconEdit size={14} />
           </button>
-          <button type="button" className="icon-btn" aria-label="Löschen" onClick={() => setDialog({ kind: 'del-deck', id: d.id, name: d.name })}>
+          <button type="button" className="icon-btn" aria-label="Löschen" onClick={() => undoable(`Deck „${d.name}“ gelöscht`, () => deleteDeck(d.id))}>
             <IconTrash size={14} />
           </button>
         </span>
@@ -674,7 +679,7 @@ function CourseView({
                     <button type="button" className="icon-btn" aria-label="Ordner umbenennen" onClick={() => setDialog({ kind: 'rename-folder', course, folder: f })}>
                       <IconEdit size={14} />
                     </button>
-                    <button type="button" className="icon-btn" aria-label="Ordner löschen" onClick={() => setDialog({ kind: 'del-folder', course, folder: f })}>
+                    <button type="button" className="icon-btn" aria-label="Ordner löschen" onClick={() => undoable(`Ordner „${f.name}“ entfernt – die Decks bleiben im Kurs`, () => deleteFolder(course.id, f.id))}>
                       <IconTrash size={14} />
                     </button>
                   </span>
@@ -688,6 +693,7 @@ function CourseView({
           {loose.map(deckRow)}
           {!decks.length && (
             <div className="empty">
+              <Mascot mood="wave" size={84} />
               <b>Noch keine Decks</b>
               <p className="muted">Lege ein Deck an – leer, mit KI aus PDF, Word oder PowerPoint oder aus einem Anki-Stapel.</p>
               <button type="button" className="btn primary" onClick={() => setDialog({ kind: 'deck', course })}>

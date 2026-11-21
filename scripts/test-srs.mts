@@ -1624,6 +1624,37 @@ console.log('Farbwelten');
   ok(old.settings.palette === 'bunt' && old.settings.theme === 'dark' && kept.settings.palette === 'beere', 'alte Daten bekommen „Bunt“, gewählte Farbwelt bleibt');
 }
 
+console.log('Rückgängig und KI-Fortschritt');
+{
+  const { restoreChange } = await import('../src/lib/undo');
+  const deckA = { id: 'a', name: 'A', cards: [{ id: 'c1' }, { id: 'c2' }], updatedAt: 1 };
+  const deckB = { id: 'b', name: 'B', cards: [], updatedAt: 1 };
+  const exam = { id: 'e', deckIds: ['a', 'b'] };
+  const rev = { deckId: 'a', at: 5 };
+  const before = { decks: [deckA, deckB], exams: [exam], reviews: [rev], deleted: {} } as any;
+  // delete deck A: deck, its reviews and the exam link are gone, a deletion mark is set
+  const after = { ...before, decks: [deckB], exams: [{ ...exam, deckIds: ['b'] }], reviews: [], deleted: { a: 9 } };
+  // meanwhile deck B got a new card – that must stay
+  const current = { ...after, decks: [{ ...deckB, cards: [{ id: 'new' }] }] };
+  const r = restoreChange(before, after, current);
+  ok(r.decks.map((d: any) => d.id).join() === 'a,b' && r.decks[1].cards.length === 1 && r.decks[0].cards.length === 2, 'Deck kommt an seinen Platz zurück, spätere Änderung an B bleibt');
+  ok(r.exams[0].deckIds.join() === 'a,b' && r.reviews.length === 1 && !('a' in r.deleted), 'Prüfungs-Verknüpfung, Verlauf und Löschmarke werden zurückgesetzt');
+  // a card deleted (deck changed) – undo puts the old deck version back if nobody touched it since
+  const afterCard = { ...before, decks: [{ ...deckA, cards: [deckA.cards[1]] }, deckB], deleted: { c1: 3 } };
+  const r2 = restoreChange(before, afterCard, afterCard);
+  ok(r2.decks[0].cards.length === 2 && !('c1' in r2.deleted), 'gelöschte Karte kommt zurück');
+
+  const P = await import('../src/lib/jobProgress');
+  const now = 1_000_000;
+  const done = (s: number) => ({ id: 'd' + s, kind: 'cards', deckId: 'x', status: 'done', createdAt: now - 100000, finishedAt: now - 100000 + s * 1000, params: {}, title: '' });
+  const hist = [done(40), done(60), done(80)] as any[];
+  ok(P.typicalSeconds(hist, 'cards') === 60 && P.typicalSeconds([], 'quiz') === 45, 'typische Dauer aus früheren Aufträgen (Median), sonst Richtwert');
+  const run = { id: 'r', kind: 'cards', deckId: 'x', status: 'running', createdAt: now - 20000, params: {}, title: '' } as any;
+  ok(P.etaText(run, hist, now) === 'noch weniger als 1 Min.' && P.etaText({ ...run, createdAt: now - 200000 }, hist, now).includes('länger'), 'Restzeit-Schätzung');
+  const prog = P.overallProgress([...hist, run], now);
+  ok(prog.total === 1 && prog.share > 0.2 && prog.share < 0.5, 'Gesamtfortschritt eines laufenden Auftrags: ' + prog.share.toFixed(2));
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

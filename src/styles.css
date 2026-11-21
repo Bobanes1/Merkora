@@ -9937,3 +9937,210 @@ html.phone .todos-bar .input.sm { flex: 1; min-width: 120px; }
 @keyframes dot-hop {
   50% { transform: translateY(-4px); }
 }
+
+/* ---------- undo bar (instead of „Wirklich löschen?“) ---------- */
+.undo-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 80;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  padding: 8px 8px 8px 16px;
+  border-radius: var(--r-lg);
+  background: var(--ink);
+  color: var(--bg);
+  box-shadow: var(--shadow-pop);
+}
+.undo-toast .undo-btn {
+  background: var(--c4-soft);
+  color: var(--c4-ink);
+  font-weight: 700;
+}
+.undo-toast .icon-btn {
+  color: inherit;
+}
+html.phone .undo-toast {
+  bottom: 84px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  :root:not(.no-anim) .undo-toast {
+    animation: undo-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+}
+@keyframes undo-in {
+  from { transform: translate(-50%, 20px); opacity: 0; }
+}
+
+/* ---------- page titles with a short explanation ---------- */
+.page-title {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+.page-intro {
+  margin: 0;
+  color: var(--muted);
+  max-width: 640px;
+}
+
+/* ---------- settings: tabs + search ---------- */
+.settings-nav {
+  gap: 8px;
+}
+.settings-search {
+  width: 100%;
+}
+.settings-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.settings-body[data-tab='ki'] > .settings-area:not(#ki),
+.settings-body[data-tab='lernen'] > .settings-area:not(#lernen),
+.settings-body[data-tab='darstellung'] > .settings-area:not(#darstellung),
+.settings-body[data-tab='daten'] > .settings-area:not(#daten),
+.settings-body[data-tab='app'] > .settings-area:not(#app) {
+  display: none;
+}
+.settings-body [data-miss] {
+  display: none !important;
+}
+.settings-nohits {
+  display: none;
+}
+.settings-body[data-nohits] .settings-nohits {
+  display: block;
+}
+.settings-body .settings-area + .settings-area {
+  margin-top: 0;
+}
+.settings-body[data-tab=''] .settings-area + .settings-area {
+  margin-top: 28px;
+}
+@media (max-width: 760px) {
+  .settings-tabs {
+    flex-direction: row;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+}
+
+/* ---------- AI jobs: progress, steps, estimate ---------- */
+.jobs-btn .grow {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+}
+.jobs-progress {
+  display: block;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.jobs-progress i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--c2), var(--c3));
+  transition: width 0.8s ease;
+}
+.jobs-hint {
+  display: block;
+  margin: 4px 10px 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.job-steps {
+  display: flex;
+  gap: 4px;
+  margin: 3px 0 2px;
+}
+.job-steps span {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.job-steps span.done {
+  background: var(--c5-soft);
+  color: var(--c5-ink);
+}
+.job-steps span.now {
+  background: var(--c2);
+  color: #fff;
+  font-weight: 700;
+}
+
+/* ---------- introduction with Pip ---------- */
+.tour-back {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(10, 20, 20, 0.45);
+}
+.tour-card {
+  position: relative;
+  width: min(460px, 100%);
+  padding: 72px 24px 20px;
+  border-radius: 24px;
+  background: var(--white);
+  box-shadow: var(--shadow-pop);
+  border-top: 8px solid var(--tc);
+  text-align: center;
+}
+.tour-pip {
+  position: absolute;
+  top: -52px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 116px;
+  height: 116px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--tc-soft);
+  border: 5px solid var(--white);
+}
+.tour-card h2 {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  color: var(--ink);
+}
+.tour-card p {
+  margin: 0 0 16px;
+}
+.tour-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.tour-dots button {
+  width: 9px;
+  height: 9px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--line);
+  transition: width 0.2s;
+}
+.tour-dots button.on {
+  width: 24px;
+  background: var(--tc);
+}
+.tour-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}

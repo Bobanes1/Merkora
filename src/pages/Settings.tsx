@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Palette } from '../lib/store';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { ManagePrivacy, PrivacyText } from '../components/Consent';
 import { IconDownload, IconEye, IconEyeOff, IconUpload } from '../components/Icons';
 import { ConfirmModal } from '../components/Modal';
@@ -20,47 +20,68 @@ const AREAS = [
   { id: 'app', label: 'Über die App' },
 ] as const;
 
-/** Left (or on top on small windows): jump to an area; the one in view is marked. */
-function SettingsNav() {
-  const [active, setActive] = useState<string>(AREAS[0].id);
+/** Tabs for the areas (left, or on top on small windows) plus a search over all settings. */
+function SettingsNav({ tab, setTab, query, setQuery }: { tab: string; setTab: (t: string) => void; query: string; setQuery: (q: string) => void }) {
+  const location = useLocation();
+  // a link like /settings#lernen opens that tab
   useEffect(() => {
-    const els = AREAS.map((a) => document.getElementById(a.id)).filter((e): e is HTMLElement => !!e);
-    const io = new IntersectionObserver(
-      (entries) => {
-        const vis = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
-        if (vis) setActive(vis.target.id);
-      },
-      { rootMargin: '-15% 0px -70% 0px' },
-    );
-    els.forEach((e) => io.observe(e));
-    // a link like /settings#lernen opens right there
-    const h = window.location.hash.slice(1);
-    if (h && document.getElementById(h)) {
-      document.getElementById(h)!.scrollIntoView();
-      setActive(h);
-    }
-    return () => io.disconnect();
-  }, []);
+    const h = location.hash.slice(1);
+    if (AREAS.some((a) => a.id === h)) setTab(h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.hash]);
   return (
     <nav className="settings-nav" aria-label="Bereiche der Einstellungen">
-      {AREAS.map((a) => (
-        <a
-          key={a.id}
-          href={`#${a.id}`}
-          className={active === a.id ? 'on' : ''}
-          aria-current={active === a.id ? 'true' : undefined}
-          onClick={(e) => {
-            e.preventDefault();
-            document.getElementById(a.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            window.history.replaceState(null, '', `#${a.id}`);
-            setActive(a.id);
-          }}
-        >
-          {a.label}
-        </a>
-      ))}
+      <input
+        type="search"
+        className="input settings-search"
+        placeholder="Einstellung suchen …"
+        aria-label="Einstellungen durchsuchen"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
+      <div className="settings-tabs" role="tablist">
+        {AREAS.map((a) => (
+          <a
+            key={a.id}
+            href={`#${a.id}`}
+            role="tab"
+            aria-selected={!query && tab === a.id}
+            className={!query && tab === a.id ? 'on' : ''}
+            onClick={(e) => {
+              e.preventDefault();
+              setQuery('');
+              setTab(a.id);
+              window.history.replaceState(null, '', `#${a.id}`);
+            }}
+          >
+            {a.label}
+          </a>
+        ))}
+      </div>
     </nav>
   );
+}
+
+/** Hides the panels that don't contain the search words (data attribute only – React's own markup stays untouched). */
+function useSettingsSearch(query: string, deps: unknown[]) {
+  useEffect(() => {
+    const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const body = document.querySelector('.settings-body');
+    if (!body) return;
+    let hits = 0;
+    body.querySelectorAll<HTMLElement>('.settings-area').forEach((area) => {
+      let areaHits = 0;
+      area.querySelectorAll<HTMLElement>(':scope > section, :scope > .panel, :scope > div:not(.settings-area-title)').forEach((p) => {
+        const hit = !words.length || words.every((w) => (p.textContent ?? '').toLowerCase().includes(w));
+        p.toggleAttribute('data-miss', !hit);
+        if (hit) areaHits++;
+      });
+      area.toggleAttribute('data-miss', words.length > 0 && areaHits === 0);
+      hits += areaHits;
+    });
+    body.toggleAttribute('data-nohits', words.length > 0 && hits === 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, ...deps]);
 }
 import { checkForUpdate, installUpdate, useUpdate } from '../lib/update';
 
@@ -77,6 +98,9 @@ export default function Settings() {
   const settings = useStore((s) => s.data.settings);
   const apiKey = useStore((s) => s.apiKey);
   const privacy = useStore((s) => s.privacy);
+  const [tab, setTab] = useState<string>(() => (AREAS.some((a) => a.id === window.location.hash.slice(1)) ? window.location.hash.slice(1) : AREAS[0].id));
+  const [query, setQuery] = useState('');
+  useSettingsSearch(query, [tab, settings]);
   const [key, setKey] = useState(apiKey);
   const [show, setShow] = useState(false);
   const [models, setModels] = useState<string[]>([]);
@@ -144,11 +168,15 @@ export default function Settings() {
   return (
     <div className="page settings-page">
       <header className="page-head">
-        <h1>Einstellungen</h1>
+        <div className="page-title">
+          <h1>Einstellungen</h1>
+          <p className="page-intro">Lernen, KI, Darstellung, Sync und Daten – alles, was du an Merkora anpassen kannst.</p>
+        </div>
       </header>
       <div className="settings-layout">
-      <SettingsNav />
-      <div className="settings-body">
+      <SettingsNav tab={tab} setTab={setTab} query={query} setQuery={setQuery} />
+      <div className="settings-body" data-tab={query.trim() ? '' : tab}>
+      <p className="settings-nohits muted">Keine Einstellung gefunden – versuch ein anderes Wort.</p>
       <div id="ki" className="settings-area">
       <h2 className="settings-area-title">KI</h2>
       <section className="panel">
@@ -391,6 +419,13 @@ export default function Settings() {
       ) : (
         isDesktop && <UpdatePanel />
       )}
+      <section className="panel">
+        <h2>Einführung</h2>
+        <p className="muted">Pip zeigt dir in vier kurzen Schritten, wie Merkora funktioniert.</p>
+        <button type="button" className="btn outline" onClick={() => setSettings({ tourDone: false })}>
+          Einführung nochmal ansehen
+        </button>
+      </section>
       <p className="muted small version-line">Merkora Version {APP_VERSION}</p>
       </div>
       </div>

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Mascot } from '../components/Mascot';
+import { undoable } from '../lib/undo';
 import { Link } from 'react-router-dom';
 import { ExamDialog } from '../components/ExamDialog';
 import { IconCalendar, IconChevron, IconDownload, IconEdit, IconPlay, IconPlus, IconTrash } from '../components/Icons';
@@ -145,7 +147,10 @@ export default function CalendarPage() {
   return (
     <div className="page">
       <header className="page-head">
-        <h1>Prüfungen</h1>
+        <div className="page-title">
+          <h1>Prüfungen</h1>
+          <p className="page-intro">Trag deine Prüfungstermine ein – Merkora plant, welche Karten bis dahin drankommen, und du kannst Probeprüfungen schreiben.</p>
+        </div>
         <div className="row-gap">
           {data.exams.length > 0 && (
             <button
@@ -221,7 +226,7 @@ export default function CalendarPage() {
           <h2>Anstehende Prüfungen</h2>
           {upcoming.length === 0 && (
             <div className="empty">
-              <IconCalendar size={28} />
+              <Mascot mood="think" size={84} />
               <b>Keine Prüfungen eingetragen</b>
               <p className="muted">Trag deine Prüfungstermine ein und verknüpfe die passenden Decks. Merkora plant dann so, dass jede Karte vorher noch einmal drankommt.</p>
               <button type="button" className="btn primary" onClick={() => setEdit({})}>
@@ -230,7 +235,7 @@ export default function CalendarPage() {
             </div>
           )}
           {upcoming.map((e) => (
-            <ExamCard key={e.id} exam={e} onEdit={() => setEdit({ exam: e })} onDelete={() => setDel(e)} onPractice={() => startPractice(e)} />
+            <ExamCard key={e.id} exam={e} onEdit={() => setEdit({ exam: e })} onDelete={() => undoable(`Prüfung „${e.title}“ gelöscht`, () => deleteExam(e.id))} onPractice={() => startPractice(e)} />
           ))}
           {past.length > 0 && (
             <>
@@ -243,7 +248,7 @@ export default function CalendarPage() {
                     <span>
                       {new Date(examAt(e)).toLocaleDateString('de-DE')} · <b>{e.title}</b> · {examCards(data, e).length} Karten
                     </span>
-                    <button type="button" className="icon-btn" aria-label="Löschen" onClick={() => setDel(e)}>
+                    <button type="button" className="icon-btn" aria-label="Löschen" onClick={() => undoable(`Prüfung „${e.title}“ gelöscht`, () => deleteExam(e.id))}>
                       <IconTrash size={14} />
                     </button>
                   </div>

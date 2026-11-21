@@ -134,7 +134,10 @@ export default function Stats() {
   return (
     <div className="page">
       <header className="page-head">
-        <h1>Statistik</h1>
+        <div className="page-title">
+          <h1>Statistik</h1>
+          <p className="page-intro">So läuft dein Lernen: gelernte Karten, Serie, Lernzeit und wie gut du deine Decks schon kannst.</p>
+        </div>
       </header>
 
       <div className="stat-tiles">

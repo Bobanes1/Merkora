@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { undoable } from '../../lib/undo';
 import { isLeech } from '../../lib/cardLinks';
 import { IconCards, IconCheck, IconFlame, IconPlay, IconRefresh } from '../../components/Icons';
 import { ConfirmModal } from '../../components/Modal';
@@ -150,7 +151,7 @@ export default function MasteryTab({ deck, reviews, onLearn, onProblems }: { dec
           <h3>
             {filter === 'all' ? 'Alle Karten' : LEVELS.find((l) => l.id === filter)!.label} ({shown.length})
           </h3>
-          <button type="button" className="btn ghost sm" onClick={() => setConfirm(true)} disabled={!reviews.length && !deck.cards.some((c) => c.srs.last)}>
+          <button type="button" className="btn ghost sm" onClick={() => undoable('Fortschritt zurückgesetzt – alle Karten gelten wieder als neu', () => resetProgress(deck.id))} disabled={!reviews.length && !deck.cards.some((c) => c.srs.last)}>
             <IconRefresh size={14} /> Fortschritt zurücksetzen
           </button>
         </div>

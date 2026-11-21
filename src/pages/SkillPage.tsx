@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { undoable } from '../lib/undo';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { CardContent } from '../components/CardContent';
 import { ConfirmModal } from '../components/Modal';
@@ -343,7 +344,7 @@ function Path({ skill }: { skill: Skill }) {
           <button type="button" className="btn ghost sm" onClick={() => updateSkill(skill.id, { status: 'planning' })}>
             Lernpfad ändern
           </button>
-          <button type="button" className="icon-btn" aria-label="Skill löschen" title="Löschen" onClick={() => setConfirm(true)}>
+          <button type="button" className="icon-btn" aria-label="Skill löschen" title="Löschen" onClick={() => undoable(`Skill „${skill.title}“ gelöscht`, () => (deleteSkill(skill.id), navigate('/skills')))}>
             <IconTrash size={15} />
           </button>
         </div>

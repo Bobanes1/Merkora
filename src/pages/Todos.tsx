@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Mascot } from '../components/Mascot';
 import { Confetti } from '../components/Mascot';
 import { Link, useSearchParams } from 'react-router-dom';
 import { IconCheck, IconPlay, IconPlus, IconSparkle, IconTrash } from '../components/Icons';
@@ -183,7 +184,7 @@ export default function Todos() {
       <header className="page-head">
         <h1>To-dos</h1>
         <p className="muted">
-          {counts.all} offen · {counts.today} heute oder überfällig · Tastatur: <kbd>N</kbd> neu, <kbd>↑</kbd>
+          Deine Aufgaben rund ums Lernen. {counts.all} offen · {counts.today} heute oder überfällig · Tastatur: <kbd>N</kbd> neu, <kbd>↑</kbd>
           <kbd>↓</kbd> wählen, <kbd>Leertaste</kbd> erledigt, <kbd>Enter</kbd> Details
         </p>
       </header>
@@ -255,6 +256,7 @@ export default function Todos() {
 
       {sections.length === 0 && (
         <div className="empty">
+          <Mascot mood={view === 'today' ? 'cheer' : 'idle'} size={84} />
           <b>{view === 'done' ? 'Noch nichts erledigt.' : view === 'today' ? 'Für heute ist nichts offen. 🎉' : 'Keine To-dos.'}</b>
           {view === 'today' && counts.all > 0 && (
             <button type="button" className="link-btn" onClick={() => setView('all')}>

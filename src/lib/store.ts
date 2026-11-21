@@ -202,6 +202,8 @@ export type Settings = {
   theme: 'system' | 'light' | 'dark';
   /** Colour world: the main colour plus six accent colours ("bunt" by default). */
   palette?: Palette;
+  /** The short introduction with Pip was finished or skipped. */
+  tourDone?: boolean;
   /** New cards per course and day, shared by its decks (the rest waits for the next days). */
   newPerDay: number;
   /** Planning: FSRS (like Anki 23+) instead of the classic intervals, with the desired chance to still know a card. */

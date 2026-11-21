@@ -1,4 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { Tour } from './Tour';
+import { UndoToast } from './UndoToast';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { aiReady, PROVIDERS } from '../lib/ai';
 import { deckUrl, dueCards, isAndroid, isDesktop, useStore, type Deck } from '../lib/store';
@@ -311,6 +313,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
       {newDeck && <NewDeckModal onClose={() => setNewDeck(false)} onAi={(courseId) => setAiCourse(courseId)} />}
       {aiCourse && <CreateWithAI courseId={aiCourse} onClose={() => setAiCourse(null)} onBack={() => (setAiCourse(null), setNewDeck(true))} />}
       {search && <SearchPalette onClose={() => setSearch(false)} />}
+      <UndoToast />
+      <Tour />
       {phone && <PhoneNav onSearch={() => setSearch(true)} onNewDeck={() => setNewDeck(true)} />}
       <ToolWindows />
       <main className="app-main">

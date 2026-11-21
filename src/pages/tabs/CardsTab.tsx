@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { Mascot } from '../../components/Mascot';
+import { undoable } from '../../lib/undo';
 import { useSearchParams } from 'react-router-dom';
 import { ImproveCardDialog } from '../../components/ImproveCardDialog';
 import { isLeech } from '../../lib/cardLinks';
@@ -328,6 +330,7 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
       )}
       {deck.cards.length === 0 ? (
         <div className="empty">
+          <Mascot mood="wave" size={84} />
           <b>Dieses Deck ist noch leer</b>
           <p className="muted">Lass die KI Karten aus deinem Lernmaterial erstellen, schreibe selbst welche oder übernimm einen Anki-Stapel.</p>
           <div className="row-gap center">
@@ -403,7 +406,7 @@ export default function CardsTab({ deck, onLearn }: { deck: Deck; onLearn: () =>
                   >
                     <IconEdit size={16} />
                   </button>
-                  <button type="button" className="icon-btn" aria-label="Löschen" onClick={() => setDel(c)}>
+                  <button type="button" className="icon-btn" aria-label="Löschen" onClick={() => undoable('Karte gelöscht', () => deleteCard(deck.id, c.id))}>
                     <IconTrash size={16} />
                   </button>
                 </div>
