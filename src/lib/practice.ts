@@ -5,7 +5,7 @@
  */
 import { compileExpr } from './plotExpr';
 import { DIAGRAM_RULE, parseDiagram, type Diagram } from './diagram';
-import { ACTIVE_TYPES, parseActive, type ActiveTask } from './tasks';
+import { ACTIVE_TYPES, niceStep, parseActive, type ActiveTask } from './tasks';
 import { LANG_RULE, type Prompt } from './ai';
 import { parseFormulaLab, parseProgram, parseScore, parseSketch, parseSyntax, parseTables, type FormulaLab, type Program, type Score, type Sentence, type Sketch, type Table } from './visuals';
 import { FORMULA_RULE } from './ai';
@@ -53,8 +53,18 @@ export type ProblemProgress = {
   chat?: { me: boolean; text: string }[];
 };
 
-/** One bite of an explanation: a short text, maybe a picture (index in figures) and an easy check question. */
-export type Bite = { title: string; text: string; figure?: number; check?: { q: string; options: string[]; correct: number; why?: string } };
+export type BiteChoice = { type?: 'choice'; q: string; options: string[]; correct: number; why?: string };
+export type BiteTf = { type: 'tf'; statement: string; answer: boolean; why?: string };
+export type BiteGap = { type: 'gap'; prompt: string; answer: string[]; placeholder?: string; why?: string };
+export type BiteReveal = { type: 'reveal'; q: string; answer: string; why?: string };
+export type BiteEstimate = { type: 'estimate'; q: string; min: number; max: number; step: number; unit: string; answer: number; tolerance: number; why?: string };
+export type BiteCheck = BiteChoice | BiteTf | BiteGap | BiteReveal | BiteEstimate;
+
+/** One bite of an explanation: a short text, maybe a picture (index in figures) and a quick interactive check. */
+export type Bite = { title: string; text: string; figure?: number; check?: BiteCheck };
+
+/** Lesson flow style: classic (bites → example → practice), discovery (try hook first → bites → practice), or sprint (brief overview → practice). */
+export type LessonStyle = 'classic' | 'discovery' | 'sprint';
 
 export type PracticeSet = {
   id: string;
@@ -74,10 +84,14 @@ export type PracticeSet = {
   /** Languages: sentences with coloured parts, and tables (endings highlighted). */
   syntax?: Sentence[];
   tables?: Table[];
-  /** The explanation in small bites, each with an easy check question (skill lessons). */
+  /** The explanation in small bites, each with an optional quick check (skill lessons). */
   bites?: Bite[];
-  /** Where a guided lesson stands: understanding (bites), the example, or practising; and the bite last seen. */
-  phase?: 'learn' | 'example' | 'practice';
+  /** Lesson flow style for guided skill lessons (default: classic). */
+  style?: LessonStyle;
+  /** Opening try-it-first hook for `discovery` lessons (a short intuition check before the explanation). */
+  hook?: Bite;
+  /** Where a guided lesson stands: try-first hook, understanding (bites), the example, or practising; and the bite last seen. */
+  phase?: 'try' | 'learn' | 'example' | 'practice';
   /** The bonus task was offered already (once per set). */
   bonusAsked?: boolean;
   bite?: number;
@@ -254,11 +268,95 @@ export function parsePractice(json: unknown, id: string, now: number): PracticeS
   const tables = parseTables(r.tables);
   const figures = parseFigures(r.figures);
   const bites = parseBites(r.bites, figures.length);
+  const style: LessonStyle | undefined = r.style === 'discovery' || r.style === 'sprint' || r.style === 'classic' ? r.style : undefined;
+  const hook = parseHook(r.hook, figures.length);
   const visuals = { ...(score ? { score } : {}), ...(program ? { program } : {}), ...(sketch ? { sketch } : {}), ...(syntax.length ? { syntax } : {}), ...(tables.length ? { tables } : {}) };
-  return { id, createdAt: now, kind, topic: s(r.topic, 80) || 'Übung', intro: s(r.intro, 3000), ...visuals, ...(s(r.theory, 8000) ? { theory: s(r.theory, 8000) } : {}), ...(figures.length ? { figures } : {}), ...(bites.length ? { bites } : {}), ...(example?.problem ? { example } : {}), labs, tasks, progress: tasks.map(() => ({ tries: 0, hints: 0 })) };
+  return {
+    id,
+    createdAt: now,
+    kind,
+    topic: s(r.topic, 80) || 'Übung',
+    intro: s(r.intro, 3000),
+    ...visuals,
+    ...(s(r.theory, 8000) ? { theory: s(r.theory, 8000) } : {}),
+    ...(figures.length ? { figures } : {}),
+    ...(bites.length ? { bites } : {}),
+    ...(style ? { style } : {}),
+    ...(hook ? { hook } : {}),
+    ...(example?.problem ? { example } : {}),
+    labs,
+    tasks,
+    progress: tasks.map(() => ({ tries: 0, hints: 0 })),
+  };
 }
 
-/** The bites of an explanation, with safe values: 2–4 options, the right one among them, a picture only if it exists. Pure – tested. */
+/** One quick check on a bite (choice, true/false, gap, reveal, or estimate). Pure – tested. */
+export function parseBiteCheck(raw: unknown): BiteCheck | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const c = raw as Record<string, unknown>;
+  const type = String(c.type ?? '').toLowerCase();
+  const why = s(c.why, 500);
+  if (type === 'tf' || type === 'truefalse' || type === 'bool') {
+    const statement = s(c.statement ?? c.q ?? c.question, 400);
+    let answer: boolean | null = null;
+    if (typeof c.answer === 'boolean') answer = c.answer;
+    else if (typeof c.answer === 'string') {
+      if (/^(true|wahr|stimmt|richtig|ja)$/i.test(c.answer.trim())) answer = true;
+      else if (/^(false|falsch|irrtum|nein)$/i.test(c.answer.trim())) answer = false;
+    }
+    return statement && answer !== null ? { type: 'tf', statement, answer, ...(why ? { why } : {}) } : undefined;
+  }
+  if (type === 'gap' || type === 'cloze' || type === 'fill') {
+    const prompt = s(c.prompt ?? c.q ?? c.question ?? c.text, 400);
+    const answer = (Array.isArray(c.answer) ? arr(c.answer, 6) : arr([c.answer], 1)).map((x) => x.slice(0, 120));
+    const placeholder = s(c.placeholder, 60);
+    return prompt && answer.length ? { type: 'gap', prompt, answer, ...(placeholder ? { placeholder } : {}), ...(why ? { why } : {}) } : undefined;
+  }
+  if (type === 'reveal' || type === 'think' || type === 'flash') {
+    const q = s(c.q ?? c.question ?? c.prompt, 400);
+    const answer = s(c.answer ?? c.a ?? c.solution, 600);
+    return q && answer ? { type: 'reveal', q, answer, ...(why ? { why } : {}) } : undefined;
+  }
+  if (type === 'estimate') {
+    const q = s(c.q ?? c.question ?? c.prompt, 400);
+    const lo = num(c.min, NaN), hi = num(c.max, NaN), answer = num(c.answer, NaN);
+    if (!q || ![lo, hi, answer].every(Number.isFinite) || lo >= hi || answer < lo || answer > hi) return undefined;
+    const span = hi - lo;
+    const stepRaw = num(c.step, NaN);
+    const tolRaw = num(c.tolerance, NaN);
+    return {
+      type: 'estimate',
+      q,
+      min: lo,
+      max: hi,
+      step: Number.isFinite(stepRaw) && stepRaw > 0 && stepRaw <= span / 4 ? stepRaw : niceStep(span),
+      unit: s(c.unit, 20),
+      answer,
+      tolerance: Number.isFinite(tolRaw) && tolRaw > 0 ? Math.min(tolRaw, span / 4) : span / 15,
+      ...(why ? { why } : {}),
+    };
+  }
+  const options = arr(c.options, 4).map((o) => o.slice(0, 240));
+  const q = s(c.q ?? c.question, 400);
+  let correct = Number(c.correct);
+  if (!Number.isInteger(correct) && typeof c.correct === 'string') correct = options.indexOf(c.correct.trim());
+  return q && options.length >= 2 && Number.isInteger(correct) && correct >= 0 && correct < options.length
+    ? { q, options, correct, ...(why ? { why } : {}) }
+    : undefined;
+}
+
+/** Opening try-it-first hook for `discovery` lessons: requires a valid interactive check. */
+function parseHook(raw: unknown, figures: number): Bite | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const r = raw as Record<string, unknown>;
+  const check = parseBiteCheck(r.check ?? r);
+  if (!check) return undefined;
+  const text = s(r.text ?? r.body, 1500);
+  const fig = r.figure === undefined || r.figure === null || r.figure === '' ? NaN : Number(r.figure);
+  return { title: s(r.title, 90) || 'Erst mal schätzen & probieren', text, ...(Number.isInteger(fig) && fig >= 0 && fig < figures ? { figure: fig } : {}), check };
+}
+
+/** The bites of an explanation, with safe values: valid checks (choice, tf, gap, reveal, estimate), a picture only if it exists. Pure – tested. */
 export function parseBites(raw: unknown, figures: number): Bite[] {
   if (!Array.isArray(raw)) return [];
   const out: Bite[] = [];
@@ -267,20 +365,29 @@ export function parseBites(raw: unknown, figures: number): Bite[] {
     const text = s(r.text ?? r.body, 1500);
     if (!text) continue;
     const fig = r.figure === undefined || r.figure === null || r.figure === '' ? NaN : Number(r.figure);
-    const c = (r.check ?? null) as Record<string, unknown> | null;
-    let check: Bite['check'];
-    if (c && typeof c === 'object') {
-      const options = arr(c.options, 4).map((o) => o.slice(0, 240));
-      const q = s(c.q ?? c.question, 400);
-      let correct = Number(c.correct);
-      if (!Number.isInteger(correct) && typeof c.correct === 'string') correct = options.indexOf(c.correct.trim());
-      const why = s(c.why, 500);
-      if (q && options.length >= 2 && Number.isInteger(correct) && correct >= 0 && correct < options.length) check = { q, options, correct, ...(why ? { why } : {}) };
-    }
+    const check = parseBiteCheck(r.check);
     out.push({ title: s(r.title, 90), text, ...(Number.isInteger(fig) && fig >= 0 && fig < figures ? { figure: fig } : {}), ...(check ? { check } : {}) });
     if (out.length >= 6) break;
   }
   return out;
+}
+
+const normGap = (v: string) => v.trim().toLowerCase().replace(/\s+/g, ' ').replace(/[.!?]+$/, '');
+
+/** Checks a bite gap answer: normalized text match against any allowed answer, or numeric equality. Pure – tested. */
+export function checkBiteGap(check: BiteGap, input: string): boolean {
+  const given = normGap(input);
+  if (!given) return false;
+  for (const ans of check.answer) {
+    if (normGap(ans) === given) return true;
+    const wantNum = parseNumber(ans);
+    const gotNum = parseNumber(input);
+    if (wantNum !== null && gotNum !== null) {
+      const tol = tolFor({ type: 'number', value: ans }, wantNum);
+      if (Math.abs(gotNum - wantNum) <= tol) return true;
+    }
+  }
+  return false;
 }
 
 /** The bites to show: the set's own, or – for older lessons – the „Grundlagen“ split at their headings, then the short explanation. Pure – tested. */
@@ -382,7 +489,7 @@ const TASK_TYPES = {
   calc: `{"type":"calc","problem":"…","answer":{"type":"number|fraction|expr|choice|text","value":"…","tolerance":0.001,"options":["…"]},"hints":["…"],"steps":["Lösungsweg"]} – rechnen/antworten; "number" (z. B. "0,2668" oder "26,68 %"), "fraction" ("3/8"), "expr" (Formel in x: + - * / ^ sqrt exp ln sin cos), "choice" (mit "options", value = richtige Option), "text" (frei, nur wenn nötig)`,
   multi: `{"type":"multi","prompt":"…","options":["…","…","…","…"],"correct":[0,2],"explain":"…"} – mehrere richtige Antworten`,
   order: `{"type":"order","prompt":"Bringe … in die richtige Reihenfolge","items":["Schritt 1","Schritt 2","Schritt 3"],"explain":"…"} – items in RICHTIGER Reihenfolge (Merkora mischt sie)`,
-  classify: `{"type":"classify","prompt":"Ordne zu","groups":["Gruppe A","Gruppe B"],"items":[{"text":"…","group":0},{"text":"…","group":1}],"explain":"…"} – 4–10 Elemente`,
+  classify: `{"type":"classify","prompt":"Ordne zu","groups":["Kategorie A","Kategorie B","Kategorie C"],"items":[{"text":"…","group":0},{"text":"…","group":1},{"text":"…","group":2}],"explain":"…"} – 2–4 Kategorien (gerne 3–4 statt immer nur 2), 4–10 Elemente`,
   cloze: `{"type":"cloze","prompt":"…","text":"Ein {{1}} ist … und {{2}} …","gaps":[["Antwort","Synonym"],["…"]],"explain":"…"} – Lücken {{1}}, {{2}} … mit erlaubten Antworten`,
   case: `{"type":"case","law":"Schweizer Recht","facts":"Sachverhalt (realistisch, 6–14 Sätze)","question":"Aufgabe (z. B. Hat A gegen B einen Anspruch auf …? Prüfe im Gutachtenstil.)","norms":["Art. 641 ZGB – Eigentum: was der Artikel regelt, in einem Satz"],"rubric":[{"criterion":"Anspruchsgrundlage richtig benannt (Art. …)","points":2},{"criterion":"…","points":3}],"solution":"vollständige Musterlösung"} – Fallaufgabe, die man selbst ausformuliert. Der Sachverhalt enthält ALLE Angaben, die die Lösung braucht (wer, wann, Beträge, was vereinbart oder gesagt wurde, Beziehungen, Reihenfolge) – nichts, was man für die Lösung wissen muss, darf fehlen. Die Frage sagt genau, was zu prüfen ist (welcher Anspruch, wer gegen wen, Umfang). "law" = Rechtsordnung. "norms" = die einschlägigen Normen zum Nachschlagen (2–6, wie ein offenes Gesetzbuch in der Prüfung). Die Musterlösung erfüllt JEDES Kriterium des Schemas ausdrücklich und in dessen Reihenfolge; das Schema verlangt nichts, was nicht in der Musterlösung steht.`,
   code: `{"type":"code","lang":"java|javascript|python|sql","title":"…","task":"…","starter":"…","tests":[{"call":"…","expected":"…"}],"hints":["…"],"solution":"…"} – Programmieren; "lang" passend zum Thema (Standard java). Java: Klasse "Solution" ohne "public", statische Methoden, keine main, starter "class Solution {\\n    static int f(int[] a) {\\n        // dein Code\\n        return 0;\\n    }\\n}", call "Solution.f(new int[]{1,2})", expected wie String.valueOf / Arrays.toString ("[1, 2]"). JavaScript: Funktionen ("function f(a) { … }"), call "f([1,2])", expected wie JSON.stringify, Text ohne Anführungszeichen. Python: Funktionen ("def f(a):\\n    # dein Code\\n    pass"), call "f([1, 2])", expected wie repr() ("[1, 2]", Text ohne Anführungszeichen, True/False). tests 3–6 Aufrufe. SQL: statt tests "schema" (CREATE TABLE … ; INSERT … mit 5–15 Zeilen Beispieldaten, SQLite) und "solution" (die richtige Abfrage), starter "SELECT "; Merkora vergleicht die Ergebniszeilen`,
@@ -395,20 +502,20 @@ const TASK_TYPES = {
 };
 const LABS_RULE = `"labs" (0–2, nur wenn sie zum Thema passen): {"type":"coin","p":0.5} · {"type":"dice","dice":2} · {"type":"binomial","n":10,"p":0.3} · {"type":"normal","mu":100,"sigma":15,"a":85,"b":115} · {"type":"tree","pA":0.3,"pBA":0.8,"pBnA":0.1,"a":"krank","b":"positiv"} · {"type":"bayes","prevalence":0.01,"sensitivity":0.95,"specificity":0.9} · {"type":"urn","N":10,"K":3,"n":4} · {"type":"function","expr":"a*x^2+b","params":{"a":1,"b":0},"min":-5,"max":5} · {"type":"vectors","matrix":[[1,1],[0,1]]}; jeweils mit "ask": eine Frage zum Ausprobieren.`;
 
-/** Which task types fit which subject (most active ones first). */
+/** Which task types fit which subject (most active ones first; classify last so it is not the default opener). */
 export const DOMAIN_TASKS: Record<Domain, (keyof typeof TASK_TYPES)[]> = {
-  math: ['calc', 'order', 'multi', 'classify', 'estimate', 'sheet'],
+  math: ['calc', 'estimate', 'order', 'sheet', 'label', 'cloze', 'multi', 'classify'],
   java: ['code', 'cloze', 'order', 'calc', 'multi'],
-  law: ['case', 'scenario', 'classify', 'order', 'cloze', 'multi', 'roleplay'],
-  music: ['music', 'calc', 'classify', 'cloze', 'multi'],
-  language: ['cloze', 'roleplay', 'classify', 'order', 'calc', 'multi'],
-  general: ['calc', 'order', 'classify', 'cloze', 'multi', 'case', 'scenario', 'roleplay', 'label', 'estimate', 'sheet'],
+  law: ['case', 'scenario', 'order', 'cloze', 'roleplay', 'multi', 'classify'],
+  music: ['music', 'order', 'label', 'cloze', 'calc', 'multi', 'classify'],
+  language: ['cloze', 'roleplay', 'scenario', 'order', 'calc', 'multi', 'classify'],
+  general: ['scenario', 'order', 'cloze', 'estimate', 'label', 'calc', 'case', 'roleplay', 'sheet', 'multi', 'classify'],
 };
 
 /** The task rules for one subject (or all for "auto"). */
 export function taskRules(kind: PracticeKind): string {
   const types = kind === 'auto' ? (Object.keys(TASK_TYPES) as (keyof typeof TASK_TYPES)[]) : DOMAIN_TASKS[kind];
-  return `Aufgabentypen (mische mehrere, der Lernende soll SELBST etwas tun – rechnen, ordnen, zuordnen, ausformulieren, spielen, programmieren; keine reinen Wissensfragen):\n${types.map((t) => '- ' + TASK_TYPES[t]).join('\n')}${kind === 'math' || kind === 'auto' ? '\n' + LABS_RULE : ''}`;
+  return `Aufgabentypen (mische mindestens 3–4 verschiedene Typen und setze nicht denselben Typ zweimal direkt hintereinander; der Lernende soll SELBST etwas tun – rechnen, schätzen, ordnen, Lücken füllen, entscheiden, beschriften, ausformulieren, spielen, programmieren; keine reinen Wissensfragen):\n${types.map((t) => '- ' + TASK_TYPES[t]).join('\n')}${kind === 'math' || kind === 'auto' ? '\n' + LABS_RULE : ''}`;
 }
 
 /** The common frame: explanation, worked example, then tasks that get harder. */
