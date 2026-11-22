@@ -224,9 +224,14 @@ export function PracticeSetView({ set, host, head, onDone, guided, focus }: { se
           )}
         </div>
       </section>
-      {phase === 'learn' && <BitesView set={set} bites={bites} host={host} onDone={() => setPhase(after('learn'))} />}
+      {phase === 'learn' && <BitesView set={set} bites={bites} host={host} onDone={() => setPhase(after('learn'))} onSkip={() => setPhase('practice')} />}
       {phase === 'example' && (
         <>
+          <div className="phase-skip">
+            <button type="button" className="btn ghost sm" onClick={() => setPhase('practice')}>
+              Weiter zu den Aufgaben <IconChevron size={14} />
+            </button>
+          </div>
           <section className="panel">
             <Explanation set={set} host={host} steps={steps} setSteps={setSteps} hideText />
           </section>
@@ -276,7 +281,7 @@ function lastSolved(set: PracticeSet, n: number) {
 }
 
 /** The explanation in bites: read a little, answer an easy question about it, go on. */
-function BitesView({ set, bites, host, onDone }: { set: PracticeSet; bites: Bite[]; host: SetHost; onDone: () => void }) {
+function BitesView({ set, bites, host, onDone, onSkip }: { set: PracticeSet; bites: Bite[]; host: SetHost; onDone: () => void; onSkip: () => void }) {
   const [k, setK] = useState(() => Math.max(0, Math.min(set.bite ?? 0, bites.length - 1)));
   const [pick, setPick] = useState<number | null>(null);
   const b = bites[k];
@@ -319,6 +324,9 @@ function BitesView({ set, bites, host, onDone }: { set: PracticeSet; bites: Bite
         <span className="muted small">
           Häppchen {k + 1} von {bites.length}
         </span>
+        <button type="button" className="link-btn small bite-skip" onClick={onSkip} title="Erklärung überspringen – direkt zu den Aufgaben">
+          Kenn ich schon – direkt üben ›
+        </button>
       </div>
       {b.title && <h3>{b.title}</h3>}
       <div className="md bite-text">

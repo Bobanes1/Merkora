@@ -12,7 +12,17 @@ export type OrderTask = { type: 'order'; prompt: string; items: string[]; hints:
 export type ClassifyTask = { type: 'classify'; prompt: string; groups: string[]; items: { text: string; group: number }[]; hints: string[]; explain?: string };
 export type ClozeTask = { type: 'cloze'; prompt: string; text: string; gaps: string[][]; hints: string[]; explain?: string };
 export type MultiTask = { type: 'multi'; prompt: string; options: string[]; correct: number[]; hints: string[]; explain?: string };
-export type CaseTask = { type: 'case'; facts: string; question: string; rubric: { criterion: string; points: number }[]; solution: string; hints: string[] };
+export type CaseTask = {
+  type: 'case';
+  facts: string;
+  question: string;
+  rubric: { criterion: string; points: number }[];
+  solution: string;
+  hints: string[];
+  /** Law: which legal system („Schweizer Recht“) and the relevant articles to look up (open book). */
+  law?: string;
+  norms?: string[];
+};
 export type MusicTask = { type: 'music'; prompt: string; music: MusicSpec; hints: string[]; explain?: string };
 /** Guess a value with a slider; points by how close you are. */
 export type EstimateTask = { type: 'estimate'; prompt: string; min: number; max: number; step: number; unit: string; answer: number; tolerance: number; hints: string[]; explain?: string };
@@ -76,7 +86,11 @@ export function parseActive(raw: unknown): ActiveTask | null {
         })
         .filter((c) => c.criterion)
         .slice(0, 10);
-      return facts && question && rubric.length >= 2 ? { type: 'case', facts, question, rubric, solution: s(r.solution, 8000), hints } : null;
+      const law = s(r.law ?? r.rechtsordnung, 40);
+      const norms = arr(r.norms ?? r.normen, 8, 300);
+      return facts && question && rubric.length >= 2
+        ? { type: 'case', facts, question, rubric, solution: s(r.solution, 8000), hints, ...(law ? { law } : {}), ...(norms.length ? { norms } : {}) }
+        : null;
     }
     case 'music': {
       const music = parseMusic(r.music ?? r);
@@ -353,6 +367,33 @@ export function shuffled<T>(items: T[], seed: number): T[] {
 }
 
 // ---------- case studies: grading by the AI ----------
+/** Words with their counts (normalised: case, punctuation, ß). */
+function wordCounts(t: string) {
+  const m = new Map<string, number>();
+  for (const w of norm(t).split(' ').filter(Boolean)) m.set(w, (m.get(w) ?? 0) + 1);
+  return m;
+}
+
+/**
+ * Is the answer (nearly) the sample solution itself? At least 90 % of its words are there and the answer
+ * is not much longer – then it gets full points without asking the AI. Pure – tested.
+ */
+export function matchesSolution(answer: string, solution: string): boolean {
+  const want = wordCounts(solution), got = wordCounts(answer);
+  const total = [...want.values()].reduce((a, b) => a + b, 0);
+  const given = [...got.values()].reduce((a, b) => a + b, 0);
+  if (total < 15 || !given || given > total * 1.3) return false;
+  let hit = 0;
+  for (const [w, n] of want) hit += Math.min(n, got.get(w) ?? 0);
+  return hit / total >= 0.9;
+}
+
+/** Full points on every criterion – for an answer that is the sample solution. */
+export function fullGrade(task: CaseTask): CaseGrade {
+  const criteria = task.rubric.map((c) => ({ criterion: c.criterion, points: c.points, max: c.points, feedback: 'Erfüllt – entspricht der Musterlösung.' }));
+  const max = criteria.reduce((n, c) => n + c.max, 0);
+  return { criteria, total: max, max, summary: 'Deine Lösung entspricht der Musterlösung – volle Punktzahl.' };
+}
 export type CaseGrade = { criteria: { criterion: string; points: number; max: number; feedback: string }[]; total: number; max: number; summary: string };
 
 /** The AI's grading, checked against the scheme (points never above the maximum). */
@@ -373,7 +414,8 @@ export function parseCaseGrade(task: CaseTask, raw: unknown): CaseGrade {
 export function caseGradePrompt(task: CaseTask, answer: string, lang: string) {
   return {
     system: `Du bewertest die Lösung eines Lernenden zu einer Fallaufgabe fair, genau und ermutigend. ${lang}
-Bewerte jedes Kriterium des Bewertungsschemas einzeln (halbe Punkte erlaubt). "feedback": 1–2 Sätze, was erfüllt ist oder fehlt. "summary": 2–3 Sätze Gesamteindruck mit dem wichtigsten nächsten Schritt.
+Bewerte jedes Kriterium des Bewertungsschemas einzeln (halbe Punkte erlaubt).
+MASSSTAB: Bewerte den INHALT, nicht Wortlaut oder Form. Die Musterlösung ist eine Lösung mit voller Punktzahl: Was inhaltlich der Musterlösung entspricht, bekommt in jedem Kriterium die volle Punktzahl. Andere Formulierungen, ein anderer sinnvoller Aufbau oder andere vertretbare Begründungen sind genauso richtig. Ziehe nur ab, was das Kriterium verlangt und in der Lösung fehlt oder falsch ist – nie für Dinge, die auch die Musterlösung nicht enthält. "feedback": 1–2 Sätze, was erfüllt ist oder fehlt. "summary": 2–3 Sätze Gesamteindruck mit dem wichtigsten nächsten Schritt.
 Format: {"criteria":[{"points":2,"feedback":"…"}],"summary":"…"} – genau so viele Einträge wie Kriterien, in derselben Reihenfolge.`,
     user: `SACHVERHALT:\n${task.facts}\n\nAUFGABE:\n${task.question}\n\nBEWERTUNGSSCHEMA:\n${task.rubric.map((c, i) => `${i + 1}. ${c.criterion} (max. ${c.points} P.)`).join('\n')}\n\nMUSTERLÖSUNG (nur für dich):\n${task.solution}\n\nLÖSUNG DES LERNENDEN:\n${answer || '(leer)'}`,
   };

@@ -7,6 +7,7 @@ import { completeJson } from './ai';
 import { parsePractice, taskList, toDomain, type Task } from './practice';
 import {
   lessonAfter,
+  jurisdictionOf,
   lessonPrompt,
   miniPrompt,
   nextSkillsPrompt,
@@ -30,7 +31,7 @@ import {
   type Stage,
 } from './skills';
 import { LANG_RULE } from './ai';
-import { caseGradePrompt, parseCaseGrade } from './tasks';
+import { caseGradePrompt, fullGrade, matchesSolution, parseCaseGrade } from './tasks';
 import { addSkill, getState, updateSkill } from './store';
 
 type Status = { busy: boolean; error?: string };
@@ -61,7 +62,13 @@ async function run(key: string, fn: () => Promise<void>) {
   emit();
 }
 
-const skill = (id: string) => getState().data.skills?.find((s) => s.id === id);
+/** The skill for an AI call – a law skill always knows its legal system (also older ones). */
+const skill = (id: string) => {
+  const s = getState().data.skills?.find((x) => x.id === id);
+  if (!s || s.domain !== 'law' || s.jurisdiction) return s;
+  const j = jurisdictionOf(s, getState().data.settings.gradeScale);
+  return j ? { ...s, jurisdiction: j } : s;
+};
 const ask = <T>(p: { system: string; user: string; maxTokens: number }) => completeJson<T>(p.system, p.user, p.maxTokens);
 const setOf = (raw: unknown) => {
   const set = parsePractice(raw, newId(), Date.now());
@@ -228,7 +235,8 @@ export function gradeStageProject(id: string, stageId: string, submission: strin
     if (!project) return;
     const task = projectAsCase(project);
     const p = caseGradePrompt(task, submission, LANG_RULE);
-    const grade = parseCaseGrade(task, await completeJson(p.system, p.user, 2500));
+    // the sample solution itself always gets full points – no need to ask the AI
+    const grade = matchesSolution(submission, task.solution) ? fullGrade(task) : parseCaseGrade(task, await completeJson(p.system, p.user, 2500));
     patchStage(id, stageId, (st) => ({ project: { ...st.project!, submission, grade, done: st.project?.done || projectPassed(grade) } }));
   });
 }

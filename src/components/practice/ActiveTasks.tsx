@@ -4,6 +4,8 @@ import { IconArrowDown, IconArrowUp, IconGrip } from '../Icons';
 import { completeJson, LANG_RULE } from '../../lib/ai';
 import {
   caseGradePrompt,
+  fullGrade,
+  matchesSolution,
   checkClassify,
   checkCloze,
   checkMulti,
@@ -387,8 +389,9 @@ export function CaseTaskView({ ctx, task }: { ctx: TaskCtx; task: CaseTask }) {
     setBusy(true);
     setError('');
     try {
+      // the sample solution itself always gets full points – no need to ask the AI
       const p = caseGradePrompt(task, answer, LANG_RULE);
-      const g = parseCaseGrade(task, await completeJson(p.system, p.user, 2500));
+      const g = matchesSolution(answer, task.solution) ? fullGrade(task) : parseCaseGrade(task, await completeJson(p.system, p.user, 2500));
       setGrade(g);
       host.progress(i, { tries: prog.tries + 1, ...(g.total / g.max >= 0.6 ? { solved: true } : {}) });
     } catch (e) {
@@ -400,10 +403,26 @@ export function CaseTaskView({ ctx, task }: { ctx: TaskCtx; task: CaseTask }) {
   return (
     <div className="practice-task">
       <div className="case-facts">
-        <b>Sachverhalt</b>
+        <span className="case-facts-head">
+          <b>Sachverhalt</b> {task.law && <span className="badge law case-law">{task.law}</span>}
+        </span>
         <CardContent text={task.facts} />
       </div>
-      <CardContent text={`**Aufgabe:** ${task.question}`} className="practice-problem" />
+      {task.norms?.length ? (
+        <details className="case-norms">
+          <summary>Gesetz zum Nachschlagen ({task.norms.length})</summary>
+          <ul>
+            {task.norms.map((n, k) => (
+              <li key={k}>
+                <CardContent text={n} className="inline" />
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+      <p className="practice-problem case-question">
+        <b>Aufgabe:</b> <CardContent text={task.question} className="inline" />
+      </p>
       <textarea className="input case-answer" rows={10} value={answer} onChange={(e) => write(e.target.value)} placeholder="Deine Lösung – z. B. im Gutachtenstil: Obersatz, Definition, Subsumtion, Ergebnis" />
       <div className="row-gap">
         <button type="button" className="btn primary" onClick={() => void submit()} disabled={busy || words < 15}>

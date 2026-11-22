@@ -11447,3 +11447,11 @@ body.learn-focus .practice-tasks { min-height: calc(100vh - 220px); }
   .mini-head { flex-direction: column; }
 }
 .next-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.case-facts-head { display: flex; align-items: center; gap: 8px; }
+.case-law { margin: 0; }
+.case-question { margin: 0; }
+.case-norms { border: 1px dashed var(--line); border-radius: var(--r-md); padding: 8px 12px; }
+.case-norms summary { cursor: pointer; font-weight: 600; }
+.case-norms ul { margin: 8px 0 2px; padding-left: 18px; display: grid; gap: 4px; }
+.bite-skip { margin-left: auto; }
+.phase-skip { display: flex; justify-content: flex-end; margin-bottom: -6px; }

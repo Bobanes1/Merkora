@@ -1951,6 +1951,36 @@ console.log('Themenvorschläge, Mini-Skills, nächster Skill');
   ok(ideas.length === 3 && ideas[0].mini === true && !ideas[1].mini && S.parseNextIdeas(null).length === 0, 'nächster Skill: höchstens 3, leere weg');
 }
 
+console.log('Jura-Fälle: Rechtsordnung, Kontext, Musterlösung; Tempo mit Vorwissen');
+{
+  const S = await import('../src/lib/skills');
+  const T = await import('../src/lib/tasks');
+  const P = await import('../src/lib/practice');
+  const sk = (title: string, material = '') => ({ title, topic: title, material });
+  ok(S.jurisdictionOf(sk('Schweizer Sachenrecht')) === 'ch' && S.jurisdictionOf(sk('BGB Allgemeiner Teil')) === 'de' && S.jurisdictionOf(sk('ABGB Schuldrecht')) === 'at', 'Rechtsordnung aus dem Thema');
+  ok(S.jurisdictionOf(sk('Vertragsrecht'), 'ch') === 'ch' && S.jurisdictionOf(sk('Vertragsrecht')) === undefined && S.jurisdictionOf(sk('Vertragsrecht', 'Art. 1 OR … Art. 97 OR')) === 'ch' && S.jurisdictionOf(sk('Contract law', 'this or that or more')) === undefined, 'Rechtsordnung aus Material / Notenskala, „or“ im Text zählt nicht');
+  const law = { id: 'j', topic: 'Sachenrecht', title: 'Sachenrecht', domain: 'law', jurisdiction: 'ch', levels: ['a'], targetLevel: 0, level: '', status: 'active', plan: {}, stages: [{ id: 'st', name: 'S', goal: 'g', lessons: [{ id: 'l', title: 'Besitz', goal: 'g' }] }], createdAt: 1, updatedAt: 1 } as any;
+  const lp = S.lessonPrompt(law, law.stages[0], law.stages[0].lessons[0]);
+  ok(lp.user.includes('RECHTSORDNUNG: Schweiz') && lp.system.includes('"norms"') && lp.system.includes('ALLE Angaben'), 'Jura-Lektion: Schweizer Recht, Sachverhalt mit allen Angaben, Normen zum Nachschlagen');
+
+  const task = P.parseTask({ type: 'case', law: 'Schweizer Recht', facts: 'F', question: 'Q', norms: ['Art. 641 ZGB – Eigentum', '', ...Array.from({ length: 10 }, (_, k) => 'Art. ' + k)], rubric: [{ criterion: 'A', points: 2 }, { criterion: 'B', points: 3 }], solution: 'S' }) as any;
+  ok(task.law === 'Schweizer Recht' && task.norms.length === 8 && task.norms[0].startsWith('Art. 641'), 'Fall: Rechtsordnung und höchstens 8 Normen');
+  const sol = 'A könnte gegen B einen Anspruch auf Herausgabe des Velos gemäss Art. 641 Abs. 2 ZGB haben. Voraussetzung ist, dass A Eigentümer ist und B das Velo ohne Recht besitzt. A hat das Velo gekauft und übergeben erhalten, also ist er Eigentümer. B hat kein Recht zum Besitz. Ergebnis: Der Anspruch besteht.';
+  ok(T.matchesSolution(sol, sol) && T.matchesSolution(sol.toUpperCase().replace(/ /g, '   ').replace(/\./g, ''), sol), 'Musterlösung erkannt – auch mit anderen Abständen, Groß/klein, Satzzeichen');
+  ok(!T.matchesSolution(sol.slice(0, sol.length / 2), sol) && !T.matchesSolution('', sol) && !T.matchesSolution('kurz', 'kurz') && !T.matchesSolution(sol + ' ' + sol, sol), 'halbe Lösung, leer, zu kurz oder doppelt → nicht automatisch volle Punkte');
+  const full = T.fullGrade({ ...task, rubric: [{ criterion: 'A', points: 2 }, { criterion: 'B', points: 3 }] });
+  ok(full.total === 5 && full.max === 5 && full.criteria.every((c) => c.points === c.max), 'Musterlösung = volle Punktzahl');
+  ok(T.caseGradePrompt(task, 'x', '').system.includes('volle Punktzahl') && T.caseGradePrompt(task, 'x', '').system.includes('nicht Wortlaut'), 'Bewertung: Inhalt zählt, Musterlösung = volle Punktzahl');
+
+  const base = { ...law, domain: 'math', jurisdiction: undefined, plan: { questions: [{ q: 'Wie viel Vorwissen hast du?', options: ['Keins', 'Etwas', 'Viel'] }], answers: { 0: 'Keins' } } } as any;
+  ok(S.paceOf(base) === 'normal' && S.paceOf({ ...base, plan: { ...base.plan, answers: { 0: 'Etwas' } } }) === 'fast' && S.paceOf({ ...base, plan: { ...base.plan, answers: { 0: 'Viel' } } }) === 'fast', 'Tempo: kein Vorwissen → normal, etwas/viel → schneller');
+  const placement = { progress: [{ solved: true }, { solved: true }, { solved: true }, { tries: 1 }, { tries: 0 }] };
+  ok(S.paceOf({ ...base, plan: { ...base.plan, placement } }) === 'fast' && S.paceOf({ ...base, stages: [{ ...base.stages[0], lessons: [{ id: 'x', title: 'x', goal: '', known: true }, ...base.stages[0].lessons] }] }) === 'fast', 'Tempo: gute Einstufung oder „kann ich schon“ → schneller');
+  const fast = S.lessonPrompt({ ...base, plan: { ...base.plan, answers: { 0: 'Viel' } } }, base.stages[0], base.stages[0].lessons[0]);
+  ok(!fast.system.includes('ANFÄNGER') && fast.system.includes('TEMPO'), 'Lektion mit Vorwissen: keine Anfänger-Regel, direkt zum Neuen');
+  ok(P.problemCount !== undefined, 'Module geladen');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

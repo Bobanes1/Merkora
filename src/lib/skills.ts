@@ -35,6 +35,12 @@ export type StageProject = {
   done?: boolean;
 };
 export type Stage = { id: string; name: string; goal: string; lessons: Lesson[]; test?: PracticeSet; passed?: boolean; project?: StageProject; sheet?: string };
+export type Jurisdiction = 'ch' | 'de' | 'at';
+export const JURISDICTION_RULE: Record<Jurisdiction, string> = {
+  ch: 'RECHTSORDNUNG: Schweiz – nur Schweizer Recht (ZGB, OR, StGB, SchKG, BV …), Normen als "Art. … ZGB/OR", Schweizer Begriffe (z. B. Besitz, Eigentum, Grundbuch nach ZGB). "law": "Schweizer Recht".',
+  de: 'RECHTSORDNUNG: Deutschland – nur deutsches Recht (BGB, StGB, HGB, GG …), Normen als "§ … BGB". "law": "Deutsches Recht".',
+  at: 'RECHTSORDNUNG: Österreich – nur österreichisches Recht (ABGB, StGB, UGB, B-VG …), Normen als "§ … ABGB". "law": "Österreichisches Recht".',
+};
 export type NextIdea = { title: string; why: string; mini?: boolean };
 export type Skill = {
   id: string;
@@ -60,6 +66,8 @@ export type Skill = {
   /** Tasks per day for the daily goal (default 6 ≈ one lesson). */
   dailyGoal?: number;
   status: 'planning' | 'active';
+  /** Law: the legal system the tasks use (from the topic, the material or the grade scale). */
+  jurisdiction?: Jurisdiction;
   /** A mini skill: a few short lessons just for fun – no planning, no stage test. */
   mini?: boolean;
   /** Suggestions for what to learn next (made once, near the end of the skill). */
@@ -121,7 +129,24 @@ export function answersText(skill: Skill): string {
   return qs.map((q, i) => `- ${q.q} → ${skill.plan.answers?.[i] || '(keine Angabe)'}`).join('\n');
 }
 
+/**
+ * Which law a law skill is about: named in title, topic or material (ZGB/OR/Schweiz, BGB/Deutschland, ABGB/Österreich),
+ * else the country of the grade scale the person chose; else unknown. Pure – tested.
+ */
+export function jurisdictionOf(skill: Pick<Skill, 'title' | 'topic' | 'material'>, gradeScale?: string): Jurisdiction | undefined {
+  const text = `${skill.title} ${skill.topic} ${(skill.material ?? '').slice(0, 20000)}`;
+  const count = (re: RegExp) => (text.match(re) ?? []).length;
+  // country words in any case, law abbreviations only in capitals (so "or" in a text does not count)
+  const ch = count(/schweiz|bundesgericht/gi) + count(/\bZGB\b|\bOR\b|\bSchKG\b|\bBGE\b/g);
+  const de = count(/deutschland|deutsches recht/gi) + count(/\bBGB\b|\bHGB\b|\bGG\b|\bBGH\b/g);
+  const at = count(/österreich/gi) + count(/\bABGB\b|\bOGH\b|\bUGB\b/g);
+  const best = Math.max(ch, de, at);
+  if (best > 0) return ch === best ? 'ch' : de === best ? 'de' : 'at';
+  return gradeScale === 'ch' || gradeScale === 'de' || gradeScale === 'at' ? gradeScale : undefined;
+}
+
 const context = (skill: Skill) =>
+  (skill.domain === 'law' && skill.jurisdiction ? JURISDICTION_RULE[skill.jurisdiction] + '\n' : '') +
   `Skill: ${skill.title || skill.topic}\nFach: ${skill.domain}\nBildungsniveau: ${skill.level || 'unbekannt'}\nNiveaustufen: ${skill.levels.join(' → ')}\nZielniveau: ${skill.levels[skill.targetLevel] ?? skill.levels[skill.levels.length - 1]}\nAntworten der Person:\n${answersText(skill)}${skill.plan.placementNote ? `\nEinstufung: ${skill.plan.placementNote}` : ''}${skill.material ? `\n\nMATERIAL:\n${spreadClip(skill.material, 20000)}` : ''}`;
 
 const kindRule = (skill: Skill) => `${LANG_RULE}\n${FORMULA_RULE}\n${setFrame(skill.domain)}`;
@@ -236,6 +261,22 @@ Die ersten Häppchen holen ab: "Worum geht's?" (2–3 Sätze), "Stell dir vor �
 Jeder Begriff, der im Beispiel oder in den Aufgaben vorkommt, muss vorher in einem Häppchen erklärt sein. Die ersten Aufgaben sind sehr leicht (Erfolgserlebnis), danach selbst etwas tun.${code}`;
 }
 
+/** With prior knowledge the lessons go faster: no basics, straight to the new part. */
+export const FAST_RULE = 'TEMPO: Die Person hat Vorwissen. Keine Grundlagen, die sie schon kennt – direkt zum Neuen dieser Lektion. Nur 2–3 Häppchen, Kontrollfragen nur wo sie wirklich helfen, wenige Zwischenschritte. Schon die ersten Aufgaben verlangen Anwendung, keine sehr leichten Aufwärmaufgaben.';
+
+/**
+ * How fast to go: 'fast' when the person said they know something already (answer to a question about prior
+ * knowledge), solved most of the placement test, or marked lessons as „kann ich schon“. Pure – tested.
+ */
+export function paceOf(skill: Skill): 'fast' | 'normal' {
+  const qs = skill.plan.questions ?? [];
+  const said = qs.some((q, i) => /vorwissen|vorkenntnis|erfahrung|kennst du|kannst du schon|bisher/i.test(q.q) && /etwas|viel|grundlagen|fortgeschritten|gut|sicher|einige|schon|mittel|erfahren/i.test(skill.plan.answers?.[i] ?? '') && !/keine?s?\b|nichts|gar nicht|null/i.test(skill.plan.answers?.[i] ?? ''));
+  const pl = skill.plan.placement;
+  const placed = !!pl && pl.progress.filter((x) => x.solved).length >= 3;
+  const known = skill.stages.some((st) => st.lessons.some((l) => l.known));
+  return said || placed || known ? 'fast' : 'normal';
+}
+
 /** Skill lessons explain in bites: read a little, answer an easy question about it, go on – no wall of text. */
 export const BITE_RULE = `ERKLÄRUNG IN HÄPPCHEN – keine Textwand. Feld "bites": 3–5 Häppchen in sinnvoller Reihenfolge:
 [{"title":"kurzer Titel","text":"Markdown, höchstens etwa 80 Wörter, ein Gedanke","figure":0,"check":{"q":"sehr leichte Frage genau zu diesem Häppchen","options":["…","…","…"],"correct":1,"why":"ein Satz, warum"}}]
@@ -251,7 +292,7 @@ export function lessonPrompt(skill: Skill, stage: Stage, lesson: Lesson, count =
   return {
     system: `Du bist ein geduldiger Tutor. Du erstellst eine Lektion, in der man durch eigenes Tun lernt: kurze Erklärung, ein durchgerechnetes Beispiel, dann ${count} Aufgaben, die man selbst löst. ${kindRule(skill)}
 ${BITE_RULE}
-${skill.mini ? MINI_RULE + ' Höchstens 3 Häppchen.' : beginnerRule(skill, stageIndex, i)}
+${skill.mini ? MINI_RULE + ' Höchstens 3 Häppchen.' : paceOf(skill) === 'fast' ? FAST_RULE : beginnerRule(skill, stageIndex, i)}
 ${FIGURE_RULE}
 ${JSON_ONLY}`,
     user: `${context(skill)}\n\nSTUFE: ${stage.name} – ${stage.goal}\nLEKTION ${i + 1} von ${all.length}: ${lesson.title} – Ziel: ${lesson.goal}${before.length ? `\nVorher gelernt: ${before.slice(-8).join('; ')}` : ''}`,
