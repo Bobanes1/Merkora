@@ -152,11 +152,14 @@ export async function complete(messages: ChatMsg[], opts: Opts = {}): Promise<st
 
 /** Like complete, and tells whether the answer stopped at the length limit (`cut`). */
 export async function completeInfo(messages: ChatMsg[], opts: Opts = {}): Promise<{ text: string; cut: boolean }> {
+  let room = opts.maxTokens;
   for (let attempt = 0; attempt < 3; attempt++) {
-    const r = await completeOnce(messages, opts);
+    const r = await completeOnce(messages, { ...opts, ...(room ? { maxTokens: room } : {}) });
     const text = cleanReply(r.text);
     if (text && !looksBroken(text, messages, opts.system)) return { text, cut: r.cut };
     if (opts.signal?.aborted) break;
+    // nothing written but stopped at the limit: thinking models used the room for thinking – give them more
+    if (!text && r.cut && room) room = Math.min(64000, room * 2);
     await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
   }
   throw new AiError('Die KI hat keine brauchbare Antwort geliefert. Bitte versuch es nochmal – oder wähle in den Einstellungen ein anderes Modell.');
@@ -172,8 +175,31 @@ const latinShare = (t: string) => {
  * Only when the material itself is in Latin script, so e.g. Japanese cards are not affected.
  */
 function looksBroken(reply: string, messages: ChatMsg[], system?: string) {
-  const input = [system ?? '', ...messages.map((m) => m.content)].join(' ');
-  return latinShare(input) > 0.97 && latinShare(reply) < 0.95;
+  return looksLikeSalad(reply, [system ?? '', ...messages.map((m) => m.content)].join(' '));
+}
+
+/** Writing systems of other alphabets (Chinese/Japanese count as one: they are mixed in normal text). */
+const SCRIPTS: RegExp[] = [
+  /\p{Script=Greek}/gu,
+  /\p{Script=Cyrillic}/gu,
+  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/gu,
+  /\p{Script=Hangul}/gu,
+  /\p{Script=Arabic}/gu,
+  /\p{Script=Hebrew}/gu,
+  /\p{Script=Devanagari}/gu,
+  /\p{Script=Thai}/gu,
+  /\p{Script=Armenian}/gu,
+  /\p{Script=Georgian}/gu,
+];
+
+/**
+ * Word salad: for Latin-script material, an answer with little Latin script spread over several other alphabets.
+ * A lesson on Hiragana, Greek letters or Russian words uses one other alphabet and is fine. Pure – tested.
+ */
+export function looksLikeSalad(reply: string, input: string): boolean {
+  if (latinShare(input) <= 0.97 || latinShare(reply) >= 0.95) return false;
+  const others = SCRIPTS.filter((re) => (reply.match(re)?.length ?? 0) >= 3).length;
+  return others >= 3 || latinShare(reply) < 0.3;
 }
 
 /** Removes visible "thinking" some models put into the answer. */

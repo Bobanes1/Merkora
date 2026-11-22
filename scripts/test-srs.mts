@@ -2019,6 +2019,20 @@ console.log('Weiß nicht ohne Sackgasse, abwechslungsreiche Folgeaufgaben, wenig
   ok(cp.user.startsWith('1. Was ist X?') && cp.user.includes('2. Was ist Y?') && cp.system.includes('Dopplungen') && cp.system.includes('Im Zweifel behalten'), 'Aussortieren: KI sieht alle Fragen nummeriert, behält im Zweifel');
 }
 
+console.log('Wortsalat-Erkennung: fremde Schrift im Lernstoff ist erlaubt');
+{
+  const A = await import('../src/lib/ai');
+  const input = 'Erstelle eine Lektion zum Thema Hiragana: die ersten zehn Zeichen. Antworte auf Deutsch.';
+  const hiragana = JSON.stringify({ topic: 'Hiragana', bites: [{ title: 'Vokale', text: 'あ (a), い (i), う (u), え (e), お (o) – das sind die Vokale. か き く け こ kommen danach.' }] });
+  ok(!A.looksLikeSalad(hiragana, input), 'Hiragana-Lektion ist kein Wortsalat');
+  const greek = 'Das griechische Alphabet: α β γ δ ε ζ η θ ι κ λ μ ν ξ ο π ρ σ τ υ φ χ ψ ω – Alpha, Beta, Gamma …';
+  ok(!A.looksLikeSalad(greek, input), 'griechische Buchstaben sind kein Wortsalat');
+  ok(!A.looksLikeSalad('Привет! Как дела? Das heißt „Hallo! Wie geht es?“ – Привет = Hallo, Как = wie, дела = Sachen', input), 'russische Wörter sind kein Wortsalat');
+  const salad = 'и ж 漢字 ქართ ภาษา עברית حروف अक्षर 문자 Ελλ the и ж ქართ ภาษา עברית حروف अक्षर 문자 Ελλ ქართ ภาษา עברית حروف';
+  ok(A.looksLikeSalad(salad, input), 'echter Wortsalat aus vielen Alphabeten wird erkannt');
+  ok(!A.looksLikeSalad('Eine ganz normale deutsche Antwort.', input), 'normale Antwort bleibt');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

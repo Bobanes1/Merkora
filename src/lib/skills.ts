@@ -296,7 +296,7 @@ ${skill.mini ? MINI_RULE + ' Höchstens 3 Häppchen.' : paceOf(skill) === 'fast'
 ${FIGURE_RULE}
 ${JSON_ONLY}`,
     user: `${context(skill)}\n\nSTUFE: ${stage.name} – ${stage.goal}\nLEKTION ${i + 1} von ${all.length}: ${lesson.title} – Ziel: ${lesson.goal}${before.length ? `\nVorher gelernt: ${before.slice(-8).join('; ')}` : ''}`,
-    maxTokens: Math.min(16000, 4400 + count * (skill.domain === 'java' || skill.domain === 'law' ? 900 : 600)),
+    maxTokens: Math.min(16000, 6000 + count * (skill.domain === 'java' || skill.domain === 'law' ? 900 : 600)),
     json: true,
   };
 }
