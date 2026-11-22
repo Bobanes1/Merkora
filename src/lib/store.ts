@@ -226,6 +226,8 @@ export type Settings = {
   /** Mock exams: education level, subject/semester and grading scale (asked once, then prefilled). */
   eduLevel?: string;
   eduDetail?: string;
+  /** „Mit KI erstellen“ → Automatisch: compact (default) or thorough. */
+  cardDensity?: 'compact' | 'thorough';
   /** Skills: „Wo lernst du gerade?“ as typed there (free text). */
   skillLevel?: string;
   gradeScale?: 'ch' | 'de' | 'at' | 'pct';

@@ -3,7 +3,7 @@
  * Tokens are guessed from characters (German text ≈ 3.5 characters per token), output from the task.
  * Prices are US-$ per 1 million tokens (input / output).
  */
-import { cardRange, CARD_MATERIAL_LIMIT } from './cardCount';
+import { cardRange, CARD_MATERIAL_LIMIT, type CardDensity } from './cardCount';
 
 /** `outputHigh`: when the AI decides the number itself, the output can only be given as a span. */
 export type Estimate = { input: number; output: number; outputHigh?: number };
@@ -24,21 +24,21 @@ export const estimate = {
    * `rulesChars`: the instructions actually sent (measured from the prompt itself, graphics rule included);
    * `images`: slide pictures sent along (≈ 800 tokens each).
    */
-  cards: (chars: number, count: number, graphics = false, rulesChars = 1600, images = 0): Estimate => {
+  cards: (chars: number, count: number, graphics = false, rulesChars = 1600, images = 0, density: CardDensity = 'compact'): Estimate => {
     const per = graphics ? 250 : 110; // a diagram is a short description, not SVG code
     const input = tokensOf(rulesChars) + 100 + tokensOf(Math.min(chars, CARD_MATERIAL_LIMIT)) + images * IMAGE_INPUT;
     if (count > 0) return { input, output: count * per };
-    const r = cardRange(chars);
+    const r = cardRange(chars, density);
     return { input, output: r.low * per, outputHigh: r.high * per };
   },
   /** Several parts one after another; later parts also get the questions of the cards made before. */
-  cardsParts: (lengths: number[], counts: number[], graphics = false, rulesChars = 1600, images: number[] = []): Estimate => {
+  cardsParts: (lengths: number[], counts: number[], graphics = false, rulesChars = 1600, images: number[] = [], density: CardDensity = 'compact'): Estimate => {
     let made = 0;
     return lengths.reduce<Estimate>(
       (sum, len, i) => {
-        const e = estimate.cards(len, counts[i] ?? 0, graphics, rulesChars, images[i] ?? 0);
+        const e = estimate.cards(len, counts[i] ?? 0, graphics, rulesChars, images[i] ?? 0, density);
         const avoid = i > 0 ? Math.min(1700, made * 15) : 0; // ≈ 6000 characters of earlier questions at most
-        made += counts[i] || Math.round((cardRange(len).low + cardRange(len).high) / 2);
+        made += counts[i] || Math.round((cardRange(len, density).low + cardRange(len, density).high) / 2);
         const high = sum.outputHigh !== undefined || e.outputHigh !== undefined ? (sum.outputHigh ?? sum.output) + (e.outputHigh ?? e.output) : undefined;
         return { input: sum.input + e.input + avoid, output: sum.output + e.output, ...(high !== undefined ? { outputHigh: high } : {}) };
       },

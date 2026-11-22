@@ -9,7 +9,7 @@ import { EMPHASIS_RULE } from './emphasis';
 import { FIGURE_RULE } from './slides';
 import { getState, type Card, type ChatMsg, type Provider } from './store';
 import { SECOND_MODEL } from '../config';
-import { autoCardInstruction, CARD_MATERIAL_LIMIT } from './cardCount';
+import { autoCardInstruction, CARD_MATERIAL_LIMIT, type CardDensity } from './cardCount';
 import { repairJsonInfo } from './jsonRepair';
 
 export const PROVIDERS: Record<
@@ -563,7 +563,7 @@ export type PartInfo = {
   gaps?: string[];
 };
 
-export function cardsPrompt(text: string, count: number, focus = '', graphics = false, part?: PartInfo, figures = false, slides: string[] = []): Prompt {
+export function cardsPrompt(text: string, count: number, focus = '', graphics = false, part?: PartInfo, figures = false, slides: string[] = [], density: CardDensity = 'compact'): Prompt {
   const slideNote = slides.length ? `\n\nAngehängte Folienbilder (in dieser Reihenfolge): ${slides.map((l, i) => `Bild ${i + 1} = ${l}`).join('; ')}.` : '';
   const known = part?.avoid?.length ? `:\n- ${part.avoid.join('\n- ')}` : '.';
   const moreNote = part?.more
@@ -601,7 +601,7 @@ ${graphics ? DIAGRAM_RULE + '\n' : ''}${figures ? FIGURE_RULE + '\n' : ''}${slid
           ? 'Ergänze die fehlenden Karten.'
           : listed
             ? 'Erstelle die Karten zu den Themen dieses Materials – Qualität vor Menge, Dopplungen weglassen.'
-            : autoCardInstruction(text.length)
+            : autoCardInstruction(text.length, density)
     }${focus ? ` Schwerpunkt: ${focus}.` : ''}${partNote}${moreNote}${topicNote}\n\n${clip(text, CARD_MATERIAL_LIMIT)}${slideNote}`,
     // automatic: generous room so the limit never decides the number (only written tokens are billed)
     maxTokens: count > 0 ? Math.min(32000, 400 + count * (graphics ? 500 : 220)) : 16000,
@@ -612,7 +612,7 @@ ${graphics ? DIAGRAM_RULE + '\n' : ''}${figures ? FIGURE_RULE + '\n' : ''}${slid
  * After long material (several parts made side by side): which cards are duplicates, too small-grained or
  * unimportant? The AI sees all questions with a short answer and names the numbers to remove.
  */
-export function curatePrompt(cards: { front: string; back: string }[], topics: string[] = []): Prompt {
+export function curatePrompt(cards: { front: string; back: string }[], topics: string[] = [], density: CardDensity = 'compact'): Prompt {
   const short = (t: string, n: number) => t.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, n);
   return {
     system: `Du bist ein erfahrener Lerncoach und sortierst einen Kartensatz aus, der aus mehreren Teilen eines langen Lernmaterials entstanden ist. Ziel: weniger, aber hochwertige Karten.
@@ -620,7 +620,7 @@ Nenne die Nummern der Karten, die WEG sollen:
 - Dopplungen (gleiche Frage oder gleicher Inhalt, auch anders formuliert) – behalte jeweils die beste Karte;
 - zu kleinteilige Karten (Detailfakten, einzelne Beispiele, Zahlen ohne Lernwert), die eine andere Karte schon abdeckt;
 - Unwichtiges oder Organisatorisches.
-Behalte alles, was für eine Prüfung wichtig ist. Im Zweifel behalten. Höchstens 40 % der Karten.${topics.length ? `\nZu jedem dieser Themen des Materials muss mindestens eine Karte bleiben: ${topics.slice(0, 120).join('; ')}.` : ''}
+${density === 'compact' ? 'Ziel ist ein KOMPAKTER Kartensatz: behalte pro Hauptthema die beste Karte, streiche Detail- und Nebenkarten, die nur Einzelheiten abfragen. ' : ''}Behalte alles, was für das Verständnis wichtig ist. Im Zweifel behalten. Höchstens 40 % der Karten.${topics.length ? `\nZu jedem dieser Themen des Materials muss mindestens eine Karte bleiben: ${topics.slice(0, 120).join('; ')}.` : ''}
 Format: {"drop":[3,17,22]}${JSON_RULE}`,
     user: cards.map((c, i) => `${i + 1}. ${short(c.front, 160)} → ${short(c.back, 120)}`).join('\n'),
     maxTokens: 1500,
@@ -778,9 +778,10 @@ export async function generateCardsInfo(
   slides?: { label: string; url: string }[],
   onImagesDropped?: (why: 'rejected' | 'format') => void,
   signal?: AbortSignal,
+  density: CardDensity = 'compact',
 ) {
   // with several parts (or a continuation, or missing topics), a part without exam-relevant content may give no cards
-  const p = cardsPrompt(text, count, focus, graphics, part, figures, slides?.map((s) => s.label));
+  const p = cardsPrompt(text, count, focus, graphics, part, figures, slides?.map((s) => s.label), density);
   return runCards(withSlideImages(p, slides), (!!part && part.n > 1) || !!part?.more || !!part?.gaps?.length, onImagesDropped, signal);
 }
 

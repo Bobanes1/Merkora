@@ -298,8 +298,8 @@ console.log('Markierte Karten');
 console.log('Kartenanzahl: die KI entscheidet');
 {
   const { autoCardInstruction, cardRange } = await import('../src/lib/cardCount');
-  const t = autoCardInstruction();
-  ok(t.includes('"topics"') && t.includes('JEDEM Thema mindestens eine Karte') && t.includes('höchstens 40') && autoCardInstruction(8000).includes('höchstens 6 '), 'Anweisung: erst Themen wie bei einer Zusammenfassung, dann je Thema eine Karte (Sicherheitsnetz je nach Länge)');
+  const t = autoCardInstruction(undefined, 'thorough');
+  ok(t.includes('"topics"') && t.includes('JEDEM Thema mindestens eine Karte') && t.includes('höchstens 40') && autoCardInstruction(8000, 'thorough').includes('höchstens 6 '), 'Anweisung: erst Themen wie bei einer Zusammenfassung, dann je Thema eine Karte (Sicherheitsnetz je nach Länge)');
   ok(/Organisatorisches/.test(t) && /Qualität vor Menge/.test(t) && /Zusammengehörendes/.test(t), 'Anweisung: hochwertige Karten, Verwandtes zusammenfassen');
   const s = cardRange(4000), l = cardRange(40000);
   ok(s.low < s.high && l.low < l.high && l.high > s.high, 'Spanne für die Kostenanzeige wächst mit dem Material');
@@ -1999,8 +1999,8 @@ console.log('Weiß nicht ohne Sackgasse, abwechslungsreiche Folgeaufgaben, wenig
   const mp = P.mistakePrompt(set, set.tasks[0], '5');
   ok(mp.system.includes('anderer Aufgabentyp') && mp.system.includes('anderer Kontext') && !mp.system.includes('genau im selben Format'), 'Folgeaufgabe in anderer Form, nicht dieselbe mit neuen Zahlen');
 
-  ok(C.maxCardsFor(3000) === 6 && C.maxCardsFor(40000) === 27 && C.maxCardsFor(200000) === 40, 'Sicherheitsnetz je Teil: 6 bis 40 Karten');
-  const r = C.cardRange(40000);
+  ok(C.maxCardsFor(3000, 'thorough') === 6 && C.maxCardsFor(40000, 'thorough') === 27 && C.maxCardsFor(200000, 'thorough') === 40, 'Gründlich: Sicherheitsnetz je Teil 6 bis 40 Karten');
+  const r = C.cardRange(40000, 'thorough');
   ok(r.high === 27 && r.low <= r.high, 'Kostenschätzung nutzt dieselbe Obergrenze');
   ok(C.uncovered(['A', 'B', 'C'], [1, 3, 7, 'x', undefined]).join() === 'B' && C.uncovered(['A'], []).join() === 'A' && C.uncovered([], [1]).length === 0, 'Themen-Check: Themen ohne Karte gefunden, falsche Nummern zählen nicht');
   const parsed = A.parseCardsInfo(JSON.stringify({ topics: ['Osmose', 'Diffusion', ''], cards: [{ front: 'Was ist Osmose?', back: 'X', topic: 1 }, { front: 'Diffusion?', back: 'Y', topic: 'zwei' }] }));
@@ -2008,7 +2008,7 @@ console.log('Weiß nicht ohne Sackgasse, abwechslungsreiche Folgeaufgaben, wenig
   const first = A.cardsPrompt('Stoff', 0);
   const cont = A.cardsPrompt('Stoff', 0, '', false, { i: 1, n: 2, more: true, topics: ['Osmose', 'Diffusion'] });
   const gapsP = A.cardsPrompt('Stoff', 0, '', false, { i: 1, n: 2, gaps: ['Diffusion'] });
-  ok(first.system.includes('"topics"') && first.user.includes('ALLE wichtigen Themen') && cont.user.includes('1. Osmose; 2. Diffusion') && !cont.system.includes('"topics"') && gapsP.user.includes('- Diffusion') && !gapsP.user.includes('ALLE wichtigen Themen'), 'Prompt: erst Themenliste, Fortsetzung nummeriert danach, fehlende Themen gezielt');
+  ok(first.system.includes('"topics"') && first.user.includes('HAUPTTHEMEN') && cont.user.includes('1. Osmose; 2. Diffusion') && !cont.system.includes('"topics"') && gapsP.user.includes('- Diffusion') && !gapsP.user.includes('HAUPTTHEMEN'), 'Prompt: erst Themenliste, Fortsetzung nummeriert danach, fehlende Themen gezielt');
   ok(!A.cardsPrompt('Stoff', 10).system.includes('"topics"'), 'feste Anzahl: ohne Themenliste wie bisher');
   const J = await import('../src/lib/jobs');
   const job = (id: string, run: string, status: string) => ({ id, kind: 'cards', deckId: 'd', title: '', status, createdAt: 1, params: { run } }) as any;
@@ -2031,6 +2031,20 @@ console.log('Wortsalat-Erkennung: fremde Schrift im Lernstoff ist erlaubt');
   const salad = 'и ж 漢字 ქართ ภาษา עברית حروف अक्षर 문자 Ελλ the и ж ქართ ภาษา עברית حروف अक्षर 문자 Ελλ ქართ ภาษา עברית حروف';
   ok(A.looksLikeSalad(salad, input), 'echter Wortsalat aus vielen Alphabeten wird erkannt');
   ok(!A.looksLikeSalad('Eine ganz normale deutsche Antwort.', input), 'normale Antwort bleibt');
+}
+
+console.log('Kompakt: wenige Karten auch aus langen Zusammenfassungen');
+{
+  const C = await import('../src/lib/cardCount');
+  const A = await import('../src/lib/ai');
+  ok(C.maxCardsFor(10000) === 4 && C.maxCardsFor(40000) === 11 && C.maxCardsFor(200000) === 15, 'Kompakt (Standard): Sicherheitsnetz 4 bis 15 je Teil');
+  const k = C.autoCardInstruction(40000, 'compact');
+  ok(k.includes('HAUPTTHEMEN') && k.includes('nicht jeden Satz') && k.includes('höchstens 11 ') && !C.autoCardInstruction(40000, 'thorough').includes('nicht jeden Satz'), 'Kompakt: Hauptthemen, nicht jeden Satz zur Karte');
+  ok(C.cardRange(40000).high < C.cardRange(40000, 'thorough').high && C.cardRange(40000).low <= C.cardRange(40000).high, 'Kostenschätzung: kompakt weniger als gründlich');
+  const stoff = 'x'.repeat(40000);
+  ok(A.cardsPrompt(stoff, 0).user.includes('höchstens 11 ') && A.cardsPrompt(stoff, 0, '', false, undefined, false, [], 'thorough').user.includes('höchstens 27 '), 'Prompt: Umfang wird weitergegeben');
+  ok(A.curatePrompt([{ front: 'a', back: 'b' }]).system.includes('KOMPAKTER') && !A.curatePrompt([{ front: 'a', back: 'b' }], [], 'thorough').system.includes('KOMPAKTER'), 'Aussortieren: kompakt behält je Hauptthema die beste Karte');
+  ok(C.shouldCurate(20, [18800]) && !C.shouldCurate(6, [18800]) && !C.shouldCurate(12, [40000], 'thorough') && C.shouldCurate(12, [40000, 40000]) && !C.shouldCurate(11, [40000, 40000]), 'Aussortieren: ein Teil erst bei deutlich mehr Karten als erlaubt, mehrere Teile ab 12');
 }
 
 console.log('Kurze Decknamen');

@@ -4,7 +4,7 @@ import { CostHint } from './CostHint';
 import { estimate } from '../lib/costs';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { applyCuration, uncovered } from '../lib/cardCount';
+import { applyCuration, shouldCurate, uncovered, type CardDensity } from '../lib/cardCount';
 import { aiConfig, cardsPrompt, completeJson, curatePrompt, generateCardsInfo, hasKey, boldOn, loadVisionInfo, supportsImages } from '../lib/ai';
 import { helpfulSlides, MAX_SLIDE_IMAGES, renderSlides, slidesInPart } from '../lib/slideImages';
 import { isPdf, MATERIAL_ACCEPT, MATERIAL_LABEL, readFileText, readPdfDetailed } from '../lib/files';
@@ -114,6 +114,12 @@ export function CreateWithAI({
   const [name, setName] = useState('');
   // 0 = automatic (as many cards as the material needs)
   const [count, setCount] = useState(0);
+  // „Automatisch“: compact (main topics, the default) or thorough – remembered
+  const [density, setDensityState] = useState<CardDensity>(data.settings.cardDensity ?? 'compact');
+  const setDensity = (d: CardDensity) => {
+    setDensityState(d);
+    setSettings({ cardDensity: d });
+  };
   // fixed number: at most 50 for one part, 300 for several
   const counts = shareCount(count > 0 ? Math.min(count, parts.length > 1 ? 300 : 50) : 0, parts);
   const [focus, setFocus] = useState('');
@@ -183,7 +189,7 @@ export function CreateWithAI({
     await attachFiles(target.id, files.flatMap((x) => (x.src ? [x.src] : [])));
     const fresh = getState().data.decks.find((d) => d.id === target!.id)!;
     // long material: one part after another, each knowing the cards made before
-    startCardJobs(fresh, parts.map((p) => p.text), { counts, focus, graphics, figureSet: prepareFigures(), slideImages: withSlideImages });
+    startCardJobs(fresh, parts.map((p) => p.text), { counts, focus, graphics, figureSet: prepareFigures(), slideImages: withSlideImages, density });
     onClose();
     navigate(deckUrl(getState().data, fresh, 'cards'));
   };
@@ -219,7 +225,7 @@ export function CreateWithAI({
           }
         };
         try {
-          let r = await generateCardsInfo(p.text, counts[i], focus, graphics, n > 1 ? { i: i + 1, n, avoid: avoidList(before) } : undefined, !!set, slides, () => setImagesDropped(true), ac.signal);
+          let r = await generateCardsInfo(p.text, counts[i], focus, graphics, n > 1 ? { i: i + 1, n, avoid: avoidList(before) } : undefined, !!set, slides, () => setImagesDropped(true), ac.signal, density);
           // the part's topic list (automatic number): continuations number by it, missing topics are asked for once
           const topics = counts[i] > 0 ? [] : r.topics;
           take(r.cards);
@@ -228,12 +234,12 @@ export function CreateWithAI({
             if (counts[i] > 0 && !left) break;
             r = await generateCardsInfo(p.text, left, focus, graphics, { i: i + 1, n, more: true, avoid: avoidList([...before, ...got.map((c) => c.front)]), ...(topics.length ? { topics } : {}) }, !!set, slides, () =>
               setImagesDropped(true),
-            ac.signal);
+            ac.signal, density);
             take(r.cards);
           }
           const gaps = uncovered(topics, hits);
           if (gaps.length) {
-            const g = await generateCardsInfo(p.text, 0, focus, graphics, { i: i + 1, n, gaps, avoid: avoidList([...before, ...got.map((c) => c.front)]) }, !!set, slides, () => setImagesDropped(true), ac.signal);
+            const g = await generateCardsInfo(p.text, 0, focus, graphics, { i: i + 1, n, gaps, avoid: avoidList([...before, ...got.map((c) => c.front)]) }, !!set, slides, () => setImagesDropped(true), ac.signal, density);
             take(g.cards);
             // one card per missing topic was asked for
             missingTotal += Math.max(0, gaps.length - g.cards.length);
@@ -262,10 +268,10 @@ export function CreateWithAI({
       made.push(...dropDuplicates(results.flat(), before));
       // long material, number left to the AI: duplicates and unimportant cards come unticked (you can tick them again)
       let drop = new Set<number>();
-      if (n > 1 && !counts.some((c) => c > 0) && made.length >= 12 && !ac.signal.aborted) {
+      if (!counts.some((c) => c > 0) && shouldCurate(made.length, parts.map((x) => x.text.length), density) && !ac.signal.aborted) {
         setBusy('Doppelte und unwichtige Karten werden aussortiert …');
         try {
-          const cp = curatePrompt(made);
+          const cp = curatePrompt(made, [], density);
           const r = await completeJson<{ drop?: unknown }>(cp.system, cp.user, cp.maxTokens);
           drop = new Set(applyCuration(made.length, r?.drop));
         } catch {
@@ -530,9 +536,21 @@ export function CreateWithAI({
             </button>
           </div>
           {count === 0 ? (
-            <small className="muted count-hint">
-              Die KI entscheidet selbst, wie viele Karten der Stoff braucht – nur Prüfungsrelevantes, keine Füllkarten.
-            </small>
+            <>
+              <div className="seg density-kind" role="radiogroup" aria-label="Umfang">
+                <button type="button" role="radio" aria-checked={density === 'compact'} className={density === 'compact' ? 'on' : ''} onClick={() => setDensity('compact')}>
+                  Kompakt
+                </button>
+                <button type="button" role="radio" aria-checked={density === 'thorough'} className={density === 'thorough' ? 'on' : ''} onClick={() => setDensity('thorough')}>
+                  Gründlich
+                </button>
+              </div>
+              <small className="muted count-hint">
+                {density === 'compact'
+                  ? 'Das Wichtigste: die Hauptthemen, je eine gute Karte – auch aus langen Zusammenfassungen nur so viele wie nötig.'
+                  : 'Auch wichtige Details: mehr Karten, jedes Thema des Materials bekommt eine.'}
+              </small>
+            </>
           ) : (
             <>
               <label className="field-label" htmlFor="ai-count">
@@ -605,6 +623,7 @@ export function CreateWithAI({
             // the instructions as they are really sent (graphics rule, slide note …)
             cardsPrompt('', 0, focus, graphics, undefined, withFigures, withSlideImages ? ['x'] : []).system.length,
             parts.map((p) => (withSlideImages ? slidesInPart(p.text).length : 0)),
+            density,
           )}
         />
       )}

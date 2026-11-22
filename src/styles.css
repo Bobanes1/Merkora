@@ -11458,3 +11458,4 @@ body.learn-focus .practice-tasks { min-height: calc(100vh - 220px); }
 .practice-nav.task-path button.skipped { background: var(--surface-2); color: var(--muted); border: 2px dashed var(--line); }
 .lesson-end-card.not-yet { background: var(--surface-2); border-color: var(--line); }
 .lesson-end-card.not-yet .lesson-end-title { color: var(--ink); }
+.seg.density-kind { margin: 4px 0 6px; }

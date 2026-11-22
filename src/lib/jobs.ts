@@ -40,7 +40,7 @@ import { deckFileBlob } from './deckFiles';
 import { avoidList, dropDuplicates } from './chunks';
 import { cardFrontText } from './content';
 import { addCards, addJob, deleteCard, getState, patchJob, subscribe, updateDeck, type Deck, type Job, type JobKind } from './store';
-import { applyCuration, uncovered } from './cardCount';
+import { applyCuration, shouldCurate, uncovered, type CardDensity } from './cardCount';
 
 export const JOB_LABEL: Record<JobKind, string> = {
   summary: 'Zusammenfassung',
@@ -106,7 +106,7 @@ function promptFor(job: Job, deck: Deck, slides: string[] = []): Prompt {
         n > 1 || cp.more || cp.few || cp.topics?.length || cp.gaps?.length
           ? { i: part?.i ?? 1, n, avoid, ...(cp.more ? { more: true } : {}), ...(cp.few ? { few: true } : {}), ...(cp.topics?.length ? { topics: cp.topics } : {}), ...(cp.gaps?.length ? { gaps: cp.gaps } : {}) }
           : undefined;
-      return cardsPrompt(p.text || deck.source, p.count ?? 0, p.focus ?? '', !!p.graphics, info, !!cp.figureSet, slides);
+      return cardsPrompt(p.text || deck.source, p.count ?? 0, p.focus ?? '', !!p.graphics, info, !!cp.figureSet, slides, cp.density ?? 'compact');
     }
   }
 }
@@ -136,6 +136,8 @@ type CardParams = {
   topics?: string[];
   /** Topics of the part that got no card – this job makes cards for exactly those. */
   gaps?: string[];
+  /** „Automatisch“: compact (main topics, default) or thorough. */
+  density?: CardDensity;
 };
 
 /** Parts that run at the same time. */
@@ -144,7 +146,7 @@ export const MAX_PARALLEL = 3;
 const MAX_MORE = 3;
 
 /** Starts card creation for one or several parts (several run side by side, without repeating cards). */
-export function startCardJobs(deck: Deck, parts: string[], o: { counts: number[]; focus: string; graphics: boolean; figureSet?: string; slideImages?: boolean }) {
+export function startCardJobs(deck: Deck, parts: string[], o: { counts: number[]; focus: string; graphics: boolean; figureSet?: string; slideImages?: boolean; density?: CardDensity }) {
   if (!parts.length) return;
   const n = parts.length;
   const run = Math.random().toString(36).slice(2, 10);
@@ -158,6 +160,7 @@ export function startCardJobs(deck: Deck, parts: string[], o: { counts: number[]
       run,
       ...(o.figureSet ? { figureSet: o.figureSet } : {}),
       ...(o.slideImages ? { slideImages: true } : {}),
+      ...(o.density ? { density: o.density } : {}),
       ...(n > 1 ? { part: { i: k + 1, n } } : {}),
     };
     const j = addJob({ kind: 'cards', deckId: deck.id, title: partTitle(deck, params), params });
@@ -257,12 +260,12 @@ async function applyResult(job: Job, text: string, pre?: CardResult): Promise<{ 
  * The last step after long material: the AI names duplicates, too small-grained and unimportant cards of
  * this run, and they are removed (at most 40 %). Returns how many went; a failure keeps all cards.
  */
-async function curateRun(deckId: string, run: string, topics: string[] = []): Promise<number> {
+async function curateRun(deckId: string, run: string, topics: string[] = [], density: CardDensity = 'compact'): Promise<number> {
   const deck = getState().data.decks.find((d) => d.id === deckId);
   const mine = deck?.cards.filter((c) => c.run === run) ?? [];
-  if (mine.length < 12) return 0;
+  if (mine.length < 4) return 0;
   try {
-    const p = curatePrompt(mine.map((c) => ({ front: cardFrontText(c as never), back: c.back })), topics);
+    const p = curatePrompt(mine.map((c) => ({ front: cardFrontText(c as never), back: c.back })), topics, density);
     const r = await completeJson<{ drop?: unknown }>(p.system, p.user, p.maxTokens);
     const gone = new Set(applyCuration(mine.length, r?.drop).map((k) => mine[k].id));
     for (const id of gone) deleteCard(deckId, id);
@@ -370,7 +373,9 @@ async function finish(job: Job, text: string, pre?: CardResult) {
     // long material in several parts (number left to the AI): sort out duplicates and unimportant cards at the end
     // the topics of all parts (each part's list once), for the message and for sorting out
     const allTopics = all.flatMap((j) => ((j as Job).id === job.id ? (cp.topics?.length || cp.gaps ? [] : res.topics) : ((j as Job).params as CardParams).topics?.length || ((j as Job).params as CardParams).gaps ? [] : ((j as Job).topics ?? [])));
-    const sorted = part && part.n > 1 && !(cp.count ?? 0) && cp.run ? await curateRun(deck.id, cp.run, allTopics) : 0;
+    // the length of each part (once per part, from its first job) – for when sorting out is worth it
+    const lengths = [...new Map(all.map((j) => [((j as Job).params as CardParams).part?.i ?? 1, (((j as Job).params as CardParams).text ?? '').length])).values()];
+    const sorted = !(cp.count ?? 0) && cp.run && shouldCurate(total, lengths, cp.density ?? 'compact') ? await curateRun(deck.id, cp.run, allTopics, cp.density ?? 'compact') : 0;
     total -= sorted;
     const g = all.reduce((s, j) => s + ((j as Job).graphics ?? 0), 0);
     const failed = all.filter((j) => j.status === 'error').length;
