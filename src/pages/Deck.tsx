@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { CoverDialog, DeckCoverTile } from '../components/DeckCover';
 import { Plant } from '../components/Plant';
 import { coverOf } from '../lib/look';
@@ -69,6 +69,21 @@ export default function DeckPage() {
   const [moreTabs, setMoreTabs] = useState(false);
   const [menu, setMenu] = useState(false);
   const [coverDialog, setCoverDialog] = useState(false);
+  // the tab bar scrolls sideways when it does not fit: a soft fade on the right shows there is more
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const [tabsOverflow, setTabsOverflow] = useState(false);
+  const checkTabs = useCallback(() => {
+    const t = tabsRef.current;
+    setTabsOverflow(!!t && t.scrollWidth - t.clientWidth - t.scrollLeft > 4);
+  }, []);
+  useEffect(() => {
+    const t = tabsRef.current;
+    if (!t || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(checkTabs);
+    ro.observe(t);
+    checkTabs();
+    return () => ro.disconnect();
+  }, [checkTabs, deck?.id, phone]);
 
   useEffect(() => {
     if (deck) document.title = `${deck.name} – Merkora`;
@@ -87,7 +102,6 @@ export default function DeckPage() {
 
   const due = dueCards(deck).length;
   const exam = nextExamForDeck(data, deck.id);
-  const todos = (data.todos ?? []).filter((t) => t.deckId === deck.id && !t.doneAt).length;
 
   return (
     <div className={`deck-layout ${chat ? 'with-chat' : ''}`} data-mode={tab === 'overview' ? undefined : tab}>
@@ -108,10 +122,10 @@ export default function DeckPage() {
         ) : (
         <div className="deck-top">
           <nav className="crumbs" aria-label="Pfad">
-            <Link to={`/library/${workspace.slug}`}>{workspace.name}</Link>
-            <span>›</span>
-            <Link to={`/library/${workspace.slug}/${crs.slug}`}>{crs.name}</Link>
-            <span>›</span>
+            <Link to={`/library/${workspace.slug}/${crs.slug}`} title={`${workspace.name} › ${crs.name}`}>
+              ‹ <span className="crumb-course">{crs.name}</span>
+            </Link>
+            <span className="crumb-sep">›</span>
             <DeckCoverTile cover={coverOf(deck)} size={26} onClick={() => setCoverDialog(true)} />
             <span className="crumb-current" title={deck.name}>
               {shortName(deck, data.decks.filter((d) => d.courseId === deck.courseId))}
@@ -132,19 +146,11 @@ export default function DeckPage() {
               </Link>
             ) : (
               <button type="button" className="btn ghost sm" onClick={() => setExamDialog(true)} title="Prüfung mit diesem Deck verknüpfen">
-                <IconCalendar size={14} /> Prüfung
+                <IconCalendar size={14} /> <span className="act-label">Prüfung</span>
               </button>
             )}
-            <button
-              type="button"
-              className="btn ghost sm"
-              onClick={() => navigate(`/tools?tab=todos&deck=${deck.id}`)}
-              title={todos ? `${todos} offene${todos === 1 ? 's' : ''} To-do${todos === 1 ? '' : 's'} – in Merkora Tools` : 'To-do zu diesem Deck anlegen'}
-            >
-              <IconCheck size={14} /> {todos ? `${todos} To-do${todos === 1 ? '' : 's'}` : 'To-do'}
-            </button>
-            <button type="button" className={`btn ${chat ? 'soft' : 'ghost'} sm`} aria-pressed={chat} onClick={() => setChat(!chat)}>
-              <IconChat size={15} /> Tutor
+            <button type="button" className={`btn ${chat ? 'soft' : 'ghost'} sm`} aria-pressed={chat} aria-label="Tutor" title="Tutor Pip" onClick={() => setChat(!chat)}>
+              <IconChat size={15} /> <span className="act-label">Tutor</span>
             </button>
             <button type="button" className="btn primary sm" onClick={() => setTab('learn')}>
               <IconPlay size={12} /> Lernen{due > 0 ? ` (${due})` : ''}
@@ -172,7 +178,7 @@ export default function DeckPage() {
             })()}
           </div>
         ) : (
-        <div className="tabs tab-groups" role="tablist">
+        <div className={`tabs tab-groups${tabsOverflow ? ' overflowing' : ''}`} role="tablist" ref={tabsRef} onScroll={checkTabs}>
           {GROUPS.map((g) => (
             <div key={g} className="tab-group" role="presentation" aria-label={g}>
               {TABS.filter((t) => t.group === g).map((t) => (
@@ -256,9 +262,6 @@ export default function DeckPage() {
             </button>
             <button type="button" onClick={() => (setMenu(false), setCoverDialog(true))}>
               <DeckCoverTile cover={coverOf(deck)} size={22} /> Cover ändern
-            </button>
-            <button type="button" onClick={() => (setMenu(false), navigate(`/tools?tab=todos&deck=${deck.id}`))}>
-              <IconCheck size={20} /> {todos ? `To-dos (${todos} offen) – neues anlegen` : 'To-do anlegen'}
             </button>
             {exam ? (
               <Link to="/tools?tab=exams" onClick={() => setMenu(false)}>
