@@ -8874,9 +8874,12 @@ html.phone .lab-num { width: 96px; }
 .skill-more summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; }
 .skill-more > * + * { margin-top: 6px; }
 .skill-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
-.skill-tile { display: grid; gap: 4px; padding: 12px; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--surface-2); color: inherit; text-decoration: none; }
+.skill-tile { position: relative; display: grid; align-content: start; gap: 4px; padding: 12px; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--surface-2); color: inherit; text-decoration: none; }
 .skill-tile:hover { border-color: var(--primary); }
-.skill-tile .badge { justify-self: start; }
+.skill-tile .badge { justify-self: start; align-self: start; }
+.skill-tile-del { position: absolute; top: 8px; right: 8px; opacity: 0.6; }
+.skill-tile-del:hover { opacity: 1; color: var(--danger, #c0392b); }
+.planner-head { align-items: flex-start; gap: 12px; }
 .badge.law { background: #ede4ff; color: #5b21b6; }
 .badge.music { background: #ffe4f0; color: #9d174d; }
 .badge.language { background: #e0f2fe; color: #075985; }

@@ -115,6 +115,7 @@ function Failed({ error, retry }: { error?: string; retry: () => void }) {
 
 // ---------- planning ----------
 function Planner({ skill }: { skill: Skill }) {
+  const navigate = useNavigate();
   const q = useSkillTask(skill.id + ':questions');
   const pl = useSkillTask(skill.id + ':placement');
   const pr = useSkillTask(skill.id + ':proposal');
@@ -126,9 +127,14 @@ function Planner({ skill }: { skill: Skill }) {
       <Link to="/skills" className="btn ghost sm">
         ‹ Skills
       </Link>
-      <header className="page-head">
-        <h1>{skill.title}</h1>
-        <p className="muted">Pip plant mit dir den Lernpfad – beantworte ein paar Fragen, dann bekommst du einen Vorschlag, den du anpassen kannst.</p>
+      <header className="page-head planner-head">
+        <div className="grow">
+          <h1>{skill.title}</h1>
+          <p className="muted">Pip plant mit dir den Lernpfad – beantworte ein paar Fragen, dann bekommst du einen Vorschlag, den du anpassen kannst.</p>
+        </div>
+        <button type="button" className="btn ghost sm" title="Skill löschen" onClick={() => undoable(`Skill „${skill.title}“ gelöscht`, () => (deleteSkill(skill.id), navigate('/skills')))}>
+          <IconTrash size={15} /> Löschen
+        </button>
       </header>
       <SkillMaterial skill={skill} />
 

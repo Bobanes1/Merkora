@@ -1,14 +1,15 @@
 import { useState } from 'react';
 import { attachSkillFiles } from '../lib/deckFiles';
 import { Link, useNavigate } from 'react-router-dom';
-import { IconClose, IconFlame, IconNote, IconSparkle, IconUpload } from '../components/Icons';
+import { IconClose, IconFlame, IconNote, IconSparkle, IconTrash, IconUpload } from '../components/Icons';
+import { undoable } from '../lib/undo';
 import { NoKeyNotice } from '../components/NoKey';
 import { hasKey } from '../lib/ai';
 import { MATERIAL_ACCEPT, readFileText } from '../lib/files';
 import { DOMAIN_LABEL } from '../lib/practice';
 import { startSkill } from '../lib/skillRun';
 import { nextLesson, skillProgress, skillStreak, skillToday } from '../lib/skills';
-import { setSettings, useData } from '../lib/store';
+import { deleteSkill, setSettings, useData } from '../lib/store';
 import type { Skill } from '../lib/skills';
 
 const EXAMPLES = ['Stochastik', 'Java programmieren', 'Vertragsrecht – Fälle lösen', 'Musiktheorie: Akkorde und Intervalle', 'Lineare Algebra', 'Spanisch Grammatik'];
@@ -128,7 +129,22 @@ function SkillTile({ skill }: { skill: Skill }) {
       <span className={'badge ' + skill.domain} data-domain={skill.domain}>{DOMAIN_LABEL[skill.domain]}</span>
       <b>{skill.title}</b>
       {skill.status === 'planning' ? (
-        <small className="muted">Lernpfad wird geplant …</small>
+        <>
+          <small className="muted">Lernpfad wird geplant …</small>
+          <button
+            type="button"
+            className="icon-btn skill-tile-del"
+            aria-label={`Skill „${skill.title}“ löschen`}
+            title="Löschen"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              undoable(`Skill „${skill.title}“ gelöscht`, () => deleteSkill(skill.id));
+            }}
+          >
+            <IconTrash size={15} />
+          </button>
+        </>
       ) : (
         <>
           <small className="muted">
