@@ -45,6 +45,8 @@ export type ProblemProgress = {
   mistake?: string;
   /** „Weiß nicht“ was pressed: the solution was shown and Pip explained the way. */
   dunno?: boolean;
+  /** A follow-up task Pip added after a mistake (it gets no further follow-up of its own). */
+  extra?: boolean;
   /** A role play: the conversation so far. */
   chat?: { me: boolean; text: string }[];
 };
@@ -496,7 +498,7 @@ ${PLAIN_RULE}
 1. "explain": Erkläre in 2–5 kurzen Sätzen (Markdown), wo genau der Denkfehler in der Antwort liegt, was richtig wäre und warum – freundlich, ohne Vorwurf. Zeig den richtigen Weg, nicht nur das Ergebnis.`;
   return {
     system: `Du bist ein geduldiger Tutor. ${first}
-2. "similar": Eine ähnliche, etwas leichtere Aufgabe zum selben Punkt, genau im selben Format wie die Aufgabe (gleicher "type").
+2. "similar": Eine etwas leichtere Übungsaufgabe zum SELBEN Punkt – aber in anderer Form, damit es nicht eintönig wird: anderes Beispiel oder anderer Kontext, andere Zahlen oder ein anderer Fall, und wenn es passt ein anderer Aufgabentyp aus der Liste (z. B. ordnen oder Lückentext statt rechnen). NICHT dieselbe Aufgabe mit neuen Zahlen.
 ${taskRules(set.kind)}
 Format: {"explain":"…","similar":{…Aufgabe…}}. Antworte ausschließlich mit gültigem JSON.`,
     user: `THEMA: ${set.topic}\n\nAUFGABE (JSON):\n${JSON.stringify(task).slice(0, 6000)}\n\nANTWORT DER PERSON:\n${dunno ? '(Die Person weiß es nicht und hat keine Antwort gegeben.)' : answer.slice(0, 4000)}`,
@@ -510,6 +512,33 @@ export function parseMistake(raw: unknown): { explain: string; similar: Task | n
   if (!explain) return null;
   return { explain, similar: r.similar ? parseTask(r.similar) : null };
 }
+/** How many tasks are settled: solved, or skipped with „Weiß nicht“ (the lesson is through when all are). */
+export const settledCount = (p: PracticeSet) => p.progress.filter((x) => x.solved || x.dunno).length;
+
+/** The next task still open after task i (solved and skipped ones are passed over, round to the start); null when none is left. Pure – tested. */
+export function nextOpen(set: PracticeSet, i: number): number | null {
+  const n = taskList(set).length;
+  for (let k = 1; k < n; k++) {
+    const j = (i + k) % n;
+    const p = set.progress[j];
+    if (!p?.solved && !p?.dunno) return j;
+  }
+  return null;
+}
+
+/**
+ * A follow-up task after a mistake – not straight after, but behind the next task (another topic in between
+ * helps memory and keeps it varied); at the end if there is none. Marked as extra. Pure – tested.
+ */
+export function insertTaskLater(set: PracticeSet, i: number, task: Task): Pick<PracticeSet, 'tasks' | 'progress'> {
+  const tasks = [...taskList(set)];
+  const at = Math.min(i + 2, tasks.length);
+  tasks.splice(at, 0, task);
+  const progress = [...set.progress];
+  progress.splice(at, 0, { tries: 0, hints: 0, extra: true });
+  return { tasks, progress };
+}
+
 /** The set with a new task right after task `i` (and its fresh progress). */
 export function insertTaskAfter(set: PracticeSet, i: number, task: Task): Pick<PracticeSet, 'tasks' | 'progress'> {
   const tasks = [...taskList(set)];

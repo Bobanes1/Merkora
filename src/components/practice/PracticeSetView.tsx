@@ -14,7 +14,7 @@ import { Lab } from '../labs/Labs';
 import { completeJson, gradeAnswer } from '../../lib/ai';
 import { openExternal } from '../../lib/desktop';
 import { buildHarness, harnessOffset, localJava, mapErrors, parseResults, runJavaLocal, runJavaOnline, type RunResult, type TestResult } from '../../lib/javaRun';
-import { bitesFrom, checkAnswer, insertTaskAfter, mistakePrompt, parseMistake, parseSimpler, simplerPrompt, DOMAIN_LABEL, problemCount, solvedCount, taskList, type Bite, type JavaProblem, type MathProblem, type PracticeSet, type ProblemProgress } from '../../lib/practice';
+import { bitesFrom, checkAnswer, insertTaskLater, nextOpen, settledCount, mistakePrompt, parseMistake, parseSimpler, simplerPrompt, DOMAIN_LABEL, problemCount, solvedCount, taskList, type Bite, type JavaProblem, type MathProblem, type PracticeSet, type ProblemProgress } from '../../lib/practice';
 import { setSettings, useStore } from '../../lib/store';
 import { CaseTaskView, ClassifyTaskView, ClozeTaskView, MultiTaskView, OrderTaskView } from './ActiveTasks';
 import { MusicTaskView } from './MusicTask';
@@ -84,7 +84,14 @@ export function PracticeSetView({ set, host, head, onDone, guided, focus }: { se
   const [focusOn, setFocus] = useLearnFocus((g && phase === 'practice') || (!guided && !!focus));
   const [sheet, setSheet] = useState(false);
   const t = tasks[i];
-  const ctx: TaskCtx = { set, i, prog: set.progress[i] ?? { tries: 0, hints: 0 }, host, onNext: () => setI((x) => Math.min(n - 1, x + 1)), isLast: i >= n - 1 };
+  // „Weiter“: to the next task still open (passing solved and skipped ones); when none is left the lesson is through
+  const settled = settledCount(set);
+  const goNext = () => {
+    const j = nextOpen(set, i);
+    if (j !== null) setI(j);
+    else document.querySelector('.lesson-end-card, .practice-tasks > .form-ok')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  };
+  const ctx: TaskCtx = { set, i, prog: set.progress[i] ?? { tries: 0, hints: 0 }, host, onNext: goNext, isLast: nextOpen(set, i) === null };
 
   // keys in focus mode: Enter = check / go on (Strg+Enter in text fields), ← → = other task, Esc = leave
   useEffect(() => {
@@ -134,17 +141,18 @@ export function PracticeSetView({ set, host, head, onDone, guided, focus }: { se
           {Array.from({ length: n }, (_, k) => {
             const p = set.progress[k];
             const helped = !!p && (p.hints > 0 || !!p.shown || !!p.dunno || p.tries > 1);
+            const skipped = !!p?.dunno && !p.solved;
             return (
               <button
                 key={k}
                 type="button"
                 role="tab"
                 aria-selected={k === i}
-                className={(k === i ? 'on ' : '') + (p?.solved ? (helped ? 'done helped' : 'done') : '')}
-                title={p?.solved ? (helped ? 'gelöst mit Hilfe' : 'gelöst ohne Hilfe') : `Aufgabe ${k + 1}`}
+                className={(k === i ? 'on ' : '') + (p?.solved ? (helped ? 'done helped' : 'done') : skipped ? 'skipped' : '')}
+                title={p?.solved ? (helped ? 'gelöst mit Hilfe' : 'gelöst ohne Hilfe') : skipped ? 'übersprungen – Lösung angesehen' : `Aufgabe ${k + 1}`}
                 onClick={() => setI(k)}
               >
-                {p?.solved ? <IconCheck size={13} /> : k + 1}
+                {p?.solved ? <IconCheck size={13} /> : skipped ? '?' : k + 1}
               </button>
             );
           })}
@@ -167,8 +175,8 @@ export function PracticeSetView({ set, host, head, onDone, guided, focus }: { se
         {t?.type === 'sheet' && <SheetTaskView key={set.id + i} ctx={ctx} task={t} />}
         {t?.type === 'scenario' && <ScenarioTaskView key={set.id + i} ctx={ctx} task={t} />}
         {t?.type === 'roleplay' && <RoleplayTaskView key={set.id + i} ctx={ctx} task={t} />}
-        {done === n && (onDone ?? <p className="form-ok">Alle Aufgaben gelöst – stark!</p>)}
-        {done === n && startDone < n && <Confetti count={50} />}
+        {settled === n && (onDone ?? <p className="form-ok">{done === n ? 'Alle Aufgaben gelöst – stark!' : 'Alle Aufgaben durch.'}</p>)}
+        {settled === n && startDone < n && <Confetti count={50} />}
     </section>
   );
 
@@ -529,8 +537,9 @@ export function TaskFooter({ ctx, solution, card, canShow, noNext }: { ctx: Task
       if (!r) throw new Error('Pip konnte gerade keine Erklärung schreiben. Bitte nochmal versuchen.');
       // one update for both, so the explanation is not overwritten by the older progress
       const mark = dunno ? { dunno: true, shown: true, last: '(weiß nicht)' } : {};
-      if (r.similar && ctx.host.updateSet) {
-        const next = insertTaskAfter(ctx.set, ctx.i, r.similar);
+      // one follow-up per task, placed a little later – none for a follow-up itself (no chains)
+      if (r.similar && ctx.host.updateSet && !ctx.prog.extra) {
+        const next = insertTaskLater(ctx.set, ctx.i, r.similar);
         next.progress[ctx.i] = { ...next.progress[ctx.i], ...mark, mistake: r.explain };
         ctx.host.updateSet(next);
       } else ctx.host.progress(ctx.i, { ...mark, mistake: r.explain });
@@ -551,7 +560,7 @@ export function TaskFooter({ ctx, solution, card, canShow, noNext }: { ctx: Task
         <div className={'mistake-box' + (ctx.prog.dunno ? ' dunno' : '')}>
           <b>{ctx.prog.dunno ? 'So geht’s – Schritt für Schritt' : 'Warum es nicht gepasst hat'}</b>
           <Markdown text={ctx.prog.mistake} />
-          {taskList(ctx.set).length > ctx.i + 1 && <small className="muted">Danach wartet eine ähnliche, etwas leichtere Aufgabe zum Üben.</small>}
+          {!ctx.prog.extra && <small className="muted">Etwas später wartet eine ähnliche Aufgabe in anderer Form zum Üben.</small>}
         </div>
       )}
       <div className="row-gap">
@@ -588,7 +597,7 @@ export function TaskFooter({ ctx, solution, card, canShow, noNext }: { ctx: Task
             Nächste Aufgabe ›
           </button>
         )}
-        {ctx.prog.dunno && !ctx.prog.solved && !ctx.isLast && why !== 'busy' && (
+        {ctx.prog.dunno && !ctx.prog.solved && (
           <button type="button" className="btn primary sm next-btn" data-primary onClick={ctx.onNext}>
             Weiter <IconChevron size={14} />
           </button>

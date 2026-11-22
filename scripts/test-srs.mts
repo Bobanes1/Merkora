@@ -299,8 +299,8 @@ console.log('Kartenanzahl: die KI entscheidet');
 {
   const { autoCardInstruction, cardRange } = await import('../src/lib/cardCount');
   const t = autoCardInstruction();
-  ok(t.includes('Entscheide selbst') && !/\d/.test(t), 'Anweisung lässt die KI entscheiden und nennt keine Zahl');
-  ok(/Organisatorisches/.test(t) && /nichts Prüfungsrelevantes aus/.test(t), 'Anweisung: nur Prüfungsrelevantes, aber nichts davon auslassen');
+  ok(t.includes('Entscheide selbst') && t.includes('höchstens 20') && autoCardInstruction(8000).includes('höchstens 4 '), 'Anweisung: KI entscheidet, mit Obergrenze je nach Länge');
+  ok(/Organisatorisches/.test(t) && /Qualität vor Menge/.test(t) && /Zusammengehörendes/.test(t), 'Anweisung: weniger, hochwertige Karten, Verwandtes zusammenfassen');
   const s = cardRange(4000), l = cardRange(40000);
   ok(s.low < s.high && l.low < l.high && l.high > s.high, 'Spanne für die Kostenanzeige wächst mit dem Material');
 }
@@ -1979,6 +1979,32 @@ console.log('Jura-Fälle: Rechtsordnung, Kontext, Musterlösung; Tempo mit Vorwi
   const fast = S.lessonPrompt({ ...base, plan: { ...base.plan, answers: { 0: 'Viel' } } }, base.stages[0], base.stages[0].lessons[0]);
   ok(!fast.system.includes('ANFÄNGER') && fast.system.includes('TEMPO'), 'Lektion mit Vorwissen: keine Anfänger-Regel, direkt zum Neuen');
   ok(P.problemCount !== undefined, 'Module geladen');
+}
+
+console.log('Weiß nicht ohne Sackgasse, abwechslungsreiche Folgeaufgaben, weniger Karten');
+{
+  const P = await import('../src/lib/practice');
+  const C = await import('../src/lib/cardCount');
+  const A = await import('../src/lib/ai');
+  const t = (k: number) => ({ type: 'calc', problem: 'p' + k, answer: { type: 'number', value: '1' }, hints: [], steps: [] });
+  const set = { id: 's', createdAt: 1, kind: 'math', topic: 'T', intro: '', labs: [], tasks: [t(0), t(1), t(2), t(3)], progress: [{ tries: 1, hints: 0, solved: true }, { tries: 0, hints: 0, dunno: true }, { tries: 0, hints: 0 }, { tries: 0, hints: 0 }] } as any;
+  ok(P.settledCount(set) === 2 && P.solvedCount(set) === 1, 'gelöst oder „Weiß nicht“ zählt als erledigt – gelöst bleibt ehrlich');
+  ok(P.nextOpen(set, 0) === 2 && P.nextOpen(set, 3) === 2 && P.nextOpen(set, 2) === 3, '„Weiter“: zur nächsten offenen Aufgabe, übersprungene und gelöste vorbei, rundum');
+  const allDone = { ...set, progress: set.progress.map(() => ({ tries: 1, hints: 0, solved: true })) };
+  ok(P.nextOpen(allDone, 1) === null, '„Weiter“: nichts mehr offen → Lektion durch');
+  const later = P.insertTaskLater(set, 0, t(9) as any);
+  ok((later.tasks![2] as any).problem === 'p9' && later.progress[2].extra === true && later.tasks!.length === 5, 'Folgeaufgabe kommt nach der nächsten Aufgabe, als Zusatz markiert');
+  const end = P.insertTaskLater(set, 3, t(9) as any);
+  ok((end.tasks![4] as any).problem === 'p9', 'Folgeaufgabe nach der letzten Aufgabe: ans Ende');
+  const mp = P.mistakePrompt(set, set.tasks[0], '5');
+  ok(mp.system.includes('anderer Aufgabentyp') && mp.system.includes('anderer Kontext') && !mp.system.includes('genau im selben Format'), 'Folgeaufgabe in anderer Form, nicht dieselbe mit neuen Zahlen');
+
+  ok(C.maxCardsFor(3000) === 4 && C.maxCardsFor(40000) === 16 && C.maxCardsFor(200000) === 20, 'Obergrenze je Teil: 4 bis 20 Karten');
+  const r = C.cardRange(40000);
+  ok(r.high === 16 && r.low <= r.high, 'Kostenschätzung nutzt dieselbe Obergrenze');
+  ok(C.applyCuration(10, [1, 3, 3, 99, 'x', 0, 5, 6, 7, 8]).join() === '0,2,4,5' && C.applyCuration(10, null).length === 0, 'Aussortieren: nur gültige Nummern, höchstens 40 %');
+  const cp = A.curatePrompt([{ front: '<b>Was ist X?</b>', back: 'X ist …' }, { front: 'Was ist Y?', back: 'Y' }]);
+  ok(cp.user.startsWith('1. Was ist X?') && cp.user.includes('2. Was ist Y?') && cp.system.includes('Dopplungen') && cp.system.includes('Im Zweifel behalten'), 'Aussortieren: KI sieht alle Fragen nummeriert, behält im Zweifel');
 }
 
 console.log('Kurze Decknamen');

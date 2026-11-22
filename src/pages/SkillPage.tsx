@@ -563,7 +563,7 @@ function Path({ skill }: { skill: Skill }) {
                   return (
                     <div
                       key={n.key}
-                      className={`path-node-wrap ${state}${l && l.id === justDone ? ' just-done' : ''}${justDone && state === 'current' ? ' arrived' : ''}`}
+                      className={`path-node-wrap ${state}${l && l.id === justDone && lessonDone(l) ? ' just-done' : ''}${justDone && state === 'current' ? ' arrived' : ''}`}
                       style={{ transform: `translateX(${off}px)`, animationDelay: `${Math.min(offIndex, 24) * 45}ms`, zIndex: 200 - k }}
                     >
                       {dx !== null && <PathLink dx={dx} height={state === 'current' ? 88 : 58} done={state === 'done' || state === 'current'} fill={!!justDone && state === 'current'} />}
@@ -692,15 +692,24 @@ function LessonView({ skill, lessonId, onBack, onPath, onOpen }: { skill: Skill;
 function LessonEnd({ lesson, after, onPath, onNext }: { lesson: Lesson; after?: Lesson; onPath: () => void; onNext: () => void }) {
   const progress = lesson.set?.progress ?? [];
   const clean = progress.filter((p) => p.solved && !p.hints && !p.shown && !p.dunno && p.tries <= 1).length;
+  const skipped = progress.filter((p) => p.dunno && !p.solved).length;
+  // with „Weiß nicht“ you get through the lesson; it counts as done from 80 % solved
+  const ok = mastered(lesson.set);
+  const missing = lesson.set ? Math.max(0, Math.ceil(problemCount(lesson.set) * 0.8) - solvedCount(lesson.set)) : 0;
   return (
-    <div className="lesson-end-card">
-      <Mascot mood="cheer" size={76} />
+    <div className={'lesson-end-card' + (ok ? '' : ' not-yet')}>
+      <Mascot mood={ok ? 'cheer' : 'happy'} size={76} />
       <div className="grow">
-        <b className="lesson-end-title">Lektion geschafft!</b>
+        <b className="lesson-end-title">{ok ? 'Lektion geschafft!' : 'Lektion durchgearbeitet'}</b>
         <p className="lesson-end-clean">
-          <IconCheck size={15} /> {clean} von {progress.length} ohne Hilfe gelöst
+          <IconCheck size={15} /> {clean} von {progress.length} ohne Hilfe gelöst{skipped ? ` · ${skipped} übersprungen` : ''}
         </p>
-        {lesson.goal && (
+        {!ok && (
+          <p className="muted small">
+            Für „geschafft“ {missing === 1 ? 'fehlt noch 1 gelöste Aufgabe' : `fehlen noch ${missing} gelöste Aufgaben`} – probier die übersprungenen (mit „?“ in der Leiste) später nochmal.
+          </p>
+        )}
+        {ok && lesson.goal && (
           <p className="lesson-end-goal">
             <b>Das kannst du jetzt:</b> {lesson.goal}
           </p>

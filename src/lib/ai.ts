@@ -558,13 +558,33 @@ ${graphics ? DIAGRAM_RULE + '\n' : ''}${figures ? FIGURE_RULE + '\n' : ''}${slid
     user: `${
       count > 0
         ? `Erstelle genau ${count} Karteikarten zu diesem Material.`
-        : autoCardInstruction()
+        : autoCardInstruction(text.length)
     }${focus ? ` Schwerpunkt: ${focus}.` : ''}${partNote}${moreNote}\n\n${clip(text, CARD_MATERIAL_LIMIT)}${slideNote}`,
     // automatic: generous room so the limit never decides the number (only written tokens are billed)
     maxTokens: count > 0 ? Math.min(32000, 400 + count * (graphics ? 500 : 220)) : 16000,
     json: true,
   };
 }
+/**
+ * After long material (several parts made side by side): which cards are duplicates, too small-grained or
+ * unimportant? The AI sees all questions with a short answer and names the numbers to remove.
+ */
+export function curatePrompt(cards: { front: string; back: string }[]): Prompt {
+  const short = (t: string, n: number) => t.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, n);
+  return {
+    system: `Du bist ein erfahrener Lerncoach und sortierst einen Kartensatz aus, der aus mehreren Teilen eines langen Lernmaterials entstanden ist. Ziel: weniger, aber hochwertige Karten.
+Nenne die Nummern der Karten, die WEG sollen:
+- Dopplungen (gleiche Frage oder gleicher Inhalt, auch anders formuliert) – behalte jeweils die beste Karte;
+- zu kleinteilige Karten (Detailfakten, einzelne Beispiele, Zahlen ohne Lernwert), die eine andere Karte schon abdeckt;
+- Unwichtiges oder Organisatorisches.
+Behalte alles, was für eine Prüfung wichtig ist. Im Zweifel behalten. Höchstens 40 % der Karten.
+Format: {"drop":[3,17,22]}${JSON_RULE}`,
+    user: cards.map((c, i) => `${i + 1}. ${short(c.front, 160)} → ${short(c.back, 120)}`).join('\n'),
+    maxTokens: 1500,
+    json: true,
+  };
+}
+
 /**
  * `allowEmpty`: one part of long material may hold nothing exam-relevant (e.g. only a literature list) –
  * then no cards is a valid answer, not an error.

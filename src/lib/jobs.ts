@@ -10,6 +10,8 @@ import {
   AiError,
   AiFormatError,
   cardsPrompt,
+  completeJson,
+  curatePrompt,
   makeQuiz,
   makeSummary,
   materialFrom,
@@ -37,7 +39,8 @@ import { renderSlides, slidesInPart } from './slideImages';
 import { deckFileBlob } from './deckFiles';
 import { avoidList, dropDuplicates } from './chunks';
 import { cardFrontText } from './content';
-import { addCards, addJob, getState, patchJob, subscribe, updateDeck, type Deck, type Job, type JobKind } from './store';
+import { addCards, addJob, deleteCard, getState, patchJob, subscribe, updateDeck, type Deck, type Job, type JobKind } from './store';
+import { applyCuration } from './cardCount';
 
 export const JOB_LABEL: Record<JobKind, string> = {
   summary: 'Zusammenfassung',
@@ -192,12 +195,12 @@ export function avoidFronts(cards: { front: string; back: string; html?: boolean
 
 /** "12 Karten, davon 4 mit Grafik" */
 export const madeText = (n: number, g: number) => `${n} ${n === 1 ? 'Karte' : 'Karten'}${g ? `, davon ${g} mit Grafik` : ''}`;
-/** A long part (this many characters) that gives fewer than 3 cards is tried once more. */
+/** A long part (this many characters) that gives fewer than 2 cards is tried once more. */
 export const FEW_CARDS_CHARS = 15000;
 /** What happens after a card answer: continue a cut-off part, try a thin result again, or nothing. Pure – tested. */
 export function followUp(p: { more?: number; few?: boolean; text?: string; count?: number }, made: number, cut: boolean): 'more' | 'few' | null {
   if (cut && (p.more ?? 0) < MAX_MORE) return 'more';
-  if (!cut && !p.more && !p.few && !(p.count ?? 0) && made < 3 && (p.text ?? '').length >= FEW_CARDS_CHARS) return 'few';
+  if (!cut && !p.more && !p.few && !(p.count ?? 0) && made < 2 && (p.text ?? '').length >= FEW_CARDS_CHARS) return 'few';
   return null;
 }
 
@@ -230,6 +233,25 @@ async function applyResult(job: Job, text: string, pre?: CardResult): Promise<{ 
     }
   }
   return undefined;
+}
+
+/**
+ * The last step after long material: the AI names duplicates, too small-grained and unimportant cards of
+ * this run, and they are removed (at most 40 %). Returns how many went; a failure keeps all cards.
+ */
+async function curateRun(deckId: string, run: string): Promise<number> {
+  const deck = getState().data.decks.find((d) => d.id === deckId);
+  const mine = deck?.cards.filter((c) => c.run === run) ?? [];
+  if (mine.length < 12) return 0;
+  try {
+    const p = curatePrompt(mine.map((c) => ({ front: cardFrontText(c as never), back: c.back })));
+    const r = await completeJson<{ drop?: unknown }>(p.system, p.user, p.maxTokens);
+    const gone = new Set(applyCuration(mine.length, r?.drop).map((k) => mine[k].id));
+    for (const id of gone) deleteCard(deckId, id);
+    return gone.size;
+  } catch {
+    return 0;
+  }
 }
 
 // ---------- runner ----------
@@ -282,12 +304,15 @@ async function finish(job: Job, text: string, pre?: CardResult) {
       return;
     }
     const all = cp.run ? run : [{ ...job, made: res.made, graphics: res.graphics }];
-    const total = all.reduce((s, j) => s + ((j as Job).made ?? 0), 0);
+    let total = all.reduce((s, j) => s + ((j as Job).made ?? 0), 0);
+    // long material in several parts (number left to the AI): sort out duplicates and unimportant cards at the end
+    const sorted = part && part.n > 1 && !(cp.count ?? 0) && cp.run ? await curateRun(deck.id, cp.run) : 0;
+    total -= sorted;
     const g = all.reduce((s, j) => s + ((j as Job).graphics ?? 0), 0);
     const failed = all.filter((j) => j.status === 'error').length;
     const msg = `${JOB_LABEL.cards} für „${deck.name}“ ${part && part.n > 1 ? `(alle ${part.n} Teile) ` : ''}sind fertig: ${madeText(total, g)}.${
       total === 0 ? ' Im Material wurde nichts Prüfungsrelevantes gefunden.' : ''
-    }${failed ? ` ${failed} ${failed === 1 ? 'Teil hat' : 'Teile haben'} nicht geklappt – unter „Aufträge“ nochmal versuchen.` : ''}`;
+    }${sorted ? ` ${sorted} doppelte oder unwichtige Karten aussortiert.` : ''}${failed ? ` ${failed} ${failed === 1 ? 'Teil hat' : 'Teile haben'} nicht geklappt – unter „Aufträge“ nochmal versuchen.` : ''}`;
     pushToast({ text: msg, jobId: job.id, ok: true });
     notifyBrowser('Fertig!', msg);
   } catch (e) {

@@ -4,7 +4,8 @@ import { CostHint } from './CostHint';
 import { estimate } from '../lib/costs';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { aiConfig, cardsPrompt, generateCardsInfo, hasKey, boldOn, loadVisionInfo, supportsImages } from '../lib/ai';
+import { applyCuration } from '../lib/cardCount';
+import { aiConfig, cardsPrompt, completeJson, curatePrompt, generateCardsInfo, hasKey, boldOn, loadVisionInfo, supportsImages } from '../lib/ai';
 import { helpfulSlides, MAX_SLIDE_IMAGES, renderSlides, slidesInPart } from '../lib/slideImages';
 import { isPdf, MATERIAL_ACCEPT, MATERIAL_LABEL, readFileText, readPdfDetailed } from '../lib/files';
 import { figureLabel, markFigures, pickFigurePages } from '../lib/slides';
@@ -126,6 +127,7 @@ export function CreateWithAI({
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [drafts, setDrafts] = useState<Draft[] | null>(null);
+  const [curated, setCurated] = useState(0);
 
   /** Reads one or several files one after another; a broken file does not stop the others. */
   const onFiles = async (list?: FileList | File[] | null) => {
@@ -228,8 +230,21 @@ export function CreateWithAI({
       );
       // parts side by side may make the same card: keep the first
       made.push(...dropDuplicates(results.flat(), before));
+      // long material, number left to the AI: duplicates and unimportant cards come unticked (you can tick them again)
+      let drop = new Set<number>();
+      if (n > 1 && !counts.some((c) => c > 0) && made.length >= 12) {
+        setBusy('Doppelte und unwichtige Karten werden aussortiert …');
+        try {
+          const cp = curatePrompt(made);
+          const r = await completeJson<{ drop?: unknown }>(cp.system, cp.user, cp.maxTokens);
+          drop = new Set(applyCuration(made.length, r?.drop));
+        } catch {
+          /* keep all */
+        }
+      }
+      setCurated(drop.size);
       // review only once all parts are done
-      if (made.length) setDrafts(made.map((c) => ({ ...c, keep: true })));
+      if (made.length) setDrafts(made.map((c, k) => ({ ...c, keep: !drop.has(k) })));
       else setError('Die KI hat in diesem Material nichts Prüfungsrelevantes gefunden und keine Karten erstellt.');
     } catch (e) {
       // a later part failed: keep what is there so far for review
@@ -284,6 +299,11 @@ export function CreateWithAI({
           </>
         }
       >
+        {curated > 0 && (
+          <p className="form-ok small">
+            {curated} doppelte oder unwichtige {curated === 1 ? 'Karte ist' : 'Karten sind'} schon abgewählt – du kannst sie wieder anhaken.
+          </p>
+        )}
         <p className="muted">
           Bearbeite oder entferne Karten, bevor du sie speicherst.{boldOn() && <> Wörter in **Sternchen** werden fett gespeichert.</>}
         </p>
