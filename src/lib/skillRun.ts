@@ -4,10 +4,13 @@
  */
 import { useSyncExternalStore } from 'react';
 import { completeJson } from './ai';
-import { parsePractice, taskList, type Task } from './practice';
+import { parsePractice, taskList, toDomain, type Task } from './practice';
 import {
   lessonAfter,
   lessonPrompt,
+  miniPrompt,
+  nextSkillsPrompt,
+  parseNextIdeas,
   newId,
   parseProposal,
   parseQuestions,
@@ -65,6 +68,38 @@ const setOf = (raw: unknown) => {
   if (!set) throw new Error('Die KI hat keine brauchbaren Aufgaben geliefert. Bitte versuche es noch einmal.');
   return set;
 };
+
+/** A mini skill: one AI call makes the short path (3 lessons) – then it can be learned right away. Returns the id at once. */
+export function startMiniSkill(topic: string, level = ''): string {
+  const id = newId();
+  const now = Date.now();
+  addSkill({ id, topic: topic.trim(), title: topic.trim(), domain: 'general', levels: ['Mini-Skill'], targetLevel: 0, level, mini: true, status: 'planning', plan: {}, stages: [], createdAt: now, updatedAt: now });
+  void buildMini(id);
+  return id;
+}
+export function buildMini(id: string) {
+  return run(id + ':mini', async () => {
+    const s = skill(id);
+    if (!s) return;
+    const raw = (await ask(miniPrompt(s.topic, s.level))) as Record<string, unknown>;
+    const p = parseProposal(raw);
+    if (!p) throw new Error('Die KI hat keinen Mini-Skill geliefert. Bitte versuche es noch einmal.');
+    const stages = p.stages.slice(0, 1).map((st) => ({ ...st, lessons: st.lessons.slice(0, 4).map((l) => ({ ...l, known: undefined })) }));
+    updateSkill(id, { title: p.title || s.title, domain: toDomain(raw?.domain), stages, status: 'active', plan: { approach: p.approach } });
+  });
+}
+
+/** „Wie geht's weiter?“: three ideas for the next skill, made once and kept. */
+export function makeNextIdeas(id: string) {
+  return run(id + ':next', async () => {
+    const s = skill(id);
+    if (!s) return;
+    const existing = (getState().data.skills ?? []).filter((x) => x.id !== id).map((x) => x.title);
+    const ideas = parseNextIdeas(await ask(nextSkillsPrompt(s, existing)));
+    if (!ideas.length) throw new Error('Pip hat gerade keine Ideen geliefert. Bitte versuche es noch einmal.');
+    updateSkill(id, { nextIdeas: ideas });
+  });
+}
 
 /** Step 1: a new skill from a broad topic – the AI asks its questions. Returns the skill id at once. */
 export function startSkill(topic: string, level: string, material?: string): string {

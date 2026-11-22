@@ -35,6 +35,7 @@ export type StageProject = {
   done?: boolean;
 };
 export type Stage = { id: string; name: string; goal: string; lessons: Lesson[]; test?: PracticeSet; passed?: boolean; project?: StageProject; sheet?: string };
+export type NextIdea = { title: string; why: string; mini?: boolean };
 export type Skill = {
   id: string;
   /** What the person typed („Musiktheorie“). */
@@ -59,6 +60,10 @@ export type Skill = {
   /** Tasks per day for the daily goal (default 6 ≈ one lesson). */
   dailyGoal?: number;
   status: 'planning' | 'active';
+  /** A mini skill: a few short lessons just for fun – no planning, no stage test. */
+  mini?: boolean;
+  /** Suggestions for what to learn next (made once, near the end of the skill). */
+  nextIdeas?: NextIdea[];
   plan: {
     questions?: PlanQuestion[];
     answers?: Record<number, string>;
@@ -238,7 +243,7 @@ export const BITE_RULE = `ERKLÄRUNG IN HÄPPCHEN – keine Textwand. Feld "bite
 - "figure" (optional) = Index eines Bildes in "figures", das genau zu diesem Häppchen passt.
 - "intro" ist dann nur EIN Satz Zusammenfassung; "theory" lässt du weg.`;
 
-export function lessonPrompt(skill: Skill, stage: Stage, lesson: Lesson, count = 6): Prompt {
+export function lessonPrompt(skill: Skill, stage: Stage, lesson: Lesson, count = skill.mini ? 4 : 6): Prompt {
   const all = skill.stages.flatMap((st) => st.lessons);
   const i = all.findIndex((l) => l.id === lesson.id);
   const stageIndex = skill.stages.findIndex((st) => st.id === stage.id);
@@ -246,7 +251,7 @@ export function lessonPrompt(skill: Skill, stage: Stage, lesson: Lesson, count =
   return {
     system: `Du bist ein geduldiger Tutor. Du erstellst eine Lektion, in der man durch eigenes Tun lernt: kurze Erklärung, ein durchgerechnetes Beispiel, dann ${count} Aufgaben, die man selbst löst. ${kindRule(skill)}
 ${BITE_RULE}
-${beginnerRule(skill, stageIndex, i)}
+${skill.mini ? MINI_RULE + ' Höchstens 3 Häppchen.' : beginnerRule(skill, stageIndex, i)}
 ${FIGURE_RULE}
 ${JSON_ONLY}`,
     user: `${context(skill)}\n\nSTUFE: ${stage.name} – ${stage.goal}\nLEKTION ${i + 1} von ${all.length}: ${lesson.title} – Ziel: ${lesson.goal}${before.length ? `\nVorher gelernt: ${before.slice(-8).join('; ')}` : ''}`,
@@ -422,7 +427,8 @@ export function planLessons(count: number, from: string, until: string, perDay =
   return out;
 }
 /** The whole skill is done: every stage up to the target is passed. */
-export const skillComplete = (skill: Skill) => skill.status === 'active' && skill.stages.length > 0 && skill.stages.every((st) => st.passed);
+export const skillComplete = (skill: Skill) =>
+  skill.status === 'active' && skill.stages.length > 0 && (skill.mini ? skill.stages.every((st) => st.lessons.every(lessonDone)) : skill.stages.every((st) => st.passed));
 
 // ---------- daily goal and streak ----------
 export const GOALS = [
@@ -517,3 +523,98 @@ export function weakLessons(skill: Skill, max = 3): Lesson[] {
     .slice(0, max)
     .map((r) => r.lesson);
 }
+
+// ---------- ideas: what to learn ----------
+/** Topics for the suggestions on the skills page (a different few every day). */
+export const TOPIC_POOL = [
+  'Stochastik', 'Lineare Algebra', 'Analysis: Ableitungen', 'Statistik für die Uni', 'Finanzmathematik',
+  'Java programmieren', 'Python-Grundlagen', 'SQL-Abfragen', 'JavaScript fürs Web', 'Algorithmen und Datenstrukturen',
+  'Vertragsrecht – Fälle lösen', 'Mietrecht', 'Strafrecht AT', 'Arbeitsrecht', 'Sachenrecht',
+  'Musiktheorie: Akkorde und Intervalle', 'Gitarre: Akkorde begleiten', 'Klavier: Noten lesen', 'Gehörbildung', 'Rhythmus und Takt',
+  'Spanisch Grammatik', 'Englisch fürs Business', 'Französisch für den Alltag', 'Italienisch für den Urlaub', 'Latein-Grundlagen',
+  'Buchhaltung Grundlagen', 'Volkswirtschaftslehre', 'Marketing-Grundlagen', 'Projektmanagement', 'Excel für den Job',
+  'Erste Hilfe', 'Ernährung verstehen', 'Psychologie-Grundlagen', 'Philosophie: Ethik', 'Chemie: Reaktionen',
+  'Physik: Mechanik', 'Biologie: Genetik', 'Geschichte: Das 20. Jahrhundert', 'Präsentieren und Reden', 'Wissenschaftliches Schreiben',
+];
+
+/** Small skills for fun – learned in about 20 minutes, to broaden the horizon. */
+export const MINI_POOL = [
+  'Morsecode', 'Sternbilder am Nachthimmel finden', 'Hiragana: die ersten 10 Zeichen', 'Origami-Kranich falten', 'Schach: Matt in 1',
+  'Wie funktioniert Bitcoin?', 'Gebärdensprache: Begrüßung', 'Blues-Tonleiter', 'Kopfrechen-Tricks', 'Wolken erkennen',
+  'Das NATO-Alphabet', 'Römische Zahlen', 'Knoten fürs Segeln', 'Wie Impfungen wirken', 'Kaffee: Von der Bohne zur Tasse',
+  'Optische Täuschungen verstehen', 'Weinregionen Europas', 'Die Planeten unseres Sonnensystems', 'Zaubertrick mit Karten', 'Binärzahlen',
+  'Griechisches Alphabet', 'Erste Worte auf Koreanisch', 'Pilze sicher unterscheiden – die Basics', 'Wie Flugzeuge fliegen', 'Fotografie: Die Drittel-Regel',
+  'Kalligrafie: Grundstriche', 'Vogelstimmen erkennen', 'Wie das Internet funktioniert', 'Mondphasen verstehen', 'Akkorde auf der Ukulele',
+  'Brot backen: Die Chemie dahinter', 'Typografie: Schriften erkennen', 'Rhetorische Stilmittel', 'Wie Wahlen gezählt werden', 'Erste Hilfe bei Verbrennungen',
+  'Geheimschriften: Caesar-Verschlüsselung', 'Wie Farben im Gehirn entstehen', 'Kurzschrift: Die ersten Zeichen', 'Feng-Shui-Grundideen', 'Sudoku-Strategien',
+];
+
+/**
+ * n topics from a pool, the same for the same seed (e.g. the day) and different for another;
+ * topics the person already has (as skill titles or topics) are left out. Pure – tested.
+ */
+export function pickTopics(pool: readonly string[], n: number, seed: number, exclude: string[] = []): string[] {
+  const has = new Set(exclude.map((x) => x.trim().toLowerCase()));
+  const free = pool.filter((t) => !has.has(t.toLowerCase()));
+  // a small seeded shuffle (mulberry32)
+  let a = (seed >>> 0) || 1;
+  const rand = () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const list = [...free];
+  for (let i = list.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [list[i], list[j]] = [list[j], list[i]];
+  }
+  return list.slice(0, n);
+}
+
+/** Mini skills: light, curious, one aha after the other – short lessons with 4 tasks. */
+export const MINI_RULE = 'MINI-SKILL: Ein kleines Thema zum Spaß und Horizont-Erweitern. Locker, neugierig machend, mit Aha-Momenten und einem überraschenden Fakt. Kein Vorwissen nötig, nichts Trockenes.';
+
+/** One call: a mini skill with one stage of 3 short lessons – no questions, no placement test. */
+export function miniPrompt(topic: string, level = ''): Prompt {
+  return {
+    system: `Du planst einen Mini-Skill: etwas Kleines, das man in etwa 20 Minuten durch eigenes Tun lernt – zum Spaß und um den Horizont zu erweitern. ${LANG_RULE}
+${MINI_RULE}
+"domain": math | java | law | music | language | general (Programmieren = java).
+Format: {"title":"kurzer, einladender Name","domain":"…","approach":"2 Sätze: was man in 20 Minuten lernt und warum es Spaß macht","stages":[{"name":"Mini-Skill","goal":"was man danach kann","lessons":[{"title":"…","goal":"Lernziel in einem Satz"}]}]}
+Genau 1 Stufe mit genau 3 Lektionen, vom Einfachsten zum kleinen Höhepunkt.
+${JSON_ONLY}`,
+    user: `Thema: ${topic}${level ? `\nBildungsniveau: ${level}` : ''}`,
+    maxTokens: 1500,
+    json: true,
+  };
+}
+
+/** What could come next after this skill: 3 ideas (for a mini skill first the topic as a real skill). */
+export function nextSkillsPrompt(skill: Skill, existing: string[] = []): Prompt {
+  return {
+    system: `Du bist ein Lerncoach. Jemand hat einen Skill (fast) geschafft. Schlage genau 3 passende nächste Skills vor, die darauf aufbauen oder den Horizont sinnvoll erweitern. ${LANG_RULE}
+${skill.mini ? 'Es war ein Mini-Skill: Der ERSTE Vorschlag ist dasselbe Thema als richtiger Skill zum Vertiefen ("mini": false), die beiden anderen sind verwandte Mini-Skills ("mini": true).' : 'Mische: 2 richtige Skills ("mini": false) und 1 überraschender Mini-Skill zum Spaß ("mini": true).'}
+Nicht vorschlagen, was die Person schon hat.
+Format: {"ideas":[{"title":"kurzer Name","why":"ein Satz, warum das gut passt","mini":false}]}
+${JSON_ONLY}`,
+    user: `Geschafft: ${skill.title} (${skill.domain})\nLektionen: ${skill.stages.flatMap((st) => st.lessons.map((l) => l.title)).join('; ')}${existing.length ? `\nHat schon: ${existing.join('; ')}` : ''}`,
+    maxTokens: 800,
+    json: true,
+  };
+}
+
+export function parseNextIdeas(raw: unknown): NextIdea[] {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  return (Array.isArray(r.ideas) ? r.ideas : [])
+    .map((x) => {
+      const o = (x ?? {}) as Record<string, unknown>;
+      return { title: s(o.title, 80), why: s(o.why, 240), ...(o.mini === true ? { mini: true } : {}) };
+    })
+    .filter((x) => x.title)
+    .slice(0, 3);
+}
+
+/** Show „Wie geht's weiter?“ once the skill is done or most of it (80 % of the lessons). */
+export const wantsNextIdeas = (skill: Skill) => skill.status === 'active' && (skillComplete(skill) || skillProgress(skill).share >= 0.8);

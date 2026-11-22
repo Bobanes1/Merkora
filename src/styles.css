@@ -11421,3 +11421,29 @@ body.learn-focus .practice-tasks { min-height: calc(100vh - 220px); }
 @media (prefers-reduced-motion: reduce) {
   .bite-card, .lesson-end-card, .path-node-wrap.just-done .path-node, .path-node-wrap.just-done .node-stars svg, .path-link.filling path, .path-node-wrap.arrived .node-mascot, .path-node-wrap.arrived .node-bubble, .unit-banner.unlocked, .cheat-sheet { animation: none !important; }
 }
+
+/* ---------- skills: suggestions, mini skills, what's next ---------- */
+.ghost-chip { background: none; border-style: dashed; display: inline-flex; align-items: center; gap: 5px; }
+.mini-head { display: flex; align-items: flex-start; gap: 12px; }
+.mini-head h2 { margin: 0 0 2px; }
+.mini-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 12px 0; }
+.mini-card { display: grid; gap: 6px; align-content: start; text-align: left; padding: 14px; border-radius: var(--r-lg); border: 1px solid var(--line); background: linear-gradient(140deg, color-mix(in srgb, var(--primary) 12%, var(--surface-2)), var(--surface-2)); color: inherit; font: inherit; cursor: pointer; transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease; }
+.mini-card svg { color: var(--primary); }
+.mini-card b { font-size: 15px; line-height: 1.3; }
+.mini-card small { color: var(--primary); font-weight: 600; }
+.mini-card:hover { transform: translateY(-2px); border-color: var(--primary); box-shadow: 0 10px 24px -14px color-mix(in srgb, var(--primary) 60%, transparent); }
+.mini-own { margin-top: 4px; }
+.tile-badges { display: flex; gap: 6px; justify-self: start; align-self: start; }
+.mini-badge { background: color-mix(in srgb, #f2b84b 25%, transparent); color: #a06a00; }
+:root[data-theme='dark'] .mini-badge { color: #f2c55c; }
+.next-ideas { display: grid; gap: 8px; border: 1px solid var(--primary); }
+.next-ideas h2 { margin: 0; }
+.next-ideas p { margin: 0; }
+.next-list { display: grid; gap: 8px; }
+.next-idea { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--r-md); background: var(--surface-2); }
+.next-idea .grow { display: grid; gap: 2px; }
+@media (max-width: 560px) {
+  .next-idea { flex-direction: column; align-items: stretch; }
+  .mini-head { flex-direction: column; }
+}
+.next-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

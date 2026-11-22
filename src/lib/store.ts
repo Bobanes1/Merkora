@@ -223,6 +223,8 @@ export type Settings = {
   /** Mock exams: education level, subject/semester and grading scale (asked once, then prefilled). */
   eduLevel?: string;
   eduDetail?: string;
+  /** Skills: „Wo lernst du gerade?“ as typed there (free text). */
+  skillLevel?: string;
   gradeScale?: 'ch' | 'de' | 'at' | 'pct';
   /** Name shown to friends when sharing a deck. */
   shareName?: string;

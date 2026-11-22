@@ -1927,6 +1927,30 @@ console.log('Häppchen statt Textwand');
   ok(lp.system.includes('"bites"') && lp.system.includes('"check"') && !lp.system.includes('Pflichtfeld "theory"'), 'Lektions-Prompt verlangt Häppchen mit Kontrollfrage');
 }
 
+console.log('Themenvorschläge, Mini-Skills, nächster Skill');
+{
+  const S = await import('../src/lib/skills');
+  const { levelLabel } = await import('../src/lib/mockExamCore');
+  const a = S.pickTopics(S.TOPIC_POOL, 6, 100), b = S.pickTopics(S.TOPIC_POOL, 6, 100), c = S.pickTopics(S.TOPIC_POOL, 6, 101);
+  ok(a.length === 6 && new Set(a).size === 6 && a.join() === b.join() && a.join() !== c.join(), 'Vorschläge: 6 verschiedene, gleich am selben Tag, anders am nächsten');
+  ok(!S.pickTopics(S.TOPIC_POOL, 40, 5, ['stochastik', 'Java programmieren']).some((t) => t === 'Stochastik' || t === 'Java programmieren') && S.pickTopics(['A'], 3, 1).length === 1, 'Vorschläge: vorhandene Skills fallen weg');
+  ok(S.TOPIC_POOL.length >= 30 && S.MINI_POOL.length >= 30, 'genug Themen für Abwechslung');
+  ok(levelLabel('bachelor') === 'Universität – Bachelor', 'Stufe aus der Probeprüfung als Name statt „bachelor“');
+
+  const mp = S.miniPrompt('Morsecode');
+  ok(mp.user.includes('Morsecode') && mp.system.includes('genau 3 Lektionen'), 'Mini-Skill: ein Aufruf, 3 Lektionen');
+  const mini = { id: 'm', topic: 'Morsecode', title: 'Morsecode', domain: 'general', levels: ['Mini-Skill'], targetLevel: 0, level: '', mini: true, status: 'active', plan: {}, createdAt: 1, updatedAt: 1,
+    stages: [{ id: 's', name: 'Mini', goal: '', lessons: [{ id: 'l1', title: 'A', goal: '' }, { id: 'l2', title: 'B', goal: '', known: true }] }] } as any;
+  ok(!S.skillComplete(mini) && S.lessonPrompt(mini, mini.stages[0], mini.stages[0].lessons[0]).system.includes('MINI-SKILL') && S.lessonPrompt(mini, mini.stages[0], mini.stages[0].lessons[0]).system.includes('dann 4 Aufgaben'), 'Mini-Skill: kurze Lektionen, noch nicht fertig');
+  const solved = { id: 'x', createdAt: 1, kind: 'general', topic: 'A', intro: '', labs: [], tasks: [{ type: 'calc', problem: '1', answer: { type: 'number', value: '1' } }], progress: [{ tries: 1, hints: 0, solved: true }] };
+  mini.stages[0].lessons[0].set = solved;
+  ok(S.skillComplete(mini) && S.wantsNextIdeas(mini), 'Mini-Skill fertig ohne Stufentest → „Wie geht\'s weiter?“');
+  const np = S.nextSkillsPrompt(mini, ['Schach']);
+  ok(np.user.includes('Morsecode') && np.user.includes('Schach') && np.system.includes('richtiger Skill'), 'nächster Skill: kennt Thema und vorhandene Skills, Mini zuerst vertiefen');
+  const ideas = S.parseNextIdeas({ ideas: [{ title: 'Funk', why: 'w', mini: true }, { title: '' }, { title: 'B' }, { title: 'C' }, { title: 'D' }] });
+  ok(ideas.length === 3 && ideas[0].mini === true && !ideas[1].mini && S.parseNextIdeas(null).length === 0, 'nächster Skill: höchstens 3, leere weg');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

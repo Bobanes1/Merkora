@@ -13,7 +13,7 @@ import { IconArrowDown, IconArrowUp, IconCheck, IconSkip, IconTools, IconLock, I
 import { FloorDecor, NodeDecor, PATH_OFFSETS, PathLink, SandFloor, SwimmingFish, themeFor, Waves } from '../components/PathDecor';
 import { Mascot } from '../components/Mascot';
 import { PracticeSetView, type SetHost } from '../components/practice/PracticeSetView';
-import { askQuestions, ensureLesson, redoLesson, makePlacement, makeProposal, makeReview, makeStageTest, reviseProposal, useSkillTask } from '../lib/skillRun';
+import { buildMini, makeNextIdeas, startMiniSkill, startSkill, askQuestions, ensureLesson, redoLesson, makePlacement, makeProposal, makeReview, makeStageTest, reviseProposal, useSkillTask } from '../lib/skillRun';
 import {
   addLesson,
   canReview,
@@ -26,7 +26,9 @@ import {
   recordSolved,
   removeLesson,
   skillToday,
+  skillComplete,
   skillProgress,
+  wantsNextIdeas,
   stageReady,
   toggleKnown,
   type Lesson,
@@ -90,7 +92,59 @@ export default function SkillPage() {
         </Link>
       </div>
     );
-  return <div className="page skill-page" data-domain={skill.domain}>{skill.status === 'planning' ? <Planner skill={skill} /> : <Path skill={skill} />}</div>;
+  return <div className="page skill-page" data-domain={skill.domain}>{skill.status === 'planning' ? skill.mini ? <MiniBuilder skill={skill} /> : <Planner skill={skill} /> : <Path skill={skill} />}</div>;
+}
+
+/** A mini skill is being built (one AI call) – then it opens as a path right away. */
+function MiniBuilder({ skill }: { skill: Skill }) {
+  const t = useSkillTask(skill.id + ':mini');
+  return (
+    <>
+      <Link to="/skills" className="btn ghost sm">
+        ‹ Skills
+      </Link>
+      <header className="page-head">
+        <h1>{skill.title}</h1>
+        <p className="muted">Mini-Skill: drei kurze Lektionen zum Ausprobieren.</p>
+      </header>
+      {(t.busy || !t.error) && <Busy text="Pip baut deinen Mini-Skill …" />}
+      <Failed error={t.error} retry={() => void buildMini(skill.id)} />
+    </>
+  );
+}
+
+/** „Wie geht's weiter?“ – near the end of a skill: three ideas for what to learn next, one click starts them. */
+function NextIdeas({ skill }: { skill: Skill }) {
+  const navigate = useNavigate();
+  const t = useSkillTask(skill.id + ':next');
+  useEffect(() => {
+    if (!skill.nextIdeas?.length) void makeNextIdeas(skill.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skill.id]);
+  const level = getState().data.settings.skillLevel ?? skill.level;
+  return (
+    <section className="panel next-ideas">
+      <h2>Wie geht's weiter?</h2>
+      <p className="muted small">{skillComplete(skill) ? 'Geschafft! Darauf kannst du aufbauen:' : 'Du bist fast durch. Darauf kannst du danach aufbauen:'}</p>
+      {!skill.nextIdeas?.length && t.busy && <p className="muted">Pip überlegt, was gut passt …</p>}
+      <Failed error={t.error} retry={() => void makeNextIdeas(skill.id)} />
+      <div className="next-list">
+        {(skill.nextIdeas ?? []).map((n) => (
+          <div key={n.title} className="next-idea">
+            <span className="grow">
+              <span className="next-title">
+                <b>{n.title}</b> {n.mini && <span className="badge mini-badge">Mini</span>}
+              </span>
+              <small className="muted">{n.why}</small>
+            </span>
+            <button type="button" className={'btn sm ' + (n.mini ? 'outline' : 'primary')} onClick={() => navigate(`/skills/${n.mini ? startMiniSkill(n.title, level) : startSkill(n.title, level)}`)}>
+              {n.mini ? 'Mini-Skill starten' : 'Lernpfad planen'}
+            </button>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
 }
 
 function Busy({ text }: { text: string }) {
@@ -385,7 +439,7 @@ function Path({ skill }: { skill: Skill }) {
               Weiter: {next.lesson.title} ›
             </button>
           ) : (
-            <p className="form-ok">Alle Lektionen geschafft! Mach die Stufentests oder erhöhe dein Ziel.</p>
+            <p className="form-ok">{skill.mini ? 'Mini-Skill geschafft!' : 'Alle Lektionen geschafft! Mach die Stufentests oder erhöhe dein Ziel.'}</p>
           )}
           {canReview(skill) && (
             <button type="button" className="btn outline" onClick={() => setView({ kind: 'review' })}>
@@ -401,6 +455,7 @@ function Path({ skill }: { skill: Skill }) {
         </div>
       </header>
       <SkillCelebration skill={skill} />
+      {wantsNextIdeas(skill) && <NextIdeas skill={skill} />}
       <div className="path-summary">
         <span>
           <b>
@@ -427,9 +482,14 @@ function Path({ skill }: { skill: Skill }) {
           let prevOff: number | null = null;
           const nodes = [
             ...st.lessons.map((l) => ({ key: l.id, lesson: l as Lesson | null })),
-            { key: st.id + ':test', lesson: null as Lesson | null },
-            // the mini project: apply the whole stage once (after the stage test)
-            { key: st.id + ':project', lesson: null as Lesson | null, project: true },
+            // a mini skill ends with its lessons – no stage test, no project
+            ...(skill.mini
+              ? []
+              : [
+                  { key: st.id + ':test', lesson: null as Lesson | null },
+                  // the mini project: apply the whole stage once (after the stage test)
+                  { key: st.id + ':project', lesson: null as Lesson | null, project: true },
+                ]),
           ];
           return (
             <section

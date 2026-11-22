@@ -70,7 +70,11 @@ export function SkillCelebration({ skill }: { skill: Skill }) {
           <IconTrophy size={28} />
         </span>
         <h2 id="party-title">Geschafft: {skill.title}!</h2>
-        <p>Du hast dein Ziel „{skill.levels[skill.targetLevel] ?? skill.stages[skill.stages.length - 1]?.name}“ erreicht. Pip ist mächtig stolz auf dich.</p>
+        <p>
+          {skill.mini
+            ? 'Mini-Skill geschafft – wieder etwas Neues gelernt! Unter „Wie geht’s weiter?“ findest du passende nächste Ideen.'
+            : `Du hast dein Ziel „${skill.levels[skill.targetLevel] ?? skill.stages[skill.stages.length - 1]?.name}“ erreicht. Pip ist mächtig stolz auf dich.`}
+        </p>
         <div className="party-stats">
           <span>
             <b>{skill.stages.length}</b> Stufen
