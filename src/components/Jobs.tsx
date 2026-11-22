@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Link } from 'react-router-dom';
-import { askNotifications, canSurviveClose, dismissToast, getToasts, JOB_LABEL, JOB_TAB, JOB_VERB, runProgress, subscribeToasts, retryJob } from '../lib/jobs';
+import { askNotifications, cancelRun, canSurviveClose, dismissToast, getToasts, JOB_LABEL, JOB_TAB, JOB_VERB, runProgress, subscribeToasts, retryJob } from '../lib/jobs';
 import { deckUrl, getState, removeJob, useStore, type Job, type JobKind } from '../lib/store';
-import { IconBell, IconCheck, IconClose, IconSparkle } from './Icons';
+import { IconBell, IconCheck, IconClose, IconSparkle, IconStop } from './Icons';
 import { Mascot } from './Mascot';
 import { etaText, JOB_STEPS, jobStep, overallProgress } from '../lib/jobProgress';
 
 export function useJob(deckId: string, kind: JobKind): Job | undefined {
   return useStore((s) => {
     const list = s.data.jobs.filter((j) => j.deckId === deckId && j.kind === kind);
-    return list[list.length - 1];
+    // a part still working wins over a newer one that is already done (follow-ups of long material)
+    return list.filter(isActive).pop() ?? list[list.length - 1];
   });
 }
 export const isActive = (j?: Job) => !!j && (j.status === 'queued' || j.status === 'running');
@@ -88,6 +89,9 @@ export function JobBanner({ job }: { job: Job }) {
         </p>
         <div className="row-gap">
           <NotifyButton />
+          <button type="button" className="btn ghost sm" onClick={() => cancelRun(job.id)} title={run ? 'Alle Teile stoppen – fertige Karten bleiben' : 'Auftrag stoppen'}>
+            <IconStop size={14} /> Stoppen
+          </button>
         </div>
       </div>
     </div>
@@ -176,12 +180,18 @@ export function JobsIndicator() {
                   <small>
                     {j.status === 'done'
                       ? 'fertig'
+                      : j.status === 'cancelled'
+                        ? 'gestoppt'
                       : j.status === 'error'
                         ? `Fehler: ${j.error}`
                         : `${etaText(j, jobs, now)} · ${j.mode === 'tab' ? 'läuft in diesem Fenster' : 'läuft beim Anbieter – auch wenn du die App schließt'}`}
                   </small>
                 </span>
-                {!isActive(j) && (
+                {isActive(j) ? (
+                  <button type="button" className="icon-btn" aria-label="Stoppen" title="Stoppen – fertige Karten bleiben" onClick={() => cancelRun(j.id)}>
+                    <IconStop size={14} />
+                  </button>
+                ) : (
                   <button type="button" className="icon-btn" aria-label="Entfernen" onClick={() => removeJob(j.id)}>
                     <IconClose size={14} />
                   </button>

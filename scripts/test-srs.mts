@@ -299,8 +299,8 @@ console.log('Kartenanzahl: die KI entscheidet');
 {
   const { autoCardInstruction, cardRange } = await import('../src/lib/cardCount');
   const t = autoCardInstruction();
-  ok(t.includes('Entscheide selbst') && t.includes('höchstens 20') && autoCardInstruction(8000).includes('höchstens 4 '), 'Anweisung: KI entscheidet, mit Obergrenze je nach Länge');
-  ok(/Organisatorisches/.test(t) && /Qualität vor Menge/.test(t) && /Zusammengehörendes/.test(t), 'Anweisung: weniger, hochwertige Karten, Verwandtes zusammenfassen');
+  ok(t.includes('"topics"') && t.includes('JEDEM Thema mindestens eine Karte') && t.includes('höchstens 40') && autoCardInstruction(8000).includes('höchstens 6 '), 'Anweisung: erst Themen wie bei einer Zusammenfassung, dann je Thema eine Karte (Sicherheitsnetz je nach Länge)');
+  ok(/Organisatorisches/.test(t) && /Qualität vor Menge/.test(t) && /Zusammengehörendes/.test(t), 'Anweisung: hochwertige Karten, Verwandtes zusammenfassen');
   const s = cardRange(4000), l = cardRange(40000);
   ok(s.low < s.high && l.low < l.high && l.high > s.high, 'Spanne für die Kostenanzeige wächst mit dem Material');
 }
@@ -1999,9 +1999,21 @@ console.log('Weiß nicht ohne Sackgasse, abwechslungsreiche Folgeaufgaben, wenig
   const mp = P.mistakePrompt(set, set.tasks[0], '5');
   ok(mp.system.includes('anderer Aufgabentyp') && mp.system.includes('anderer Kontext') && !mp.system.includes('genau im selben Format'), 'Folgeaufgabe in anderer Form, nicht dieselbe mit neuen Zahlen');
 
-  ok(C.maxCardsFor(3000) === 4 && C.maxCardsFor(40000) === 16 && C.maxCardsFor(200000) === 20, 'Obergrenze je Teil: 4 bis 20 Karten');
+  ok(C.maxCardsFor(3000) === 6 && C.maxCardsFor(40000) === 27 && C.maxCardsFor(200000) === 40, 'Sicherheitsnetz je Teil: 6 bis 40 Karten');
   const r = C.cardRange(40000);
-  ok(r.high === 16 && r.low <= r.high, 'Kostenschätzung nutzt dieselbe Obergrenze');
+  ok(r.high === 27 && r.low <= r.high, 'Kostenschätzung nutzt dieselbe Obergrenze');
+  ok(C.uncovered(['A', 'B', 'C'], [1, 3, 7, 'x', undefined]).join() === 'B' && C.uncovered(['A'], []).join() === 'A' && C.uncovered([], [1]).length === 0, 'Themen-Check: Themen ohne Karte gefunden, falsche Nummern zählen nicht');
+  const parsed = A.parseCardsInfo(JSON.stringify({ topics: ['Osmose', 'Diffusion', ''], cards: [{ front: 'Was ist Osmose?', back: 'X', topic: 1 }, { front: 'Diffusion?', back: 'Y', topic: 'zwei' }] }));
+  ok(parsed.topics.join() === 'Osmose,Diffusion' && parsed.cards[0].topic === 1 && parsed.cards[1].topic === undefined && A.parseCardsInfo(JSON.stringify({ cards: [{ front: 'a', back: 'b' }] })).topics.length === 0, 'Karten: Themenliste und Themen-Nummer gelesen, alte Antworten bleiben gültig');
+  const first = A.cardsPrompt('Stoff', 0);
+  const cont = A.cardsPrompt('Stoff', 0, '', false, { i: 1, n: 2, more: true, topics: ['Osmose', 'Diffusion'] });
+  const gapsP = A.cardsPrompt('Stoff', 0, '', false, { i: 1, n: 2, gaps: ['Diffusion'] });
+  ok(first.system.includes('"topics"') && first.user.includes('ALLE wichtigen Themen') && cont.user.includes('1. Osmose; 2. Diffusion') && !cont.system.includes('"topics"') && gapsP.user.includes('- Diffusion') && !gapsP.user.includes('ALLE wichtigen Themen'), 'Prompt: erst Themenliste, Fortsetzung nummeriert danach, fehlende Themen gezielt');
+  ok(!A.cardsPrompt('Stoff', 10).system.includes('"topics"'), 'feste Anzahl: ohne Themenliste wie bisher');
+  const J = await import('../src/lib/jobs');
+  const job = (id: string, run: string, status: string) => ({ id, kind: 'cards', deckId: 'd', title: '', status, createdAt: 1, params: { run } }) as any;
+  const jobs = [job('a', 'r1', 'running'), job('b', 'r1', 'queued'), job('c', 'r1', 'done'), job('d', 'r2', 'queued')];
+  ok(J.runJobsToCancel(jobs, 'a').sort().join() === 'a,b' && J.runJobsToCancel(jobs, 'd').join() === 'd' && J.runJobsToCancel(jobs, 'x').length === 0, 'Stoppen: alle laufenden Teile des Auftrags, fertige und andere Aufträge bleiben');
   ok(C.applyCuration(10, [1, 3, 3, 99, 'x', 0, 5, 6, 7, 8]).join() === '0,2,4,5' && C.applyCuration(10, null).length === 0, 'Aussortieren: nur gültige Nummern, höchstens 40 %');
   const cp = A.curatePrompt([{ front: '<b>Was ist X?</b>', back: 'X ist …' }, { front: 'Was ist Y?', back: 'Y' }]);
   ok(cp.user.startsWith('1. Was ist X?') && cp.user.includes('2. Was ist Y?') && cp.system.includes('Dopplungen') && cp.system.includes('Im Zweifel behalten'), 'Aussortieren: KI sieht alle Fragen nummeriert, behält im Zweifel');

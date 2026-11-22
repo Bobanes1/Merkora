@@ -158,7 +158,7 @@ export type Exam = {
 };
 
 export type JobKind = 'summary' | 'quiz' | 'cards' | 'practice';
-export type JobStatus = 'queued' | 'running' | 'done' | 'error';
+export type JobStatus = 'queued' | 'running' | 'done' | 'error' | 'cancelled';
 export type Job = {
   id: string;
   kind: JobKind;
@@ -177,6 +177,9 @@ export type Job = {
   /** Card jobs: how many cards were added, and how many of them with a graphic. */
   made?: number;
   graphics?: number;
+  /** Card jobs: the topic list of the part (first answer) and the topic numbers its cards cover. */
+  topics?: string[];
+  hits?: number[];
 };
 
 export type Game = {

@@ -40,7 +40,7 @@ import { deckFileBlob } from './deckFiles';
 import { avoidList, dropDuplicates } from './chunks';
 import { cardFrontText } from './content';
 import { addCards, addJob, deleteCard, getState, patchJob, subscribe, updateDeck, type Deck, type Job, type JobKind } from './store';
-import { applyCuration } from './cardCount';
+import { applyCuration, uncovered } from './cardCount';
 
 export const JOB_LABEL: Record<JobKind, string> = {
   summary: 'Zusammenfassung',
@@ -101,8 +101,11 @@ function promptFor(job: Job, deck: Deck, slides: string[] = []): Prompt {
       const part = cp.part;
       const n = part?.n ?? 1;
       // a continuation, a second try or a later part: the questions already in the deck are not repeated
-      const avoid = cp.more || cp.few || (part && n > 1) ? avoidList(avoidFronts(deck.cards, cp.run)) : [];
-      const info = n > 1 || cp.more || cp.few ? { i: part?.i ?? 1, n, avoid, ...(cp.more ? { more: true } : {}), ...(cp.few ? { few: true } : {}) } : undefined;
+      const avoid = cp.more || cp.few || cp.gaps || (part && n > 1) ? avoidList(avoidFronts(deck.cards, cp.run)) : [];
+      const info =
+        n > 1 || cp.more || cp.few || cp.topics?.length || cp.gaps?.length
+          ? { i: part?.i ?? 1, n, avoid, ...(cp.more ? { more: true } : {}), ...(cp.few ? { few: true } : {}), ...(cp.topics?.length ? { topics: cp.topics } : {}), ...(cp.gaps?.length ? { gaps: cp.gaps } : {}) }
+          : undefined;
       return cardsPrompt(p.text || deck.source, p.count ?? 0, p.focus ?? '', !!p.graphics, info, !!cp.figureSet, slides);
     }
   }
@@ -129,6 +132,10 @@ type CardParams = {
   more?: number;
   /** Second try because a long part gave very few cards. */
   few?: boolean;
+  /** The part's topic list (from its first answer) – continuations number their cards by it. */
+  topics?: string[];
+  /** Topics of the part that got no card – this job makes cards for exactly those. */
+  gaps?: string[];
 };
 
 /** Parts that run at the same time. */
@@ -204,9 +211,18 @@ export function followUp(p: { more?: number; few?: boolean; text?: string; count
   return null;
 }
 
-type CardResult = { cards: AiCard[]; cut: boolean };
+type CardResult = { cards: AiCard[]; cut: boolean; topics?: string[] };
 
-async function applyResult(job: Job, text: string, pre?: CardResult): Promise<{ made: number; graphics: number; cut: boolean } | undefined> {
+/** The jobs to stop with this one: every still active job of the same run (all parts, continuations, missing topics). Pure – tested. */
+export function runJobsToCancel(jobs: Job[], id: string): string[] {
+  const job = jobs.find((j) => j.id === id);
+  if (!job) return [];
+  const run = (job.params as CardParams).run;
+  const active = (j: Job) => j.status === 'queued' || j.status === 'running';
+  return jobs.filter((j) => active(j) && (j.id === id || (!!run && j.kind === 'cards' && (j.params as CardParams).run === run))).map((j) => j.id);
+}
+
+async function applyResult(job: Job, text: string, pre?: CardResult): Promise<{ made: number; graphics: number; cut: boolean; topics: string[]; hits: number[] } | undefined> {
   switch (job.kind) {
     case 'summary':
       updateDeck(job.deckId, { summary: parseSummary(text) });
@@ -226,10 +242,12 @@ async function applyResult(job: Job, text: string, pre?: CardResult): Promise<{ 
       const r = pre ?? parseCardsInfo(text, (!!cp.part && cp.part.n > 1) || !!cp.more || !!cp.few);
       const deck = deckOf(job);
       // parts running side by side may make the same card: keep the first
-      const fresh = dropDuplicates(r.cards, deck ? deck.cards.map(cardFrontText) : []);
+      // which topics of the part these cards cover (also the ones dropped as duplicates – the topic has a card)
+      const hits = r.cards.map((c) => (c as { topic?: number }).topic).filter((x): x is number => Number.isInteger(x));
+      const fresh = dropDuplicates(r.cards.map(({ topic: _t, ...c }) => c), deck ? deck.cards.map(cardFrontText) : []);
       const cards = await withGraphics(fresh, cp.figureSet);
       addCards(job.deckId, cp.run ? cards.map((c) => ({ ...c, run: cp.run })) : cards);
-      return { made: cards.length, graphics: cards.filter((c) => /data-diagram=|slide-figure|<svg/.test(c.back)).length, cut: r.cut };
+      return { made: cards.length, graphics: cards.filter((c) => /data-diagram=|slide-figure|<svg/.test(c.back)).length, cut: r.cut, topics: r.topics ?? [], hits };
     }
   }
   return undefined;
@@ -239,12 +257,12 @@ async function applyResult(job: Job, text: string, pre?: CardResult): Promise<{ 
  * The last step after long material: the AI names duplicates, too small-grained and unimportant cards of
  * this run, and they are removed (at most 40 %). Returns how many went; a failure keeps all cards.
  */
-async function curateRun(deckId: string, run: string): Promise<number> {
+async function curateRun(deckId: string, run: string, topics: string[] = []): Promise<number> {
   const deck = getState().data.decks.find((d) => d.id === deckId);
   const mine = deck?.cards.filter((c) => c.run === run) ?? [];
   if (mine.length < 12) return 0;
   try {
-    const p = curatePrompt(mine.map((c) => ({ front: cardFrontText(c as never), back: c.back })));
+    const p = curatePrompt(mine.map((c) => ({ front: cardFrontText(c as never), back: c.back })), topics);
     const r = await completeJson<{ drop?: unknown }>(p.system, p.user, p.maxTokens);
     const gone = new Set(applyCuration(mine.length, r?.drop).map((k) => mine[k].id));
     for (const id of gone) deleteCard(deckId, id);
@@ -256,6 +274,31 @@ async function curateRun(deckId: string, run: string): Promise<number> {
 
 // ---------- runner ----------
 const localRunning = new Set<string>();
+/** Requests running in this window, so „Stoppen“ can abort them. */
+const aborts = new Map<string, AbortController>();
+
+/**
+ * „Stoppen“: this job and every still active job of its run stop – queued ones never start, running ones in
+ * this window are aborted, at the provider their answer is ignored. Cards already made stay.
+ */
+export function cancelRun(id: string) {
+  const { jobs, decks } = getState().data;
+  const ids = runJobsToCancel(jobs, id);
+  for (const j of ids) {
+    patchJob(j, { status: 'cancelled', finishedAt: Date.now() });
+    aborts.get(j)?.abort();
+    aborts.delete(j);
+    const t = pollTimers.get(j);
+    if (t) clearTimeout(t);
+    pollTimers.delete(j);
+  }
+  const job = jobs.find((j) => j.id === id);
+  if (!job) return;
+  const run = (job.params as CardParams).run;
+  const kept = run ? getState().data.jobs.filter((j) => (j.params as CardParams).run === run).reduce((n, j) => n + (j.made ?? 0), 0) : 0;
+  const deck = decks.find((d) => d.id === job.deckId);
+  pushToast({ text: `Gestoppt${deck ? ` – „${deck.name}“` : ''}${job.kind === 'cards' ? `: ${kept} ${kept === 1 ? 'fertige Karte bleibt' : 'fertige Karten bleiben'}` : ''}.`, ok: true });
+}
 const pollTimers = new Map<string, ReturnType<typeof setTimeout>>();
 let started = false;
 
@@ -264,6 +307,8 @@ function deckOf(job: Job) {
 }
 
 async function finish(job: Job, text: string, pre?: CardResult) {
+  // stopped in the meantime: the answer is not used
+  if (getState().data.jobs.find((j) => j.id === job.id)?.status === 'cancelled') return;
   const deck = deckOf(job);
   if (!deck) {
     patchJob(job.id, { status: 'error', error: 'Das Deck gibt es nicht mehr.', finishedAt: Date.now() });
@@ -271,7 +316,12 @@ async function finish(job: Job, text: string, pre?: CardResult) {
   }
   try {
     const res = await applyResult(job, text, pre);
-    patchJob(job.id, { status: 'done', finishedAt: Date.now(), error: undefined, ...(res ? { made: res.made, graphics: res.graphics } : {}) });
+    patchJob(job.id, {
+      status: 'done',
+      finishedAt: Date.now(),
+      error: undefined,
+      ...(res ? { made: res.made, graphics: res.graphics, ...(res.topics.length ? { topics: res.topics } : {}), hits: res.hits } : {}),
+    });
     if (job.kind !== 'cards' || !res) {
       const msg = `${JOB_LABEL[job.kind]} für „${deck.name}“ ist fertig.`;
       pushToast({ text: msg, jobId: job.id, ok: true });
@@ -282,9 +332,10 @@ async function finish(job: Job, text: string, pre?: CardResult) {
     const part = cp.part;
     const label = part && part.n > 1 ? `Teil ${part.i} von ${part.n}` : '';
     // the answer was cut off (length limit) or very thin: Merkora asks once more for the rest
+    const topics = cp.topics?.length ? cp.topics : res.topics;
     const next = followUp(cp, res.made, res.cut);
     if (next) {
-      const params: CardParams = { ...cp, ...(next === 'more' ? { more: (cp.more ?? 0) + 1 } : { few: true }) };
+      const params: CardParams = { ...cp, ...(topics.length && !cp.gaps ? { topics } : {}), ...(next === 'more' ? { more: (cp.more ?? 0) + 1 } : { few: true }) };
       addJob({ kind: 'cards', deckId: deck.id, title: partTitle(deck, params), params });
       pushToast({
         text:
@@ -296,6 +347,17 @@ async function finish(job: Job, text: string, pre?: CardResult) {
       });
       return;
     }
+    // every topic of the part should have a card: once, the missing ones are asked for
+    if (!(cp.count ?? 0) && !cp.gaps && topics.length) {
+      const mine = getState().data.jobs.filter((j) => j.kind === 'cards' && (j.id === job.id || (!!cp.run && (j.params as CardParams).run === cp.run && (j.params as CardParams).part?.i === part?.i && !(j.params as CardParams).gaps)));
+      const gaps = uncovered(topics, mine.flatMap((j) => (j.id === job.id ? res.hits : (j.hits ?? []))));
+      if (gaps.length) {
+        const params: CardParams = { ...cp, more: undefined, few: undefined, topics, gaps };
+        addJob({ kind: 'cards', deckId: deck.id, title: `${partTitle(deck, cp)} (fehlende Themen)`, params });
+        pushToast({ text: `${label || 'Karteikarten'}: ${gaps.length} ${gaps.length === 1 ? 'Thema hat' : 'Themen haben'} noch keine Karte – Merkora ergänzt sie …`, jobId: job.id, ok: true });
+        return;
+      }
+    }
     // other jobs of the same run still working: a short note; the last one sums everything up
     const run = getState().data.jobs.filter((j) => j.kind === 'cards' && (j.params as CardParams).run && (j.params as CardParams).run === cp.run);
     const open = run.filter((j) => j.status === 'queued' || j.status === 'running').length;
@@ -306,11 +368,13 @@ async function finish(job: Job, text: string, pre?: CardResult) {
     const all = cp.run ? run : [{ ...job, made: res.made, graphics: res.graphics }];
     let total = all.reduce((s, j) => s + ((j as Job).made ?? 0), 0);
     // long material in several parts (number left to the AI): sort out duplicates and unimportant cards at the end
-    const sorted = part && part.n > 1 && !(cp.count ?? 0) && cp.run ? await curateRun(deck.id, cp.run) : 0;
+    // the topics of all parts (each part's list once), for the message and for sorting out
+    const allTopics = all.flatMap((j) => ((j as Job).id === job.id ? (cp.topics?.length || cp.gaps ? [] : res.topics) : ((j as Job).params as CardParams).topics?.length || ((j as Job).params as CardParams).gaps ? [] : ((j as Job).topics ?? [])));
+    const sorted = part && part.n > 1 && !(cp.count ?? 0) && cp.run ? await curateRun(deck.id, cp.run, allTopics) : 0;
     total -= sorted;
     const g = all.reduce((s, j) => s + ((j as Job).graphics ?? 0), 0);
     const failed = all.filter((j) => j.status === 'error').length;
-    const msg = `${JOB_LABEL.cards} für „${deck.name}“ ${part && part.n > 1 ? `(alle ${part.n} Teile) ` : ''}sind fertig: ${madeText(total, g)}.${
+    const msg = `${JOB_LABEL.cards} für „${deck.name}“ ${part && part.n > 1 ? `(alle ${part.n} Teile) ` : ''}sind fertig: ${madeText(total, g)}${allTopics.length ? ` zu ${allTopics.length} Themen` : ''}.${
       total === 0 ? ' Im Material wurde nichts Prüfungsrelevantes gefunden.' : ''
     }${sorted ? ` ${sorted} doppelte oder unwichtige Karten aussortiert.` : ''}${failed ? ` ${failed} ${failed === 1 ? 'Teil hat' : 'Teile haben'} nicht geklappt – unter „Aufträge“ nochmal versuchen.` : ''}`;
     pushToast({ text: msg, jobId: job.id, ok: true });
@@ -323,6 +387,8 @@ async function finish(job: Job, text: string, pre?: CardResult) {
 function fail(stale: Job, e: unknown) {
   // the job as it is now (the copy passed in may be older and miss the counted attempts)
   const job = getState().data.jobs.find((j) => j.id === stale.id) ?? stale;
+  // stopped: the aborted request is no error
+  if (job.status === 'cancelled') return;
   // an unreadable answer: start the job once more by itself before telling the person (at most 2 times)
   if (e instanceof AiFormatError && (job.attempts ?? 0) <= 2) {
     patchJob(job.id, { status: 'queued', error: undefined, remoteId: undefined, mode: undefined });
@@ -381,7 +447,9 @@ async function runInTab(job: Job, deck: Deck) {
   try {
     if (job.kind === 'cards') {
       const cp = job.params as CardParams;
-      const r = await runCards(await promptWithSlides(job, deck), (!!cp.part && cp.part.n > 1) || !!cp.more || !!cp.few, imagesDropped);
+      const ac = new AbortController();
+      aborts.set(job.id, ac);
+      const r = await runCards(await promptWithSlides(job, deck), (!!cp.part && cp.part.n > 1) || !!cp.more || !!cp.few || !!cp.gaps, imagesDropped, ac.signal);
       await finish(job, '', r);
     } else if (job.kind === 'summary') {
       await finish(job, await makeSummary(deck.source, deck.cards));
@@ -395,6 +463,7 @@ async function runInTab(job: Job, deck: Deck) {
     fail(job, e);
   } finally {
     localRunning.delete(job.id);
+    aborts.delete(job.id);
   }
 }
 

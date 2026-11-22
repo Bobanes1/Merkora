@@ -4,7 +4,7 @@ import { CostHint } from './CostHint';
 import { estimate } from '../lib/costs';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { applyCuration } from '../lib/cardCount';
+import { applyCuration, uncovered } from '../lib/cardCount';
 import { aiConfig, cardsPrompt, completeJson, curatePrompt, generateCardsInfo, hasKey, boldOn, loadVisionInfo, supportsImages } from '../lib/ai';
 import { helpfulSlides, MAX_SLIDE_IMAGES, renderSlides, slidesInPart } from '../lib/slideImages';
 import { isPdf, MATERIAL_ACCEPT, MATERIAL_LABEL, readFileText, readPdfDetailed } from '../lib/files';
@@ -17,7 +17,7 @@ import { cleanSvg, withGraphics } from '../lib/graphics';
 import { parseDiagram, PALETTES, renderDiagram } from '../lib/diagram';
 import { useResolvedTheme } from '../lib/theme';
 import { addCards, addCourse, addDeck, addWorkspace, deckUrl, getState, setSettings, updateDeck, useData, useStore } from '../lib/store';
-import { IconClose, IconDoc, IconSparkle, IconTrash, IconUpload } from './Icons';
+import { IconClose, IconDoc, IconSparkle, IconStop, IconTrash, IconUpload } from './Icons';
 import { Modal } from './Modal';
 import { NoKeyNotice } from './NoKey';
 
@@ -128,6 +128,9 @@ export function CreateWithAI({
   const [error, setError] = useState('');
   const [drafts, setDrafts] = useState<Draft[] | null>(null);
   const [curated, setCurated] = useState(0);
+  const [topicCount, setTopicCount] = useState(0);
+  const [topicMissing, setTopicMissing] = useState(0);
+  const abortRef = useRef<AbortController | null>(null);
 
   /** Reads one or several files one after another; a broken file does not stop the others. */
   const onFiles = async (list?: FileList | File[] | null) => {
@@ -189,6 +192,11 @@ export function CreateWithAI({
   const runAndReview = async () => {
     setError('');
     setBusy('Die KI erstellt deine Karteikarten …');
+    // „Stoppen“: running requests are aborted, no further part starts; the cards so far can be checked
+    const ac = new AbortController();
+    abortRef.current = ac;
+    let topicTotal = 0;
+    let missingTotal = 0;
     const made: { front: string; back: string; svg?: string; diagram?: unknown; figure?: unknown }[] = [];
     const set = prepareFigures();
     setFigSet(set);
@@ -203,15 +211,37 @@ export function CreateWithAI({
         const p = parts[i];
         const slides = withSlideImages ? await renderSlides(slidesInPart(p.text), async (name) => files.find((x) => x.name === name)?.src) : undefined;
         const got: typeof made = [];
-        let r = await generateCardsInfo(p.text, counts[i], focus, graphics, n > 1 ? { i: i + 1, n, avoid: avoidList(before) } : undefined, !!set, slides, () => setImagesDropped(true));
-        got.push(...r.cards);
-        for (let more = 0; r.cut && more < 3; more++) {
-          const left = counts[i] > 0 ? Math.max(0, counts[i] - got.length) : 0;
-          if (counts[i] > 0 && !left) break;
-          r = await generateCardsInfo(p.text, left, focus, graphics, { i: i + 1, n, more: true, avoid: avoidList([...before, ...got.map((c) => c.front)]) }, !!set, slides, () =>
-            setImagesDropped(true),
-          );
-          got.push(...r.cards);
+        const hits: unknown[] = [];
+        const take = (cards: { topic?: number }[]) => {
+          for (const { topic, ...c } of cards as ({ topic?: number } & (typeof made)[number])[]) {
+            hits.push(topic);
+            got.push(c);
+          }
+        };
+        try {
+          let r = await generateCardsInfo(p.text, counts[i], focus, graphics, n > 1 ? { i: i + 1, n, avoid: avoidList(before) } : undefined, !!set, slides, () => setImagesDropped(true), ac.signal);
+          // the part's topic list (automatic number): continuations number by it, missing topics are asked for once
+          const topics = counts[i] > 0 ? [] : r.topics;
+          take(r.cards);
+          for (let more = 0; r.cut && more < 3; more++) {
+            const left = counts[i] > 0 ? Math.max(0, counts[i] - got.length) : 0;
+            if (counts[i] > 0 && !left) break;
+            r = await generateCardsInfo(p.text, left, focus, graphics, { i: i + 1, n, more: true, avoid: avoidList([...before, ...got.map((c) => c.front)]), ...(topics.length ? { topics } : {}) }, !!set, slides, () =>
+              setImagesDropped(true),
+            ac.signal);
+            take(r.cards);
+          }
+          const gaps = uncovered(topics, hits);
+          if (gaps.length) {
+            const g = await generateCardsInfo(p.text, 0, focus, graphics, { i: i + 1, n, gaps, avoid: avoidList([...before, ...got.map((c) => c.front)]) }, !!set, slides, () => setImagesDropped(true), ac.signal);
+            take(g.cards);
+            // one card per missing topic was asked for
+            missingTotal += Math.max(0, gaps.length - g.cards.length);
+          }
+          topicTotal += topics.length;
+        } catch (e) {
+          // stopped: keep what this part has so far
+          if (!ac.signal.aborted) throw e;
         }
         done++;
         if (n > 1) setBusy(`${done} von ${n} Teilen fertig …`);
@@ -222,7 +252,7 @@ export function CreateWithAI({
       let next = 0;
       await Promise.all(
         Array.from({ length: Math.min(MAX_PARALLEL, n) }, async () => {
-          while (next < n) {
+          while (next < n && !ac.signal.aborted) {
             const i = next++;
             results[i] = await onePart(i);
           }
@@ -232,7 +262,7 @@ export function CreateWithAI({
       made.push(...dropDuplicates(results.flat(), before));
       // long material, number left to the AI: duplicates and unimportant cards come unticked (you can tick them again)
       let drop = new Set<number>();
-      if (n > 1 && !counts.some((c) => c > 0) && made.length >= 12) {
+      if (n > 1 && !counts.some((c) => c > 0) && made.length >= 12 && !ac.signal.aborted) {
         setBusy('Doppelte und unwichtige Karten werden aussortiert …');
         try {
           const cp = curatePrompt(made);
@@ -243,15 +273,19 @@ export function CreateWithAI({
         }
       }
       setCurated(drop.size);
+      setTopicCount(topicTotal);
+      setTopicMissing(missingTotal);
+      if (ac.signal.aborted) setError(made.length ? 'Gestoppt – du kannst die bisherigen Karten prüfen und speichern.' : 'Gestoppt – es wurden noch keine Karten erstellt.');
       // review only once all parts are done
       if (made.length) setDrafts(made.map((c, k) => ({ ...c, keep: !drop.has(k) })));
-      else setError('Die KI hat in diesem Material nichts Prüfungsrelevantes gefunden und keine Karten erstellt.');
+      else if (!ac.signal.aborted) setError('Die KI hat in diesem Material nichts Prüfungsrelevantes gefunden und keine Karten erstellt.');
     } catch (e) {
       // a later part failed: keep what is there so far for review
       if (made.length) setDrafts(made.map((c) => ({ ...c, keep: true })));
       setError(made.length ? `Ein Teil hat nicht geklappt (${(e as Error).message}). Die ${made.length} Karten aus den vorherigen Teilen kannst du trotzdem prüfen und speichern.` : (e as Error).message);
     } finally {
       setBusy('');
+      abortRef.current = null;
     }
   };
 
@@ -299,6 +333,11 @@ export function CreateWithAI({
           </>
         }
       >
+        {topicCount > 0 && (
+          <p className="muted small">
+            Die KI hat {topicCount} Themen im Material gefunden{topicMissing ? ` – ${topicMissing} davon noch ohne eigene Karte.` : ' und zu jedem eine Karte erstellt.'}
+          </p>
+        )}
         {curated > 0 && (
           <p className="form-ok small">
             {curated} doppelte oder unwichtige {curated === 1 ? 'Karte ist' : 'Karten sind'} schon abgewählt – du kannst sie wieder anhaken.
@@ -372,6 +411,11 @@ export function CreateWithAI({
           <button type="button" className="btn outline" onClick={runAndReview} disabled={!!busy || text.trim().length < 40}>
             {busy ? busy : 'Erst prüfen, dann speichern'}
           </button>
+          {busy && abortRef.current && (
+            <button type="button" className="btn ghost" onClick={() => abortRef.current?.abort()} title="Stoppen – die bisherigen Karten kannst du prüfen">
+              <IconStop size={14} /> Stoppen
+            </button>
+          )}
           <button type="button" className="btn primary" onClick={() => void run().catch((e: Error) => setError(e.message))} disabled={!!busy || text.trim().length < 40}>
             <IconSparkle size={16} /> Im Hintergrund erstellen
           </button>

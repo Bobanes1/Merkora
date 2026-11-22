@@ -531,6 +531,10 @@ export type PartInfo = {
   more?: boolean;
   /** Second try: a lot of material gave very few cards. */
   few?: boolean;
+  /** The topic list of this part (made by the first answer) – continuations number their cards by it. */
+  topics?: string[];
+  /** Topics that got no card yet – this request makes cards for exactly those. */
+  gaps?: string[];
 };
 
 export function cardsPrompt(text: string, count: number, focus = '', graphics = false, part?: PartInfo, figures = false, slides: string[] = []): Prompt {
@@ -541,6 +545,15 @@ export function cardsPrompt(text: string, count: number, focus = '', graphics = 
     : part?.few
       ? `\n\nDas Material enthält mehr prüfungsrelevante Inhalte, als bisher Karten haben. Erstelle Karten zu allen prüfungsrelevanten Konzepten – nicht zu den schon vorhandenen${known}`
       : '';
+  const auto = count <= 0;
+  // continuations keep the numbering of the part's topic list; the first answer makes the list
+  const listed = auto && !!part?.topics?.length;
+  const topicNote = part?.gaps?.length
+    ? `\n\nZu diesen Themen des Materials gibt es noch keine Karte. Erstelle für JEDES genau eine Karte, mit der man es versteht (ohne "topics"/"topic"):\n- ${part.gaps.join('\n- ')}`
+    : listed
+      ? `\n\nThemenliste dieses Materials (nicht neu auflisten, kein "topics"): ${part!.topics!.map((t, k) => `${k + 1}. ${t}`).join('; ')}. Gib bei jeder Karte die Nummer ihres Themas an ("topic").`
+      : '';
+  const withTopics = auto && !listed && !part?.gaps?.length;
   const partNote = part && part.n > 1
     ? `\n\nDies ist Teil ${part.i} von ${part.n} des Lernmaterials. Erstelle Karten nur zu diesem Teil${count > 0 ? '' : ' und entscheide die Anzahl nur nach seinem Inhalt'}.${
         part.avoid?.length && !part.more && !part.few
@@ -554,12 +567,16 @@ Regeln: Eine Idee pro Karte. Vorderseite = präzise Frage oder Begriff. Rücksei
 ${TERM_RULE}
 ${FORMULA_RULE}
 Wähle prüfungsorientiert aus: Karten zu dem, was in einer Prüfung zu diesem Stoff gefragt werden kann – nicht zu Organisatorischem, Agenda oder Literaturlisten.${boldOn() ? '\n' + EMPHASIS_RULE : ''}
-${graphics ? DIAGRAM_RULE + '\n' : ''}${figures ? FIGURE_RULE + '\n' : ''}${slides.length ? SLIDE_IMAGE_RULE + '\n' : ''}Format: {"cards":[{"front":"...","back":"..."${graphics ? ',"diagram":{"type":"flow","title":"…","steps":["…","…","…"]}' : ''}${figures ? ',"figure":7 (optional)' : ''}}]}${graphics ? ' – "diagram" bei den Karten, zu denen eine Grafik passt (etwa jede dritte Karte), sonst weglassen.' : ''}${JSON_RULE}`,
+${graphics ? DIAGRAM_RULE + '\n' : ''}${figures ? FIGURE_RULE + '\n' : ''}${slides.length ? SLIDE_IMAGE_RULE + '\n' : ''}Format: {${withTopics ? '"topics":["Thema 1","Thema 2"],' : ''}"cards":[{"front":"...","back":"..."${auto && !part?.gaps?.length ? ',"topic":1' : ''}${graphics ? ',"diagram":{"type":"flow","title":"…","steps":["…","…","…"]}' : ''}${figures ? ',"figure":7 (optional)' : ''}}]}${graphics ? ' – "diagram" bei den Karten, zu denen eine Grafik passt (etwa jede dritte Karte), sonst weglassen.' : ''}${JSON_RULE}`,
     user: `${
       count > 0
         ? `Erstelle genau ${count} Karteikarten zu diesem Material.`
-        : autoCardInstruction(text.length)
-    }${focus ? ` Schwerpunkt: ${focus}.` : ''}${partNote}${moreNote}\n\n${clip(text, CARD_MATERIAL_LIMIT)}${slideNote}`,
+        : part?.gaps?.length
+          ? 'Ergänze die fehlenden Karten.'
+          : listed
+            ? 'Erstelle die Karten zu den Themen dieses Materials – Qualität vor Menge, Dopplungen weglassen.'
+            : autoCardInstruction(text.length)
+    }${focus ? ` Schwerpunkt: ${focus}.` : ''}${partNote}${moreNote}${topicNote}\n\n${clip(text, CARD_MATERIAL_LIMIT)}${slideNote}`,
     // automatic: generous room so the limit never decides the number (only written tokens are billed)
     maxTokens: count > 0 ? Math.min(32000, 400 + count * (graphics ? 500 : 220)) : 16000,
     json: true,
@@ -569,7 +586,7 @@ ${graphics ? DIAGRAM_RULE + '\n' : ''}${figures ? FIGURE_RULE + '\n' : ''}${slid
  * After long material (several parts made side by side): which cards are duplicates, too small-grained or
  * unimportant? The AI sees all questions with a short answer and names the numbers to remove.
  */
-export function curatePrompt(cards: { front: string; back: string }[]): Prompt {
+export function curatePrompt(cards: { front: string; back: string }[], topics: string[] = []): Prompt {
   const short = (t: string, n: number) => t.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, n);
   return {
     system: `Du bist ein erfahrener Lerncoach und sortierst einen Kartensatz aus, der aus mehreren Teilen eines langen Lernmaterials entstanden ist. Ziel: weniger, aber hochwertige Karten.
@@ -577,7 +594,7 @@ Nenne die Nummern der Karten, die WEG sollen:
 - Dopplungen (gleiche Frage oder gleicher Inhalt, auch anders formuliert) – behalte jeweils die beste Karte;
 - zu kleinteilige Karten (Detailfakten, einzelne Beispiele, Zahlen ohne Lernwert), die eine andere Karte schon abdeckt;
 - Unwichtiges oder Organisatorisches.
-Behalte alles, was für eine Prüfung wichtig ist. Im Zweifel behalten. Höchstens 40 % der Karten.
+Behalte alles, was für eine Prüfung wichtig ist. Im Zweifel behalten. Höchstens 40 % der Karten.${topics.length ? `\nZu jedem dieser Themen des Materials muss mindestens eine Karte bleiben: ${topics.slice(0, 120).join('; ')}.` : ''}
 Format: {"drop":[3,17,22]}${JSON_RULE}`,
     user: cards.map((c, i) => `${i + 1}. ${short(c.front, 160)} → ${short(c.back, 120)}`).join('\n'),
     maxTokens: 1500,
@@ -597,14 +614,17 @@ export type AiCard = ReturnType<typeof parseCards>[number];
 
 /** The cards of an answer, and whether it was cut off (then a continuation makes the rest). */
 export function parseCardsInfo(text: string, allowEmpty = false) {
-  const { value: res, cut } = parseJsonInfo<{ cards: { front: string; back: string; svg?: string; diagram?: unknown; figure?: unknown; icons?: unknown }[] }>(text, 'cards');
+  const { value: res, cut } = parseJsonInfo<{ topics?: unknown; cards: { front: string; back: string; svg?: string; diagram?: unknown; figure?: unknown; icons?: unknown; topic?: unknown }[] }>(text, 'cards');
+  // the topic list (like the outline of a summary) – for checking that every topic got a card
+  const topics = (Array.isArray(res.topics) ? res.topics : []).map((t) => String(t ?? '').trim().slice(0, 120)).filter(Boolean).slice(0, 60);
   const cards = (Array.isArray(res.cards) ? res.cards : []).filter((c) => c && c.front && c.back);
   // cut off before the first complete card: nothing usable, but a continuation may still bring cards
   if (!cards.length && !allowEmpty && !cut)
     throw new AiError('Die KI hat in diesem Material nichts Prüfungsrelevantes gefunden (z. B. nur Literaturliste oder Organisatorisches) und keine Karten erstellt.');
-  return { cut, cards: cards.map((c) => ({
+  return { cut, topics, cards: cards.map((c) => ({
     front: String(c.front).trim(),
     back: String(c.back).trim(),
+    ...(Number.isInteger(Number(c.topic)) && Number(c.topic) > 0 ? { topic: Number(c.topic) } : {}),
     // symbols written next to the diagram instead of inside it still count
     // a diagram sent as JSON text still counts
     ...(typeof c.diagram === 'string' && c.diagram.trim().startsWith('{') ? { diagram: c.diagram } : {}),
@@ -680,12 +700,12 @@ export async function runCards(
   allowEmpty: boolean,
   onImagesDropped?: (why: 'rejected' | 'format') => void,
   signal?: AbortSignal,
-): Promise<{ cards: AiCard[]; cut: boolean }> {
+): Promise<{ cards: AiCard[]; cut: boolean; topics: string[] }> {
   const opts = { system: p.system, maxTokens: p.maxTokens, json: p.json, signal };
   const textOnly = async () => {
     const r = await completeInfo([{ role: 'user', content: p.user }], { ...opts, maxTokens: p.images?.length ? p.maxTokens - IMAGE_TOKENS : p.maxTokens });
     const c = parseCardsInfo(r.text, allowEmpty);
-    return { cards: c.cards, cut: r.cut || c.cut };
+    return { cards: c.cards, cut: r.cut || c.cut, topics: c.topics };
   };
   if (!p.images?.length) return textOnly();
   let r: { text: string; cut: boolean };
@@ -698,7 +718,7 @@ export async function runCards(
   }
   try {
     const c = parseCardsInfo(r.text, allowEmpty);
-    return { cards: c.cards, cut: r.cut || c.cut };
+    return { cards: c.cards, cut: r.cut || c.cut, topics: c.topics };
   } catch (e) {
     if (!(e instanceof AiFormatError)) throw e;
     onImagesDropped?.('format');
@@ -731,10 +751,11 @@ export async function generateCardsInfo(
   figures = false,
   slides?: { label: string; url: string }[],
   onImagesDropped?: (why: 'rejected' | 'format') => void,
+  signal?: AbortSignal,
 ) {
-  // with several parts (or a continuation), a part without exam-relevant content may give no cards
+  // with several parts (or a continuation, or missing topics), a part without exam-relevant content may give no cards
   const p = cardsPrompt(text, count, focus, graphics, part, figures, slides?.map((s) => s.label));
-  return runCards(withSlideImages(p, slides), (!!part && part.n > 1) || !!part?.more, onImagesDropped);
+  return runCards(withSlideImages(p, slides), (!!part && part.n > 1) || !!part?.more || !!part?.gaps?.length, onImagesDropped, signal);
 }
 
 /** The prompt with slide pictures attached (and room for them). */
