@@ -11506,3 +11506,5 @@ body.learn-focus .practice-tasks { min-height: calc(100vh - 220px); }
 .bonus-offer { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 10px; padding: 10px 12px; border-radius: var(--r-md); background: color-mix(in srgb, #f2b84b 14%, var(--surface-2)); border: 1px solid color-mix(in srgb, #f2b84b 45%, var(--line)); }
 .skill-next-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .skill-next-why { font-size: 13px; }
+.example-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.example-result { margin: 4px 0 0; padding: 8px 12px; border-radius: var(--r-md); background: var(--ok-soft); border-left: 3px solid var(--ok); }

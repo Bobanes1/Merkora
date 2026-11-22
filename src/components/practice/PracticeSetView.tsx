@@ -54,7 +54,6 @@ export function PracticeSetView({ set, host, head, onDone, guided, focus }: { se
   const total = tasks.length;
   const firstOpen = set.progress.findIndex((p) => !p.solved);
   const [i, setI] = useState(firstOpen < 0 ? 0 : firstOpen);
-  const [steps, setSteps] = useState(0);
   const done = solvedCount(set);
   // confetti only when the last task is solved here, not when an already solved set is opened again
   const [startDone] = useState(done);
@@ -199,7 +198,7 @@ export function PracticeSetView({ set, host, head, onDone, guided, focus }: { se
           {head}
           <span className={'badge ' + set.kind}>{DOMAIN_LABEL[set.kind] ?? 'Übung'}</span>
           <h2>{set.topic}</h2>
-          <Explanation set={set} host={host} steps={steps} setSteps={setSteps} />
+          <Explanation set={set} host={host} />
           {guided && (
             <button type="button" className="link-btn small read-mode" onClick={() => switchReadAll(false)}>
               Lieber Schritt für Schritt lernen
@@ -251,7 +250,7 @@ export function PracticeSetView({ set, host, head, onDone, guided, focus }: { se
             </button>
           </div>
           <section className="panel">
-            <Explanation set={set} host={host} steps={steps} setSteps={setSteps} hideText />
+            <Explanation set={set} host={host} hideText />
           </section>
           {labs}
           <div className="phase-next">
@@ -280,7 +279,7 @@ export function PracticeSetView({ set, host, head, onDone, guided, focus }: { se
                 </div>
               </div>
             ))}
-            <Explanation set={set} host={host} steps={steps} setSteps={setSteps} hideText />
+            <Explanation set={set} host={host} hideText />
             {labs}
           </aside>
         </div>,
@@ -403,8 +402,71 @@ function BitesView({ set, bites, host, onDone, onSkip }: { set: PracticeSet; bit
   );
 }
 
+const THINK_KEY = 'merkora.exampleThink';
+
+/**
+ * A worked example: the task, then every step and the result – shown at once, to read along.
+ * Who wants to think first can switch on „Erst selbst überlegen“ (remembered): then one click shows the whole way.
+ */
+function WorkedExample({ example, code }: { example: NonNullable<PracticeSet['example']>; code?: string }) {
+  const [think, setThinkState] = useState(() => {
+    try {
+      return localStorage.getItem(THINK_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [open, setOpen] = useState(false);
+  const setThink = (on: boolean) => {
+    setThinkState(on);
+    setOpen(false);
+    try {
+      localStorage.setItem(THINK_KEY, on ? '1' : '0');
+    } catch {
+      /* only for now */
+    }
+  };
+  const shown = !think || open;
+  const hasWay = example.steps.length > 0 || !!example.answer;
+  return (
+    <div className="practice-example">
+      <div className="example-head">
+        <b>So geht's – ein Beispiel durchgerechnet</b>
+        {hasWay && (
+          <button type="button" className="link-btn small" onClick={() => setThink(!think)}>
+            {think ? 'Lösungsweg gleich zeigen' : 'Erst selbst überlegen'}
+          </button>
+        )}
+      </div>
+      <small className="muted">{think && !open ? 'Überleg kurz selbst – dann schau nach, wie es geht.' : 'Lies mit, dann übst du es selbst.'}</small>
+      <CardContent text={example.problem} />
+      {code && <pre className="code" dangerouslySetInnerHTML={{ __html: esc(code) }} />}
+      {hasWay &&
+        (shown ? (
+          <>
+            {example.steps.map((s, k) => (
+              <div key={k} className="practice-step">
+                <span>{k + 1}</span>
+                <CardContent text={s} />
+              </div>
+            ))}
+            {example.answer && (
+              <p className="example-result">
+                <b>Ergebnis:</b> <CardContent text={example.answer} className="inline" />
+              </p>
+            )}
+          </>
+        ) : (
+          <button type="button" className="btn outline sm" onClick={() => setOpen(true)}>
+            Lösung zeigen
+          </button>
+        ))}
+    </div>
+  );
+}
+
 /** The explanation and worked example – or the simpler version („Einfacher erklären“). */
-function Explanation({ set, host, steps, setSteps, hideText }: { set: PracticeSet; host: SetHost; steps: number; setSteps: (f: (x: number) => number) => void; hideText?: boolean }) {
+function Explanation({ set, host, hideText }: { set: PracticeSet; host: SetHost; hideText?: boolean }) {
   const [original, setOriginal] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -422,7 +484,6 @@ function Explanation({ set, host, steps, setSteps, hideText }: { set: PracticeSe
       if (!r) throw new Error('Die KI hat keine einfachere Erklärung geliefert. Bitte nochmal versuchen.');
       host.updateSet?.({ simple: r });
       setOriginal(false);
-      setSteps(() => 0);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -453,34 +514,11 @@ function Explanation({ set, host, steps, setSteps, hideText }: { set: PracticeSe
       {set.syntax?.length ? <SyntaxView sentences={set.syntax} /> : null}
       {set.tables?.length ? <TablesView tables={set.tables} /> : null}
       {set.program && <ProgramView program={set.program} />}
-      {example && (
-        <div className="practice-example">
-          <b>Beispiel</b>
-          <CardContent text={example.problem} />
-          {code && <pre className="code" dangerouslySetInnerHTML={{ __html: esc(code) }} />}
-          {example.steps.slice(0, steps).map((s, k) => (
-            <div key={k} className="practice-step">
-              <span>{k + 1}</span>
-              <CardContent text={s} />
-            </div>
-          ))}
-          {steps < example.steps.length ? (
-            <button type="button" className="btn outline sm" onClick={() => setSteps((x) => x + 1)}>
-              {steps ? 'Nächster Schritt' : 'Lösungsweg zeigen'} ({steps}/{example.steps.length})
-            </button>
-          ) : (
-            example.answer && (
-              <p>
-                <b>Ergebnis:</b> <CardContent text={example.answer} className="inline" />
-              </p>
-            )
-          )}
-        </div>
-      )}
+      {example && <WorkedExample example={example} code={code} />}
       {host.updateSet && (
         <div className="row-gap">
           {set.simple ? (
-            <button type="button" className="btn ghost sm" onClick={() => (setOriginal(!original), setSteps(() => 0))}>
+            <button type="button" className="btn ghost sm" onClick={() => setOriginal(!original)}>
               {original ? 'Einfache Erklärung zeigen' : 'Original zeigen'}
             </button>
           ) : (
