@@ -163,47 +163,134 @@ mod tests {
     }
 }
 
+/// How often a broken download is picked up again before giving up.
+#[cfg(desktop)]
+const RETRIES: u32 = 5;
+
+/// For the ≈ 200 MB archive: no overall time limit (on a slow line the download may take long),
+/// but it gives up when nothing arrives for a minute; no gzip, so the bytes on disk are exactly the file.
+#[cfg(desktop)]
+static DOWNLOAD: once_cell::sync::Lazy<reqwest::Client> = once_cell::sync::Lazy::new(|| {
+    reqwest::Client::builder()
+        .user_agent(concat!("Merkora/", env!("CARGO_PKG_VERSION")))
+        .connect_timeout(std::time::Duration::from_secs(20))
+        .read_timeout(std::time::Duration::from_secs(60))
+        .no_gzip()
+        .build()
+        .expect("http client")
+});
+
+/// Downloads `url` into `file`. When the connection breaks, it asks for the rest (`Range`) and goes on
+/// where it stopped – up to `retries` times; a server that ignores `Range` sends everything again, then
+/// the file starts over. `on_progress` gets the bytes in the file so far. Returns the size.
+#[cfg(desktop)]
+pub(crate) async fn download_resumable(
+    client: &reqwest::Client,
+    url: &str,
+    file: &mut std::fs::File,
+    retries: u32,
+    mut on_progress: impl FnMut(u64),
+) -> Result<u64, String> {
+    use std::io::{Seek, SeekFrom, Write};
+    let mut got = 0u64;
+    let mut failures = 0u32;
+    let mut total: Option<u64> = None;
+    loop {
+        let mut req = client.get(url);
+        if got > 0 {
+            req = req.header(reqwest::header::RANGE, format!("bytes={got}-"));
+        }
+        let broke: String = 'attempt: {
+            let mut res = match req.send().await {
+                Ok(r) => r,
+                Err(e) => break 'attempt e.to_string(),
+            };
+            let status = res.status();
+            if got > 0 && status == reqwest::StatusCode::PARTIAL_CONTENT {
+                // the rest comes – carry on
+            } else if status.is_success() {
+                if got > 0 {
+                    // the server sends the whole file again
+                    file.set_len(0).map_err(|e| e.to_string())?;
+                    file.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
+                    got = 0;
+                }
+                total = res.content_length();
+            } else if status.is_server_error() || status == reqwest::StatusCode::RANGE_NOT_SATISFIABLE {
+                break 'attempt format!("Server antwortet mit {status}");
+            } else {
+                return Err(format!("Download fehlgeschlagen ({status})."));
+            }
+            loop {
+                match res.chunk().await {
+                    Ok(Some(c)) => {
+                        file.write_all(&c).map_err(|e| e.to_string())?;
+                        got += c.len() as u64;
+                        on_progress(got);
+                    }
+                    Ok(None) => {
+                        if total.is_some_and(|t| got < t) {
+                            break 'attempt "Verbindung vorzeitig beendet".to_string();
+                        }
+                        file.flush().map_err(|e| e.to_string())?;
+                        return Ok(got);
+                    }
+                    Err(e) => break 'attempt e.to_string(),
+                }
+            }
+        };
+        failures += 1;
+        if failures > retries {
+            let mb = |b: u64| b as f64 / 1_000_000.0;
+            let at = match total {
+                Some(t) => format!("bei {:.0} von {:.0} MB", mb(got), mb(t)),
+                None => format!("bei {:.0} MB", mb(got)),
+            };
+            return Err(format!("Die Verbindung ist mehrmals abgebrochen ({at}). Bitte prüfe dein Internet und versuche es nochmal. ({broke})"));
+        }
+        let wait = std::time::Duration::from_millis(if cfg!(test) { 10 } else { 2000 * failures as u64 });
+        let _ = tauri::async_runtime::spawn_blocking(move || std::thread::sleep(wait)).await;
+    }
+}
+
 /// Downloads Java, checks the SHA-256 checksum, unpacks it next to the old one and swaps it in.
 /// `progress` gets 0–0.9 while downloading, then 0.92 (unpacking) and 1.0.
 #[cfg(desktop)]
 pub async fn install(client: &reqwest::Client, progress: impl Fn(f64)) -> Result<(), String> {
     use sha2::Digest;
-    use std::io::Write;
     let o = offer(client).await?;
     let root = jdk_root().ok_or("Kein Datenordner gefunden.")?;
     let parent = root.parent().ok_or("Kein Datenordner gefunden.")?.to_path_buf();
     std::fs::create_dir_all(&parent).map_err(|e| e.to_string())?;
+    let _ = client; // the archive goes through DOWNLOAD (no overall time limit), see there
     let archive = parent.join(format!("java-download-{}", o.name));
     progress(0.0);
-    let mut res = client.get(&o.link).send().await.map_err(|e| format!("Download fehlgeschlagen: {e}"))?;
-    if !res.status().is_success() {
-        return Err(format!("Download fehlgeschlagen ({}).", res.status()));
-    }
-    let total = res.content_length().filter(|n| *n > 0).unwrap_or(o.size);
-    let mut file = std::io::BufWriter::new(std::fs::File::create(&archive).map_err(|e| e.to_string())?);
-    let mut hash = sha2::Sha256::new();
-    let (mut got, mut last) = (0u64, 0u64);
-    loop {
-        let chunk = match res.chunk().await {
-            Ok(Some(c)) => c,
-            Ok(None) => break,
-            Err(e) => {
-                drop(file);
-                let _ = std::fs::remove_file(&archive);
-                return Err(format!("Download abgebrochen: {e}"));
-            }
-        };
-        hash.update(&chunk);
-        file.write_all(&chunk).map_err(|e| e.to_string())?;
-        got += chunk.len() as u64;
-        if total > 0 && (got - last) * 100 >= total {
+    let total = o.size;
+    let mut file = std::fs::File::create(&archive).map_err(|e| e.to_string())?;
+    let mut last = 0u64;
+    let r = download_resumable(&DOWNLOAD, &o.link, &mut file, RETRIES, |got| {
+        if total > 0 && got.abs_diff(last) * 100 >= total {
             last = got;
-            progress(0.9 * got as f64 / total as f64);
+            progress(0.9 * (got.min(total)) as f64 / total as f64);
         }
-    }
-    file.flush().map_err(|e| e.to_string())?;
+    })
+    .await;
     drop(file);
-    if format!("{:x}", hash.finalize()) != o.checksum {
+    if let Err(e) = r {
+        let _ = std::fs::remove_file(&archive);
+        return Err(e);
+    }
+    // checked from the file: after a resumed download the parts come from several connections
+    let path = archive.clone();
+    let digest = tauri::async_runtime::spawn_blocking(move || -> Result<String, String> {
+        let mut f = std::fs::File::open(&path).map_err(|e| e.to_string())?;
+        let mut hash = sha2::Sha256::new();
+        std::io::copy(&mut f, &mut hash).map_err(|e| e.to_string())?;
+        Ok(format!("{:x}", hash.finalize()))
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    if digest != o.checksum {
         let _ = std::fs::remove_file(&archive);
         return Err("Die Prüfsumme stimmt nicht – der Download ist beschädigt. Bitte nochmal versuchen.".into());
     }
@@ -226,6 +313,91 @@ pub async fn install(client: &reqwest::Client, progress: impl Fn(f64)) -> Result
     .map_err(|e| e.to_string())??;
     progress(1.0);
     Ok(())
+}
+
+/// The download picks up again after a broken connection – tested against a tiny local server.
+#[cfg(all(test, desktop))]
+mod resume_tests {
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+
+    /// Serves `answers` one connection after another: (cut the body after n bytes, honour Range?).
+    fn server(body: Vec<u8>, answers: Vec<(Option<usize>, bool)>) -> (String, std::thread::JoinHandle<Vec<String>>) {
+        let l = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/jdk.zip", l.local_addr().unwrap());
+        let h = std::thread::spawn(move || {
+            let mut ranges = vec![];
+            for (cut, honour) in answers {
+                let (mut s, _) = l.accept().unwrap();
+                let mut buf = [0u8; 4096];
+                let n = s.read(&mut buf).unwrap();
+                let req = String::from_utf8_lossy(&buf[..n]).to_lowercase();
+                let from = req
+                    .lines()
+                    .find_map(|l| l.strip_prefix("range: bytes="))
+                    .and_then(|r| r.trim_end_matches('-').trim().parse::<usize>().ok());
+                ranges.push(from.map(|f| f.to_string()).unwrap_or_else(|| "-".into()));
+                let (status, part) = match from {
+                    Some(f) if honour => (format!("206 Partial Content\r\nContent-Range: bytes {f}-{}/{}", body.len() - 1, body.len()), &body[f..]),
+                    _ => ("200 OK".to_string(), &body[..]),
+                };
+                let head = format!("HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", part.len());
+                s.write_all(head.as_bytes()).unwrap();
+                let send = cut.map_or(part.len(), |c| c.min(part.len()));
+                let _ = s.write_all(&part[..send]);
+                let _ = s.flush();
+                // dropping the socket here breaks the connection mid-body when cut
+            }
+            ranges
+        });
+        (url, h)
+    }
+
+    fn run(url: &str, retries: u32) -> (Result<u64, String>, Vec<u8>) {
+        let path = std::env::temp_dir().join(format!("merkora-resume-{}-{}", std::process::id(), url.rsplit(':').next().unwrap_or("x").replace('/', "_")));
+        let client = reqwest::Client::builder().no_gzip().build().unwrap();
+        let mut f = std::fs::File::create(&path).unwrap();
+        let r = tauri::async_runtime::block_on(super::download_resumable(&client, url, &mut f, retries, |_| {}));
+        drop(f);
+        let data = std::fs::read(&path).unwrap_or_default();
+        let _ = std::fs::remove_file(&path);
+        (r, data)
+    }
+
+    fn body() -> Vec<u8> {
+        (0..200_000u32).map(|i| (i * 7 % 251) as u8).collect()
+    }
+
+    #[test]
+    fn resumes_after_broken_connection() {
+        let b = body();
+        let (url, h) = server(b.clone(), vec![(Some(70_000), true), (Some(50_000), true), (None, true)]);
+        let (r, data) = run(&url, 5);
+        assert_eq!(r.unwrap(), b.len() as u64);
+        assert!(data == b, "file differs");
+        let ranges = h.join().unwrap();
+        assert_eq!(ranges[0], "-");
+        assert_ne!(ranges[1], "-", "second request asks for the rest");
+    }
+
+    #[test]
+    fn starts_over_when_range_is_ignored() {
+        let b = body();
+        let (url, h) = server(b.clone(), vec![(Some(90_000), false), (None, false)]);
+        let (r, data) = run(&url, 5);
+        assert_eq!(r.unwrap(), b.len() as u64);
+        assert!(data == b, "file differs");
+        h.join().unwrap();
+    }
+
+    #[test]
+    fn gives_up_with_a_clear_message() {
+        let b = body();
+        let (url, _h) = server(b, vec![(Some(10_000), true), (Some(10_000), true), (Some(10_000), true)]);
+        let (r, _) = run(&url, 2);
+        let e = r.unwrap_err();
+        assert!(e.contains("mehrmals abgebrochen") && e.contains("MB"), "{e}");
+    }
 }
 
 /// Real download (≈ 200 MB) into a temp folder, then `java -version`. Run with: cargo test --lib real_java_install -- --ignored
