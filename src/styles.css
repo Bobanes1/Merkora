@@ -11315,3 +11315,106 @@ html.glass .pip-tip-bubble { background: color-mix(in srgb, var(--white) 86%, tr
 .lab-formula code { font-size: 15px; padding: 4px 10px; border-radius: 8px; background: var(--bg); }
 .lab-result { margin: 10px 0; font-size: 16px; }
 .lab-result b { font-size: 22px; color: var(--primary); }
+
+/* ---------- skills im Flow: Häppchen, Fokus-Modus, Weg ---------- */
+.guided-head { display: grid; gap: 8px; }
+.guided-head h2 { margin: 0; }
+.guided-head > .badge { justify-self: start; }
+.guided-head.slim { padding-top: 12px; padding-bottom: 12px; }
+.phase-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; }
+.phase-steps { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0; padding: 0; flex: 1; }
+.phase-steps li { display: flex; align-items: center; gap: 6px; }
+.phase-steps li + li::before { content: ''; width: 18px; height: 2px; border-radius: 2px; background: var(--line); }
+.phase-steps li.done + li::before, .phase-steps li.done::before { background: var(--ok); }
+.phase-steps button { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; color: var(--muted); font: inherit; font-weight: 600; font-size: 14px; padding: 4px 6px; border-radius: 999px; cursor: pointer; }
+.phase-steps button span { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; background: var(--surface-2); border: 1px solid var(--line); }
+.phase-steps li.on button { color: var(--ink); }
+.phase-steps li.on button span { background: var(--primary); border-color: var(--primary); color: #fff; }
+.phase-steps li.done button span { background: var(--ok-soft); border-color: var(--ok); color: var(--ok-ink); }
+.phase-steps button:hover { background: var(--surface-2); }
+.read-mode { margin-top: 10px; }
+.phase-next { display: flex; justify-content: flex-end; }
+
+.bite-card { display: grid; gap: 12px; animation: bite-in 0.28s ease both; }
+@keyframes bite-in { from { opacity: 0; transform: translateY(8px); } }
+.bite-card h3 { margin: 0; font-family: var(--font-display); font-size: 21px; }
+.bite-text { font-size: 16.5px; line-height: 1.6; }
+.bite-dots { display: flex; align-items: center; gap: 6px; }
+.bite-dots button { width: 10px; height: 10px; padding: 0; border-radius: 999px; border: 0; background: var(--line); cursor: pointer; transition: width 0.2s ease, background 0.2s ease; }
+.bite-dots button.done { background: var(--ok); }
+.bite-dots button.on { width: 26px; background: var(--primary); }
+.bite-dots .muted { margin-left: 6px; }
+.bite-check { border: 1px solid var(--line); border-radius: var(--r-lg); padding: 12px 14px; background: var(--surface-2); display: grid; gap: 10px; }
+.bite-check p { margin: 0; }
+.bite-options { display: grid; gap: 8px; }
+.bite-opt { justify-content: flex-start; text-align: left; height: auto; min-height: 40px; padding: 8px 12px; white-space: normal; gap: 10px; }
+.bite-opt kbd { font-size: 11px; min-width: 20px; text-align: center; opacity: 0.7; }
+.bite-opt.right { border-color: var(--ok); background: var(--ok-soft); color: var(--ok-ink); opacity: 1; }
+.bite-opt.wrong { border-color: #d9534f; animation: bite-shake 0.3s ease; }
+@keyframes bite-shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+.bite-nav { align-items: center; }
+
+/* mini path above the tasks */
+.task-path { align-items: center; }
+.task-stations { position: relative; display: flex; flex-wrap: wrap; gap: 10px; }
+.task-stations::before { content: ''; position: absolute; left: 16px; right: 16px; top: 15px; height: 3px; border-radius: 3px; background: linear-gradient(90deg, var(--ok) var(--fill, 0%), var(--line) var(--fill, 0%)); z-index: 0; }
+.task-stations button { position: relative; z-index: 1; transition: transform 0.15s ease; }
+.practice-nav.task-path button.on { transform: scale(1.18); }
+.practice-nav.task-path button.done.helped { background: var(--surface-2); color: var(--ok-ink); border: 2px solid var(--ok); }
+.task-stations:has(button:nth-child(9))::before { display: none; }
+.focus-tools { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+
+/* focus mode: only the task */
+body.learn-focus .sidebar,
+body.learn-focus .mobile-bar,
+body.learn-focus .phone-nav,
+body.learn-focus .pip-tip { display: none !important; }
+body.learn-focus .page { max-width: 820px; padding-top: 18px; }
+body.learn-focus .app-main { padding-bottom: 0; }
+body.learn-focus .practice-tasks { min-height: calc(100vh - 220px); }
+
+/* the cheat sheet: a drawer on the side, a sheet from below on the phone */
+.cheat-backdrop { position: fixed; inset: 0; z-index: 1000; background: rgba(10, 20, 30, 0.35); animation: fade-in 0.2s ease both; }
+@keyframes fade-in { from { opacity: 0; } }
+.cheat-sheet { position: absolute; top: 0; right: 0; bottom: 0; width: min(460px, 92vw); overflow-y: auto; background: var(--white); border-left: 1px solid var(--line); padding: 16px 18px 40px; display: grid; align-content: start; gap: 12px; box-shadow: -10px 0 30px rgba(0, 0, 0, 0.15); animation: sheet-side 0.25s ease both; }
+@keyframes sheet-side { from { transform: translateX(40px); opacity: 0; } }
+@keyframes sheet-up { from { transform: translateY(40px); opacity: 0; } }
+.cheat-sheet > header { display: flex; align-items: center; justify-content: space-between; position: sticky; top: -16px; background: var(--white); padding: 6px 0; z-index: 2; }
+.cheat-sheet > header b { font-family: var(--font-display); font-size: 18px; }
+.cheat-bite h4 { margin: 0 0 4px; }
+.cheat-bite { border-bottom: 1px solid var(--line); padding-bottom: 10px; }
+@media (max-width: 700px) {
+  .cheat-sheet { top: auto; left: 0; width: auto; max-height: 78vh; border-left: 0; border-top: 1px solid var(--line); border-radius: 18px 18px 0 0; animation-name: sheet-up; }
+}
+
+/* end of a lesson */
+.lesson-end-card { display: flex; align-items: center; gap: 16px; margin-top: 14px; padding: 16px 18px; border-radius: var(--r-xl); background: var(--ok-soft); border: 1px solid var(--ok); animation: bite-in 0.35s ease both; }
+.lesson-end-card .grow { display: grid; gap: 6px; }
+.lesson-end-title { font-family: var(--font-display); font-size: 22px; color: var(--ok-ink); }
+.lesson-end-card p { margin: 0; }
+.lesson-end-clean { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+@media (max-width: 560px) {
+  .lesson-end-card { flex-direction: column; align-items: stretch; }
+}
+
+/* the path: stage goal, passed stage, the lesson just finished */
+.unit-goal { display: block; font-size: 14px; font-weight: 600; margin: 2px 0; }
+.unit-banner.passed { background: linear-gradient(110deg, #e0a526, #f2c55c); box-shadow: 0 4px 0 #b37d12; color: #3b2a05; }
+.unit-banner.passed small { opacity: 0.8; }
+.unit-banner.unlocked { animation: unit-glow 1.4s ease 0.6s 2; }
+@keyframes unit-glow { 50% { box-shadow: 0 4px 0 var(--primary-deep), 0 0 0 6px color-mix(in srgb, var(--primary) 35%, transparent); } }
+.path-node-wrap.just-done .path-node { animation: node-flip 0.7s ease both; }
+@keyframes node-flip { 0% { transform: scale(0.85) rotateY(90deg); } 60% { transform: scale(1.12) rotateY(0); } 100% { transform: none; } }
+.path-node-wrap.just-done .node-stars svg { animation: star-pop 0.45s cubic-bezier(0.3, 1.6, 0.5, 1) both; }
+.path-node-wrap.just-done .node-stars svg:nth-child(1) { animation-delay: 0.55s; }
+.path-node-wrap.just-done .node-stars svg:nth-child(2) { animation-delay: 0.75s; }
+.path-node-wrap.just-done .node-stars svg:nth-child(3) { animation-delay: 0.95s; }
+.path-link.filling path { animation: link-fill 1s ease 0.9s both; }
+@keyframes link-fill { from { stroke: color-mix(in srgb, var(--scene-accent) 35%, #ffffff); opacity: 0.5; stroke-dashoffset: 28; } to { stroke-dashoffset: 0; } }
+.path-node-wrap.arrived .node-mascot { animation: pip-arrive 0.8s cubic-bezier(0.3, 1.4, 0.5, 1) 1.5s both; }
+.path-node-wrap.arrived .node-bubble { animation: bite-in 0.3s ease 2.1s both; }
+@keyframes pip-arrive { 0% { transform: translateY(-70px) scale(0.6); opacity: 0; } 70% { transform: translateY(6px) scale(1.05); opacity: 1; } 100% { transform: none; } }
+.skill-below { display: grid; gap: 14px; margin-top: 18px; }
+@media (prefers-reduced-motion: reduce) {
+  .bite-card, .lesson-end-card, .path-node-wrap.just-done .path-node, .path-node-wrap.just-done .node-stars svg, .path-link.filling path, .path-node-wrap.arrived .node-mascot, .path-node-wrap.arrived .node-bubble, .unit-banner.unlocked, .cheat-sheet { animation: none !important; }
+}

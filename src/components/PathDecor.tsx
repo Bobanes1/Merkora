@@ -144,20 +144,21 @@ export function SandFloor() {
 }
 
 /** Dotted curve from the previous node (dx pixels to the side) down to this node. */
-export function PathLink({ dx, height = 58, done = false }: { dx: number; height?: number; done?: boolean }) {
+export function PathLink({ dx, height = 58, done = false, fill = false }: { dx: number; height?: number; done?: boolean; fill?: boolean }) {
   const w = Math.abs(dx) + 20;
   const x0 = dx < 0 ? 10 : w - 10; // previous node
   const x1 = dx < 0 ? w - 10 : 10; // this node
+  const cls = `path-link ${done ? 'done' : ''} ${fill ? 'filling' : ''}`;
   if (dx === 0) {
     return (
-      <svg className={`path-link ${done ? 'done' : ''}`} width="20" height={height} style={{ left: 'calc(50% - 10px)', top: -(height - 14) }} aria-hidden="true">
+      <svg className={cls} width="20" height={height} style={{ left: 'calc(50% - 10px)', top: -(height - 14) }} aria-hidden="true">
         <path d={`M10 0 V${height}`} />
       </svg>
     );
   }
   return (
     <svg
-      className={`path-link ${done ? 'done' : ''}`}
+      className={cls}
       width={w}
       height={height}
       style={{ left: dx < 0 ? `calc(50% - ${w - 10}px)` : `calc(50% - 10px)`, top: -(height - 14) }}

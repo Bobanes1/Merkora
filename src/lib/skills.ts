@@ -219,7 +219,7 @@ export const toggleKnown = (stages: Stage[], lessonId: string): Stage[] =>
  */
 export function beginnerRule(skill: Skill, stageIndex: number, lessonIndex: number): string {
   const beginner = stageIndex === 0 || lessonIndex < 3;
-  if (!beginner) return 'Wenn in dieser Lektion neue Grundbegriffe vorkommen, erkläre sie kurz in "theory" (Markdown); sonst lass "theory" weg.';
+  if (!beginner) return 'Wenn in dieser Lektion neue Grundbegriffe vorkommen, erkläre sie im ersten Häppchen kurz.';
   const code =
     skill.domain === 'java'
       ? `
@@ -227,10 +227,16 @@ PROGRAMMIER-ANFÄNGER: Die Person hat vielleicht noch nie programmiert. Werkzeug
 Mindestens die Hälfte der Aufgaben sind "code"-Aufgaben, bei denen man selbst ein kleines, lauffähiges Programm schreibt – ganz klein anfangen (z. B. den eigenen Namen ausgeben, zwei Zahlen addieren), immer mit Startcode und klarer Anleitung, welche Zeile man ändert.`
       : '';
   return `ANFÄNGER-LEKTION – setze KEIN Vorwissen voraus.
-Pflichtfeld "theory" (Markdown, etwa 150–350 Wörter), VOR der kurzen Erklärung:
-"### Worum geht's?" (2–3 Sätze) · "### Stell dir vor …" (ein Bild/Vergleich aus dem Alltag) · "### Die wichtigen Begriffe" (Liste: **Begriff** – einfache Erklärung in einem Satz) · "### Was du gleich machst" (1–2 Sätze).
-Jeder Begriff, der in "intro", im Beispiel oder in den Aufgaben vorkommt, muss vorher in "theory" erklärt sein. Die ersten Aufgaben sind sehr leicht (Erfolgserlebnis), danach selbst etwas tun.${code}`;
+Die ersten Häppchen holen ab: "Worum geht's?" (2–3 Sätze), "Stell dir vor …" (ein Bild/Vergleich aus dem Alltag), "Die wichtigen Begriffe" (**Begriff** – einfache Erklärung in einem Satz), dann erst das Neue.
+Jeder Begriff, der im Beispiel oder in den Aufgaben vorkommt, muss vorher in einem Häppchen erklärt sein. Die ersten Aufgaben sind sehr leicht (Erfolgserlebnis), danach selbst etwas tun.${code}`;
 }
+
+/** Skill lessons explain in bites: read a little, answer an easy question about it, go on – no wall of text. */
+export const BITE_RULE = `ERKLÄRUNG IN HÄPPCHEN – keine Textwand. Feld "bites": 3–5 Häppchen in sinnvoller Reihenfolge:
+[{"title":"kurzer Titel","text":"Markdown, höchstens etwa 80 Wörter, ein Gedanke","figure":0,"check":{"q":"sehr leichte Frage genau zu diesem Häppchen","options":["…","…","…"],"correct":1,"why":"ein Satz, warum"}}]
+- Jedes Häppchen endet mit "check" (2–4 Optionen, "correct" = Index der richtigen Option, ab 0). Die Frage prüft nur, ob man das Häppchen verstanden hat – kein Wissen von später.
+- "figure" (optional) = Index eines Bildes in "figures", das genau zu diesem Häppchen passt.
+- "intro" ist dann nur EIN Satz Zusammenfassung; "theory" lässt du weg.`;
 
 export function lessonPrompt(skill: Skill, stage: Stage, lesson: Lesson, count = 6): Prompt {
   const all = skill.stages.flatMap((st) => st.lessons);
@@ -239,11 +245,12 @@ export function lessonPrompt(skill: Skill, stage: Stage, lesson: Lesson, count =
   const before = all.slice(0, Math.max(0, i)).map((l) => l.title);
   return {
     system: `Du bist ein geduldiger Tutor. Du erstellst eine Lektion, in der man durch eigenes Tun lernt: kurze Erklärung, ein durchgerechnetes Beispiel, dann ${count} Aufgaben, die man selbst löst. ${kindRule(skill)}
+${BITE_RULE}
 ${beginnerRule(skill, stageIndex, i)}
 ${FIGURE_RULE}
 ${JSON_ONLY}`,
     user: `${context(skill)}\n\nSTUFE: ${stage.name} – ${stage.goal}\nLEKTION ${i + 1} von ${all.length}: ${lesson.title} – Ziel: ${lesson.goal}${before.length ? `\nVorher gelernt: ${before.slice(-8).join('; ')}` : ''}`,
-    maxTokens: Math.min(16000, 3600 + count * (skill.domain === 'java' || skill.domain === 'law' ? 900 : 600)),
+    maxTokens: Math.min(16000, 4400 + count * (skill.domain === 'java' || skill.domain === 'law' ? 900 : 600)),
     json: true,
   };
 }

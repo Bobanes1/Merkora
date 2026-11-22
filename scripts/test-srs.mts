@@ -1660,9 +1660,9 @@ console.log('Anfänger-Lektionen: Grundlagen zuerst');
   const { beginnerRule } = await import('../src/lib/skills');
   const { parsePractice } = await import('../src/lib/practice');
   const java = { domain: 'java' } as any, math = { domain: 'math' } as any;
-  ok(beginnerRule(java, 0, 0).includes('"theory"') && beginnerRule(java, 0, 0).includes('"code"-Aufgaben') && beginnerRule(java, 0, 0).includes('nichts installieren'), 'erste Java-Lektion: Grundlagen und eigene kleine Programme');
-  ok(beginnerRule(math, 0, 1).includes('Pflichtfeld "theory"') && !beginnerRule(math, 0, 1).includes('"code"-Aufgaben'), 'erste Mathe-Lektion: Grundlagen, keine Code-Aufgaben');
-  ok(!beginnerRule(math, 2, 9).includes('Pflichtfeld'), 'spätere Lektion: Grundlagen nur wenn nötig');
+  ok(beginnerRule(java, 0, 0).includes('Worum geht') && beginnerRule(java, 0, 0).includes('"code"-Aufgaben') && beginnerRule(java, 0, 0).includes('nichts installieren'), 'erste Java-Lektion: Grundlagen und eigene kleine Programme');
+  ok(beginnerRule(math, 0, 1).includes('ANFÄNGER-LEKTION') && !beginnerRule(math, 0, 1).includes('"code"-Aufgaben'), 'erste Mathe-Lektion: Grundlagen, keine Code-Aufgaben');
+  ok(!beginnerRule(math, 2, 9).includes('ANFÄNGER'), 'spätere Lektion: Grundlagen nur wenn nötig');
   const set = parsePractice({ kind: 'java', topic: 'Start', theory: '### Worum geht\'s?\nText', intro: '- a', problems: [{ type: 'order', prompt: 'p', items: ['a', 'b', 'c'] }] }, 'x', 1);
   ok(!!set && set.theory!.startsWith('### Worum'), 'Grundlagen werden übernommen');
 }
@@ -1899,6 +1899,32 @@ console.log('Weiß nicht und visuelle Erklärungen');
   ok(D.diagramBoxCount(dg) === 3 && (part.match(/opacity="0.06"/g) ?? []).length === 2 && !D.renderDiagram(dg, D.PALETTES.light).includes('dg-build'), 'Bild baut sich auf: spätere Kästen ausgeblendet');
   const ps = P.parsePractice({ kind: 'music', topic: 'T', intro: 'x', score: { items: ['C4'] }, figures: [{ diagram: dg, narration: ['a', 'b'] }], problems: [{ type: 'calc', problem: '1+1', answer: { type: 'number', value: '2' } }] }, 'id', 1)!;
   ok(!!ps.score && ps.figures![0].narration!.length === 2, 'Lektion: Notenblatt und Erzähl-Sätze werden übernommen');
+}
+
+console.log('Häppchen statt Textwand');
+{
+  const P = await import('../src/lib/practice');
+  const S = await import('../src/lib/skills');
+  const bites = P.parseBites(
+    [
+      { title: 'Worum geht es?', text: 'Ein **Akkord** sind drei Töne zugleich.', figure: 0, check: { q: 'Wie viele Töne?', options: ['1', '3', '7'], correct: 1, why: 'Drei Töne.' } },
+      { title: 'Falsch', text: 'x', check: { q: 'q', options: ['a'], correct: 0 } },
+      { title: 'Bild', text: 'y', figure: 5, check: { q: 'q', options: ['a', 'b'], correct: 'b' } },
+      { title: 'leer', text: '' },
+      { text: 'z', check: { q: 'q', options: ['a', 'b'], correct: 4 } },
+    ],
+    1,
+  );
+  ok(bites.length === 4 && bites[0].figure === 0 && bites[0].check?.correct === 1 && !bites[1].check && bites[2].figure === undefined && bites[2].check?.correct === 1 && !bites[3].check, 'Häppchen: Frage nur mit 2–4 Optionen und gültiger Antwort, Bild nur wenn vorhanden, leere weg');
+  ok(P.parseBites(Array.from({ length: 9 }, () => ({ text: 'a' })), 0).length === 6 && P.parseBites('x', 0).length === 0, 'Häppchen: höchstens 6');
+  const set = P.parsePractice({ kind: 'music', topic: 'T', intro: 'Kurz.', bites: [{ title: 'A', text: 'a', check: { q: 'q', options: ['x', 'y'], correct: 0 } }], problems: [{ type: 'calc', problem: '1+1', answer: { type: 'number', value: '2' } }] }, 'id', 1)!;
+  ok(set.bites?.length === 1 && P.bitesFrom(set) === set.bites, 'Lektion übernimmt Häppchen');
+  const old = P.bitesFrom({ theory: "### Worum geht's?\nZwei Sätze.\n\n### Begriffe\n- **A** – a", intro: '- Punkt' });
+  ok(old.length === 3 && old[0].title === "Worum geht's?" && old[1].text === '- **A** – a' && old[2].title === 'Kurz gesagt' && !old[0].check, 'ältere Lektion: Grundlagen an Überschriften geteilt, Erklärung als letztes Häppchen');
+  ok(P.bitesFrom({ intro: 'Nur das.' }).length === 1 && P.bitesFrom({ intro: '' }).length === 0 && P.bitesFrom({ theory: 'Ohne Titel', intro: '' })[0].title === '', 'ältere Lektion: nur Erklärung / gar nichts / Text ohne Überschrift');
+  const sk = { id: 's', topic: 'T', title: 'T', domain: 'math', levels: ['a'], targetLevel: 0, level: '', status: 'active', plan: {}, stages: [{ id: 'st', name: 'S', goal: 'g', lessons: [{ id: 'l', title: 'L', goal: 'g' }] }], createdAt: 1, updatedAt: 1 } as any;
+  const lp = S.lessonPrompt(sk, sk.stages[0], sk.stages[0].lessons[0]);
+  ok(lp.system.includes('"bites"') && lp.system.includes('"check"') && !lp.system.includes('Pflichtfeld "theory"'), 'Lektions-Prompt verlangt Häppchen mit Kontrollfrage');
 }
 
 console.log('Kurze Decknamen');

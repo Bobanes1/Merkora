@@ -49,6 +49,9 @@ export type ProblemProgress = {
   chat?: { me: boolean; text: string }[];
 };
 
+/** One bite of an explanation: a short text, maybe a picture (index in figures) and an easy check question. */
+export type Bite = { title: string; text: string; figure?: number; check?: { q: string; options: string[]; correct: number; why?: string } };
+
 export type PracticeSet = {
   id: string;
   createdAt: number;
@@ -67,6 +70,11 @@ export type PracticeSet = {
   /** Languages: sentences with coloured parts, and tables (endings highlighted). */
   syntax?: Sentence[];
   tables?: Table[];
+  /** The explanation in small bites, each with an easy check question (skill lessons). */
+  bites?: Bite[];
+  /** Where a guided lesson stands: understanding (bites), the example, or practising; and the bite last seen. */
+  phase?: 'learn' | 'example' | 'practice';
+  bite?: number;
   /** „Grundlagen“ before the explanation: what it is about, a picture in the head, the key terms (Markdown). */
   theory?: string;
   /** The explanation once more, even simpler („Einfacher erklären“). */
@@ -230,8 +238,50 @@ export function parsePractice(json: unknown, id: string, now: number): PracticeS
   const sketch = parseSketch(r.sketch);
   const syntax = parseSyntax(r.syntax);
   const tables = parseTables(r.tables);
+  const figures = parseFigures(r.figures);
+  const bites = parseBites(r.bites, figures.length);
   const visuals = { ...(score ? { score } : {}), ...(program ? { program } : {}), ...(sketch ? { sketch } : {}), ...(syntax.length ? { syntax } : {}), ...(tables.length ? { tables } : {}) };
-  return { id, createdAt: now, kind, topic: s(r.topic, 80) || 'Übung', intro: s(r.intro, 3000), ...visuals, ...(s(r.theory, 8000) ? { theory: s(r.theory, 8000) } : {}), ...(parseFigures(r.figures).length ? { figures: parseFigures(r.figures) } : {}), ...(example?.problem ? { example } : {}), labs, tasks, progress: tasks.map(() => ({ tries: 0, hints: 0 })) };
+  return { id, createdAt: now, kind, topic: s(r.topic, 80) || 'Übung', intro: s(r.intro, 3000), ...visuals, ...(s(r.theory, 8000) ? { theory: s(r.theory, 8000) } : {}), ...(figures.length ? { figures } : {}), ...(bites.length ? { bites } : {}), ...(example?.problem ? { example } : {}), labs, tasks, progress: tasks.map(() => ({ tries: 0, hints: 0 })) };
+}
+
+/** The bites of an explanation, with safe values: 2–4 options, the right one among them, a picture only if it exists. Pure – tested. */
+export function parseBites(raw: unknown, figures: number): Bite[] {
+  if (!Array.isArray(raw)) return [];
+  const out: Bite[] = [];
+  for (const b of raw) {
+    const r = (b ?? {}) as Record<string, unknown>;
+    const text = s(r.text ?? r.body, 1500);
+    if (!text) continue;
+    const fig = r.figure === undefined || r.figure === null || r.figure === '' ? NaN : Number(r.figure);
+    const c = (r.check ?? null) as Record<string, unknown> | null;
+    let check: Bite['check'];
+    if (c && typeof c === 'object') {
+      const options = arr(c.options, 4).map((o) => o.slice(0, 240));
+      const q = s(c.q ?? c.question, 400);
+      let correct = Number(c.correct);
+      if (!Number.isInteger(correct) && typeof c.correct === 'string') correct = options.indexOf(c.correct.trim());
+      const why = s(c.why, 500);
+      if (q && options.length >= 2 && Number.isInteger(correct) && correct >= 0 && correct < options.length) check = { q, options, correct, ...(why ? { why } : {}) };
+    }
+    out.push({ title: s(r.title, 90), text, ...(Number.isInteger(fig) && fig >= 0 && fig < figures ? { figure: fig } : {}), ...(check ? { check } : {}) });
+    if (out.length >= 6) break;
+  }
+  return out;
+}
+
+/** The bites to show: the set's own, or – for older lessons – the „Grundlagen“ split at their headings, then the short explanation. Pure – tested. */
+export function bitesFrom(set: Pick<PracticeSet, 'bites' | 'theory' | 'intro'>): Bite[] {
+  if (set.bites?.length) return set.bites;
+  const out: { title: string; lines: string[] }[] = [];
+  for (const line of (set.theory ?? '').split('\n')) {
+    const h = /^#{1,4}\s+(.*)$/.exec(line.trim());
+    if (h) out.push({ title: h[1].trim(), lines: [] });
+    else if (out.length) out[out.length - 1].lines.push(line);
+    else out.push({ title: '', lines: [line] });
+  }
+  const bites: Bite[] = out.map((b) => ({ title: b.title, text: b.lines.join('\n').trim() })).filter((b) => b.text);
+  if (set.intro?.trim()) bites.push({ title: bites.length ? 'Kurz gesagt' : '', text: set.intro.trim() });
+  return bites;
 }
 
 // ---------- checking answers ----------

@@ -330,12 +330,28 @@ function Path({ skill }: { skill: Skill }) {
   const reached = reachedStage(skill);
   const stars = skill.stages.reduce((sum, st) => sum + st.lessons.reduce((a, l) => a + lessonStars(l), 0), 0);
   const currentRef = useRef<HTMLButtonElement>(null);
+  // the lesson just finished: back on the path its station tips over, the stars pop in and Pip hops on
+  const [justDone, setJustDone] = useState<string | null>(null);
   useEffect(() => {
     if (!view) currentRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }, [view]);
+  useEffect(() => {
+    if (!justDone) return;
+    const t = window.setTimeout(() => setJustDone(null), 3200);
+    return () => window.clearTimeout(t);
+  }, [justDone]);
   let offIndex = 0;
 
-  if (view?.kind === 'lesson') return <LessonView skill={skill} lessonId={view.id} onBack={() => setView(null)} onOpen={(lid) => setView({ kind: 'lesson', id: lid })} />;
+  if (view?.kind === 'lesson')
+    return (
+      <LessonView
+        skill={skill}
+        lessonId={view.id}
+        onBack={() => setView(null)}
+        onPath={(lid) => (setJustDone(lid), setView(null))}
+        onOpen={(lid) => setView({ kind: 'lesson', id: lid })}
+      />
+    );
   if (view?.kind === 'test') return <StageTestView skill={skill} stageId={view.stageId} onBack={() => setView(null)} />;
   if (view?.kind === 'review') return <ReviewView skill={skill} onBack={() => setView(null)} />;
   if (view?.kind === 'project') return <ProjectView skill={skill} stageId={view.stageId} onBack={() => setView(null)} />;
@@ -378,15 +394,7 @@ function Path({ skill }: { skill: Skill }) {
           </button>
         </div>
       </header>
-      {skill.plan.approach && (
-        <details className="panel skill-approach">
-          <summary>So meisterst du den Skill</summary>
-          <CardContent text={skill.plan.approach} />
-        </details>
-      )}
-      <SkillCompetence skill={skill} onOpen={(lid) => setView({ kind: 'lesson', id: lid })} onTrain={() => setView({ kind: 'review' })} />
       <SkillCelebration skill={skill} />
-      <SkillMaterial skill={skill} />
       <div className="path-summary">
         <span>
           <b>
@@ -408,6 +416,8 @@ function Path({ skill }: { skill: Skill }) {
           const ready = stageReady(st);
           // the stage test is the trophy at the end; Pip waits there once all lessons of the stage are done
           const testCurrent = ready && !st.passed && !next;
+          // the lesson just finished was the last one of this stage: the stage test glows
+          const unlocked = !!justDone && ready && !st.passed && st.lessons.some((l) => l.id === justDone);
           let prevOff: number | null = null;
           const nodes = [
             ...st.lessons.map((l) => ({ key: l.id, lesson: l as Lesson | null })),
@@ -429,7 +439,7 @@ function Path({ skill }: { skill: Skill }) {
                 <i />
                 <i />
               </span>
-              <header className="unit-banner">
+              <header className={'unit-banner' + (st.passed ? ' passed' : '') + (unlocked ? ' unlocked' : '')}>
                 <span className="unit-no">{st.passed ? <IconTrophy size={18} /> : si + 1}</span>
                 <span className="grow">
                   <b>
@@ -440,10 +450,10 @@ function Path({ skill }: { skill: Skill }) {
                       Spickzettel
                     </button>
                   )}
+                  {st.goal && <span className="unit-goal">{st.passed ? 'Das kannst du jetzt: ' : 'Danach kannst du: '}{st.goal}</span>}
                   <small>
-                    {st.goal ? st.goal + ' · ' : ''}
                     {skippedHere ? `${skippedHere} übersprungen · ` : ''}
-                    {doneHere} von {toLearn.length} geschafft
+                    {doneHere} von {toLearn.length} geschafft{ready && !st.passed ? ' · Stufentest freigeschaltet' : ''}
                   </small>
                   <span className="unit-progress">
                     <i style={{ width: `${toLearn.length ? (doneHere / toLearn.length) * 100 : 100}%` }} />
@@ -485,8 +495,12 @@ function Path({ skill }: { skill: Skill }) {
                   const nStars = l ? lessonStars(l) : 0;
                   const sub = isProject ? (st.project?.done ? 'geschafft' : st.passed ? 'jetzt anwenden' : 'nach dem Stufentest') : l ? (l.known ? 'übersprungen – kannst du schon' : l.set ? `${solvedCount(l.set)}/${problemCount(l.set)} gelöst` : '') : st.passed ? 'bestanden' : ready ? 'Stufentest' : 'erst alle Lektionen';
                   return (
-                    <div key={n.key} className={`path-node-wrap ${state}`} style={{ transform: `translateX(${off}px)`, animationDelay: `${Math.min(offIndex, 24) * 45}ms`, zIndex: 200 - k }}>
-                      {dx !== null && <PathLink dx={dx} height={state === 'current' ? 88 : 58} done={state === 'done' || state === 'current'} />}
+                    <div
+                      key={n.key}
+                      className={`path-node-wrap ${state}${l && l.id === justDone ? ' just-done' : ''}${justDone && state === 'current' ? ' arrived' : ''}`}
+                      style={{ transform: `translateX(${off}px)`, animationDelay: `${Math.min(offIndex, 24) * 45}ms`, zIndex: 200 - k }}
+                    >
+                      {dx !== null && <PathLink dx={dx} height={state === 'current' ? 88 : 58} done={state === 'done' || state === 'current'} fill={!!justDone && state === 'current'} />}
                       <NodeDecor theme={theme} index={k + si * 2} side={decoSide} />
                       {state === 'current' && <span className="node-bubble">{l ? 'Start' : 'Test!'}</span>}
                       {state === 'current' && <Mascot className={`node-mascot ${mascotSide}`} mood="wave" size={64} />}
@@ -522,6 +536,16 @@ function Path({ skill }: { skill: Skill }) {
           );
         })}
       </div>
+      <div className="skill-below">
+        <SkillCompetence skill={skill} onOpen={(lid) => setView({ kind: 'lesson', id: lid })} onTrain={() => setView({ kind: 'review' })} />
+        {skill.plan.approach && (
+          <details className="panel skill-approach">
+            <summary>So meisterst du den Skill</summary>
+            <CardContent text={skill.plan.approach} />
+          </details>
+        )}
+        <SkillMaterial skill={skill} />
+      </div>
       {confirm && (
         <ConfirmModal
           title="Skill löschen?"
@@ -539,7 +563,7 @@ function findLesson(skill: Skill, lessonId: string): { stage: Stage; lesson: Les
   return null;
 }
 
-function LessonView({ skill, lessonId, onBack, onOpen }: { skill: Skill; lessonId: string; onBack: () => void; onOpen: (id: string) => void }) {
+function LessonView({ skill, lessonId, onBack, onPath, onOpen }: { skill: Skill; lessonId: string; onBack: () => void; onPath: (lessonId: string) => void; onOpen: (id: string) => void }) {
   const found = findLesson(skill, lessonId);
   const t = useSkillTask(skill.id + ':' + lessonId);
   useEffect(() => {
@@ -575,25 +599,17 @@ function LessonView({ skill, lessonId, onBack, onOpen }: { skill: Skill; lessonI
         <PracticeSetView
           set={lesson.set}
           host={host}
+          guided
           head={
             <div className="lesson-head">
               <p className="muted small grow">Lektion: {lesson.title}</p>
               <SkillGoal skill={skill} compact />
             </div>
           }
-          onDone={
-            <div className="row-gap">
-              <p className="form-ok grow">Lektion geschafft!</p>
-              {after && (
-                <button type="button" className="btn primary" onClick={() => onOpen(after.id)}>
-                  Nächste Lektion: {after.title} ›
-                </button>
-              )}
-            </div>
-          }
+          onDone={<LessonEnd lesson={lesson} after={after} onPath={() => onPath(lessonId)} onNext={() => after && onOpen(after.id)} />}
         />
       )}
-      {lesson.set && !lesson.set.theory && (
+      {lesson.set && !lesson.set.theory && !lesson.set.bites?.length && (
         <p className="muted small redo-lesson">
           Zu schwer zum Einstieg?{' '}
           <button type="button" className="link-btn" onClick={() => void redoLesson(skill.id, lessonId)} disabled={t.busy}>
@@ -602,6 +618,38 @@ function LessonView({ skill, lessonId, onBack, onOpen }: { skill: Skill; lessonI
           (dein Fortschritt in dieser Lektion beginnt neu)
         </p>
       )}
+    </div>
+  );
+}
+
+/** The end of a lesson: what went well, what you can do now – and back onto the path, where you see yourself move on. */
+function LessonEnd({ lesson, after, onPath, onNext }: { lesson: Lesson; after?: Lesson; onPath: () => void; onNext: () => void }) {
+  const progress = lesson.set?.progress ?? [];
+  const clean = progress.filter((p) => p.solved && !p.hints && !p.shown && !p.dunno && p.tries <= 1).length;
+  return (
+    <div className="lesson-end-card">
+      <Mascot mood="cheer" size={76} />
+      <div className="grow">
+        <b className="lesson-end-title">Lektion geschafft!</b>
+        <p className="lesson-end-clean">
+          <IconCheck size={15} /> {clean} von {progress.length} ohne Hilfe gelöst
+        </p>
+        {lesson.goal && (
+          <p className="lesson-end-goal">
+            <b>Das kannst du jetzt:</b> {lesson.goal}
+          </p>
+        )}
+        <div className="row-gap">
+          <button type="button" className="btn primary" data-primary onClick={onPath}>
+            Zurück zum Weg
+          </button>
+          {after && (
+            <button type="button" className="btn outline" onClick={onNext}>
+              Gleich weiter: {after.title} ›
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -634,7 +682,7 @@ function StageTestView({ skill, stageId, onBack }: { skill: Skill; stageId: stri
       <Failed error={t.error} retry={() => void makeStageTest(skill.id, stageId)} />
       {stage.test && (
         <>
-          <PracticeSetView set={stage.test} host={host} head={
+          <PracticeSetView set={stage.test} host={host} focus head={
                 <div className="lesson-head">
                   <p className="muted small grow">Stufentest: {stage.name} – ab 80 % richtig ist die Stufe erreicht.</p>
                   <SkillGoal skill={skill} compact />
@@ -675,6 +723,7 @@ function ReviewView({ skill, onBack }: { skill: Skill; onBack: () => void }) {
         <PracticeSetView
           set={skill.review}
           host={host}
+          focus
           head={
             <div className="lesson-head">
               <p className="muted small grow">{skill.reviewFocus?.length ? `Schwachstellen-Training: ${skill.reviewFocus.join(', ')}` : 'Gemischte Wiederholung'}</p>
