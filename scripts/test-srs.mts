@@ -1660,7 +1660,7 @@ console.log('Anfänger-Lektionen: Grundlagen zuerst');
   const { beginnerRule } = await import('../src/lib/skills');
   const { parsePractice } = await import('../src/lib/practice');
   const java = { domain: 'java' } as any, math = { domain: 'math' } as any;
-  ok(beginnerRule(java, 0, 0).includes('Worum geht') && beginnerRule(java, 0, 0).includes('"code"-Aufgaben') && beginnerRule(java, 0, 0).includes('nichts installieren'), 'erste Java-Lektion: Grundlagen und eigene kleine Programme');
+  ok(beginnerRule(java, 0, 0).includes('ANFÄNGER-LEKTION') && beginnerRule(java, 0, 0).includes('"code"-Aufgaben') && beginnerRule(java, 0, 0).includes('nichts installieren'), 'erste Java-Lektion: Grundlagen und eigene kleine Programme');
   ok(beginnerRule(math, 0, 1).includes('ANFÄNGER-LEKTION') && !beginnerRule(math, 0, 1).includes('"code"-Aufgaben'), 'erste Mathe-Lektion: Grundlagen, keine Code-Aufgaben');
   ok(!beginnerRule(math, 2, 9).includes('ANFÄNGER'), 'spätere Lektion: Grundlagen nur wenn nötig');
   const set = parsePractice({ kind: 'java', topic: 'Start', theory: '### Worum geht\'s?\nText', intro: '- a', problems: [{ type: 'order', prompt: 'p', items: ['a', 'b', 'c'] }] }, 'x', 1);
