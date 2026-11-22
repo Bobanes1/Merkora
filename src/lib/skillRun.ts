@@ -254,12 +254,15 @@ export function makeStageSheet(id: string, stageId: string) {
 }
 
 /** A mixed review – or, with lesson ids, a training of just those (weak) topics. */
-export function makeReview(id: string, focusIds?: string[]) {
+/** A mixed review, or a training of weak lessons (focusIds); `count` tasks (short form from the smart „Weiter“). */
+export function makeReview(id: string, focusIds?: string[], count?: number) {
   return run(id + ':review', async () => {
     const s = skill(id);
     if (!s) return;
     const focus = focusIds?.length ? s.stages.flatMap((st) => st.lessons).filter((l) => focusIds.includes(l.id)) : undefined;
-    const set = setOf(await ask(reviewPrompt(s, focus)));
+    // remembered at once, so the smart „Weiter“ does not offer the same again
+    updateSkill(id, focus?.length ? { lastWeakAt: Date.now() } : { lastReviewAt: Date.now() });
+    const set = setOf(await ask(reviewPrompt(s, focus, count)));
     updateSkill(id, { review: set, reviewFocus: focus?.map((l) => l.title) });
   });
 }

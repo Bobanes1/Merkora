@@ -8,13 +8,13 @@ import { CodeEditor } from '../CodeEditor';
 import { Confetti } from '../Mascot';
 import { Markdown } from '../Markdown';
 import { JavaSetup } from '../JavaSetup';
-import { IconBulb, IconCheck, IconChevron, IconClose, IconDoc, IconHelp, IconPlay, IconPlus, IconSparkle, IconTarget } from '../Icons';
+import { IconBulb, IconCheck, IconChevron, IconClose, IconDoc, IconHelp, IconPlay, IconPlus, IconSparkle, IconStar, IconTarget } from '../Icons';
 import { useLearnFocus } from '../../lib/learnFocus';
 import { Lab } from '../labs/Labs';
 import { completeJson, gradeAnswer } from '../../lib/ai';
 import { openExternal } from '../../lib/desktop';
 import { buildHarness, harnessOffset, localJava, mapErrors, parseResults, runJavaLocal, runJavaOnline, type RunResult, type TestResult } from '../../lib/javaRun';
-import { bitesFrom, checkAnswer, insertTaskLater, nextOpen, settledCount, mistakePrompt, parseMistake, parseSimpler, simplerPrompt, DOMAIN_LABEL, problemCount, solvedCount, taskList, type Bite, type JavaProblem, type MathProblem, type PracticeSet, type ProblemProgress } from '../../lib/practice';
+import { bitesFrom, checkAnswer, cleanSolve, goingWell, harderPrompt, insertTaskAfter, insertTaskLater, nextOpen, parseHarder, pickNext, settledCount, mistakePrompt, parseMistake, parseSimpler, simplerPrompt, DOMAIN_LABEL, problemCount, solvedCount, taskList, type Bite, type JavaProblem, type MathProblem, type PracticeSet, type ProblemProgress } from '../../lib/practice';
 import { setSettings, useStore } from '../../lib/store';
 import { CaseTaskView, ClassifyTaskView, ClozeTaskView, MultiTaskView, OrderTaskView } from './ActiveTasks';
 import { MusicTaskView } from './MusicTask';
@@ -49,7 +49,9 @@ const READ_ALL_KEY = 'merkora.readAll';
  */
 export function PracticeSetView({ set, host, head, onDone, guided, focus }: { set: PracticeSet; host: SetHost; head?: ReactNode; onDone?: ReactNode; guided?: boolean; focus?: boolean }) {
   const tasks = taskList(set);
+  // n = core tasks (for „x von y gelöst“ and finishing); total = all, also extra tasks Pip added
   const n = problemCount(set);
+  const total = tasks.length;
   const firstOpen = set.progress.findIndex((p) => !p.solved);
   const [i, setI] = useState(firstOpen < 0 ? 0 : firstOpen);
   const [steps, setSteps] = useState(0);
@@ -87,7 +89,8 @@ export function PracticeSetView({ set, host, head, onDone, guided, focus }: { se
   // „Weiter“: to the next task still open (passing solved and skipped ones); when none is left the lesson is through
   const settled = settledCount(set);
   const goNext = () => {
-    const j = nextOpen(set, i);
+    // the difficulty adapts: after clean solves a harder task, after a mistake not a harder one
+    const j = pickNext(set, i);
     if (j !== null) setI(j);
     else document.querySelector('.lesson-end-card, .practice-tasks > .form-ok')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
   };
@@ -114,12 +117,12 @@ export function PracticeSetView({ set, host, head, onDone, guided, focus }: { se
           btn.click();
         }
       } else if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && !typing && !field && !e.altKey && !e.ctrlKey && !e.metaKey && !sheet) {
-        setI((x) => Math.max(0, Math.min(n - 1, x + (e.key === 'ArrowRight' ? 1 : -1))));
+        setI((x) => Math.max(0, Math.min(total - 1, x + (e.key === 'ArrowRight' ? 1 : -1))));
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [focusOn, sheet, n, setFocus]);
+  }, [focusOn, sheet, total, setFocus]);
 
   const focusTools = (
     <div className="focus-tools">
@@ -138,7 +141,7 @@ export function PracticeSetView({ set, host, head, onDone, guided, focus }: { se
     <section className="panel practice-tasks">
       <div className="practice-nav task-path" role="tablist" aria-label="Aufgaben">
         <div className="task-stations" style={{ ['--fill' as string]: `${n > 1 ? (Math.max(0, lastSolved(set, n)) / (n - 1)) * 100 : 0}%` }}>
-          {Array.from({ length: n }, (_, k) => {
+          {Array.from({ length: total }, (_, k) => {
             const p = set.progress[k];
             const helped = !!p && (p.hints > 0 || !!p.shown || !!p.dunno || p.tries > 1);
             const skipped = !!p?.dunno && !p.solved;
@@ -148,7 +151,7 @@ export function PracticeSetView({ set, host, head, onDone, guided, focus }: { se
                 type="button"
                 role="tab"
                 aria-selected={k === i}
-                className={(k === i ? 'on ' : '') + (p?.solved ? (helped ? 'done helped' : 'done') : skipped ? 'skipped' : '')}
+                className={(k === i ? 'on ' : '') + (p?.solved ? (helped ? 'done helped' : 'done') : skipped ? 'skipped' : '') + (p?.extra ? ' extra' : '') + (p?.bonus ? ' bonus' : '')}
                 title={p?.solved ? (helped ? 'gelöst mit Hilfe' : 'gelöst ohne Hilfe') : skipped ? 'übersprungen – Lösung angesehen' : `Aufgabe ${k + 1}`}
                 onClick={() => setI(k)}
               >
@@ -158,6 +161,13 @@ export function PracticeSetView({ set, host, head, onDone, guided, focus }: { se
           })}
         </div>
         <span className="muted small grow right">
+          {t?.level ? (
+            <span className={`task-level lv-${t.level}`} title={`Schwierigkeit: ${LEVEL_NAME[t.level]}`}>
+              <i />
+              <i />
+              <i /> {LEVEL_NAME[t.level]}
+            </span>
+          ) : null}{' '}
           {done} von {n} gelöst
         </span>
         {!guided && focus && focusTools}
@@ -279,6 +289,8 @@ export function PracticeSetView({ set, host, head, onDone, guided, focus }: { se
     </>
   );
 }
+
+const LEVEL_NAME: Record<number, string> = { 1: 'leicht', 2: 'mittel', 3: 'schwer' };
 
 const PHASE_LABEL: Record<Phase, string> = { learn: 'Verstehen', example: 'Beispiel', practice: 'Üben' };
 
@@ -548,6 +560,27 @@ export function TaskFooter({ ctx, solution, card, canShow, noNext }: { ctx: Task
       setWhy((e as Error).message);
     }
   };
+  // it goes very well and nothing harder is left: once per set a bonus task, one level harder
+  const [bonus, setBonus] = useState<'' | 'busy' | string>('');
+  const curLevel = taskList(ctx.set)[ctx.i]?.level ?? 2;
+  const harderLeft = taskList(ctx.set).some((t, k) => !ctx.set.progress[k]?.solved && !ctx.set.progress[k]?.dunno && (t.level ?? 0) > curLevel);
+  const canBonus = !!ctx.host.updateSet && cleanSolve(ctx.prog) && !ctx.prog.extra && !ctx.set.bonusAsked && goingWell(ctx.set) && !harderLeft;
+  const addBonus = async () => {
+    const task = taskList(ctx.set)[ctx.i];
+    if (!task || !ctx.host.updateSet) return;
+    setBonus('busy');
+    try {
+      const p = harderPrompt(ctx.set, task, ctx.host.level);
+      const t = parseHarder(await completeJson(p.system, p.user, p.maxTokens));
+      if (!t) throw new Error('Pip konnte gerade keine Bonus-Aufgabe erstellen.');
+      const next = insertTaskAfter(ctx.set, ctx.i, { ...t, level: Math.min(3, (task.level ?? 2) + 1) });
+      next.progress[ctx.i + 1] = { ...next.progress[ctx.i + 1], extra: true, bonus: true };
+      ctx.host.updateSet({ ...next, bonusAsked: true });
+      setBonus('');
+    } catch (e) {
+      setBonus((e as Error).message);
+    }
+  };
   // „Weiß nicht“: show the solution at once, Pip explains the way and adds a similar, easier task after this one
   const dunno = () => {
     setShow(true);
@@ -561,6 +594,20 @@ export function TaskFooter({ ctx, solution, card, canShow, noNext }: { ctx: Task
           <b>{ctx.prog.dunno ? 'So geht’s – Schritt für Schritt' : 'Warum es nicht gepasst hat'}</b>
           <Markdown text={ctx.prog.mistake} />
           {!ctx.prog.extra && <small className="muted">Etwas später wartet eine ähnliche Aufgabe in anderer Form zum Üben.</small>}
+        </div>
+      )}
+      {canBonus && (
+        <div className="bonus-offer">
+          <span className="grow">
+            <b>Läuft super!</b> Lust auf eine Bonus-Aufgabe, eine Stufe schwerer? Sie zählt nicht gegen dich.
+          </span>
+          <button type="button" className="btn outline sm" onClick={() => void addBonus()} disabled={bonus === 'busy'}>
+            <IconStar size={14} /> {bonus === 'busy' ? 'Pip denkt sich etwas aus …' : 'Bonus-Aufgabe'}
+          </button>
+          <button type="button" className="link-btn small" onClick={() => ctx.host.updateSet?.({ bonusAsked: true })}>
+            Nein danke
+          </button>
+          {bonus && bonus !== 'busy' && <small className="err-msg">{bonus}</small>}
         </div>
       )}
       <div className="row-gap">

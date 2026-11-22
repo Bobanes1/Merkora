@@ -45,8 +45,10 @@ export type ProblemProgress = {
   mistake?: string;
   /** „Weiß nicht“ was pressed: the solution was shown and Pip explained the way. */
   dunno?: boolean;
-  /** A follow-up task Pip added after a mistake (it gets no further follow-up of its own). */
+  /** A follow-up task Pip added after a mistake (it gets no further follow-up of its own). Extra tasks never count against mastery. */
   extra?: boolean;
+  /** A bonus task, one level harder (offered when it goes very well). */
+  bonus?: boolean;
   /** A role play: the conversation so far. */
   chat?: { me: boolean; text: string }[];
 };
@@ -76,6 +78,8 @@ export type PracticeSet = {
   bites?: Bite[];
   /** Where a guided lesson stands: understanding (bites), the example, or practising; and the bite last seen. */
   phase?: 'learn' | 'example' | 'practice';
+  /** The bonus task was offered already (once per set). */
+  bonusAsked?: boolean;
   bite?: number;
   /** „Grundlagen“ before the explanation: what it is about, a picture in the head, the key terms (Markdown). */
   theory?: string;
@@ -185,7 +189,10 @@ export const toDomain = (v: unknown): Domain => {
 };
 
 /** One task of a set: calculate/answer, write code, or one of the active types (lib/tasks.ts). */
-export type Task = ({ type: 'calc' } & MathProblem) | ({ type: 'code' } & JavaProblem) | ActiveTask;
+export type Task = (({ type: 'calc' } & MathProblem) | ({ type: 'code' } & JavaProblem) | ActiveTask) & {
+  /** How hard: 1 = leicht, 2 = mittel, 3 = schwer (from the AI; the order adapts to it). */
+  level?: number;
+};
 
 /** All tasks of a set (sets from v0.9.5 kept math/java lists). */
 export function taskList(p: PracticeSet): Task[] {
@@ -217,6 +224,11 @@ function parseCode(o: Record<string, unknown>): ({ type: 'code' } & JavaProblem)
 
 /** One task of any type from the AI's JSON. */
 export function parseTask(raw: unknown): Task | null {
+  const t = parseTaskOnly(raw);
+  const lv = Number((raw as { level?: unknown } | null)?.level);
+  return t && Number.isInteger(lv) && lv >= 1 && lv <= 3 ? { ...t, level: lv } : t;
+}
+function parseTaskOnly(raw: unknown): Task | null {
   const o = (raw ?? {}) as Record<string, unknown>;
   const type = String(o.type ?? '').toLowerCase();
   if (ACTIVE_TYPES.includes(type)) return parseActive(o);
@@ -425,7 +437,7 @@ export function setFrame(kind: PracticeKind) {
 ${kind === 'auto' ? '' : VISUAL_RULES[kind]}
 Format: {"kind":"${kind === 'auto' ? 'math|java|law|music|language|general' : kind}","topic":"…","intro":"- Stichpunkt 1\\n- Stichpunkt 2 …","example":{"problem":"…","steps":["Schritt 1 …","Schritt 2 …"],"answer":"…","code":"(nur bei Programmieren)"},"problems":[…],"labs":[…]}
 ${taskRules(kind)}
-Steigere die Schwierigkeit langsam: zuerst verstehen, dann anwenden, dann selbst lösen. Hinweise ("hints") helfen schrittweise, ohne die Lösung zu verraten.`;
+Steigere die Schwierigkeit langsam: zuerst verstehen, dann anwenden, dann selbst lösen. Gib jeder Aufgabe "level": 1 (leicht), 2 (mittel) oder 3 (schwer) – Merkora passt die Reihenfolge daran an, wie es läuft; mische die Stufen, damit es zu jeder etwas gibt. Hinweise ("hints") helfen schrittweise, ohne die Lösung zu verraten.`;
 }
 
 /** „Einfacher erklären“: the explanation of a set once more, even simpler, with another everyday example. */
@@ -464,8 +476,10 @@ Erstelle ${count} Aufgaben zum Material. Antworte ausschließlich mit gültigem 
 }
 
 /** How far a set is done. */
-export const solvedCount = (p: PracticeSet) => p.progress.filter((x) => x.solved).length;
-export const problemCount = (p: PracticeSet) => taskList(p).length;
+/** Solved core tasks – extra tasks (follow-ups, bonus) never count against or for mastery. */
+export const solvedCount = (p: PracticeSet) => taskList(p).filter((_, k) => p.progress[k]?.solved && !p.progress[k]?.extra).length;
+/** Core tasks of a set (without the extra ones Pip added). */
+export const problemCount = (p: PracticeSet) => taskList(p).filter((_, k) => !p.progress[k]?.extra).length;
 
 /** Up to two pictures of an explanation: each either a diagram description or {diagram, caption}. Pure – tested. */
 export function parseFigures(raw: unknown): { diagram: Diagram; caption?: string }[] {
@@ -513,7 +527,53 @@ export function parseMistake(raw: unknown): { explain: string; similar: Task | n
   return { explain, similar: r.similar ? parseTask(r.similar) : null };
 }
 /** How many tasks are settled: solved, or skipped with „Weiß nicht“ (the lesson is through when all are). */
-export const settledCount = (p: PracticeSet) => p.progress.filter((x) => x.solved || x.dunno).length;
+export const settledCount = (p: PracticeSet) => taskList(p).filter((_, k) => !p.progress[k]?.extra && (p.progress[k]?.solved || p.progress[k]?.dunno)).length;
+
+/** Solved at the first try, without hints, without looking at the solution. */
+export const cleanSolve = (x?: ProblemProgress) => !!x?.solved && !x.hints && !x.shown && !x.dunno && x.tries <= 1;
+/** It goes very well: at least 3 tasks done, all of them clean. */
+export function goingWell(set: PracticeSet): boolean {
+  const tried = set.progress.filter((x) => x.solved || x.tries > 0 || x.dunno || x.shown);
+  return tried.length >= 3 && tried.every(cleanSolve);
+}
+
+/**
+ * „Weiter“ with adapting difficulty: after a clean solve (and at least two clean ones) the next open task
+ * that is harder; after a mistake, „Weiß nicht“ or several tries one that is not harder; otherwise in order.
+ * Tasks without a level go in order. Null when nothing is open. Pure – tested.
+ */
+export function pickNext(set: PracticeSet, i: number): number | null {
+  const tasks = taskList(set);
+  const n = tasks.length;
+  const open: number[] = [];
+  for (let k = 1; k < n; k++) {
+    const j = (i + k) % n;
+    if (!set.progress[j]?.solved && !set.progress[j]?.dunno) open.push(j);
+  }
+  if (!open.length) return null;
+  const cur = set.progress[i];
+  const level = tasks[i]?.level;
+  if (!level) return open[0];
+  const clean = set.progress.filter(cleanSolve).length;
+  const bad = !!cur && (!!cur.dunno || !!cur.shown || cur.tries > 1 || (!cur.solved && cur.tries > 0));
+  if (cleanSolve(cur) && clean >= 2) return open.find((j) => (tasks[j].level ?? 0) > level) ?? open[0];
+  if (bad) return open.find((j) => (tasks[j].level ?? 9) <= level) ?? open[0];
+  return open[0];
+}
+
+/** When it goes very well: one bonus task, a level harder than the current one. */
+export function harderPrompt(set: PracticeSet, task: Task, level = ''): Prompt {
+  return {
+    system: `Du bist ein Tutor. Die Person löst die Aufgaben dieser Lektion mühelos${level ? ` (Niveau: ${level})` : ''}. ${LANG_RULE}
+Erstelle EINE Bonus-Aufgabe zum selben Thema, die eine Stufe schwerer ist: mehr Transfer, ein Schritt mehr oder eine knifflige Variante – fair lösbar, mit Hinweisen. Gern ein anderer Aufgabentyp aus der Liste.
+${taskRules(set.kind)}
+Format: {"task":{…Aufgabe…, "level":3}}. Antworte ausschließlich mit gültigem JSON.`,
+    user: `THEMA: ${set.topic}\n\nZULETZT GELÖSTE AUFGABE (JSON):\n${JSON.stringify(task).slice(0, 5000)}`,
+    maxTokens: 2500,
+    json: true,
+  };
+}
+export const parseHarder = (raw: unknown): Task | null => parseTask((raw as { task?: unknown } | null)?.task ?? raw);
 
 /** The next task still open after task i (solved and skipped ones are passed over, round to the start); null when none is left. Pure – tested. */
 export function nextOpen(set: PracticeSet, i: number): number | null {
@@ -530,12 +590,12 @@ export function nextOpen(set: PracticeSet, i: number): number | null {
  * A follow-up task after a mistake – not straight after, but behind the next task (another topic in between
  * helps memory and keeps it varied); at the end if there is none. Marked as extra. Pure – tested.
  */
-export function insertTaskLater(set: PracticeSet, i: number, task: Task): Pick<PracticeSet, 'tasks' | 'progress'> {
+export function insertTaskLater(set: PracticeSet, i: number, task: Task, bonus = false): Pick<PracticeSet, 'tasks' | 'progress'> {
   const tasks = [...taskList(set)];
   const at = Math.min(i + 2, tasks.length);
   tasks.splice(at, 0, task);
   const progress = [...set.progress];
-  progress.splice(at, 0, { tries: 0, hints: 0, extra: true });
+  progress.splice(at, 0, { tries: 0, hints: 0, extra: true, ...(bonus ? { bonus: true } : {}) });
   return { tasks, progress };
 }
 

@@ -2047,6 +2047,46 @@ console.log('Kompakt: wenige Karten auch aus langen Zusammenfassungen');
   ok(C.shouldCurate(20, [18800]) && !C.shouldCurate(6, [18800]) && !C.shouldCurate(12, [40000], 'thorough') && C.shouldCurate(12, [40000, 40000]) && !C.shouldCurate(11, [40000, 40000]), 'Aussortieren: ein Teil erst bei deutlich mehr Karten als erlaubt, mehrere Teile ab 12');
 }
 
+console.log('Schlauer „Weiter“-Knopf und Schwierigkeit, die sich anpasst');
+{
+  const P = await import('../src/lib/practice');
+  const S = await import('../src/lib/skills');
+  const t = (k: number, level?: number) => ({ type: 'calc', problem: 'p' + k, answer: { type: 'number', value: '1' }, hints: [], steps: [], ...(level ? { level } : {}) });
+  const clean = { tries: 1, hints: 0, solved: true };
+  const open = { tries: 0, hints: 0 };
+  ok((P.parseTask({ type: 'calc', problem: 'x', answer: { type: 'number', value: '1' }, level: 3 }) as any).level === 3 && (P.parseTask({ type: 'calc', problem: 'x', answer: { type: 'number', value: '1' }, level: 7 }) as any).level === undefined, 'Aufgaben: Stufe 1–3 übernommen, Unsinn weg');
+  const set = (progress: any[], levels = [1, 2, 1, 3, 2]) => ({ id: 's', createdAt: 1, kind: 'math', topic: 'T', intro: '', labs: [], tasks: levels.map((lv, k) => t(k, lv)), progress }) as any;
+  // two clean solves (tasks 0 and 1, level 2 at 1) → next harder open (task 3, level 3), not task 2 (level 1)
+  ok(P.pickNext(set([clean, clean, open, open, open]), 1) === 3, 'läuft gut → nächste schwerere Aufgabe');
+  ok(P.pickNext(set([clean, { tries: 3, hints: 1, solved: true }, open, open, open]), 1) === 2, 'mit Mühe gelöst → nicht schwerer');
+  ok(P.pickNext(set([open, open, open, open, open], [0, 0, 0, 0, 0] as any), 0) === 1, 'ohne Stufen → der Reihe nach');
+  const withExtra = { ...set([clean, open, open, open, open]), progress: [clean, open, open, open, { ...clean, extra: true }] };
+  ok(P.problemCount(withExtra) === 4 && P.solvedCount(withExtra) === 1 && P.settledCount(withExtra) === 1, 'Zusatz- und Bonus-Aufgaben zählen nicht für das Meistern');
+  ok(P.goingWell(set([clean, clean, clean, open, open])) && !P.goingWell(set([clean, clean, open, open, open])) && !P.goingWell(set([clean, clean, { tries: 2, hints: 0, solved: true }, open, open])), 'Bonus nur, wenn mindestens 3 Aufgaben sauber gelöst sind');
+  const hp = P.harderPrompt(set([clean]), t(0, 2) as any);
+  ok(hp.system.includes('schwerer') && hp.user.includes('"p0"') && (P.parseHarder({ task: { type: 'calc', problem: 'b', answer: { type: 'number', value: '2' }, level: 3 } }) as any)?.level === 3, 'Bonus-Aufgabe: eine Stufe schwerer');
+
+  const DAY = 86_400_000, now = 10 * DAY;
+  const done = (id: string, doneAt?: number) => ({ id, title: id, goal: '', ...(doneAt ? { doneAt } : {}), set: { id: 'x' + id, createdAt: 1, kind: 'math', topic: id, intro: '', labs: [], tasks: [t(0), t(1), t(2), t(3), t(4)], progress: [clean, clean, clean, clean, clean] } });
+  const sk = (lessons: any[], extra: any = {}) => ({ id: 'k', topic: 'T', title: 'T', domain: 'math', levels: ['a'], targetLevel: 0, level: '', status: 'active', plan: {}, stages: [{ id: 'st', name: 'S', goal: '', lessons }], createdAt: 1, updatedAt: 1, ...extra }) as any;
+  const fresh = [done('a', now - 3 * DAY), done('b', now - DAY), { id: 'c', title: 'c', goal: '' }];
+  ok(S.nextStep(sk(fresh), now)?.kind === 'review', 'nach 2 neuen Lektionen: kurze Wiederholung');
+  ok(S.nextStep(sk(fresh, { lastReviewAt: now - 2 * DAY }), now)?.kind === 'lesson', 'seit der letzten Wiederholung erst 1 neue Lektion → neue Lektion');
+  ok(S.nextStep(sk([done('a', now - 5 * DAY), done('b', now - 4 * DAY), { id: 'c', title: 'c', goal: '' }], { lastReviewAt: now - 3 * DAY }), now)?.kind === 'lesson', 'Lektionen vor der letzten Wiederholung zählen nicht');
+  ok(S.nextStep(sk(fresh, { lastReviewAt: now - 3600_000 }), now)?.kind === 'lesson', 'höchstens eine Wiederholung pro Tag');
+  const shaky = { ...done('w', now - 5 * DAY), set: { ...done('w').set, progress: [clean, clean, clean, clean, { tries: 1, hints: 0, solved: true, dunno: false, shown: true }].map((x, k) => (k < 4 ? { tries: 3, hints: 2, solved: true } : x)) } };
+  const weakStep = S.nextStep(sk([shaky, { id: 'c', title: 'c', goal: '' }], { lastReviewAt: now }), now);
+  ok(weakStep?.kind === 'weak' && (weakStep as any).lesson.id === 'w' && S.nextStep(sk([shaky, { id: 'c', title: 'c', goal: '' }], { lastReviewAt: now, lastWeakAt: now - DAY }), now)?.kind === 'lesson', 'Schwachstelle unter 50 % → festigen, aber nicht öfter als alle 2 Tage');
+  ok(S.nextStep(sk([done('a')], { mini: true }), now) === null, 'alles geschafft → kein nächster Schritt (Stufentest wie bisher)');
+
+  const easy = [done('a'), done('b'), { id: 'c', title: 'c', goal: '' }];
+  ok(S.paceOf(sk(easy)) === 'fast', 'letzte zwei Lektionen sauber → schneller');
+  const hard = (id: string) => ({ ...done(id), set: { ...done(id).set, progress: Array.from({ length: 5 }, () => ({ tries: 3, hints: 2, solved: true })) } });
+  const gentle = sk([hard('a'), hard('b'), { id: 'c', title: 'c', goal: '' }]);
+  ok(S.paceOf(gentle) === 'gentle' && S.lessonPrompt(gentle, gentle.stages[0], gentle.stages[0].lessons[2]).system.includes('Kleinere Schritte'), 'letzte Lektionen schwer → kleinere Schritte');
+  ok(S.reviewPrompt(sk(easy), undefined, 4).system.includes('4 Aufgaben') && S.reviewPrompt(sk(easy)).system.includes('8 Aufgaben'), 'kurze Wiederholung: 4 Aufgaben');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

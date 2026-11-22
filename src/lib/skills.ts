@@ -5,7 +5,7 @@
  * Pure – tested in scripts/test-srs.mts. Running the AI requests: lib/skillRun.ts.
  */
 import { FORMULA_RULE, LANG_RULE, type Prompt } from './ai';
-import { FIGURE_RULE, problemCount, setFrame, solvedCount, toDomain, type Domain, type PracticeSet, type ProblemProgress } from './practice';
+import { cleanSolve, FIGURE_RULE, problemCount, setFrame, solvedCount, toDomain, type Domain, type PracticeSet, type ProblemProgress } from './practice';
 import { DAY, dayKey, startOfDay } from './util';
 import { spreadClip } from './sample';
 import type { DeckFile } from './store';
@@ -20,6 +20,8 @@ export type Lesson = {
   set?: PracticeSet;
   /** Minutes spent in this lesson (measured while it is open) – for the remaining-time estimate. */
   minutes?: number;
+  /** When it was mastered for the first time (for when a review is due). */
+  doneAt?: number;
 };
 /** A small hands-on project at the end of a stage: apply everything of the stage once. */
 export type StageProject = {
@@ -81,6 +83,9 @@ export type Skill = {
     duration?: string;
   };
   stages: Stage[];
+  /** When the last review and the last weak-spot training were started (for the smart „Weiter“). */
+  lastReviewAt?: number;
+  lastWeakAt?: number;
   /** The latest mixed review (tasks across finished lessons). */
   review?: PracticeSet;
   /** When the review is a training of weak topics: their titles. */
@@ -268,7 +273,37 @@ export const FAST_RULE = 'TEMPO: Die Person hat Vorwissen. Keine Grundlagen, die
  * How fast to go: 'fast' when the person said they know something already (answer to a question about prior
  * knowledge), solved most of the placement test, or marked lessons as „kann ich schon“. Pure – tested.
  */
-export function paceOf(skill: Skill): 'fast' | 'normal' {
+/** When the last lessons went badly: smaller steps. */
+export const GENTLE_RULE = 'TEMPO: Die letzten Lektionen fielen der Person schwer. Kleinere Schritte: ein Häppchen mehr, die ersten zwei Aufgaben sehr leicht (Erfolgserlebnis), danach langsam steigern, zu jeder Aufgabe zwei hilfreiche Hinweise.';
+
+/** Share of a lesson's core tasks solved cleanly (first try, no hints, no solution looked at). */
+function cleanShare(l: Lesson): number | null {
+  const set = l.set;
+  if (!set) return null;
+  const core = set.progress.filter((x) => !x.extra);
+  const tried = core.filter((x) => x.solved || x.tries > 0 || x.dunno || x.shown);
+  if (tried.length < 3) return null;
+  return core.filter(cleanSolve).length / core.length;
+}
+
+/**
+ * How fast to go: the last two lessons worked on decide first (clean ≥ 80 % → fast, below 50 % → gentle);
+ * otherwise prior knowledge (answer to a question about it, a good placement test, lessons marked „kann ich schon“). Pure – tested.
+ */
+export function paceOf(skill: Skill): 'fast' | 'normal' | 'gentle' {
+  const recent = skill.stages
+    .flatMap((st) => st.lessons)
+    .map(cleanShare)
+    .filter((x): x is number => x !== null)
+    .slice(-2);
+  if (recent.length) {
+    const avg = recent.reduce((a, b) => a + b, 0) / recent.length;
+    if (avg < 0.5) return 'gentle';
+    if (recent.length === 2 && recent.every((x) => x >= 0.8)) return 'fast';
+  }
+  return priorPace(skill);
+}
+function priorPace(skill: Skill): 'fast' | 'normal' {
   const qs = skill.plan.questions ?? [];
   const said = qs.some((q, i) => /vorwissen|vorkenntnis|erfahrung|kennst du|kannst du schon|bisher/i.test(q.q) && /etwas|viel|grundlagen|fortgeschritten|gut|sicher|einige|schon|mittel|erfahren/i.test(skill.plan.answers?.[i] ?? '') && !/keine?s?\b|nichts|gar nicht|null/i.test(skill.plan.answers?.[i] ?? ''));
   const pl = skill.plan.placement;
@@ -292,7 +327,7 @@ export function lessonPrompt(skill: Skill, stage: Stage, lesson: Lesson, count =
   return {
     system: `Du bist ein geduldiger Tutor. Du erstellst eine Lektion, in der man durch eigenes Tun lernt: kurze Erklärung, ein durchgerechnetes Beispiel, dann ${count} Aufgaben, die man selbst löst. ${kindRule(skill)}
 ${BITE_RULE}
-${skill.mini ? MINI_RULE + ' Höchstens 3 Häppchen.' : paceOf(skill) === 'fast' ? FAST_RULE : beginnerRule(skill, stageIndex, i)}
+${skill.mini ? MINI_RULE + ' Höchstens 3 Häppchen.' : paceOf(skill) === 'fast' ? FAST_RULE : paceOf(skill) === 'gentle' ? GENTLE_RULE + '\n' + beginnerRule(skill, stageIndex, i) : beginnerRule(skill, stageIndex, i)}
 ${FIGURE_RULE}
 ${JSON_ONLY}`,
     user: `${context(skill)}\n\nSTUFE: ${stage.name} – ${stage.goal}\nLEKTION ${i + 1} von ${all.length}: ${lesson.title} – Ziel: ${lesson.goal}${before.length ? `\nVorher gelernt: ${before.slice(-8).join('; ')}` : ''}`,
@@ -311,11 +346,11 @@ Keine Erklärung nötig ("intro" 1 Satz, kein "example"). 8 Aufgaben. ${JSON_ONL
   };
 }
 
-export function reviewPrompt(skill: Skill, focus?: Lesson[]): Prompt {
+export function reviewPrompt(skill: Skill, focus?: Lesson[], count?: number): Prompt {
   if (focus?.length)
     return {
       system: `Du erstellst ein Schwachstellen-Training: Aufgaben nur zu den Themen, bei denen die Person noch unsicher ist. Beginne mit einer etwas leichteren Aufgabe, steigere dann, und decke jedes Thema ab. ${kindRule(skill)}
-Kein "example". 6 Aufgaben. ${JSON_ONLY}`,
+Kein "example". ${count ?? 6} Aufgaben. ${JSON_ONLY}`,
       user: `${context(skill)}
 
 UNSICHERE THEMEN: ${focus.map((l) => `${l.title} (${l.goal})`).join('; ')}`,
@@ -325,7 +360,7 @@ UNSICHERE THEMEN: ${focus.map((l) => `${l.title} (${l.goal})`).join('; ')}`,
   const done = skill.stages.flatMap((st) => st.lessons).filter(lessonDone);
   return {
     system: `Du erstellst eine gemischte Wiederholung: Aufgaben quer durch bereits gelernte Lektionen, damit nichts vergessen wird (verteiltes Üben). ${kindRule(skill)}
-Kein "example". 8 Aufgaben. ${JSON_ONLY}`,
+Kein "example". ${count ?? 8} Aufgaben. ${JSON_ONLY}`,
     user: `${context(skill)}\n\nGELERNTE LEKTIONEN: ${done.map((l) => `${l.title} (${l.goal})`).join('; ')}`,
     maxTokens: 9000,
     json: true,
@@ -655,6 +690,30 @@ export function parseNextIdeas(raw: unknown): NextIdea[] {
     })
     .filter((x) => x.title)
     .slice(0, 3);
+}
+
+export type NextStep =
+  | { kind: 'lesson'; stage: Stage; lesson: Lesson }
+  | { kind: 'review'; reason: string }
+  | { kind: 'weak'; lesson: Lesson; reason: string };
+
+/**
+ * The smart „Weiter“: what is best now. A short mixed review after every two new lessons (at most once a day),
+ * a weak spot (below 50 %) that was not trained for two days, otherwise the next new lesson. Pure – tested.
+ */
+export function nextStep(skill: Skill, now = Date.now()): NextStep | null {
+  const DAY = 86_400_000;
+  const all = skill.stages.flatMap((st) => st.lessons);
+  const learned = all.filter((l) => !l.known && mastered(l.set));
+  const fresh = learned.filter((l) => (l.doneAt ?? 0) > (skill.lastReviewAt ?? 0)).length;
+  if (!skill.mini && learned.length >= 2 && fresh >= 2 && now - (skill.lastReviewAt ?? 0) > DAY) return { kind: 'review', reason: 'damit nichts vergessen wird' };
+  const weak = competenceMap(skill)
+    .flatMap((g) => g.rows)
+    .filter((r) => r.state === 'weak' && r.share < 0.5 && mastered(r.lesson.set))
+    .sort((a, b) => a.share - b.share)[0];
+  if (weak && now - (skill.lastWeakAt ?? 0) > 2 * DAY) return { kind: 'weak', lesson: weak.lesson, reason: 'da bist du noch unsicher' };
+  const next = nextLesson(skill);
+  return next ? { kind: 'lesson', ...next } : null;
 }
 
 /** Show „Wie geht's weiter?“ once the skill is done or most of it (80 % of the lessons). */

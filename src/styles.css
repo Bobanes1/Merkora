@@ -11490,3 +11490,19 @@ body.learn-focus .practice-tasks { min-height: calc(100vh - 220px); }
 @container deckmain (max-width: 700px) { .deck-top .crumb-course, .deck-top .crumb-sep { display: none; } }
 .deck-top .crumb-current { min-width: 5em; }
 @container deckmain (max-width: 760px) { .deck-actions .act-label { display: none; } }
+
+/* ---------- adapting difficulty ---------- */
+.task-level { display: inline-flex; align-items: center; gap: 2px; margin-right: 8px; font-size: 12px; color: var(--muted); }
+.task-level i { width: 4px; height: 10px; border-radius: 2px; background: var(--line); }
+.task-level i:first-child { height: 6px; }
+.task-level i:nth-child(2) { height: 8px; }
+.task-level.lv-1 i:nth-child(1),
+.task-level.lv-2 i:nth-child(-n + 2),
+.task-level.lv-3 i { background: var(--primary); }
+.task-level i:last-of-type { margin-right: 4px; }
+.practice-nav.task-path button.extra { width: 26px; height: 26px; font-size: 12px; }
+.practice-nav.task-path button.bonus { border-color: #e0a526; color: #a06a00; }
+:root[data-theme='dark'] .practice-nav.task-path button.bonus { color: #f2c55c; }
+.bonus-offer { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 10px; padding: 10px 12px; border-radius: var(--r-md); background: color-mix(in srgb, #f2b84b 14%, var(--surface-2)); border: 1px solid color-mix(in srgb, #f2b84b 45%, var(--line)); }
+.skill-next-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.skill-next-why { font-size: 13px; }

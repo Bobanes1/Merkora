@@ -20,6 +20,7 @@ import {
   lessonDone,
   lessonStars,
   mastered,
+  nextStep,
   moveLesson,
   nextLesson,
   reachedStage,
@@ -379,7 +380,9 @@ function Proposal({ skill }: { skill: Skill }) {
 }
 
 // ---------- learning ----------
-type View = { kind: 'lesson'; id: string } | { kind: 'test'; stageId: string } | { kind: 'project'; stageId: string } | { kind: 'sheet'; stageId: string } | { kind: 'review' } | null;
+/** A review started by the smart „Weiter“: its focus lessons and number of tasks. */
+type ReviewPlan = { focus?: string[]; count?: number };
+type View = { kind: 'lesson'; id: string } | { kind: 'test'; stageId: string } | { kind: 'project'; stageId: string } | { kind: 'sheet'; stageId: string } | { kind: 'review'; plan?: ReviewPlan } | null;
 
 function Path({ skill }: { skill: Skill }) {
   const navigate = useNavigate();
@@ -387,6 +390,8 @@ function Path({ skill }: { skill: Skill }) {
   const [confirm, setConfirm] = useState(false);
   const p = skillProgress(skill);
   const next = nextLesson(skill);
+  // the smart „Weiter“: a short review, a weak spot or the next lesson – whatever is best now
+  const step = nextStep(skill);
   const reached = reachedStage(skill);
   const stars = skill.stages.reduce((sum, st) => sum + st.lessons.reduce((a, l) => a + lessonStars(l), 0), 0);
   const currentRef = useRef<HTMLButtonElement>(null);
@@ -413,7 +418,7 @@ function Path({ skill }: { skill: Skill }) {
       />
     );
   if (view?.kind === 'test') return <StageTestView skill={skill} stageId={view.stageId} onBack={() => setView(null)} />;
-  if (view?.kind === 'review') return <ReviewView skill={skill} onBack={() => setView(null)} />;
+  if (view?.kind === 'review') return <ReviewView skill={skill} plan={view.plan} onBack={() => setView(null)} />;
   if (view?.kind === 'project') return <ProjectView skill={skill} stageId={view.stageId} onBack={() => setView(null)} />;
   if (view?.kind === 'sheet') return <SheetView skill={skill} stageId={view.stageId} onBack={() => setView(null)} />;
 
@@ -434,7 +439,23 @@ function Path({ skill }: { skill: Skill }) {
           <i style={{ width: `${Math.round(p.share * 100)}%` }} />
         </span>
         <div className="row-gap">
-          {next ? (
+          {step && step.kind !== 'lesson' ? (
+            <span className="skill-next-row">
+              <button
+                type="button"
+                className="btn primary"
+                onClick={() => setView({ kind: 'review', plan: step.kind === 'weak' ? { focus: [step.lesson.id], count: 4 } : { count: 4 } })}
+              >
+                {step.kind === 'review' ? 'Weiter: Kurze Wiederholung ›' : `Weiter: „${step.lesson.title}“ festigen ›`}
+              </button>
+              <small className="muted skill-next-why">{step.reason}</small>
+              {next && (
+                <button type="button" className="link-btn small" onClick={() => setView({ kind: 'lesson', id: next.lesson.id })}>
+                  Lieber neue Lektion
+                </button>
+              )}
+            </span>
+          ) : next ? (
             <button type="button" className="btn primary" onClick={() => setView({ kind: 'lesson', id: next.lesson.id })}>
               Weiter: {next.lesson.title} ›
             </button>
@@ -651,7 +672,17 @@ function LessonView({ skill, lessonId, onBack, onPath, onOpen }: { skill: Skill;
   const all = skill.stages.flatMap((st) => st.lessons);
   const after = all[all.findIndex((l) => l.id === lessonId) + 1];
   const host = cardHost(skill, tracked(skill.id, (s) => s.stages.flatMap((st) => st.lessons).find((l) => l.id === lessonId)?.set, (i, patch) =>
-    updateSkill(skill.id, (s) => ({ stages: s.stages.map((st) => ({ ...st, lessons: st.lessons.map((l) => (l.id === lessonId && l.set ? { ...l, set: patchSet(l.set, i, patch) } : l)) })) }))),
+    updateSkill(skill.id, (s) => ({
+      stages: s.stages.map((st) => ({
+        ...st,
+        lessons: st.lessons.map((l) => {
+          if (l.id !== lessonId || !l.set) return l;
+          const set = patchSet(l.set, i, patch);
+          // when it is mastered for the first time (the smart „Weiter“ counts new lessons since the last review)
+          return { ...l, set, ...(!l.doneAt && mastered(set) ? { doneAt: Date.now() } : {}) };
+        }),
+      })),
+    }))),
     (patch) => updateSkill(skill.id, (s) => ({ stages: s.stages.map((st) => ({ ...st, lessons: st.lessons.map((l) => (l.id === lessonId && l.set ? { ...l, set: { ...l.set, ...patch } } : l)) })) })),
   );
   return (
@@ -772,13 +803,14 @@ function StageTestView({ skill, stageId, onBack }: { skill: Skill; stageId: stri
   );
 }
 
-function ReviewView({ skill, onBack }: { skill: Skill; onBack: () => void }) {
+function ReviewView({ skill, plan, onBack }: { skill: Skill; plan?: ReviewPlan; onBack: () => void }) {
   const t = useSkillTask(skill.id + ':review');
   const [fresh, setFresh] = useState(false);
   useEffect(() => {
-    if (!t.busy && (!skill.review || skill.review.progress.every((p) => p.solved))) {
+    // from the smart „Weiter“ always a fresh short review; otherwise the open one is continued
+    if (!t.busy && (plan || !skill.review || skill.review.progress.every((p) => p.solved))) {
       setFresh(true);
-      void makeReview(skill.id);
+      void makeReview(skill.id, plan?.focus, plan?.count);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -793,7 +825,7 @@ function ReviewView({ skill, onBack }: { skill: Skill; onBack: () => void }) {
         ‹ {skill.title}
       </button>
       {(t.busy || (fresh && !skill.review)) && <Busy text="Pip mischt Aufgaben aus deinen Lektionen …" />}
-      <Failed error={t.error} retry={() => void makeReview(skill.id)} />
+      <Failed error={t.error} retry={() => void makeReview(skill.id, plan?.focus, plan?.count)} />
       {skill.review && !t.busy && (
         <PracticeSetView
           set={skill.review}
@@ -803,6 +835,14 @@ function ReviewView({ skill, onBack }: { skill: Skill; onBack: () => void }) {
             <div className="lesson-head">
               <p className="muted small grow">{skill.reviewFocus?.length ? `Schwachstellen-Training: ${skill.reviewFocus.join(', ')}` : 'Gemischte Wiederholung'}</p>
               <SkillGoal skill={skill} compact />
+            </div>
+          }
+          onDone={
+            <div className="row-gap">
+              <p className="form-ok grow">{skill.reviewFocus?.length ? 'Gefestigt – stark!' : 'Wiederholung geschafft – das sitzt!'}</p>
+              <button type="button" className="btn primary" data-primary onClick={onBack}>
+                Zurück zum Weg
+              </button>
             </div>
           }
         />
