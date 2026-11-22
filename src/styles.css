@@ -11343,9 +11343,9 @@ html.glass .pip-tip-bubble { background: color-mix(in srgb, var(--white) 86%, tr
 .bite-card h3 { margin: 0; font-family: var(--font-display); font-size: 21px; }
 .bite-text { font-size: 16.5px; line-height: 1.6; }
 .bite-dots { display: flex; align-items: center; gap: 6px; }
-.bite-dots button { width: 10px; height: 10px; padding: 0; border-radius: 999px; border: 0; background: var(--line); cursor: pointer; transition: width 0.2s ease, background 0.2s ease; }
-.bite-dots button.done { background: var(--ok); }
-.bite-dots button.on { width: 26px; background: var(--primary); }
+.bite-dots button:not(.bite-skip) { width: 10px; height: 10px; padding: 0; border-radius: 999px; border: 0; background: var(--line); cursor: pointer; transition: width 0.2s ease, background 0.2s ease; }
+.bite-dots button.done:not(.bite-skip) { background: var(--ok); }
+.bite-dots button.on:not(.bite-skip) { width: 26px; background: var(--primary); }
 .bite-dots .muted { margin-left: 6px; }
 .bite-check { border: 1px solid var(--line); border-radius: var(--r-lg); padding: 12px 14px; background: var(--surface-2); display: grid; gap: 10px; }
 .bite-check p { margin: 0; }
@@ -11453,7 +11453,7 @@ body.learn-focus .practice-tasks { min-height: calc(100vh - 220px); }
 .case-norms { border: 1px dashed var(--line); border-radius: var(--r-md); padding: 8px 12px; }
 .case-norms summary { cursor: pointer; font-weight: 600; }
 .case-norms ul { margin: 8px 0 2px; padding-left: 18px; display: grid; gap: 4px; }
-.bite-skip { margin-left: auto; }
+.bite-skip { margin-left: auto; flex: none; white-space: nowrap; }
 .phase-skip { display: flex; justify-content: flex-end; margin-bottom: -6px; }
 .practice-nav.task-path button.skipped { background: var(--surface-2); color: var(--muted); border: 2px dashed var(--line); }
 .lesson-end-card.not-yet { background: var(--surface-2); border-color: var(--line); }
