@@ -14,7 +14,7 @@ import { Lab } from '../labs/Labs';
 import { completeJson, gradeAnswer } from '../../lib/ai';
 import { openExternal } from '../../lib/desktop';
 import { buildHarness, harnessOffset, localJava, mapErrors, parseResults, runJavaLocal, runJavaOnline, type RunResult, type TestResult } from '../../lib/javaRun';
-import { bitesFrom, checkAnswer, cleanSolve, goingWell, harderPrompt, insertTaskAfter, insertTaskLater, nextOpen, parseHarder, pickNext, settledCount, mistakePrompt, parseMistake, parseSimpler, simplerPrompt, DOMAIN_LABEL, problemCount, solvedCount, taskList, type Bite, type JavaProblem, type MathProblem, type PracticeSet, type ProblemProgress } from '../../lib/practice';
+import { bitesFrom, checkAnswer, checkBiteGap, cleanSolve, goingWell, harderPrompt, insertTaskAfter, insertTaskLater, nextOpen, parseHarder, pickNext, settledCount, mistakePrompt, parseMistake, parseSimpler, simplerPrompt, DOMAIN_LABEL, problemCount, solvedCount, taskList, type Bite, type BiteCheck, type JavaProblem, type MathProblem, type PracticeSet, type ProblemProgress } from '../../lib/practice';
 import { setSettings, useStore } from '../../lib/store';
 import { CaseTaskView, ClassifyTaskView, ClozeTaskView, MultiTaskView, OrderTaskView } from './ActiveTasks';
 import { MusicTaskView } from './MusicTask';
@@ -39,13 +39,14 @@ export type SetHost = {
 /** Shared by all task views: progress of this task, saving it, going on. */
 export type TaskCtx = { set: PracticeSet; i: number; prog: ProblemProgress; host: SetHost; onNext: () => void; isLast: boolean };
 
-type Phase = 'learn' | 'example' | 'practice';
+type Phase = 'try' | 'learn' | 'example' | 'practice';
 const READ_ALL_KEY = 'merkora.readAll';
 
 /**
  * A practice set: explanation, worked example, labs, then the tasks one after another.
- * `guided` (skill lessons): step by step instead – understand in bites with a check question each,
- * then the example, then practise in focus mode. `focus`: focus mode for the tasks (stage tests, reviews).
+ * `guided` (skill lessons): supports three flows – classic (bites → example → practice),
+ * discovery (try-it-first hook → bites → example → practice), and sprint (compact overview → practice).
+ * `focus`: focus mode for the tasks (stage tests, reviews).
  */
 export function PracticeSetView({ set, host, head, onDone, guided, focus }: { set: PracticeSet; host: SetHost; head?: ReactNode; onDone?: ReactNode; guided?: boolean; focus?: boolean }) {
   const tasks = taskList(set);
@@ -73,9 +74,14 @@ export function PracticeSetView({ set, host, head, onDone, guided, focus }: { se
     }
   };
   const bites = guided ? bitesFrom(set) : [];
+  const hasHook = !!guided && set.style === 'discovery' && !!set.hook?.check;
+  const isSprint = !!guided && set.style === 'sprint';
   const hasExample = !!(set.example || set.figures?.length || set.score || set.sketch || set.syntax?.length || set.tables?.length || set.program || set.labs.length);
+  const order: Phase[] = isSprint
+    ? [...(bites.length || hasExample ? (['learn'] as Phase[]) : []), 'practice']
+    : [...(hasHook ? (['try'] as Phase[]) : []), ...(bites.length ? (['learn'] as Phase[]) : []), ...(hasExample ? (['example'] as Phase[]) : []), 'practice'];
   const started = set.progress.some((p) => p.solved || p.tries > 0 || p.shown);
-  const [phase, setPhaseState] = useState<Phase>(() => set.phase ?? (started || (!bites.length && !hasExample) ? 'practice' : bites.length ? 'learn' : 'example'));
+  const [phase, setPhaseState] = useState<Phase>(() => (set.phase && order.includes(set.phase) ? set.phase : started ? 'practice' : order[0] ?? 'practice'));
   const g = !!guided && !readAll;
   const setPhase = (p: Phase) => {
     setPhaseState(p);
@@ -210,7 +216,6 @@ export function PracticeSetView({ set, host, head, onDone, guided, focus }: { se
       </>
     );
 
-  const order: Phase[] = [...(bites.length ? (['learn'] as Phase[]) : []), ...(hasExample ? (['example'] as Phase[]) : []), 'practice'];
   const after = (p: Phase) => order[order.indexOf(p) + 1] ?? 'practice';
   return (
     <>
@@ -218,7 +223,11 @@ export function PracticeSetView({ set, host, head, onDone, guided, focus }: { se
         {head}
         {phase !== 'practice' && (
           <>
-            <span className={'badge ' + set.kind}>{DOMAIN_LABEL[set.kind] ?? 'Übung'}</span>
+            <div className="guided-badges">
+              <span className={'badge ' + set.kind}>{DOMAIN_LABEL[set.kind] ?? 'Übung'}</span>
+              {hasHook && <span className="style-pill">Erst probieren</span>}
+              {isSprint && <span className="style-pill">Praxis-Sprint</span>}
+            </div>
             <h2>{set.topic}</h2>
           </>
         )}
@@ -227,7 +236,7 @@ export function PracticeSetView({ set, host, head, onDone, guided, focus }: { se
             {order.map((p, k) => (
               <li key={p} className={p === phase ? 'on' : order.indexOf(phase) > k ? 'done' : ''}>
                 <button type="button" onClick={() => setPhase(p)} aria-current={p === phase ? 'step' : undefined}>
-                  <span>{order.indexOf(phase) > k ? <IconCheck size={12} /> : k + 1}</span> {PHASE_LABEL[p]}
+                  <span>{order.indexOf(phase) > k ? <IconCheck size={12} /> : k + 1}</span> {phaseLabel(p, isSprint)}
                 </button>
               </li>
             ))}
@@ -241,7 +250,15 @@ export function PracticeSetView({ set, host, head, onDone, guided, focus }: { se
           )}
         </div>
       </section>
-      {phase === 'learn' && <BitesView set={set} bites={bites} host={host} onDone={() => setPhase(after('learn'))} onSkip={() => setPhase('practice')} />}
+      {phase === 'try' && set.hook?.check && (
+        <HookView set={set} hook={set.hook} check={set.hook.check} onDone={() => setPhase(after('try'))} onSkip={() => setPhase('practice')} />
+      )}
+      {phase === 'learn' &&
+        (isSprint ? (
+          <SprintOverview set={set} bites={bites} host={host} hasExample={hasExample} labs={labs} onDone={() => setPhase('practice')} />
+        ) : (
+          <BitesView set={set} bites={bites} host={host} onDone={() => setPhase(after('learn'))} onSkip={() => setPhase('practice')} />
+        ))}
       {phase === 'example' && (
         <>
           <div className="phase-skip">
@@ -291,7 +308,8 @@ export function PracticeSetView({ set, host, head, onDone, guided, focus }: { se
 
 const LEVEL_NAME: Record<number, string> = { 1: 'leicht', 2: 'mittel', 3: 'schwer' };
 
-const PHASE_LABEL: Record<Phase, string> = { learn: 'Verstehen', example: 'Beispiel', practice: 'Üben' };
+const phaseLabel = (p: Phase, sprint: boolean) =>
+  p === 'try' ? 'Ausprobieren' : p === 'learn' ? (sprint ? 'Überblick' : 'Verstehen') : p === 'example' ? 'Beispiel' : 'Üben';
 
 /** Index of the last solved task (for the filled part of the line on the mini path); −1 if none. */
 function lastSolved(set: PracticeSet, n: number) {
@@ -299,34 +317,382 @@ function lastSolved(set: PracticeSet, n: number) {
   return -1;
 }
 
-/** The explanation in bites: read a little, answer an easy question about it, go on. */
-function BitesView({ set, bites, host, onDone, onSkip }: { set: PracticeSet; bites: Bite[]; host: SetHost; onDone: () => void; onSkip: () => void }) {
-  const [k, setK] = useState(() => Math.max(0, Math.min(set.bite ?? 0, bites.length - 1)));
+type CheckActions = { pick?: (j: number) => void; primary?: () => void };
+
+function formatEst(v: number, unit: string) {
+  const num = Number.isInteger(v) ? v.toLocaleString('de-DE') : v.toLocaleString('de-DE', { maximumFractionDigits: 3 });
+  if (!unit) return num;
+  return unit === '%' || unit === '°' ? `${num}\u202f${unit}` : `${num} ${unit}`;
+}
+
+/** Interactive check inside a bite or discovery hook: choice, true/false, mini-gap, reveal, or slider estimate. */
+function BiteCheckView({ check, done, onDone, hookMode, actions }: { check: BiteCheck; done: boolean; onDone: () => void; hookMode?: boolean; actions: { current: CheckActions } }) {
   const [pick, setPick] = useState<number | null>(null);
-  const b = bites[k];
-  const answered = !b?.check || pick === b.check.correct;
-  const go = (to: number) => {
-    setK(to);
-    setPick(null);
-    host.updateSet?.({ bite: to });
-  };
-  const next = () => (k < bites.length - 1 ? go(k + 1) : onDone());
+  const [tfPick, setTfPick] = useState<boolean | null>(null);
+  const [gapVal, setGapVal] = useState('');
+  const [gapState, setGapState] = useState<'idle' | 'right' | 'wrong' | 'shown'>('idle');
+  const [revealed, setRevealed] = useState(false);
+  const mid = check.type === 'estimate' ? Math.round(((check.min + check.max) / 2 - check.min) / check.step) * check.step + check.min : 0;
+  const [estVal, setEstVal] = useState(mid);
+  const [estDone, setEstDone] = useState(false);
+
+  if (check.type === 'tf') {
+    const choose = (val: boolean) => {
+      if (tfPick !== null) return;
+      setTfPick(val);
+      const ok = val === check.answer;
+      playUi(ok ? 'right' : 'wrong');
+      onDone();
+    };
+    actions.current = { pick: (j) => (j === 0 ? choose(true) : j === 1 ? choose(false) : undefined) };
+    const right = tfPick === check.answer;
+    return (
+      <div className="bite-check">
+        <p>
+          <b>Stimmt oder Irrtum?</b> <CardContent text={check.statement} className="inline" />
+        </p>
+        <div className="bite-tf-row">
+          {[true, false].map((val, j) => (
+            <button
+              key={j}
+              type="button"
+              className={
+                'btn outline bite-opt bite-tf-btn' +
+                (tfPick !== null ? (val === check.answer ? ' right' : val === tfPick ? ' wrong' : '') : '')
+              }
+              disabled={tfPick !== null}
+              onClick={() => choose(val)}
+            >
+              <kbd>{j + 1}</kbd> {val ? 'Stimmt' : 'Irrtum'}
+            </button>
+          ))}
+        </div>
+        {tfPick !== null &&
+          (right ? (
+            <p className="form-ok">
+              <IconCheck size={15} /> Richtig! {check.why}
+            </p>
+          ) : (
+            <p className={hookMode ? 'bite-reveal-note' : 'form-error'}>
+              {!hookMode && <IconClose size={15} />} {check.answer ? 'Tatsächlich stimmt das.' : 'Das ist ein Irrtum.'} {check.why}
+            </p>
+          ))}
+      </div>
+    );
+  }
+
+  if (check.type === 'gap') {
+    const submit = () => {
+      if (!gapVal.trim() || done) return;
+      const ok = checkBiteGap(check, gapVal);
+      if (ok) {
+        setGapState('right');
+        playUi('right');
+        onDone();
+      } else if (hookMode) {
+        setGapState('shown');
+        playUi('wrong');
+        onDone();
+      } else {
+        setGapState('wrong');
+        playUi('wrong');
+      }
+    };
+    const show = () => {
+      setGapState('shown');
+      onDone();
+    };
+    actions.current = {};
+    return (
+      <div className="bite-check">
+        <p>
+          <b>{hookMode ? 'Dein Tipp:' : 'Kurz ergänzen:'}</b> <CardContent text={check.prompt} className="inline" />
+        </p>
+        <form
+          className="bite-gap-row"
+          onSubmit={(e) => {
+            e.preventDefault();
+            submit();
+          }}
+        >
+          <input
+            type="text"
+            className="input"
+            value={gapVal}
+            disabled={done}
+            placeholder={check.placeholder || 'Antwort eingeben …'}
+            onChange={(e) => {
+              setGapVal(e.target.value);
+              if (gapState === 'wrong') setGapState('idle');
+            }}
+          />
+          {!done && (
+            <button type="submit" className="btn primary sm" disabled={!gapVal.trim()}>
+              Prüfen
+            </button>
+          )}
+          {gapState === 'wrong' && !done && (
+            <button type="button" className="btn ghost sm" onClick={show}>
+              Lösung zeigen
+            </button>
+          )}
+        </form>
+        {gapState === 'right' && (
+          <p className="form-ok">
+            <IconCheck size={15} /> Richtig! {check.why}
+          </p>
+        )}
+        {gapState === 'wrong' && (
+          <p className="form-error">
+            <IconClose size={15} /> Noch nicht ganz – versuch es nochmal oder schau dir die Lösung an.
+          </p>
+        )}
+        {gapState === 'shown' && (
+          <p className="bite-reveal-note">
+            <b>Lösung:</b> {check.answer[0]}
+            {check.why ? ` – ${check.why}` : ''}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  if (check.type === 'reveal') {
+    const open = () => {
+      if (revealed) return;
+      setRevealed(true);
+      onDone();
+    };
+    actions.current = { primary: open };
+    return (
+      <div className="bite-check">
+        <p>
+          <b>{hookMode ? 'Kurz überlegen:' : 'Kurz im Kopf beantworten:'}</b> <CardContent text={check.q} className="inline" />
+        </p>
+        {!revealed ? (
+          <div>
+            <button type="button" className="btn outline sm" onClick={open}>
+              Antwort aufdecken
+            </button>
+          </div>
+        ) : (
+          <div className="bite-reveal-box">
+            <CardContent text={check.answer} />
+            {check.why && <p className="muted small">{check.why}</p>}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (check.type === 'estimate') {
+    const submit = () => {
+      if (estDone) return;
+      setEstDone(true);
+      const diff = Math.abs(estVal - check.answer);
+      playUi(diff <= check.tolerance * 3 ? 'right' : 'wrong');
+      onDone();
+    };
+    actions.current = { primary: submit };
+    const span = check.max - check.min || 1;
+    const pct = (v: number) => `${Math.max(0, Math.min(100, ((v - check.min) / span) * 100))}%`;
+    const diff = Math.abs(estVal - check.answer);
+    const verdict = diff <= check.tolerance ? 'Volltreffer!' : diff <= check.tolerance * 3 ? 'Nah dran!' : 'Gute Schätzung – hier die Auflösung:';
+    return (
+      <div className="bite-check">
+        <p>
+          <b>{hookMode ? 'Was schätzt du?' : 'Kurz schätzen:'}</b> <CardContent text={check.q} className="inline" />
+        </p>
+        <div className="bite-est">
+          <div className="bite-est-val">{formatEst(estVal, check.unit)}</div>
+          <input
+            type="range"
+            min={check.min}
+            max={check.max}
+            step={check.step}
+            value={estVal}
+            disabled={estDone}
+            onChange={(e) => setEstVal(Number(e.target.value))}
+          />
+          <div className="bite-est-bounds muted small">
+            <span>{formatEst(check.min, check.unit)}</span>
+            <span>{formatEst(check.max, check.unit)}</span>
+          </div>
+          {!estDone ? (
+            <div>
+              <button type="button" className="btn primary sm" onClick={submit}>
+                Schätzen
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="bite-est-scale" aria-hidden="true">
+                <span className="bite-est-pin mine" style={{ left: pct(estVal) }} title="Deine Schätzung" />
+                <span className="bite-est-pin truth" style={{ left: pct(check.answer) }} title="Richtiger Wert" />
+              </div>
+              <p className={diff <= check.tolerance * 3 ? 'form-ok' : 'bite-reveal-note'}>
+                {diff <= check.tolerance * 3 && <IconCheck size={15} />} <b>{verdict}</b> Richtig ist <b>{formatEst(check.answer, check.unit)}</b>. {check.why}
+              </p>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Default: choice (backwards compatible with bites without `type`)
   const choose = (j: number) => {
-    if (!b?.check || answered) return;
+    if (done || j < 0 || j >= check.options.length) return;
     setPick(j);
-    playUi(j === b.check.correct ? 'right' : 'wrong');
+    const ok = j === check.correct;
+    playUi(ok ? 'right' : 'wrong');
+    if (ok || hookMode) onDone();
   };
-  // keys: 1–4 answer the question, Enter goes on
-  const keys = useRef({ next, choose, answered });
-  keys.current = { next, choose, answered };
+  actions.current = { pick: choose };
+  return (
+    <div className="bite-check">
+      <p>
+        <b>{hookMode ? 'Was meinst du?' : 'Kurz gecheckt:'}</b> <CardContent text={check.q} className="inline" />
+      </p>
+      <div className="bite-options">
+        {check.options.map((o, j) => (
+          <button
+            key={j}
+            type="button"
+            className={'btn outline bite-opt' + (j === pick ? (j === check.correct ? ' right' : ' wrong') : done && j === check.correct ? ' right' : '')}
+            disabled={done && j !== check.correct}
+            onClick={() => choose(j)}
+          >
+            <kbd>{j + 1}</kbd> <CardContent text={o} className="inline" />
+          </button>
+        ))}
+      </div>
+      {pick !== null &&
+        (pick === check.correct ? (
+          <p className="form-ok">
+            <IconCheck size={15} /> Richtig! {check.why}
+          </p>
+        ) : hookMode ? (
+          <p className="bite-reveal-note">
+            <b>Auflösung:</b> {check.options[check.correct]}
+            {check.why ? ` – ${check.why}` : ''}
+          </p>
+        ) : (
+          <p className="form-error">
+            <IconClose size={15} /> Nicht ganz – lies das Häppchen nochmal und versuch es erneut.
+          </p>
+        ))}
+    </div>
+  );
+}
+
+/** Opening try-it-first card for `discovery` lessons: spark intuition before explaining. */
+function HookView({ set, hook, check, onDone, onSkip }: { set: PracticeSet; hook: Bite; check: BiteCheck; onDone: () => void; onSkip: () => void }) {
+  const [done, setDone] = useState(false);
+  const actions = useRef<CheckActions>({});
+  const keys = useRef({ onDone, done });
+  keys.current = { onDone, done };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement;
       if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || el.closest?.('input, textarea, select, [contenteditable="true"], .lab, .cheat-sheet')) return;
-      if (/^[1-4]$/.test(e.key)) keys.current.choose(Number(e.key) - 1);
-      else if (e.key === 'Enter' && keys.current.answered && el.tagName !== 'BUTTON' && el.tagName !== 'A') {
+      if (/^[1-4]$/.test(e.key)) actions.current.pick?.(Number(e.key) - 1);
+      else if (e.key === 'Enter' && el.tagName !== 'BUTTON' && el.tagName !== 'A') {
         e.preventDefault();
-        keys.current.next();
+        if (keys.current.done) keys.current.onDone();
+        else actions.current.primary?.();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  const fig = hook.figure !== undefined ? set.figures?.[hook.figure] : undefined;
+  return (
+    <section className="panel bite-card hook-card">
+      <div className="bite-dots">
+        <span className="muted small">Erst probieren · zählt nicht gegen dich</span>
+        <button type="button" className="link-btn small bite-skip" onClick={onSkip} title="Direkt zu den Aufgaben">
+          Direkt üben ›
+        </button>
+      </div>
+      {hook.title && <h3>{hook.title}</h3>}
+      {hook.text && (
+        <div className="md bite-text">
+          <Markdown text={hook.text} />
+        </div>
+      )}
+      {fig && <Figures figures={[fig]} />}
+      <BiteCheckView check={check} done={done} onDone={() => setDone(true)} hookMode actions={actions} />
+      <div className="row-gap bite-nav">
+        <span className="grow" />
+        {!done && (
+          <button type="button" className="btn ghost sm" onClick={onDone}>
+            Überspringen
+          </button>
+        )}
+        <button type="button" className="btn primary" onClick={onDone} disabled={!done}>
+          Weiter zur Erklärung <IconChevron size={15} />
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/** Compact one-card overview for `sprint` lessons: brief recap + optional example, then straight to tasks. */
+function SprintOverview({ set, bites, host, hasExample, labs, onDone }: { set: PracticeSet; bites: Bite[]; host: SetHost; hasExample: boolean; labs: ReactNode; onDone: () => void }) {
+  return (
+    <>
+      <section className="panel bite-card">
+        <div className="bite-dots">
+          <span className="muted small">Kurz-Überblick · direkt ins Üben</span>
+        </div>
+        {bites.map((b, k) => (
+          <div key={k} className="sprint-bite">
+            {b.title && <h3>{b.title}</h3>}
+            <div className="md bite-text">
+              <Markdown text={b.text} />
+            </div>
+            {b.figure !== undefined && set.figures?.[b.figure] && <Figures figures={[set.figures[b.figure]]} />}
+          </div>
+        ))}
+        {hasExample && <Explanation set={set} host={host} hideText />}
+      </section>
+      {labs}
+      <div className="phase-next">
+        <button type="button" className="btn primary" onClick={onDone}>
+          Direkt zu den Aufgaben <IconChevron size={15} />
+        </button>
+      </div>
+    </>
+  );
+}
+
+/** The explanation in bites: read a little, interact with a varied quick check, go on. */
+function BitesView({ set, bites, host, onDone, onSkip }: { set: PracticeSet; bites: Bite[]; host: SetHost; onDone: () => void; onSkip: () => void }) {
+  const [k, setK] = useState(() => Math.max(0, Math.min(set.bite ?? 0, bites.length - 1)));
+  const [done, setDone] = useState(false);
+  const actions = useRef<CheckActions>({});
+  const b = bites[k];
+  const answered = !b?.check || done;
+  const go = (to: number) => {
+    setK(to);
+    setDone(false);
+    actions.current = {};
+    host.updateSet?.({ bite: to });
+  };
+  const next = () => (k < bites.length - 1 ? go(k + 1) : onDone());
+  // keys: 1–4 answer choice/tf checks, Enter reveals/submits or goes on
+  const keys = useRef({ next, answered });
+  keys.current = { next, answered };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement;
+      if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || el.closest?.('input, textarea, select, [contenteditable="true"], .lab, .cheat-sheet')) return;
+      if (/^[1-4]$/.test(e.key)) actions.current.pick?.(Number(e.key) - 1);
+      else if (e.key === 'Enter' && el.tagName !== 'BUTTON' && el.tagName !== 'A') {
+        e.preventDefault();
+        if (keys.current.answered) keys.current.next();
+        else actions.current.primary?.();
       }
     };
     window.addEventListener('keydown', onKey);
@@ -352,36 +718,7 @@ function BitesView({ set, bites, host, onDone, onSkip }: { set: PracticeSet; bit
         <Markdown text={b.text} />
       </div>
       {fig && <Figures figures={[fig]} />}
-      {b.check && (
-        <div className="bite-check">
-          <p>
-            <b>Kurz gecheckt:</b> <CardContent text={b.check.q} className="inline" />
-          </p>
-          <div className="bite-options">
-            {b.check.options.map((o, j) => (
-              <button
-                key={j}
-                type="button"
-                className={'btn outline bite-opt' + (j === pick ? (j === b.check!.correct ? ' right' : ' wrong') : answered && j === b.check!.correct ? ' right' : '')}
-                disabled={answered && j !== b.check!.correct}
-                onClick={() => choose(j)}
-              >
-                <kbd>{j + 1}</kbd> <CardContent text={o} className="inline" />
-              </button>
-            ))}
-          </div>
-          {pick !== null &&
-            (answered ? (
-              <p className="form-ok">
-                <IconCheck size={15} /> Richtig! {b.check.why}
-              </p>
-            ) : (
-              <p className="form-error">
-                <IconClose size={15} /> Nicht ganz – lies das Häppchen nochmal und versuch es erneut.
-              </p>
-            ))}
-        </div>
-      )}
+      {b.check && <BiteCheckView key={k} check={b.check} done={done} onDone={() => setDone(true)} actions={actions} />}
       <div className="row-gap bite-nav">
         {k > 0 && (
           <button type="button" className="btn ghost sm" onClick={() => go(k - 1)}>

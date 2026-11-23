@@ -5,7 +5,7 @@
  * Pure – tested in scripts/test-srs.mts. Running the AI requests: lib/skillRun.ts.
  */
 import { FORMULA_RULE, LANG_RULE, type Prompt } from './ai';
-import { cleanSolve, FIGURE_RULE, problemCount, setFrame, solvedCount, toDomain, type Domain, type PracticeSet, type ProblemProgress } from './practice';
+import { cleanSolve, FIGURE_RULE, problemCount, setFrame, solvedCount, taskList, toDomain, type Domain, type LessonStyle, type PracticeSet, type ProblemProgress } from './practice';
 import { DAY, dayKey, startOfDay } from './util';
 import { spreadClip } from './sample';
 import type { DeckFile } from './store';
@@ -262,8 +262,7 @@ PROGRAMMIER-ANFÄNGER: Die Person hat vielleicht noch nie programmiert. Werkzeug
 Mindestens die Hälfte der Aufgaben sind "code"-Aufgaben, bei denen man selbst ein kleines, lauffähiges Programm schreibt – ganz klein anfangen (z. B. den eigenen Namen ausgeben, zwei Zahlen addieren), immer mit Startcode und klarer Anleitung, welche Zeile man ändert.`
       : '';
   return `ANFÄNGER-LEKTION – setze KEIN Vorwissen voraus.
-Die ersten Häppchen holen ab: "Worum geht's?" (2–3 Sätze), "Stell dir vor …" (ein Bild/Vergleich aus dem Alltag), "Die wichtigen Begriffe" (**Begriff** – einfache Erklärung in einem Satz), dann erst das Neue.
-Jeder Begriff, der im Beispiel oder in den Aufgaben vorkommt, muss vorher in einem Häppchen erklärt sein. Die ersten Aufgaben sind sehr leicht (Erfolgserlebnis), danach selbst etwas tun.${code}`;
+Hole ganz am Anfang mit einer einfachen Alltagsidee ab und erkläre jeden neuen Fachbegriff sofort kurz, bevor er im Beispiel oder in den Aufgaben vorkommt. Nutze lebendige, zum Thema passende Überschriften statt starrer Standard-Titel. Die ersten Aufgaben geben ein schnelles Erfolgserlebnis, danach wird selbst angewendet.${code}`;
 }
 
 /** With prior knowledge the lessons go faster: no basics, straight to the new part. */
@@ -312,21 +311,151 @@ function priorPace(skill: Skill): 'fast' | 'normal' {
   return said || placed || known ? 'fast' : 'normal';
 }
 
-/** Skill lessons explain in bites: read a little, answer an easy question about it, go on – no wall of text. */
-export const BITE_RULE = `ERKLÄRUNG IN HÄPPCHEN – keine Textwand. Feld "bites": 3–5 Häppchen in sinnvoller Reihenfolge:
-[{"title":"kurzer Titel","text":"Markdown, höchstens etwa 80 Wörter, ein Gedanke","figure":0,"check":{"q":"sehr leichte Frage genau zu diesem Häppchen","options":["…","…","…"],"correct":1,"why":"ein Satz, warum"}}]
-- Jedes Häppchen endet mit "check" (2–4 Optionen, "correct" = Index der richtigen Option, ab 0). Die Frage prüft nur, ob man das Häppchen verstanden hat – kein Wissen von später.
-- "figure" (optional) = Index eines Bildes in "figures", das genau zu diesem Häppchen passt.
+/** Skill lessons explain in bites with varied mini-checks (not only multiple choice). */
+export const BITE_RULE = `ERKLÄRUNG IN HÄPPCHEN – keine Textwand. Feld "bites": 3–4 Häppchen in sinnvoller Reihenfolge:
+[{"title":"kurzer, themenspezifischer Titel","text":"Markdown, höchstens etwa 80 Wörter, ein Gedanke","figure":0,"check":{…}}]
+- Mische verschiedene kurze "check"-Formate – NICHT jedes Häppchen als Multiple Choice (höchstens 1× "choice" pro Lektion):
+  • Wahr oder Irrtum: {"type":"tf","statement":"steile Behauptung oder typischer Irrtum","answer":false,"why":"ein Satz Auflösung"}
+  • Mini-Lücke: {"type":"gap","prompt":"Merksatz mit ___ für das Schlüsselwort","answer":["Wort","Synonym"],"why":"ein Satz"}
+  • Kurz überlegen & aufdecken: {"type":"reveal","q":"kurze Denkfrage zum Häppchen","answer":"knappe Antwort in 1–2 Sätzen","why":"optionaler Zusatz"}
+  • Kurz schätzen: {"type":"estimate","q":"Schätzfrage","min":0,"max":100,"answer":37,"tolerance":5,"unit":"%","why":"ein Satz"}
+  • Auswahl (höchstens 1×): {"type":"choice","q":"leichte Frage","options":["…","…","…"],"correct":1,"why":"ein Satz"}
+- Häppchen mit einer Grafik ("figure") dürfen "check" auch weglassen, wenn die Grafik für sich spricht.
+- Jeder Check prüft nur, was in diesem Häppchen steht – kein Wissen von später.
 - "intro" ist dann nur EIN Satz Zusammenfassung; "theory" lässt du weg.`;
+
+const BITE_DOMAIN_HINT: Record<Domain, string> = {
+  math: 'Bei Mathe passen als Häppchen-Checks besonders "estimate" (Größenordnung/Wahrscheinlichkeit), "gap" (Zahl oder Begriff) und "reveal".',
+  java: 'Bei Programmieren passen als Häppchen-Checks besonders "gap" (Ausgabe/Codewort tippen), "tf" (Verhalten/Irrtum) und "reveal".',
+  law: 'Bei Recht passen als Häppchen-Checks besonders "tf" („Stimmt das juristisch?“), "reveal" (kurze Fallfrage) und "gap" (Tatbestandsmerkmal).',
+  language: 'Bei Sprachen passen als Häppchen-Checks besonders "gap" (Wort/Endung), "reveal" (Übersetzung) und "tf" (typischer Fehler / Falscher Freund).',
+  music: 'Bei Musik passen als Häppchen-Checks besonders "reveal", "tf" und "gap" (Intervall/Notenname); Häppchen mit Notenblatt brauchen keinen Check.',
+  general: 'Wähle die Häppchen-Checks passend zum Thema: bei Zahlen/Geschichte/Natur gerne "estimate", bei Mythen "tf", bei Begriffen und Abläufen "gap" oder "reveal".',
+};
+
+const OPENERS: Record<Domain, string[]> = {
+  math: ['estimate', 'calc', 'order', 'label', 'cloze', 'sheet'],
+  java: ['code', 'cloze', 'order', 'calc'],
+  law: ['scenario', 'order', 'cloze', 'case', 'multi'],
+  music: ['music', 'order', 'label', 'cloze'],
+  language: ['cloze', 'scenario', 'order', 'roleplay', 'calc'],
+  general: ['estimate', 'order', 'cloze', 'scenario', 'label', 'calc', 'case', 'roleplay', 'sheet'],
+};
+
+const TOPIC_FIT_HINT: Record<Domain, string> = {
+  math: 'Mathe-Mix: verbinde Rechnen ("calc"), Schätzen ("estimate"), Rechenwege ordnen ("order"), Formeltabellen ("sheet") und Grafik beschriften ("label").',
+  java: 'Programmier-Mix: Schwerpunkt auf eigenem "code", ergänzt durch Code-Lücken ("cloze"), Programmablauf ordnen ("order") und Ausgabe vorhersagen ("calc").',
+  law: 'Rechts-Mix: echte Fallarbeit ("case"), Entscheidungs-Szenarien ("scenario"), Prüfungsschemata ("order"), Tatbestands-Lücken ("cloze") und Beratungs-Rollenspiel ("roleplay") statt bloßer 2-Gruppen-Zuordnung.',
+  music: 'Musik-Mix: Schwerpunkt auf interaktiven "music"-Aufgaben (Hören, Klavier, Rhythmus, Noten), ergänzt durch "order", "label" und "cloze".',
+  language: 'Sprach-Mix: Lücken ("cloze"), kurze Gespräche ("roleplay"), Alltagsszenarien ("scenario"), Satzbau ordnen ("order") und kurze Übersetzungen ("calc").',
+  general: 'Themen-Mix: wähle die Typen passend zum konkreten Thema – Zahlen/Wirtschaft/Tabellen → "sheet", "estimate", "calc"; Abläufe/Praxis/Erste Hilfe/Kochen → "order", "scenario", "label"; Kommunikation/Psychologie/Verhandeln → "roleplay", "scenario", "case"; Naturwissenschaft/Technik/Geschichte → "label", "estimate", "order", "cloze".',
+};
+
+/**
+ * Chooses a varied lesson style (`classic`, `discovery`, or `sprint`) based on position in the stage,
+ * pace, and the previous lessons' styles so consecutive lessons do not feel identical. Pure – tested.
+ */
+export function lessonStyleOf(skill: Skill, stageIndex: number, lessonIndex: number, inStageIndex: number): LessonStyle {
+  const pace = paceOf(skill);
+  if (pace === 'gentle') return 'classic';
+  if (skill.mini) return lessonIndex === 0 ? 'discovery' : lessonIndex === 1 ? 'classic' : 'sprint';
+  const all = skill.stages.flatMap((st) => st.lessons);
+  const recent = all
+    .slice(0, Math.max(0, lessonIndex))
+    .map((l) => l.set?.style ?? (l.set ? 'classic' : undefined))
+    .filter((x): x is LessonStyle => !!x)
+    .slice(-2);
+  const last = recent[recent.length - 1];
+  if (pace === 'fast') {
+    if (lessonIndex === 0) return 'discovery';
+    if (last !== 'sprint' && !recent.includes('sprint')) return 'sprint';
+    if (last === 'sprint') return 'discovery';
+    return inStageIndex === 0 ? 'classic' : 'sprint';
+  }
+  if (lessonIndex === 0) return 'classic';
+  if (inStageIndex === 0 && stageIndex > 0) return last === 'classic' ? 'discovery' : 'classic';
+  if (inStageIndex >= 2 && last !== 'sprint' && !recent.includes('sprint')) return 'sprint';
+  if (last === 'classic') return 'discovery';
+  if (last === 'discovery') return inStageIndex >= 2 ? 'sprint' : 'classic';
+  if (last === 'sprint') return 'discovery';
+  // Fallback when earlier lessons have no generated set yet (e.g. skipped/planned): alternate by position
+  return inStageIndex >= 2 && inStageIndex % 3 === 2 ? 'sprint' : inStageIndex % 2 === 1 ? 'discovery' : 'classic';
+}
+
+export type LessonVariety = {
+  style: LessonStyle;
+  preferredOpeners: string[];
+  overused: string[];
+  avoidClassify: boolean;
+  styleRule: string;
+  taskRule: string;
+};
+
+/**
+ * Plans task-type variety and lesson flow from the skill's domain, position, and the last 2 generated lessons.
+ * Pure – tested in scripts/test-srs.mts.
+ */
+export function lessonVariety(skill: Skill, stageIndex: number, lessonIndex: number, inStageIndex: number): LessonVariety {
+  const style = lessonStyleOf(skill, stageIndex, lessonIndex, inStageIndex);
+  const all = skill.stages.flatMap((st) => st.lessons);
+  const recentSets = all
+    .slice(0, Math.max(0, lessonIndex))
+    .map((l) => l.set)
+    .filter((x): x is PracticeSet => !!x)
+    .slice(-2);
+  const recentOpeners = new Set<string>(recentSets.map((s) => taskList(s)[0]?.type).filter((x): x is NonNullable<typeof x> => !!x));
+  const counts = new Map<string, number>();
+  for (const s of recentSets) {
+    for (const t of taskList(s)) counts.set(t.type, (counts.get(t.type) ?? 0) + 1);
+  }
+  const pool = OPENERS[skill.domain];
+  const shift = (lessonIndex * 2) % pool.length;
+  const rotated = [...pool.slice(shift), ...pool.slice(0, shift)];
+  const fresh = rotated.filter((t) => !recentOpeners.has(t));
+  const preferredOpeners = (fresh.length >= 2 ? fresh : rotated).slice(0, 3);
+  const avoidClassify = (counts.get('classify') ?? 0) >= 1;
+  const overused = [...counts.entries()]
+    .filter(([t, n]) => n >= 2 && t !== 'code' && t !== 'music')
+    .map(([t]) => t);
+
+  const styleRule =
+    style === 'discovery'
+      ? `LEKTIONS-STIL: "style": "discovery" (Erst probieren, dann verstehen).
+- Gib das Feld "hook" an: {"title":"kurze, neugierig machende Überschrift","text":"knappe Alltagssituation oder verblüffende Frage (1–3 Sätze, ohne Fachwissen lösbar)","check":{…ein Check vom Typ estimate, tf, gap, reveal oder choice…}}.
+- Danach nur 2–3 kurze "bites", die direkt an den Einstieg anknüpfen („Warum ist das so?“).`
+      : style === 'sprint'
+        ? `LEKTIONS-STIL: "style": "sprint" (Praxis-Sprint – kurz einstimmen, direkt üben).
+- Gib "style": "sprint" an.
+- Feld "bites": genau 1 kompaktes Überblicks-Häppchen (3–4 knappe Merkpunkte, OHNE "check"), damit man sofort zu den Aufgaben kommt. Ein kurzes "example" genügt.`
+        : `LEKTIONS-STIL: "style": "classic" (Verstehen in Häppchen → Beispiel → Üben). Gib "style": "classic" an.`;
+
+  const parts = [
+    `ABWECHSLUNG BEI DEN AUFGABEN (${skill.domain}):`,
+    `- ${TOPIC_FIT_HINT[skill.domain]}`,
+    `- Starte Aufgabe 1 NICHT mit "classify". Gute Einstiegs-Typen für Aufgabe 1 diesmal: ${preferredOpeners.map((t) => `"${t}"`).join(', ')} – wähle den, der inhaltlich am besten passt.`,
+    avoidClassify
+      ? `- "classify" kam gerade erst vor: lass "classify" in dieser Lektion ganz weg.`
+      : `- Wenn du "classify" überhaupt nutzt, dann erst später in der Lektion und mit 3–4 Kategorien statt nur 2.`,
+  ];
+  if (overused.length) {
+    parts.push(`- Zuletzt schon häufig dran: ${overused.map((t) => `"${t}"`).join(', ')} – setze diesmal bevorzugt andere Typen aus der Liste ein.`);
+  }
+  return { style, preferredOpeners, overused, avoidClassify, styleRule, taskRule: parts.join('\n') };
+}
 
 export function lessonPrompt(skill: Skill, stage: Stage, lesson: Lesson, count = skill.mini ? 4 : 6): Prompt {
   const all = skill.stages.flatMap((st) => st.lessons);
   const i = all.findIndex((l) => l.id === lesson.id);
   const stageIndex = skill.stages.findIndex((st) => st.id === stage.id);
+  const inStageIndex = Math.max(0, stage.lessons.findIndex((l) => l.id === lesson.id));
   const before = all.slice(0, Math.max(0, i)).map((l) => l.title);
+  const variety = lessonVariety(skill, stageIndex, Math.max(0, i), inStageIndex);
   return {
     system: `Du bist ein geduldiger Tutor. Du erstellst eine Lektion, in der man durch eigenes Tun lernt: kurze Erklärung, ein durchgerechnetes Beispiel, dann ${count} Aufgaben, die man selbst löst. ${kindRule(skill)}
 ${BITE_RULE}
+${BITE_DOMAIN_HINT[skill.domain]}
+${variety.styleRule}
+${variety.taskRule}
 ${skill.mini ? MINI_RULE + ' Höchstens 3 Häppchen.' : paceOf(skill) === 'fast' ? FAST_RULE : paceOf(skill) === 'gentle' ? GENTLE_RULE + '\n' + beginnerRule(skill, stageIndex, i) : beginnerRule(skill, stageIndex, i)}
 ${FIGURE_RULE}
 ${JSON_ONLY}`,

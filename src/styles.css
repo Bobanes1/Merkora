@@ -11508,3 +11508,23 @@ body.learn-focus .practice-tasks { min-height: calc(100vh - 220px); }
 .skill-next-why { font-size: 13px; }
 .example-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .example-result { margin: 4px 0 0; padding: 8px 12px; border-radius: var(--r-md); background: var(--ok-soft); border-left: 3px solid var(--ok); }
+.guided-badges { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.style-pill { font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); color: var(--muted); }
+.hook-card { border-color: color-mix(in srgb, var(--primary) 35%, var(--line)); }
+.sprint-bite { display: grid; gap: 8px; }
+.sprint-bite + .sprint-bite { padding-top: 10px; border-top: 1px solid var(--line); }
+.bite-tf-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.bite-tf-btn { justify-content: center; font-weight: 600; }
+.bite-gap-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.bite-gap-row .input { flex: 1 1 200px; min-width: 140px; }
+.bite-reveal-box { padding: 10px 12px; border-radius: var(--r-md); background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--primary); display: grid; gap: 6px; }
+.bite-reveal-note { margin: 0; font-size: 14px; color: var(--ink); }
+.bite-est { display: grid; gap: 8px; }
+.bite-est-val { font-size: 20px; font-weight: 700; color: var(--primary); }
+.bite-est input[type='range'] { width: 100%; accent-color: var(--primary); }
+.bite-est-bounds { display: flex; justify-content: space-between; margin-top: -4px; }
+.bite-est-scale { position: relative; height: 8px; border-radius: 999px; background: var(--line); margin: 4px 0; }
+.bite-est-pin { position: absolute; top: 50%; width: 12px; height: 12px; border-radius: 50%; transform: translate(-50%, -50%); border: 2px solid var(--surface); }
+.bite-est-pin.mine { background: var(--primary); }
+.bite-est-pin.truth { background: var(--ok); }
+

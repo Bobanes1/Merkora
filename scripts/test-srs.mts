@@ -1660,7 +1660,7 @@ console.log('Anfänger-Lektionen: Grundlagen zuerst');
   const { beginnerRule } = await import('../src/lib/skills');
   const { parsePractice } = await import('../src/lib/practice');
   const java = { domain: 'java' } as any, math = { domain: 'math' } as any;
-  ok(beginnerRule(java, 0, 0).includes('Worum geht') && beginnerRule(java, 0, 0).includes('"code"-Aufgaben') && beginnerRule(java, 0, 0).includes('nichts installieren'), 'erste Java-Lektion: Grundlagen und eigene kleine Programme');
+  ok(beginnerRule(java, 0, 0).includes('ANFÄNGER-LEKTION') && beginnerRule(java, 0, 0).includes('"code"-Aufgaben') && beginnerRule(java, 0, 0).includes('nichts installieren'), 'erste Java-Lektion: Grundlagen und eigene kleine Programme');
   ok(beginnerRule(math, 0, 1).includes('ANFÄNGER-LEKTION') && !beginnerRule(math, 0, 1).includes('"code"-Aufgaben'), 'erste Mathe-Lektion: Grundlagen, keine Code-Aufgaben');
   ok(!beginnerRule(math, 2, 9).includes('ANFÄNGER'), 'spätere Lektion: Grundlagen nur wenn nötig');
   const set = parsePractice({ kind: 'java', topic: 'Start', theory: '### Worum geht\'s?\nText', intro: '- a', problems: [{ type: 'order', prompt: 'p', items: ['a', 'b', 'c'] }] }, 'x', 1);
@@ -2142,6 +2142,122 @@ console.log('Arbeitsplanung & To-do-Reihenfolge');
     now,
   );
   ok(g[0].items[0].id === '1' && g[0].items[1].id === '2', 'To-dos eines Tages folgen der Arbeitsplan-Reihenfolge');
+}
+
+console.log('Abwechslung in Skills: Häppchen-Checks, Lektions-Stile, Aufgaben-Regie');
+{
+  const P = await import('../src/lib/practice');
+  const S = await import('../src/lib/skills');
+
+  const bites = P.parseBites(
+    [
+      { title: 'Mythos', text: 'Text 1', check: { type: 'tf', statement: 'Wasser kocht immer bei 100 °C.', answer: false, why: 'Vom Luftdruck abhängig.' } },
+      { title: 'Lücke', text: 'Text 2', check: { type: 'gap', prompt: 'Die Hälfte als Dezimalzahl: ___', answer: ['0,5', 'ein halb'], why: '1/2 = 0,5' } },
+      { title: 'Denken', text: 'Text 3', check: { type: 'reveal', q: 'Warum sinkt der Siedepunkt am Berg?', answer: 'Geringerer Luftdruck.' } },
+      { title: 'Schätzen', text: 'Text 4', check: { type: 'estimate', q: 'Siedepunkt auf dem Mount Everest?', min: 50, max: 100, answer: 70, unit: '°C', tolerance: 5 } },
+      { title: 'Ungültig', text: 'Text 5', check: { type: 'estimate', q: 'Kaputt', min: 100, max: 50, answer: 70 } },
+    ],
+    0,
+  );
+  ok(
+    bites.length === 5 &&
+      bites[0].check?.type === 'tf' &&
+      bites[0].check.answer === false &&
+      bites[1].check?.type === 'gap' &&
+      bites[2].check?.type === 'reveal' &&
+      bites[3].check?.type === 'estimate' &&
+      bites[3].check.unit === '°C' &&
+      !bites[4].check,
+    'Häppchen-Checks: tf, gap, reveal, estimate geparst; ungültige verworfen',
+  );
+  const gap = bites[1].check as Extract<import('../src/lib/practice').BiteCheck, { type: 'gap' }>;
+  ok(
+    P.checkBiteGap(gap, '0,5') && P.checkBiteGap(gap, '0.5') && P.checkBiteGap(gap, '1/2') && P.checkBiteGap(gap, '50%') && P.checkBiteGap(gap, 'Ein Halb.') && !P.checkBiteGap(gap, '0,8'),
+    'Mini-Lücke: Text, Synonyme und Zahlenformate (Komma, Punkt, Bruch, Prozent) erkannt',
+  );
+
+  const disc = P.parsePractice(
+    {
+      kind: 'general',
+      topic: 'Erste Hilfe',
+      style: 'discovery',
+      hook: { title: 'Kurzer Check', text: 'Jemand verbrennt sich die Hand.', check: { type: 'tf', statement: 'Eiswürfel sind am besten.', answer: false, why: 'Lauwarmes Wasser schont das Gewebe.' } },
+      intro: 'Kurz.',
+      bites: [{ title: 'Warum?', text: 'Lauwarm kühlt sanft.' }],
+      problems: [{ type: 'calc', problem: '1+1', answer: { type: 'number', value: '2' } }],
+    },
+    'd1',
+    1,
+  )!;
+  ok(disc.style === 'discovery' && disc.hook?.check?.type === 'tf' && disc.hook.check.answer === false, 'parsePractice: style und discovery-hook übernommen');
+  const badHook = P.parsePractice({ kind: 'general', topic: 'X', style: 'discovery', hook: { title: 'Ohne Check', text: 'nur text' }, intro: '', problems: [{ type: 'calc', problem: '1', answer: { type: 'number', value: '1' } }] }, 'd2', 1)!;
+  ok(badHook.style === 'discovery' && !badHook.hook, 'parsePractice: hook ohne gültigen Check verworfen');
+
+  const mkSet = (style: 'classic' | 'discovery' | 'sprint', types: string[]) =>
+    ({
+      id: 'x',
+      createdAt: 1,
+      kind: 'general',
+      topic: 'T',
+      intro: '',
+      style,
+      labs: [],
+      tasks: types.map((type) =>
+        type === 'classify'
+          ? { type: 'classify', prompt: 'p', groups: ['A', 'B'], items: [{ text: '1', group: 0 }, { text: '2', group: 1 }, { text: '3', group: 0 }], hints: [] }
+          : type === 'order'
+            ? { type: 'order', prompt: 'p', items: ['a', 'b', 'c'], hints: [] }
+            : { type: 'calc', problem: 'p', answer: { type: 'number', value: '1' }, hints: [], steps: [] },
+      ),
+      progress: types.map((_, idx) => ({ tries: 1, hints: idx === 0 ? 1 : 0, solved: true })),
+    }) as any;
+
+  const sk = {
+    id: 'v',
+    topic: 'Erste Hilfe',
+    title: 'Erste Hilfe',
+    domain: 'general',
+    levels: ['Basis'],
+    targetLevel: 0,
+    level: '',
+    status: 'active',
+    plan: {},
+    stages: [
+      {
+        id: 'st1',
+        name: 'Basis',
+        goal: 'g',
+        lessons: [
+          { id: 'l1', title: 'L1', goal: 'g', set: mkSet('classic', ['order', 'classify', 'calc']) },
+          { id: 'l2', title: 'L2', goal: 'g', set: mkSet('discovery', ['calc', 'calc', 'order']) },
+          { id: 'l3', title: 'L3', goal: 'g' },
+          { id: 'l4', title: 'L4', goal: 'g' },
+        ],
+      },
+    ],
+    createdAt: 1,
+    updatedAt: 1,
+  } as any;
+
+  ok(S.lessonStyleOf(sk, 0, 0, 0) === 'classic', 'Lektion 1 normal → classic');
+  ok(S.lessonStyleOf(sk, 0, 1, 1) === 'discovery', 'nach classic → discovery');
+  ok(S.lessonStyleOf(sk, 0, 2, 2) === 'sprint', 'Lektion 3 in Stufe nach classic+discovery → sprint');
+  const fastSk = { ...sk, plan: { questions: [{ q: 'Vorwissen?', options: ['Keins', 'Viel'] }], answers: { 0: 'Viel' } } };
+  ok(S.lessonStyleOf(fastSk, 0, 0, 0) === 'discovery' && S.lessonStyleOf(fastSk, 0, 2, 2) === 'sprint', 'Tempo fast: Einstieg discovery, danach sprint');
+  const gentleSk = {
+    ...sk,
+    stages: [{ ...sk.stages[0], lessons: [{ id: 'l1', title: 'L1', goal: 'g', set: { ...mkSet('classic', ['calc', 'calc', 'calc']), progress: [{ tries: 3, hints: 2 }, { tries: 2, hints: 1 }, { tries: 2, hints: 1 }] } }, { id: 'l2', title: 'L2', goal: 'g' }] }],
+  };
+  ok(S.lessonStyleOf(gentleSk, 0, 1, 1) === 'classic', 'Tempo gentle bleibt immer bei classic');
+  const miniSk = { ...sk, mini: true };
+  ok(S.lessonStyleOf(miniSk, 0, 0, 0) === 'discovery' && S.lessonStyleOf(miniSk, 0, 1, 1) === 'classic' && S.lessonStyleOf(miniSk, 0, 2, 2) === 'sprint', 'Mini-Skill: discovery → classic → sprint');
+  const v3 = S.lessonVariety(sk, 0, 2, 2);
+  ok(!v3.preferredOpeners.includes('classify'), 'classify wird nie als Einstieg vorgeschlagen');
+  ok(!v3.preferredOpeners.includes('order') && !v3.preferredOpeners.includes('calc'), 'kürzliche Einstiege werden rotiert');
+  ok(v3.avoidClassify && v3.overused.includes('calc'), 'Verlauf erkennt classify und häufige Typen');
+  const lp3 = S.lessonPrompt(sk, sk.stages[0], sk.stages[0].lessons[2]);
+  ok(lp3.system.includes('"style": "sprint"') && lp3.system.includes('Starte Aufgabe 1 NICHT mit "classify"') && lp3.system.includes('höchstens 1× "choice"'), 'lessonPrompt übernimmt Stil, Häppchen-Mix und Aufgaben-Regie');
+  ok(P.DOMAIN_TASKS.general[P.DOMAIN_TASKS.general.length - 1] === 'classify' && P.DOMAIN_TASKS.math.includes('label'), 'classify am Ende der Domain-Listen, math hat label');
 }
 
 console.log(failures ? `\n${failures} Test(s) fehlgeschlagen` : '\nAlle SRS-Tests bestanden');
