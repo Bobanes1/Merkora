@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { playUi } from '../lib/uiSound';
 import { Mascot } from '../components/Mascot';
 import { Confetti } from '../components/Mascot';
 import { Link, useSearchParams } from 'react-router-dom';
-import { IconArrowDown, IconArrowUp, IconCalendar, IconCheck, IconChecklist, IconClock, IconFlag, IconHash, IconNote, IconPlay, IconPlus, IconRepeat, IconSparkle, IconTarget, IconTimer, IconTrash } from '../components/Icons';
+import { IconArrowDown, IconArrowUp, IconCalendar, IconCheck, IconChecklist, IconClock, IconClose, IconFlag, IconHash, IconNote, IconPlay, IconPlus, IconRepeat, IconSearch, IconSparkle, IconTarget, IconTimer, IconTrash } from '../components/Icons';
 import { isLeech } from '../lib/cardLinks';
 import { pomodoro, usePomodoro, usePomodoroMeta } from '../lib/pomodoro';
 import { addTodo, deckUrl, deleteTodo, toggleTodo, updateTodo, useData } from '../lib/store';
@@ -31,6 +32,11 @@ const VIEWS: [View, string][] = [
   ['all', 'Alle'],
   ['done', 'Erledigt'],
 ];
+
+/** The date of a to-do as a short word with its colour (overdue red, today green, tomorrow orange, later purple). */
+function dueTone(due: string, today: string, tomorrow: string): string {
+  return due < today ? 'overdue' : due === today ? 'today' : due === tomorrow ? 'tomorrow' : 'later';
+}
 
 /**
  * The plan from the Arbeitsplanung keeps going here: which step is running, and what's next once the timer is done.
@@ -75,24 +81,28 @@ function PlanNext({ todos, today, handedOver, onStart }: { todos: Todo[]; today:
   );
 }
 
-/** The to-do list as its own page: quick entry, views, details, sub-tasks, repeating, bulk actions, undo, keyboard. */
+/** The to-do list, in a calm list style: views, quick entry in the list, details in a side panel, keyboard, undo. */
 export default function Todos({ embedded = false }: { embedded?: boolean }) {
   const data = useData();
   const [params] = useSearchParams();
   const all = data.todos ?? [];
   const now = Date.now();
   const today = dayKey(now);
+  const tomorrow = dayKey(now + DAY);
   const [view, setView] = useState<View>('today');
   const [search, setSearch] = useState('');
   const [deckFilter, setDeckFilter] = useState(params.get('deck') ?? '');
   const [prioFilter, setPrioFilter] = useState<'' | TodoPriority>('');
+  const [filters, setFilters] = useState(!!params.get('deck'));
   const [open, setOpen] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [focus, setFocus] = useState(0);
   const [undo, setUndo] = useState<{ text: string; run: () => void } | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout>>();
-  const addRef = useRef<HTMLInputElement>(null);
+  const [adding, setAdding] = useState<string | null>(null);
   const [party, setParty] = useState(0);
+  // a checked to-do stays a moment with its tick before it leaves the list
+  const [leaving, setLeaving] = useState<Set<string>>(new Set());
 
   const offerUndo = (text: string, run: () => void) => {
     clearTimeout(undoTimer.current);
@@ -107,16 +117,21 @@ export default function Todos({ embedded = false }: { embedded?: boolean }) {
       (!deckFilter || t.deckId === deckFilter) &&
       (!prioFilter || t.priority === prioFilter),
   );
-  const sections: { label: string; items: Todo[]; tone?: string }[] = useMemo(() => {
-    if (view === 'done') return [{ label: 'Erledigt', items: [...filtered.filter((t) => t.doneAt)].sort((a, b) => (b.doneAt ?? 0) - (a.doneAt ?? 0)) }];
+  type Section = { id: string; label: string; items: Todo[]; tone?: string; addDue?: string };
+  const sections: Section[] = useMemo((): Section[] => {
+    if (view === 'done') return [{ id: 'done', label: 'Erledigt', items: [...filtered.filter((t) => t.doneAt)].sort((a, b) => (b.doneAt ?? 0) - (a.doneAt ?? 0)) }];
     if (view === 'planned')
-      return plannedDays(filtered, now, 14)
-        .filter((d) => d.items.length)
-        .map((d): { label: string; items: Todo[]; tone?: string } => ({ label: d.key === today ? 'Heute' : dueText(d.key, now), items: sortTodos(d.items) }))
-        .concat(filtered.some((t) => !t.doneAt && t.due && t.due < today) ? [{ label: 'Überfällig', items: sortTodos(filtered.filter((t) => !t.doneAt && t.due && t.due < today)), tone: 'overdue' }] : []);
+      return (filtered.some((t) => !t.doneAt && t.due && t.due < today)
+        ? ([{ id: 'overdue', label: 'Überfällig', items: sortTodos(filtered.filter((t) => !t.doneAt && t.due && t.due < today)), tone: 'overdue' }] as Section[])
+        : ([] as Section[])
+      ).concat(
+        plannedDays(filtered, now, 14)
+          .filter((d) => d.items.length)
+          .map((d) => ({ id: d.key, label: d.key === today ? 'Heute' : dueText(d.key, now), items: sortTodos(d.items), addDue: d.key })),
+      );
     const groups = todoGroups(filtered, now).filter((g) => g.id !== 'done');
     const pick = view === 'today' ? groups.filter((g) => g.id === 'overdue' || g.id === 'today') : groups;
-    return pick.map((g) => ({ label: g.label, items: sortTodos(g.items), tone: g.id }));
+    return pick.map((g) => ({ id: g.id, label: g.label, items: sortTodos(g.items), tone: g.id, addDue: g.id === 'today' ? today : undefined }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, all, search, deckFilter, prioFilter]);
   const flat = sections.flatMap((s) => s.items);
@@ -126,15 +141,34 @@ export default function Todos({ embedded = false }: { embedded?: boolean }) {
     all: all.filter((t) => !t.doneAt).length,
     done: all.filter((t) => t.doneAt).length,
   };
+  const overdue = all.filter((t) => !t.doneAt && t.due && t.due < today);
+  const openTodo = open ? all.find((t) => t.id === open) : undefined;
+  const title = view === 'today' ? 'Heute' : VIEWS.find(([id]) => id === view)![1];
 
   // ---------- actions ----------
   const check = (t: Todo) => {
     const wasDone = !!t.doneAt;
-    if (!wasDone) playUi('tick');
+    if (!wasDone) {
+      playUi('tick');
+      // the tick shows for a moment, then the to-do leaves the open list
+      setLeaving((s) => new Set(s).add(t.id));
+      setTimeout(() => {
+        setLeaving((s) => {
+          const n = new Set(s);
+          n.delete(t.id);
+          return n;
+        });
+        finish(t);
+      }, 380);
+      return;
+    }
+    toggleTodo(t.id);
+  };
+  const finish = (t: Todo) => {
     const next = toggleTodo(t.id);
     // the last open to-do of today checked off: a little party
-    if (!wasDone && t.due && t.due <= today && !all.some((x) => x.id !== t.id && !x.doneAt && x.due && x.due <= today)) setParty(Date.now());
-    if (!wasDone) offerUndo(`„${t.text}“ erledigt${next ? ' – nächstes Mal ist schon eingeplant' : ''}`, () => (toggleTodo(t.id), next && deleteTodo(next)));
+    if (t.due && t.due <= today && !all.some((x) => x.id !== t.id && !x.doneAt && x.due && x.due <= today)) setParty(Date.now());
+    offerUndo(`„${t.text}“ erledigt${next ? ' – nächstes Mal ist schon eingeplant' : ''}`, () => (toggleTodo(t.id), next && deleteTodo(next)));
   };
   const remove = (ids: string[]) => {
     const gone = all.filter((t) => ids.includes(t.id));
@@ -157,14 +191,20 @@ export default function Todos({ embedded = false }: { embedded?: boolean }) {
     pomodoro.startForTodo(t.id, t.minutes);
     toolWindows.open('pomodoro');
   };
+  const rescheduleOverdue = () => {
+    const moved = overdue.map((t) => ({ id: t.id, due: t.due }));
+    overdue.forEach((t) => updateTodo(t.id, { due: today }));
+    offerUndo(`${moved.length} ${moved.length === 1 ? 'To-do' : 'To-dos'} auf heute verschoben`, () => moved.forEach((m) => updateTodo(m.id, { due: m.due })));
+  };
 
-  // keyboard: N new · ↑↓ move · Space check off · Enter details · Del delete
+  // keyboard: N / Q new · ↑↓ move · Space check off · Enter details · Del delete · Esc close
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
+      if (e.key === 'Escape' && open) return setOpen(null);
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.ctrlKey || e.metaKey || e.altKey) return;
       const t = flat[focus];
-      if (e.key === 'n' || e.key === 'N') (e.preventDefault(), addRef.current?.focus());
+      if (e.key === 'n' || e.key === 'N' || e.key === 'q' || e.key === 'Q') (e.preventDefault(), setAdding(sections[0]?.id ?? 'top'));
       else if (e.key === 'ArrowDown') (e.preventDefault(), setFocus((f) => Math.min(flat.length - 1, f + 1)));
       else if (e.key === 'ArrowUp') (e.preventDefault(), setFocus((f) => Math.max(0, f - 1)));
       else if (e.key === ' ' && t) (e.preventDefault(), check(t));
@@ -180,65 +220,70 @@ export default function Todos({ embedded = false }: { embedded?: boolean }) {
     decks: data.decks.map((d) => ({ id: d.id, name: d.name, leeches: d.cards.filter(isLeech).length })),
     todos: all.filter((t) => !t.doneAt),
   });
+  const filterOn = !!(search.trim() || deckFilter || prioFilter);
 
   return (
-    <div className={embedded ? 'todos-page embedded' : 'page todos-page'}>
-      <header className={embedded ? 'todos-head' : 'page-head'}>
-        {!embedded && <h1>To-dos</h1>}
-        <p className="muted grow">
-          Deine Aufgaben rund ums Lernen. {counts.all} offen · {counts.today} heute oder überfällig · Tastatur: <kbd>N</kbd> neu, <kbd>↑</kbd>
-          <kbd>↓</kbd> wählen, <kbd>Leertaste</kbd> erledigt, <kbd>Enter</kbd> Details
-        </p>
-        {counts.all > 0 && (
-          <Link to="/tools?tab=plan&from=today" className="btn outline sm" title="Die To-dos von heute in der Arbeitsplanung zu einem Ablauf mit Pausen ordnen">
-            <IconSparkle size={14} /> Tag planen
-          </Link>
-        )}
+    <div className={embedded ? 'todos-page td embedded' : 'page todos-page td'}>
+      <header className="td-head">
+        <div className="td-title">
+          <h1>{title}</h1>
+          <span className="muted">
+            {view === 'today' ? new Date(now).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' }) + ' · ' : ''}
+            {view === 'done' ? `${counts.done} erledigt` : `${flat.length} ${flat.length === 1 ? 'To-do' : 'To-dos'}`}
+          </span>
+        </div>
+        <div className="td-tools">
+          <button type="button" className={'icon-btn' + (filters || filterOn ? ' on' : '')} aria-label="Suchen und filtern" title="Suchen und filtern" aria-expanded={filters} onClick={() => setFilters(!filters)}>
+            <IconSearch size={16} />
+          </button>
+          {counts.all > 0 && (
+            <Link to="/tools?tab=plan&from=today" className="btn ghost sm" title="Die To-dos von heute in der Arbeitsplanung zu einem Ablauf mit Pausen ordnen">
+              <IconSparkle size={14} /> Tag planen
+            </Link>
+          )}
+        </div>
       </header>
 
-      {party > 0 && <Confetti key={party} count={60} />}
-      <PlanNext todos={all} today={today} handedOver={Number(params.get('plan')) || 0} onStart={startTimer} />
+      <nav className="td-views" role="tablist" aria-label="Ansicht">
+        {VIEWS.map(([id, label]) => (
+          <button key={id} type="button" role="tab" aria-selected={view === id} className={view === id ? 'on' : ''} onClick={() => (setView(id), setFocus(0), setAdding(null))}>
+            {label}
+            {counts[id] > 0 && <span className="td-count">{counts[id]}</span>}
+          </button>
+        ))}
+      </nav>
 
-      <QuickAdd inputRef={addRef} deckId={deckFilter} />
-
-      {ideas.length > 0 && (
-        <div className="chips">
-          {ideas.map((i) => (
-            <button key={i.text} type="button" className="chip" title="Als To-do übernehmen" onClick={() => addTodo(i)}>
-              <IconSparkle size={12} /> {i.text}
-            </button>
-          ))}
-        </div>
-      )}
-
-      <div className="todos-bar">
-        <div className="seg" role="tablist" aria-label="Ansicht">
-          {VIEWS.map(([id, label]) => (
-            <button key={id} type="button" role="tab" aria-selected={view === id} className={view === id ? 'on' : ''} onClick={() => (setView(id), setFocus(0))}>
-              {label} <span className="seg-count">{counts[id]}</span>
-            </button>
-          ))}
-        </div>
-        <input className="input sm" type="search" placeholder="Suchen …" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="To-dos suchen" />
-        {data.decks.length > 0 && (
-          <select className="input sm" value={deckFilter} onChange={(e) => setDeckFilter(e.target.value)} aria-label="Nach Deck filtern">
-            <option value="">Alle Decks</option>
-            {data.decks.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
+      {filters && (
+        <div className="td-filters">
+          <input className="input sm" type="search" autoFocus placeholder="To-dos durchsuchen …" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="To-dos suchen" />
+          {data.decks.length > 0 && (
+            <select className="input sm" value={deckFilter} onChange={(e) => setDeckFilter(e.target.value)} aria-label="Nach Deck filtern">
+              <option value="">Alle Decks</option>
+              {data.decks.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+          )}
+          <select className="input sm" value={prioFilter} onChange={(e) => setPrioFilter(e.target.value as TodoPriority | '')} aria-label="Nach Priorität filtern">
+            <option value="">Jede Priorität</option>
+            {(Object.keys(PRIORITY_LABEL) as TodoPriority[]).map((p) => (
+              <option key={p} value={p}>
+                {PRIORITY_LABEL[p]}
               </option>
             ))}
           </select>
-        )}
-        <select className="input sm" value={prioFilter} onChange={(e) => setPrioFilter(e.target.value as TodoPriority | '')} aria-label="Nach Priorität filtern">
-          <option value="">Jede Priorität</option>
-          {(Object.keys(PRIORITY_LABEL) as TodoPriority[]).map((p) => (
-            <option key={p} value={p}>
-              {PRIORITY_LABEL[p]}
-            </option>
-          ))}
-        </select>
-      </div>
+          {filterOn && (
+            <button type="button" className="link-btn small" onClick={() => (setSearch(''), setDeckFilter(''), setPrioFilter(''))}>
+              Zurücksetzen
+            </button>
+          )}
+        </div>
+      )}
+
+      {party > 0 && <Confetti key={party} count={60} />}
+      <PlanNext todos={all} today={today} handedOver={Number(params.get('plan')) || 0} onStart={startTimer} />
 
       {selected.size > 0 && (
         <div className="todos-bulk" role="toolbar" aria-label="Ausgewählte To-dos">
@@ -249,7 +294,7 @@ export default function Todos({ embedded = false }: { embedded?: boolean }) {
           <button type="button" className="btn ghost sm" onClick={() => (selected.forEach((id) => updateTodo(id, { due: today })), setSelected(new Set()))}>
             Auf heute
           </button>
-          <button type="button" className="btn ghost sm" onClick={() => (selected.forEach((id) => updateTodo(id, { due: dayKey(now + DAY) })), setSelected(new Set()))}>
+          <button type="button" className="btn ghost sm" onClick={() => (selected.forEach((id) => updateTodo(id, { due: tomorrow })), setSelected(new Set()))}>
             Auf morgen
           </button>
           <button type="button" className="btn ghost sm danger" onClick={() => remove([...selected])}>
@@ -261,10 +306,10 @@ export default function Todos({ embedded = false }: { embedded?: boolean }) {
         </div>
       )}
 
-      {sections.length === 0 && (
-        <div className="empty">
+      {sections.length === 0 && view !== 'done' && (
+        <div className="td-empty">
           <Mascot mood={view === 'today' ? 'cheer' : 'idle'} size={84} />
-          <b>{view === 'done' ? 'Noch nichts erledigt.' : view === 'today' ? 'Für heute ist nichts offen.' : 'Keine To-dos.'}</b>
+          <b>{view === 'today' ? 'Für heute ist alles erledigt.' : 'Keine To-dos.'}</b>
           {view === 'today' && counts.all > 0 && (
             <button type="button" className="link-btn" onClick={() => setView('all')}>
               Alle {counts.all} offenen ansehen
@@ -272,36 +317,95 @@ export default function Todos({ embedded = false }: { embedded?: boolean }) {
           )}
         </div>
       )}
+      {sections.length === 0 && view !== 'done' && (
+        <AddRow active={adding === 'top'} onOpen={() => setAdding('top')} onClose={() => setAdding(null)} due={view === 'today' ? today : undefined} deckId={deckFilter} />
+      )}
+      {sections.length === 0 && view === 'done' && (
+        <div className="td-empty">
+          <Mascot mood="idle" size={84} />
+          <b>Noch nichts erledigt.</b>
+        </div>
+      )}
 
       {sections.map((sec) => (
-        <section key={sec.label} className={'panel todo-section ' + (sec.tone ? 't-' + sec.tone : '')}>
-          <h2>
-            {sec.label} <span className="muted small">{sec.items.length}</span>
+        <section key={sec.id} className={'td-section' + (sec.tone ? ' t-' + sec.tone : '')}>
+          <h2 className="td-section-head">
+            <span>{sec.label}</span>
+            <span className="td-count">{sec.items.length}</span>
+            <span className="grow" />
+            {sec.id === 'overdue' && sec.items.length > 0 && (
+              <button type="button" className="link-btn small" onClick={rescheduleOverdue} title="Alle überfälligen To-dos auf heute legen">
+                Auf heute verschieben
+              </button>
+            )}
             {view === 'done' && (
               <button type="button" className="link-btn small" onClick={() => remove(sec.items.map((t) => t.id))}>
                 Erledigte aufräumen
               </button>
             )}
           </h2>
-          <ul className="todo-rows">
+          <ul className="td-list">
             {sec.items.map((t) => (
               <TodoRow
                 key={t.id}
                 t={t}
+                today={today}
+                tomorrow={tomorrow}
+                leaving={leaving.has(t.id)}
                 focused={flat[focus]?.id === t.id}
-                open={open === t.id}
+                selecting={selected.size > 0}
                 selected={selected.has(t.id)}
                 onSelect={(v) => setSelected((s) => { const n = new Set(s); if (v) n.add(t.id); else n.delete(t.id); return n; })}
-                onOpen={() => (setOpen(open === t.id ? null : t.id), setFocus(flat.findIndex((x) => x.id === t.id)))}
+                onOpen={() => (setOpen(t.id), setFocus(flat.findIndex((x) => x.id === t.id)))}
                 onCheck={() => check(t)}
                 onMove={(by) => move(t, by, sec.items)}
                 onTimer={() => startTimer(t)}
-                onDelete={() => remove([t.id])}
               />
             ))}
           </ul>
+          {view !== 'done' && sec.id !== 'overdue' && (
+            <AddRow active={adding === sec.id} onOpen={() => setAdding(sec.id)} onClose={() => setAdding(null)} due={sec.addDue} deckId={deckFilter} />
+          )}
         </section>
       ))}
+
+      {view !== 'done' && sections.length > 0 && !sections.some((s) => s.id !== 'overdue') && (
+        <AddRow active={adding === 'top'} onOpen={() => setAdding('top')} onClose={() => setAdding(null)} due={view === 'today' ? today : undefined} deckId={deckFilter} />
+      )}
+
+      {ideas.length > 0 && view !== 'done' && (
+        <div className="td-ideas">
+          <small className="muted">Vorschläge</small>
+          {ideas.map((i) => (
+            <button key={i.text} type="button" className="chip" title="Als To-do übernehmen" onClick={() => addTodo(i)}>
+              <IconPlus size={12} /> {i.text}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <p className="td-keys muted small">
+        <kbd>Q</kbd> neues To-do · <kbd>↑</kbd>
+        <kbd>↓</kbd> wählen · <kbd>Leertaste</kbd> erledigt · <kbd>Enter</kbd> öffnen
+      </p>
+
+      {openTodo &&
+        createPortal(
+          <div className="td-drawer-backdrop" onClick={() => setOpen(null)}>
+            <aside className="td-drawer" role="dialog" aria-label="To-do bearbeiten" onClick={(e) => e.stopPropagation()}>
+              <TodoDetails
+                t={openTodo}
+                today={today}
+                tomorrow={tomorrow}
+                deckLink={openTodo.deckId ? (() => { const d = data.decks.find((x) => x.id === openTodo.deckId); return d ? deckUrl(data, d) : undefined; })() : undefined}
+                onCheck={() => check(openTodo)}
+                onDelete={() => remove([openTodo.id])}
+                onClose={() => setOpen(null)}
+              />
+            </aside>
+          </div>,
+          document.body,
+        )}
 
       {undo && (
         <div className="todo-undo" role="status">
@@ -315,210 +419,102 @@ export default function Todos({ embedded = false }: { embedded?: boolean }) {
   );
 }
 
-/** Quick entry with recognition: the recognized parts show as chips before saving; details on demand. */
-function QuickAdd({ inputRef, deckId }: { inputRef: React.RefObject<HTMLInputElement>; deckId: string }) {
+/**
+ * „+ To-do hinzufügen“ at the end of a list: opens an inline editor – title (with recognition of date, time,
+ * !priority, #deck, 30min), a description and small chips for the details.
+ */
+function AddRow({ active, onOpen, onClose, due, deckId }: { active: boolean; onOpen: () => void; onClose: () => void; due?: string; deckId: string }) {
   const data = useData();
   const [text, setText] = useState('');
-  const [more, setMore] = useState(false);
+  const [note, setNote] = useState('');
   const [extra, setExtra] = useState<{ due?: string; time?: string; priority?: TodoPriority; repeat?: TodoRepeat; minutes?: number; deckId?: string }>({});
+  const [field, setField] = useState<'' | 'date' | 'prio' | 'deck' | 'more'>('');
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (active) inputRef.current?.focus();
+  }, [active]);
+  if (!active)
+    return (
+      <button type="button" className="td-add" onClick={onOpen}>
+        <span className="td-add-plus">
+          <IconPlus size={14} />
+        </span>
+        To-do hinzufügen
+      </button>
+    );
   const parsed = parseQuickTodo(text, data.decks, Date.now());
   const final = { ...parsed, ...Object.fromEntries(Object.entries(extra).filter(([, v]) => v !== undefined && v !== '')) } as typeof parsed;
+  const when = final.due ?? due;
   const deck = data.decks.find((d) => d.id === (final.deckId || deckId));
+  const reset = () => (setText(''), setNote(''), setExtra({}), setField(''));
   const add = () => {
     if (!final.text.trim()) return;
     addTodo({
       text: final.text,
-      ...(final.due ? { due: final.due } : {}),
+      ...(note.trim() ? { note: note.trim() } : {}),
+      ...(when ? { due: when } : {}),
       ...(final.time ? { time: final.time } : {}),
       ...(final.priority ? { priority: final.priority } : {}),
       ...(final.repeat ? { repeat: final.repeat } : {}),
       ...(final.minutes ? { minutes: final.minutes } : {}),
       ...(deck ? { deckId: deck.id } : {}),
     });
-    setText('');
-    setExtra({});
+    reset();
+    inputRef.current?.focus();
   };
   return (
-    <section className="panel todo-quick">
-      <div className="input-row">
-        <input
-          ref={inputRef}
-          className="input"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && add()}
-          placeholder="Neues To-do – z. B. „Zusammenfassung schreiben morgen 14:00 !hoch #Biologie 30min“"
-          aria-label="Neues To-do"
-        />
-        <button type="button" className="btn primary" onClick={add} disabled={!final.text.trim()}>
-          <IconPlus size={15} /> Hinzufügen
+    <div className="td-composer">
+      <input
+        ref={inputRef}
+        className="td-composer-title"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => (e.key === 'Enter' ? add() : e.key === 'Escape' ? (reset(), onClose()) : undefined)}
+        placeholder="z. B. Zusammenfassung schreiben morgen 14:00 !hoch #Biologie 30min"
+        aria-label="Neues To-do"
+      />
+      <input className="td-composer-note" value={note} onChange={(e) => setNote(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} placeholder="Beschreibung" aria-label="Beschreibung" />
+      <div className="td-composer-chips">
+        <button type="button" className={'chip' + (when ? ' on' : '')} onClick={() => setField(field === 'date' ? '' : 'date')}>
+          <IconCalendar size={13} /> {when ? dueText(when) + (final.time ? ` ${final.time}` : '') : 'Datum'}
+        </button>
+        <button type="button" className={'chip' + (final.priority ? ' on prio-' + final.priority : '')} onClick={() => setField(field === 'prio' ? '' : 'prio')}>
+          <IconFlag size={13} /> {final.priority ? PRIORITY_LABEL[final.priority] : 'Priorität'}
+        </button>
+        {data.decks.length > 0 && (
+          <button type="button" className={'chip' + (deck ? ' on' : '')} onClick={() => setField(field === 'deck' ? '' : 'deck')}>
+            <IconHash size={13} /> {deck ? deck.name : 'Deck'}
+          </button>
+        )}
+        <button type="button" className={'chip' + (final.minutes || final.repeat ? ' on' : '')} onClick={() => setField(field === 'more' ? '' : 'more')}>
+          {final.repeat ? <IconRepeat size={13} /> : <IconTimer size={13} />}{' '}
+          {[final.minutes ? `${final.minutes} Min.` : '', final.repeat ? REPEAT_LABEL[final.repeat] : ''].filter(Boolean).join(' · ') || 'Dauer & Wiederholen'}
         </button>
       </div>
-      <div className="todo-chips">
-        {final.due && <span className="chip on"><IconCalendar size={13} /> {dueText(final.due)}{final.time ? ` · ${final.time}` : ''}</span>}
-        {!final.due && final.time && <span className="chip on"><IconClock size={13} /> {final.time}</span>}
-        {final.priority && <span className={'chip on prio-' + final.priority}><IconFlag size={13} /> {PRIORITY_LABEL[final.priority]}</span>}
-        {deck && <span className="chip on"><IconHash size={13} /> {deck.name}</span>}
-        {final.minutes && <span className="chip on"><IconTimer size={13} /> {final.minutes} Min.</span>}
-        {final.repeat && <span className="chip on"><IconRepeat size={13} /> {REPEAT_LABEL[final.repeat]}</span>}
-        <button type="button" className="link-btn small" onClick={() => setMore(!more)}>
-          {more ? 'Weniger' : 'Datum, Priorität, Wiederholen …'}
-        </button>
-      </div>
-      {more && (
-        <div className="todo-fields">
-          <label>
-            Datum <input className="input sm" type="date" value={extra.due ?? parsed.due ?? ''} onChange={(e) => setExtra({ ...extra, due: e.target.value || undefined })} />
-          </label>
-          <label>
-            Uhrzeit <input className="input sm" type="time" value={extra.time ?? parsed.time ?? ''} onChange={(e) => setExtra({ ...extra, time: e.target.value || undefined })} />
-          </label>
-          <label>
-            Priorität
-            <select className="input sm" value={extra.priority ?? parsed.priority ?? ''} onChange={(e) => setExtra({ ...extra, priority: (e.target.value || undefined) as TodoPriority | undefined })}>
-              <option value="">–</option>
-              {(Object.keys(PRIORITY_LABEL) as TodoPriority[]).map((p) => (
-                <option key={p} value={p}>
-                  {PRIORITY_LABEL[p]}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Wiederholen
-            <select className="input sm" value={extra.repeat ?? parsed.repeat ?? ''} onChange={(e) => setExtra({ ...extra, repeat: (e.target.value || undefined) as TodoRepeat | undefined })}>
-              <option value="">Nie</option>
-              {(Object.keys(REPEAT_LABEL) as TodoRepeat[]).map((r) => (
-                <option key={r} value={r}>
-                  {REPEAT_LABEL[r]}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Dauer (Min.) <input className="input sm" type="number" min={1} max={600} value={extra.minutes ?? parsed.minutes ?? ''} onChange={(e) => setExtra({ ...extra, minutes: Number(e.target.value) || undefined })} />
-          </label>
-          {data.decks.length > 0 && (
-            <label>
-              Deck
-              <select className="input sm" value={extra.deckId ?? parsed.deckId ?? deckId} onChange={(e) => setExtra({ ...extra, deckId: e.target.value || undefined })}>
-                <option value="">Kein Deck</option>
-                {data.decks.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
+      {field === 'date' && (
+        <div className="td-composer-field">
+          <button type="button" className="chip" onClick={() => setExtra({ ...extra, due: dayKey(Date.now()) })}>
+            Heute
+          </button>
+          <button type="button" className="chip" onClick={() => setExtra({ ...extra, due: dayKey(Date.now() + DAY) })}>
+            Morgen
+          </button>
+          <input className="input sm" type="date" value={extra.due ?? parsed.due ?? due ?? ''} onChange={(e) => setExtra({ ...extra, due: e.target.value || undefined })} aria-label="Datum" />
+          <input className="input sm" type="time" value={extra.time ?? parsed.time ?? ''} onChange={(e) => setExtra({ ...extra, time: e.target.value || undefined })} aria-label="Uhrzeit" />
         </div>
       )}
-    </section>
-  );
-}
-
-function TodoRow(p: {
-  t: Todo;
-  focused: boolean;
-  open: boolean;
-  selected: boolean;
-  onSelect: (v: boolean) => void;
-  onOpen: () => void;
-  onCheck: () => void;
-  onMove: (by: -1 | 1) => void;
-  onTimer: () => void;
-  onDelete: () => void;
-}) {
-  const { t } = p;
-  const data = useData();
-  const { activeTodoId } = usePomodoroMeta();
-  const deck = t.deckId ? data.decks.find((d) => d.id === t.deckId) : undefined;
-  const exam = t.examId ? data.exams.find((e) => e.id === t.examId) : undefined;
-  const sub = subtaskProgress(t);
-  const overdue = !t.doneAt && t.due && t.due < dayKey(Date.now());
-  return (
-    <li className={'todo-row' + (t.doneAt ? ' done' : '') + (p.focused ? ' focused' : '') + (p.open ? ' open' : '') + (overdue ? ' overdue' : '') + (t.priority ? ' prio-' + t.priority : '')}>
-      <div className="todo-line">
-        <input type="checkbox" className="todo-select" checked={p.selected} onChange={(e) => p.onSelect(e.target.checked)} aria-label="Auswählen" />
-        <button type="button" className="todo-check" role="checkbox" aria-checked={!!t.doneAt} aria-label={t.doneAt ? 'Wieder öffnen' : 'Erledigt'} onClick={p.onCheck}>
-          {t.doneAt && <IconCheck size={13} />}
-        </button>
-        <button type="button" className="todo-main" onClick={p.onOpen} aria-expanded={p.open}>
-          <span className="todo-text">{t.text}</span>
-          <span className="todo-meta">
-            {t.priority && <span className={'prio-dot prio-' + t.priority} title={'Priorität: ' + PRIORITY_LABEL[t.priority]} />}
-            {t.due && <span className={overdue ? 'bad' : ''}><IconCalendar size={12} /> {dueText(t.due)}{t.time ? ` ${t.time}` : ''}</span>}
-            {t.repeat && <span title={REPEAT_LABEL[t.repeat]} aria-label={REPEAT_LABEL[t.repeat]}><IconRepeat size={12} /></span>}
-            {sub && <span><IconChecklist size={12} /> {sub.done}/{sub.total}</span>}
-            {t.minutes && <span><IconTimer size={12} /> {t.minutes} Min.</span>}
-            {deck && <span><IconHash size={12} /> {deck.name}</span>}
-            {exam && <span><IconTarget size={12} /> {exam.title}</span>}
-            {t.note && <span title={t.note} aria-label="Notiz"><IconNote size={12} /></span>}
-          </span>
-        </button>
-        <span className="todo-actions">
-          {!t.doneAt && (
-            <button type="button" className={'icon-btn sm' + (activeTodoId === t.id ? ' on' : '')} title={t.minutes ? `Pomodoro (${t.minutes} Min.) starten` : 'Pomodoro starten'} aria-label="Pomodoro starten" onClick={p.onTimer}>
-              <IconPlay size={12} />
+      {field === 'prio' && (
+        <div className="td-composer-field">
+          {(Object.keys(PRIORITY_LABEL) as TodoPriority[]).map((p) => (
+            <button key={p} type="button" className={'chip prio-' + p + (final.priority === p ? ' on' : '')} onClick={() => (setExtra({ ...extra, priority: p }), setField(''))}>
+              <IconFlag size={13} /> {PRIORITY_LABEL[p]}
             </button>
-          )}
-          <button type="button" className="icon-btn sm" aria-label="Nach oben" onClick={() => p.onMove(-1)}>
-            <IconArrowUp size={13} />
-          </button>
-          <button type="button" className="icon-btn sm" aria-label="Nach unten" onClick={() => p.onMove(1)}>
-            <IconArrowDown size={13} />
-          </button>
-        </span>
-      </div>
-      {p.open && <TodoDetails t={t} deckLink={deck ? deckUrl(data, deck) : undefined} onDelete={p.onDelete} />}
-    </li>
-  );
-}
-
-function TodoDetails({ t, deckLink, onDelete }: { t: Todo; deckLink?: string; onDelete: () => void }) {
-  const data = useData();
-  const [newSub, setNewSub] = useState('');
-  const set = (patch: Partial<Todo>) => updateTodo(t.id, patch);
-  const subs = t.subtasks ?? [];
-  return (
-    <div className="todo-details">
-      <input className="input" value={t.text} onChange={(e) => set({ text: e.target.value })} aria-label="Titel" />
-      <textarea className="input" rows={2} value={t.note ?? ''} onChange={(e) => set({ note: e.target.value || undefined })} placeholder="Notiz …" aria-label="Notiz" />
-      <div className="todo-fields">
-        <label>
-          Datum <input className="input sm" type="date" value={t.due ?? ''} onChange={(e) => set({ due: e.target.value || undefined })} />
-        </label>
-        <label>
-          Uhrzeit <input className="input sm" type="time" value={t.time ?? ''} onChange={(e) => set({ time: e.target.value || undefined })} />
-        </label>
-        <label>
-          Priorität
-          <select className="input sm" value={t.priority ?? ''} onChange={(e) => set({ priority: (e.target.value || undefined) as TodoPriority | undefined })}>
-            <option value="">–</option>
-            {(Object.keys(PRIORITY_LABEL) as TodoPriority[]).map((p) => (
-              <option key={p} value={p}>
-                {PRIORITY_LABEL[p]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Wiederholen
-          <select className="input sm" value={t.repeat ?? ''} onChange={(e) => set({ repeat: (e.target.value || undefined) as TodoRepeat | undefined })}>
-            <option value="">Nie</option>
-            {(Object.keys(REPEAT_LABEL) as TodoRepeat[]).map((r) => (
-              <option key={r} value={r}>
-                {REPEAT_LABEL[r]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Dauer (Min.) <input className="input sm" type="number" min={1} max={600} value={t.minutes ?? ''} onChange={(e) => set({ minutes: Number(e.target.value) || undefined })} />
-        </label>
-        <label>
-          Deck
-          <select className="input sm" value={t.deckId ?? ''} onChange={(e) => set({ deckId: e.target.value || undefined })}>
+          ))}
+        </div>
+      )}
+      {field === 'deck' && (
+        <div className="td-composer-field">
+          <select className="input sm" value={extra.deckId ?? parsed.deckId ?? deckId} onChange={(e) => (setExtra({ ...extra, deckId: e.target.value || undefined }), setField(''))} aria-label="Deck">
             <option value="">Kein Deck</option>
             {data.decks.map((d) => (
               <option key={d.id} value={d.id}>
@@ -526,24 +522,246 @@ function TodoDetails({ t, deckLink, onDelete }: { t: Todo; deckLink?: string; on
               </option>
             ))}
           </select>
+        </div>
+      )}
+      {field === 'more' && (
+        <div className="td-composer-field">
+          <label>
+            Dauer <input className="input sm" type="number" min={1} max={600} value={extra.minutes ?? parsed.minutes ?? ''} onChange={(e) => setExtra({ ...extra, minutes: Number(e.target.value) || undefined })} /> Min.
+          </label>
+          <select className="input sm" value={extra.repeat ?? parsed.repeat ?? ''} onChange={(e) => setExtra({ ...extra, repeat: (e.target.value || undefined) as TodoRepeat | undefined })} aria-label="Wiederholen">
+            <option value="">Nicht wiederholen</option>
+            {(Object.keys(REPEAT_LABEL) as TodoRepeat[]).map((r) => (
+              <option key={r} value={r}>
+                {REPEAT_LABEL[r]}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      <div className="td-composer-foot">
+        <button type="button" className="btn ghost sm" onClick={() => (reset(), onClose())}>
+          Abbrechen
+        </button>
+        <button type="button" className="btn primary sm" onClick={add} disabled={!final.text.trim()}>
+          To-do hinzufügen
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function TodoRow(p: {
+  t: Todo;
+  today: string;
+  tomorrow: string;
+  leaving: boolean;
+  focused: boolean;
+  selecting: boolean;
+  selected: boolean;
+  onSelect: (v: boolean) => void;
+  onOpen: () => void;
+  onCheck: () => void;
+  onMove: (by: -1 | 1) => void;
+  onTimer: () => void;
+}) {
+  const { t } = p;
+  const data = useData();
+  const { activeTodoId } = usePomodoroMeta();
+  const deck = t.deckId ? data.decks.find((d) => d.id === t.deckId) : undefined;
+  const exam = t.examId ? data.exams.find((e) => e.id === t.examId) : undefined;
+  const sub = subtaskProgress(t);
+  const done = !!t.doneAt || p.leaving;
+  const tone = t.due && !t.doneAt ? dueTone(t.due, p.today, p.tomorrow) : '';
+  const hasMeta = !!(t.due || t.repeat || sub || t.minutes || exam || t.note || deck);
+  return (
+    <li className={'td-row' + (done ? ' done' : '') + (p.leaving ? ' leaving' : '') + (p.focused ? ' focused' : '') + (p.selected ? ' selected' : '') + (p.selecting ? ' selecting' : '')}>
+      <input type="checkbox" className="td-select" checked={p.selected} onChange={(e) => p.onSelect(e.target.checked)} aria-label="Auswählen" />
+      <button
+        type="button"
+        className={'td-check' + (t.priority ? ' prio-' + t.priority : '')}
+        role="checkbox"
+        aria-checked={done}
+        aria-label={t.doneAt ? 'Wieder öffnen' : 'Erledigt'}
+        title={t.priority ? `Priorität: ${PRIORITY_LABEL[t.priority]}` : undefined}
+        onClick={p.onCheck}
+      >
+        <IconCheck size={11} />
+      </button>
+      <button type="button" className="td-main" onClick={p.onOpen}>
+        <span className="td-text">{t.text}</span>
+        {t.note && <span className="td-note">{t.note}</span>}
+        {hasMeta && (
+          <span className="td-meta">
+            {t.due && (
+              <span className={'td-due ' + tone}>
+                <IconCalendar size={12} /> {dueText(t.due)}
+                {t.time ? ` ${t.time}` : ''}
+              </span>
+            )}
+            {!t.due && t.time && (
+              <span>
+                <IconClock size={12} /> {t.time}
+              </span>
+            )}
+            {t.repeat && (
+              <span title={REPEAT_LABEL[t.repeat]} aria-label={REPEAT_LABEL[t.repeat]}>
+                <IconRepeat size={12} />
+              </span>
+            )}
+            {sub && (
+              <span>
+                <IconChecklist size={12} /> {sub.done}/{sub.total}
+              </span>
+            )}
+            {t.minutes && (
+              <span>
+                <IconTimer size={12} /> {t.minutes} Min.
+              </span>
+            )}
+            {exam && (
+              <span>
+                <IconTarget size={12} /> {exam.title}
+              </span>
+            )}
+            {deck && (
+              <span className="td-deck">
+                <IconHash size={12} /> {deck.name}
+              </span>
+            )}
+          </span>
+        )}
+      </button>
+      <span className="td-actions">
+        {!t.doneAt && (
+          <button type="button" className={'icon-btn sm' + (activeTodoId === t.id ? ' on' : '')} title={t.minutes ? `Pomodoro (${t.minutes} Min.) starten` : 'Pomodoro starten'} aria-label="Pomodoro starten" onClick={p.onTimer}>
+            <IconPlay size={12} />
+          </button>
+        )}
+        <button type="button" className="icon-btn sm" aria-label="Nach oben" title="Nach oben" onClick={() => p.onMove(-1)}>
+          <IconArrowUp size={13} />
+        </button>
+        <button type="button" className="icon-btn sm" aria-label="Nach unten" title="Nach unten" onClick={() => p.onMove(1)}>
+          <IconArrowDown size={13} />
+        </button>
+      </span>
+    </li>
+  );
+}
+
+/** One to-do in the side panel: title and description, the details as rows, sub-tasks, actions. */
+function TodoDetails({ t, today, tomorrow, deckLink, onCheck, onDelete, onClose }: { t: Todo; today: string; tomorrow: string; deckLink?: string; onCheck: () => void; onDelete: () => void; onClose: () => void }) {
+  const data = useData();
+  const [newSub, setNewSub] = useState('');
+  const set = (patch: Partial<Todo>) => updateTodo(t.id, patch);
+  const subs = t.subtasks ?? [];
+  const tone = t.due && !t.doneAt ? dueTone(t.due, today, tomorrow) : '';
+  return (
+    <div className="td-details">
+      <header className="td-details-head">
+        <small className="muted">{t.doneAt ? 'Erledigt' : t.due ? `Fällig ${dueText(t.due)}` : 'To-do'}</small>
+        <button type="button" className="icon-btn" aria-label="Schließen" onClick={onClose}>
+          <IconClose size={18} />
+        </button>
+      </header>
+      <div className="td-details-title">
+        <button type="button" className={'td-check' + (t.priority ? ' prio-' + t.priority : '')} role="checkbox" aria-checked={!!t.doneAt} aria-label={t.doneAt ? 'Wieder öffnen' : 'Erledigt'} onClick={onCheck}>
+          <IconCheck size={11} />
+        </button>
+        <div className="grow">
+          <input className="td-edit-title" value={t.text} onChange={(e) => set({ text: e.target.value })} aria-label="Titel" />
+          <textarea className="td-edit-note" rows={2} value={t.note ?? ''} onChange={(e) => set({ note: e.target.value || undefined })} placeholder="Beschreibung …" aria-label="Beschreibung" />
+        </div>
+      </div>
+
+      <div className="td-props">
+        <label className="td-prop">
+          <span>
+            <IconCalendar size={14} /> Datum
+          </span>
+          <span className={'td-prop-value ' + tone}>
+            <input className="input sm" type="date" value={t.due ?? ''} onChange={(e) => set({ due: e.target.value || undefined })} />
+            <input className="input sm" type="time" value={t.time ?? ''} onChange={(e) => set({ time: e.target.value || undefined })} aria-label="Uhrzeit" />
+          </span>
+        </label>
+        <div className="td-prop">
+          <span>
+            <IconFlag size={14} /> Priorität
+          </span>
+          <span className="td-prop-value">
+            {(Object.keys(PRIORITY_LABEL) as TodoPriority[]).map((p) => (
+              <button key={p} type="button" className={'chip prio-' + p + (t.priority === p ? ' on' : '')} onClick={() => set({ priority: t.priority === p ? undefined : p })}>
+                <IconFlag size={12} /> {PRIORITY_LABEL[p]}
+              </button>
+            ))}
+          </span>
+        </div>
+        <label className="td-prop">
+          <span>
+            <IconHash size={14} /> Deck
+          </span>
+          <span className="td-prop-value">
+            <select className="input sm" value={t.deckId ?? ''} onChange={(e) => set({ deckId: e.target.value || undefined })}>
+              <option value="">Kein Deck</option>
+              {data.decks.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+            {deckLink && (
+              <Link to={deckLink} className="link-btn small">
+                öffnen
+              </Link>
+            )}
+          </span>
+        </label>
+        <label className="td-prop">
+          <span>
+            <IconTimer size={14} /> Dauer
+          </span>
+          <span className="td-prop-value">
+            <input className="input sm td-minutes" type="number" min={1} max={600} value={t.minutes ?? ''} onChange={(e) => set({ minutes: Number(e.target.value) || undefined })} /> Min.
+          </span>
+        </label>
+        <label className="td-prop">
+          <span>
+            <IconRepeat size={14} /> Wiederholen
+          </span>
+          <span className="td-prop-value">
+            <select className="input sm" value={t.repeat ?? ''} onChange={(e) => set({ repeat: (e.target.value || undefined) as TodoRepeat | undefined })}>
+              <option value="">Nie</option>
+              {(Object.keys(REPEAT_LABEL) as TodoRepeat[]).map((r) => (
+                <option key={r} value={r}>
+                  {REPEAT_LABEL[r]}
+                </option>
+              ))}
+            </select>
+          </span>
         </label>
       </div>
-      <div className="todo-subs">
-        <b>Unteraufgaben</b>
+
+      <div className="td-subs">
+        <b>
+          Unteraufgaben {subs.length > 0 && <span className="muted small">{subs.filter((s) => s.done).length}/{subs.length}</span>}
+        </b>
         {subs.map((s, k) => (
-          <div key={s.id} className={'todo-sub' + (s.done ? ' done' : '')}>
-            <input type="checkbox" checked={!!s.done} onChange={(e) => set({ subtasks: subs.map((x) => (x.id === s.id ? { ...x, done: e.target.checked } : x)) })} aria-label={s.text} />
-            <input className="input sm" value={s.text} onChange={(e) => set({ subtasks: subs.map((x) => (x.id === s.id ? { ...x, text: e.target.value } : x)) })} />
+          <div key={s.id} className={'td-sub' + (s.done ? ' done' : '')}>
+            <button type="button" className="td-check small" role="checkbox" aria-checked={!!s.done} aria-label={s.text} onClick={() => set({ subtasks: subs.map((x) => (x.id === s.id ? { ...x, done: !s.done } : x)) })}>
+              <IconCheck size={9} />
+            </button>
+            <input className="td-sub-text" value={s.text} onChange={(e) => set({ subtasks: subs.map((x) => (x.id === s.id ? { ...x, text: e.target.value } : x)) })} />
             <button type="button" className="icon-btn sm" aria-label="Unteraufgabe löschen" onClick={() => set({ subtasks: subs.filter((_, j) => j !== k) })}>
-              ×
+              <IconClose size={12} />
             </button>
           </div>
         ))}
-        <div className="input-row">
+        <div className="td-sub add">
+          <IconPlus size={13} />
           <input
-            className="input sm"
+            className="td-sub-text"
             value={newSub}
-            placeholder="Unteraufgabe hinzufügen …"
+            placeholder="Unteraufgabe hinzufügen"
             onChange={(e) => setNewSub(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && newSub.trim()) {
@@ -554,12 +772,8 @@ function TodoDetails({ t, deckLink, onDelete }: { t: Todo; deckLink?: string; on
           />
         </div>
       </div>
-      <div className="row-gap">
-        {deckLink && (
-          <Link to={deckLink} className="btn ghost sm">
-            Deck öffnen
-          </Link>
-        )}
+
+      <footer className="td-details-foot">
         <button
           type="button"
           className="btn ghost sm"
@@ -571,10 +785,11 @@ function TodoDetails({ t, deckLink, onDelete }: { t: Todo; deckLink?: string; on
         >
           Duplizieren
         </button>
+        <span className="grow" />
         <button type="button" className="btn ghost sm danger" onClick={onDelete}>
           <IconTrash size={14} /> Löschen
         </button>
-      </div>
+      </footer>
     </div>
   );
 }
