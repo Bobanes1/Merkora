@@ -11690,3 +11690,27 @@ body.learn-focus .practice-tasks { min-height: calc(100vh - 220px); }
 .label-ghost { position: fixed; z-index: 2000; pointer-events: none; transform: translate(-50%, -60%) rotate(-2deg); padding: 8px 14px; border-radius: 999px; border: 1px solid var(--primary); background: var(--white); color: var(--ink); font-weight: 700; font-size: 14px; box-shadow: 0 12px 28px -10px rgba(0, 0, 0, 0.45); }
 .label-help { display: block; margin-top: -4px; }
 @media (prefers-reduced-motion: reduce) { .label-diagram.dnd.picking .dg-slot rect { animation: none; } }
+
+/* ---------- skill suggestions: category filter, info, onboarding ---------- */
+.skill-new .mini-head { align-items: center; }
+.skill-new .mini-head h2 { margin: 0; }
+.skill-cats { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 10px 0 4px; padding-bottom: 2px; }
+.skill-cats::-webkit-scrollbar { display: none; }
+.skill-cat { flex: none; padding: 4px 10px; border-radius: 999px; border: 1px solid transparent; background: none; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.skill-cat:hover { color: var(--ink); background: var(--surface-2); }
+.skill-cat.on { color: var(--primary); border-color: color-mix(in srgb, var(--primary) 45%, transparent); background: var(--primary-soft); }
+.skill-idea-info { margin: 4px 0 8px; font-size: 14px; color: var(--muted); display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.skill-cat-badge { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--primary); background: var(--primary-soft); padding: 2px 8px; border-radius: 999px; }
+.skill-new-foot { display: flex; align-items: flex-start; gap: 12px; }
+.skill-new-foot .skill-more { flex: 1; }
+.skill-new-foot .link-btn { margin-top: 4px; white-space: nowrap; }
+.mini-card .mini-teaser { font-size: 13px; line-height: 1.4; color: var(--muted); }
+.mini-card { align-content: stretch; }
+.mini-card small { align-self: end; }
+.skill-onboard { border-color: color-mix(in srgb, var(--primary) 40%, var(--line)); }
+.skill-onboard h2 { margin: 0 0 6px; }
+.onb-q { margin-top: 14px; display: grid; gap: 8px; }
+.onb-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.onb-q .input { max-width: 420px; }
+.onb-actions { display: flex; gap: 8px; margin-top: 18px; }
+@media (max-width: 640px) { .skill-new .mini-head, .mini-new .mini-head { flex-direction: row; } .mini-new .mini-head .btn { flex: none; } }

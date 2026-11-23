@@ -2164,6 +2164,24 @@ console.log('Beschriften per Drag & Drop, Aufgabentypen passend zum Thema');
   ok((svg.match(/data-slot="/g) ?? []).length === 4 && svg.includes('>Press Agentry<') && svg.includes('#1f9d6b') && svg.includes('#d93f3f') && svg.includes('>2<'), 'Grafik: Ablagefelder, abgelegte Begriffe, richtig/falsch farbig, freie Felder mit Nummer');
 }
 
+console.log('Skill-Vorschläge: getrennt blättern, Kategorien, Kurzinfo');
+{
+  const S = await import('../src/lib/skills');
+  const P = await import('../src/lib/topicPool');
+  const p0 = S.pageTopics(S.TOPIC_POOL, 6, 42, 0), p1 = S.pageTopics(S.TOPIC_POOL, 6, 42, 1);
+  ok(p0.length === 6 && p1.length === 6 && !p0.some((t) => p1.includes(t)) && S.pageTopics(S.TOPIC_POOL, 6, 42, 1).join() === p1.join(), 'Andere: nächster Block ohne Wiederholung, gleiche Seite = gleiche Themen');
+  const seen = new Set<string>();
+  for (let k = 0; k < Math.floor(S.TOPIC_POOL.length / 6); k++) S.pageTopics(S.TOPIC_POOL, 6, 7, k).forEach((t) => seen.add(t));
+  ok(seen.size === Math.floor(S.TOPIC_POOL.length / 6) * 6, 'Durchblättern zeigt jedes Thema höchstens einmal');
+  ok(!S.pageTopics(S.TOPIC_POOL, 6, 3, 0, ['Stochastik']).includes('Stochastik') && S.pageTopics(['A', 'B'], 6, 1, 3).length === 2, 'vorhandene Skills fallen weg, kleiner Pool geht');
+  const prefer = P.SKILL_IDEAS.filter((x) => x.cat === 'recht').map((x) => x.t);
+  ok(S.pageTopics(S.TOPIC_POOL, 6, 9, 0, [], prefer).every((t) => prefer.includes(t)), 'Interessen kommen zuerst');
+  const all = [...P.SKILL_IDEAS, ...P.MINI_IDEAS];
+  const names = all.map((x) => x.t.toLowerCase());
+  ok(P.SKILL_IDEAS.length >= 90 && P.MINI_IDEAS.length >= 90 && new Set(names).size === names.length, 'je mind. 90 Themen, keine Dopplungen (auch nicht zwischen den Listen)');
+  ok(all.every((x) => P.TOPIC_CATS.includes(x.cat) && x.info.trim().length > 0 && x.info.length <= 140), 'jedes Thema hat Kategorie und Kurzinfo');
+  ok(P.TOPIC_CATS.every((c) => P.SKILL_IDEAS.some((x) => x.cat === c) && P.MINI_IDEAS.some((x) => x.cat === c)), 'jede Kategorie hat Skills und Mini-Skills');
+}
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

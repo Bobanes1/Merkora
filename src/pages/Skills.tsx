@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { attachSkillFiles } from '../lib/deckFiles';
 import { Link, useNavigate } from 'react-router-dom';
 import { IconClose, IconFlame, IconNote, IconShuffle, IconSparkle, IconTrash, IconUpload } from '../components/Icons';
@@ -9,9 +9,10 @@ import { MATERIAL_ACCEPT, readFileText } from '../lib/files';
 import { DOMAIN_LABEL } from '../lib/practice';
 import { startMiniSkill, startSkill } from '../lib/skillRun';
 import { levelLabel } from '../lib/mockExamCore';
-import { MINI_POOL, TOPIC_POOL, nextLesson, pickTopics, skillProgress, skillStreak, skillToday } from '../lib/skills';
+import { nextLesson, pageTopics, skillProgress, skillStreak, skillToday } from '../lib/skills';
 import { deleteSkill, setSettings, useData } from '../lib/store';
 import type { Skill } from '../lib/skills';
+import { CAT_LABEL, MINI_IDEAS, SKILL_IDEAS, TOPIC_CATS, type TopicCat, type TopicIdea } from '../lib/topicPool';
 
 const today = () => Math.floor(Date.now() / 86_400_000);
 
@@ -29,12 +30,28 @@ export default function Skills() {
   const skills = data.skills ?? [];
   const [topic, setTopic] = useState('');
   const [level, setLevel] = useState(() => defaultLevel(data.settings));
-  // suggestions: a new few every day, „Andere Vorschläge“ shuffles on
-  const [seed, setSeed] = useState(today);
+  const st = data.settings;
+  const [onboard, setOnboard] = useState(() => !st.skillOnboarded && skills.length === 0);
+  // suggestions: a fixed order per day; each „Andere“ shows the next block of its own section only
+  const seed = useMemo(today, []);
+  const [skillPage, setSkillPage] = useState(0);
+  const [miniPage, setMiniPage] = useState(0);
+  const [skillCat, setSkillCatRaw] = useState<TopicCat | ''>(() => readCat('merkora.skillCat'));
+  const [miniCat, setMiniCatRaw] = useState<TopicCat | ''>(() => readCat('merkora.miniCat'));
+  const setSkillCat = (c: TopicCat | '') => (setSkillCatRaw(c), setSkillPage(0), saveCat('merkora.skillCat', c));
+  const setMiniCat = (c: TopicCat | '') => (setMiniCatRaw(c), setMiniPage(0), saveCat('merkora.miniCat', c));
   const have = skills.flatMap((s) => [s.title, s.topic]);
-  const examples = pickTopics(TOPIC_POOL, 6, seed, have);
-  const minis = pickTopics(MINI_POOL, 4, seed * 7 + 3, have);
+  const interests = st.skillInterests ?? [];
+  const pool = (ideas: TopicIdea[], cat: TopicCat | '') => ideas.filter((x) => !cat || x.cat === cat);
+  const preferred = (ideas: TopicIdea[]) => ideas.filter((x) => interests.includes(x.cat)).map((x) => x.t);
+  const skillIdeas = pool(SKILL_IDEAS, skillCat);
+  const miniIdeas = pool(MINI_IDEAS, miniCat);
+  const examples = pageTopics(skillIdeas.map((x) => x.t), 6, seed, skillPage, have, skillCat ? [] : preferred(SKILL_IDEAS));
+  const minis = pageTopics(miniIdeas.map((x) => x.t), 4, seed * 7 + 3, miniPage, have, miniCat ? [] : preferred(MINI_IDEAS));
+  const ideaOf = (t: string) => SKILL_IDEAS.find((x) => x.t === t) ?? MINI_IDEAS.find((x) => x.t === t);
+  const picked = ideaOf(topic);
   const [ownMini, setOwnMini] = useState('');
+  const withGoal = (lv: string) => (st.skillGoal ? [lv, `Ziel: ${GOAL_LABEL[st.skillGoal]}`].filter(Boolean).join(' – ') : lv);
   const startMini = (t: string) => {
     if (!t.trim()) return;
     navigate(`/skills/${startMiniSkill(t, level)}`);
@@ -49,7 +66,7 @@ export default function Skills() {
   const start = () => {
     if (!topic.trim()) return;
     setSettings({ skillLevel: level });
-    const id = startSkill(topic, level, material);
+    const id = startSkill(topic, withGoal(level), material);
     if (files.length) void attachSkillFiles(id, files);
     navigate(`/skills/${id}`);
   };
@@ -76,8 +93,26 @@ export default function Skills() {
         <p className="muted">Lernen durch Tun: Du gibst ein Thema an, Pip plant mit dir einen Lernpfad bis zu deinem Ziel – und dann übst du aktiv, Lektion für Lektion.</p>
       </header>
 
+      {hasKey() && onboard && (
+        <SkillOnboard
+          onDone={(lv) => {
+            setOnboard(false);
+            if (lv !== undefined) setLevel(lv);
+            setSkillCat('');
+            setMiniCat('');
+          }}
+        />
+      )}
+
       <section className="panel skill-new">
-        <h2>Was willst du können?</h2>
+        <div className="mini-head">
+          <h2 className="grow">Was willst du können?</h2>
+          {hasKey() && (
+            <button type="button" className="btn ghost sm" onClick={() => setSkillPage((x) => x + 1)} title="Andere Themen vorschlagen">
+              <IconShuffle size={14} /> Andere
+            </button>
+          )}
+        </div>
         {!hasKey() ? (
           <NoKeyNotice compact />
         ) : (
@@ -88,44 +123,54 @@ export default function Skills() {
                 <IconSparkle size={16} /> Lernpfad planen
               </button>
             </div>
+            <CatFilter value={skillCat} onChange={setSkillCat} label="Themen filtern" />
             <div className="chips">
               {examples.map((e) => (
-                <button key={e} type="button" className="chip" onClick={() => setTopic(e)}>
+                <button key={e} type="button" className={`chip${topic === e ? ' on' : ''}`} onClick={() => setTopic(e)}>
                   {e}
                 </button>
               ))}
-              <button type="button" className="chip ghost-chip" onClick={() => setSeed((x) => x + 1)} title="Andere Themen vorschlagen">
-                <IconShuffle size={13} /> Andere Vorschläge
-              </button>
             </div>
-            <details className="skill-more">
-              <summary>Mehr Angaben (optional)</summary>
-              <label className="field-label" htmlFor="skill-level">
-                Wo lernst du gerade?
-              </label>
-              <input id="skill-level" className="input" value={level} onChange={(e) => setLevel(e.target.value)} placeholder="z. B. Gymnasium 11. Klasse, Jura-Studium 2. Semester, Hobby" />
-              <label className="field-label" htmlFor="skill-material">
-                Eigenes Material (Skript, Folien, Notizen) – dann richtet sich der Lernpfad danach
-              </label>
-              <textarea id="skill-material" className="input" rows={4} value={material} onChange={(e) => setMaterial(e.target.value)} placeholder="Text einfügen …" />
-              <label className="btn outline sm">
-                <IconUpload size={14} /> Dateien wählen
-                <input type="file" multiple accept={MATERIAL_ACCEPT} hidden onChange={(e) => void onFiles(e.target.files)} />
-              </label>
-              {fileNote && <small className="muted"> {fileNote}</small>}
-              {files.length > 0 && (
-                <ul className="skill-file-list">
-                  {files.map((f) => (
-                    <li key={f.name}>
-                      <IconNote size={14} /> <span className="grow">{f.name}</span>
-                      <button type="button" className="icon-btn sm" aria-label={`${f.name} entfernen`} onClick={() => setFiles((x) => x.filter((y) => y !== f))}>
-                        <IconClose size={12} />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+            {picked && (
+              <p className="skill-idea-info">
+                <span className="skill-cat-badge">{CAT_LABEL[picked.cat]}</span> {picked.info}
+              </p>
+            )}
+            <div className="skill-new-foot">
+              <details className="skill-more">
+                <summary>Mehr Angaben (optional)</summary>
+                <label className="field-label" htmlFor="skill-level">
+                  Wo lernst du gerade?
+                </label>
+                <input id="skill-level" className="input" value={level} onChange={(e) => setLevel(e.target.value)} placeholder="z. B. Gymnasium 11. Klasse, Jura-Studium 2. Semester, Hobby" />
+                <label className="field-label" htmlFor="skill-material">
+                  Eigenes Material (Skript, Folien, Notizen) – dann richtet sich der Lernpfad danach
+                </label>
+                <textarea id="skill-material" className="input" rows={4} value={material} onChange={(e) => setMaterial(e.target.value)} placeholder="Text einfügen …" />
+                <label className="btn outline sm">
+                  <IconUpload size={14} /> Dateien wählen
+                  <input type="file" multiple accept={MATERIAL_ACCEPT} hidden onChange={(e) => void onFiles(e.target.files)} />
+                </label>
+                {fileNote && <small className="muted"> {fileNote}</small>}
+                {files.length > 0 && (
+                  <ul className="skill-file-list">
+                    {files.map((f) => (
+                      <li key={f.name}>
+                        <IconNote size={14} /> <span className="grow">{f.name}</span>
+                        <button type="button" className="icon-btn sm" aria-label={`${f.name} entfernen`} onClick={() => setFiles((x) => x.filter((y) => y !== f))}>
+                          <IconClose size={12} />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </details>
+              {!onboard && (
+                <button type="button" className="link-btn small" onClick={() => setOnboard(true)}>
+                  Interessen ändern
+                </button>
               )}
-            </details>
+            </div>
           </>
         )}
       </section>
@@ -137,15 +182,17 @@ export default function Skills() {
               <h2>Mal was Neues – in 20 Minuten</h2>
               <p className="muted small">Kleine Mini-Skills zum Spaß und Horizont-Erweitern: drei kurze Lektionen, sofort los, ohne Planung.</p>
             </div>
-            <button type="button" className="btn ghost sm" onClick={() => setSeed((x) => x + 1)}>
+            <button type="button" className="btn ghost sm" onClick={() => setMiniPage((x) => x + 1)} title="Andere Mini-Skills vorschlagen">
               <IconShuffle size={14} /> Andere
             </button>
           </div>
+          <CatFilter value={miniCat} onChange={setMiniCat} label="Mini-Skills filtern" />
           <div className="mini-cards">
             {minis.map((m) => (
               <button key={m} type="button" className="mini-card" onClick={() => startMini(m)}>
                 <IconSparkle size={16} />
                 <b>{m}</b>
+                {ideaOf(m) && <span className="mini-teaser">{ideaOf(m)!.info}</span>}
                 <small>Los geht's ›</small>
               </button>
             ))}
@@ -241,5 +288,107 @@ function SkillTileGoal({ skill }: { skill: Skill }) {
       )}
       heute {t.done}/{t.goal}
     </small>
+  );
+}
+
+const GOAL_LABEL = { exam: 'Prüfung bestehen', job: 'Für den Job', fun: 'Aus Neugier' } as const;
+const STAGES = ['Schule', 'Ausbildung', 'Studium', 'Beruf', 'Hobby'];
+
+const readCat = (key: string): TopicCat | '' => {
+  try {
+    const v = localStorage.getItem(key) ?? '';
+    return (TOPIC_CATS as string[]).includes(v) ? (v as TopicCat) : '';
+  } catch {
+    return '';
+  }
+};
+const saveCat = (key: string, c: string) => {
+  try {
+    localStorage.setItem(key, c);
+  } catch {
+    // no storage: the filter is simply not remembered
+  }
+};
+
+/** A slim row of category chips: „Alle“ plus one per category. */
+function CatFilter({ value, onChange, label }: { value: TopicCat | ''; onChange: (c: TopicCat | '') => void; label: string }) {
+  const row = useRef<HTMLDivElement>(null);
+  // the chosen category stays visible in the scrolling row
+  useEffect(() => {
+    const el = row.current?.querySelector<HTMLElement>('.skill-cat.on');
+    const box = row.current;
+    if (el && box) box.scrollLeft = Math.max(0, el.offsetLeft - box.offsetLeft - 24);
+  }, [value]);
+  return (
+    <div className="skill-cats" role="group" aria-label={label} ref={row}>
+      {(['', ...TOPIC_CATS] as (TopicCat | '')[]).map((c) => (
+        <button key={c || 'all'} type="button" className={`skill-cat${value === c ? ' on' : ''}`} aria-pressed={value === c} onClick={() => onChange(c)}>
+          {c ? CAT_LABEL[c] : 'Alle'}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Three short questions so the suggestions fit: interests, where one learns, what for. */
+function SkillOnboard({ onDone }: { onDone: (level?: string) => void }) {
+  const st = useData().settings;
+  const [cats, setCats] = useState<TopicCat[]>(st.skillInterests ?? []);
+  const [stage, setStage] = useState('');
+  const [detail, setDetail] = useState('');
+  const [goal, setGoal] = useState<keyof typeof GOAL_LABEL | undefined>(st.skillGoal);
+  const toggle = (c: TopicCat) => setCats((x) => (x.includes(c) ? x.filter((y) => y !== c) : [...x, c]));
+  const finish = () => {
+    const level = stage ? (detail.trim() ? `${stage} (${detail.trim()})` : stage) : undefined;
+    setSettings({ skillInterests: cats, skillGoal: goal, skillOnboarded: true, ...(level !== undefined ? { skillLevel: level } : {}) });
+    onDone(level);
+  };
+  const skip = () => {
+    setSettings({ skillOnboarded: true });
+    onDone();
+  };
+  return (
+    <section className="panel skill-onboard">
+      <h2>Kurz zu dir – dann passen die Vorschläge</h2>
+      <div className="onb-q">
+        <b>1. Was interessiert dich?</b> <small className="muted">(mehrere möglich)</small>
+        <div className="onb-chips">
+          {TOPIC_CATS.map((c) => (
+            <button key={c} type="button" className={`chip${cats.includes(c) ? ' on' : ''}`} aria-pressed={cats.includes(c)} onClick={() => toggle(c)}>
+              {CAT_LABEL[c]}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="onb-q">
+        <b>2. Wo lernst du gerade?</b>
+        <div className="onb-chips">
+          {STAGES.map((s) => (
+            <button key={s} type="button" className={`chip${stage === s ? ' on' : ''}`} aria-pressed={stage === s} onClick={() => setStage(stage === s ? '' : s)}>
+              {s}
+            </button>
+          ))}
+        </div>
+        {stage && stage !== 'Hobby' && <input className="input" value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="Genauer (optional), z. B. Jura, 2. Semester" aria-label="Genauer" />}
+      </div>
+      <div className="onb-q">
+        <b>3. Wofür lernst du?</b>
+        <div className="onb-chips">
+          {(Object.keys(GOAL_LABEL) as (keyof typeof GOAL_LABEL)[]).map((g) => (
+            <button key={g} type="button" className={`chip${goal === g ? ' on' : ''}`} aria-pressed={goal === g} onClick={() => setGoal(goal === g ? undefined : g)}>
+              {GOAL_LABEL[g]}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="onb-actions">
+        <button type="button" className="btn primary" onClick={finish}>
+          Fertig
+        </button>
+        <button type="button" className="btn ghost" onClick={skip}>
+          Überspringen
+        </button>
+      </div>
+    </section>
   );
 }

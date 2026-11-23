@@ -9,6 +9,7 @@ import { cleanSolve, FIGURE_RULE, problemCount, setFrame, solvedCount, taskList,
 import { DAY, dayKey, startOfDay } from './util';
 import { spreadClip } from './sample';
 import type { DeckFile } from './store';
+import { MINI_IDEAS, SKILL_IDEAS } from './topicPool';
 import type { CaseGrade, CaseTask } from './tasks';
 
 export type PlanQuestion = { q: string; options: string[]; multi?: boolean };
@@ -749,28 +750,10 @@ export function weakLessons(skill: Skill, max = 3): Lesson[] {
 
 // ---------- ideas: what to learn ----------
 /** Topics for the suggestions on the skills page (a different few every day). */
-export const TOPIC_POOL = [
-  'Stochastik', 'Lineare Algebra', 'Analysis: Ableitungen', 'Statistik für die Uni', 'Finanzmathematik',
-  'Java programmieren', 'Python-Grundlagen', 'SQL-Abfragen', 'JavaScript fürs Web', 'Algorithmen und Datenstrukturen',
-  'Vertragsrecht – Fälle lösen', 'Mietrecht', 'Strafrecht AT', 'Arbeitsrecht', 'Sachenrecht',
-  'Musiktheorie: Akkorde und Intervalle', 'Gitarre: Akkorde begleiten', 'Klavier: Noten lesen', 'Gehörbildung', 'Rhythmus und Takt',
-  'Spanisch Grammatik', 'Englisch fürs Business', 'Französisch für den Alltag', 'Italienisch für den Urlaub', 'Latein-Grundlagen',
-  'Buchhaltung Grundlagen', 'Volkswirtschaftslehre', 'Marketing-Grundlagen', 'Projektmanagement', 'Excel für den Job',
-  'Erste Hilfe', 'Ernährung verstehen', 'Psychologie-Grundlagen', 'Philosophie: Ethik', 'Chemie: Reaktionen',
-  'Physik: Mechanik', 'Biologie: Genetik', 'Geschichte: Das 20. Jahrhundert', 'Präsentieren und Reden', 'Wissenschaftliches Schreiben',
-];
+export const TOPIC_POOL = SKILL_IDEAS.map((x) => x.t);
 
 /** Small skills for fun – learned in about 20 minutes, to broaden the horizon. */
-export const MINI_POOL = [
-  'Morsecode', 'Sternbilder am Nachthimmel finden', 'Hiragana: die ersten 10 Zeichen', 'Origami-Kranich falten', 'Schach: Matt in 1',
-  'Wie funktioniert Bitcoin?', 'Gebärdensprache: Begrüßung', 'Blues-Tonleiter', 'Kopfrechen-Tricks', 'Wolken erkennen',
-  'Das NATO-Alphabet', 'Römische Zahlen', 'Knoten fürs Segeln', 'Wie Impfungen wirken', 'Kaffee: Von der Bohne zur Tasse',
-  'Optische Täuschungen verstehen', 'Weinregionen Europas', 'Die Planeten unseres Sonnensystems', 'Zaubertrick mit Karten', 'Binärzahlen',
-  'Griechisches Alphabet', 'Erste Worte auf Koreanisch', 'Pilze sicher unterscheiden – die Basics', 'Wie Flugzeuge fliegen', 'Fotografie: Die Drittel-Regel',
-  'Kalligrafie: Grundstriche', 'Vogelstimmen erkennen', 'Wie das Internet funktioniert', 'Mondphasen verstehen', 'Akkorde auf der Ukulele',
-  'Brot backen: Die Chemie dahinter', 'Typografie: Schriften erkennen', 'Rhetorische Stilmittel', 'Wie Wahlen gezählt werden', 'Erste Hilfe bei Verbrennungen',
-  'Geheimschriften: Caesar-Verschlüsselung', 'Wie Farben im Gehirn entstehen', 'Kurzschrift: Die ersten Zeichen', 'Feng-Shui-Grundideen', 'Sudoku-Strategien',
-];
+export const MINI_POOL = MINI_IDEAS.map((x) => x.t);
 
 /**
  * n topics from a pool, the same for the same seed (e.g. the day) and different for another;
@@ -794,6 +777,23 @@ export function pickTopics(pool: readonly string[], n: number, seed: number, exc
     [list[i], list[j]] = [list[j], list[i]];
   }
   return list.slice(0, n);
+}
+
+/**
+ * Block `page` of n topics from a fixed shuffled order (same seed = same order): each click on „Andere“
+ * shows the next block, so topics only come back once all were shown. `prefer` topics come first
+ * (each group shuffled on its own). Pure – tested.
+ */
+export function pageTopics(pool: readonly string[], n: number, seed: number, page: number, exclude: string[] = [], prefer: readonly string[] = []): string[] {
+  const all = pickTopics(pool, pool.length, seed, exclude);
+  const pref = new Set(prefer);
+  const order = [...all.filter((t) => pref.has(t)), ...all.filter((t) => !pref.has(t))];
+  if (order.length <= n) return order;
+  const blocks = Math.ceil(order.length / n);
+  const start = ((page % blocks) + blocks) % blocks * n;
+  const out = order.slice(start, start + n);
+  // the last block is filled up from the start
+  return out.length < n ? [...out, ...order.slice(0, n - out.length)] : out;
 }
 
 /** Mini skills: light, curious, one aha after the other – short lessons with 4 tasks. */

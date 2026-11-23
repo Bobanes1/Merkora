@@ -230,6 +230,10 @@ export type Settings = {
   cardDensity?: 'compact' | 'thorough';
   /** Skills: „Wo lernst du gerade?“ as typed there (free text). */
   skillLevel?: string;
+  /** Skills onboarding: interests (topic categories), goal, done. */
+  skillInterests?: import('./topicPool').TopicCat[];
+  skillGoal?: 'exam' | 'job' | 'fun';
+  skillOnboarded?: boolean;
   gradeScale?: 'ch' | 'de' | 'at' | 'pct';
   /** Name shown to friends when sharing a deck. */
   shareName?: string;
