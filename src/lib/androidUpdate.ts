@@ -27,6 +27,8 @@ export type ApkState = {
   progress?: number;
   error?: string;
   hidden?: boolean;
+  /** Back from Android's installer and still the old version: the update did not go through. */
+  retried?: boolean;
 };
 let state: ApkState = { status: 'idle' };
 const subs = new Set<() => void>();
@@ -105,7 +107,17 @@ if (typeof window !== 'undefined') (window as unknown as { __merkoraInstallResul
 export function afterInstallAnswer(r: string): Partial<ApkState> {
   if (r === 'ok' || r === 'timeout') return { status: 'installing' };
   if (r === 'permission') return { status: 'permission' };
+  forgetDownload();
   return { status: 'error', error: 'Android konnte den Installer nicht öffnen: ' + r.replace(/^error:\s*/, '') };
+}
+
+/** The downloaded file is not used again (after an error a fresh download is safer). */
+function forgetDownload() {
+  try {
+    localStorage.removeItem(DOWNLOADED);
+  } catch {
+    /* no storage */
+  }
 }
 
 async function startInstaller(run: () => string) {
@@ -127,9 +139,12 @@ export async function installApkUpdate(): Promise<void> {
     openExternal(url);
     return;
   }
+  // after an error always a fresh download – the file kept may be the reason
+  const fresh = state.status === 'error';
+  if (fresh) forgetDownload();
   set({ error: undefined });
   try {
-    if (b.installDownloaded && downloadedFor(v)) {
+    if (!fresh && b.installDownloaded && downloadedFor(v)) {
       await startInstaller(() => b.installDownloaded!());
       return;
     }
@@ -150,6 +165,7 @@ export async function installApkUpdate(): Promise<void> {
       /* no storage */
     }
   } catch (e) {
+    forgetDownload();
     set({ status: 'error', error: String((e as Error)?.message ?? e) });
   }
 }
@@ -161,10 +177,13 @@ export async function downloadApkInBrowser() {
   openExternal(apkUrl(state.version));
 }
 
-// back in Merkora without the update installed (installer closed, or "Später"): offer installing again
+// back in Merkora: without the update installed (installer closed, „Später“ or Android refused) offer it again –
+// with the way through the browser; otherwise look for a new version (the app is rarely restarted on a phone)
 if (typeof document !== 'undefined')
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && state.status === 'installing') setTimeout(() => state.status === 'installing' && set({ status: 'ready' }), 1500);
+    if (document.visibilityState !== 'visible') return;
+    if (state.status === 'installing') setTimeout(() => state.status === 'installing' && set({ status: 'ready', retried: true }), 1500);
+    else if (state.status === 'idle' || state.status === 'none') void checkApkUpdate();
   });
 
 export function startApkUpdateChecks() {

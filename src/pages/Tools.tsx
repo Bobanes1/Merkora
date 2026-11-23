@@ -19,8 +19,8 @@ import { toolWindows } from '../lib/toolWindows';
 type Tab = 'plan' | 'todos' | 'exams' | 'pomodoro' | 'sounds' | 'labs' | 'piano' | 'java';
 
 const TABS: { id: Tab; label: string; icon: (p: { size?: number }) => JSX.Element }[] = [
-  { id: 'plan', label: 'Arbeitsplanung', icon: IconSparkle },
   { id: 'todos', label: 'To-do-Liste', icon: IconChecklist },
+  { id: 'plan', label: 'Arbeitsplanung', icon: IconSparkle },
   { id: 'exams', label: 'Prüfungen', icon: IconCalendar },
   { id: 'pomodoro', label: 'Pomodoro-Timer', icon: IconTimer },
   { id: 'sounds', label: 'Klänge', icon: IconHeadphones },
@@ -67,7 +67,7 @@ function ToolPicker({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
 export default function Tools() {
   const [params, setParams] = useSearchParams();
   const raw = params.get('tab') as Tab | null;
-  const tab: Tab = raw && TABS.some((t) => t.id === raw) ? raw : 'plan';
+  const tab: Tab = raw && TABS.some((t) => t.id === raw) ? raw : 'todos';
   const setTab = (id: Tab) => setParams({ tab: id }, { replace: true });
   const phone = usePhone();
 

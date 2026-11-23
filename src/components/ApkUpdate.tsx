@@ -23,7 +23,12 @@ function Body({ u }: { u: ApkState }) {
       </>
     );
   if (u.status === 'ready')
-    return (
+    return u.retried ? (
+      <>
+        <b>Version {u.version} ist noch nicht installiert</b>
+        <small>Tippe auf „Installieren“ und im Android-Fenster nochmal auf „Installieren“. Zeigt Android einen Fehler, lade die Version über „Im Browser laden“ und tippe die Datei an – dein Lernstand bleibt erhalten.</small>
+      </>
+    ) : (
       <>
         <b>Version {u.version} ist bereit</b>
         <small>Schon heruntergeladen – tippe auf „Installieren“ und bestätige im Android-Fenster.</small>
@@ -61,7 +66,7 @@ export function ApkUpdateNotice() {
           <button type="button" className="btn primary sm" onClick={() => void installApkUpdate()}>
             {u.status === 'error' ? 'Nochmal versuchen' : u.status === 'installing' ? 'Nochmal' : u.status === 'permission' || u.status === 'ready' ? 'Installieren' : 'Jetzt aktualisieren'}
           </button>
-          {u.status === 'error' && (
+          {(u.status === 'error' || u.retried) && (
             <button type="button" className="btn ghost sm" onClick={() => void downloadApkInBrowser()} title="Lädt die neue Version im Browser – danach die Datei antippen">
               Im Browser laden
             </button>

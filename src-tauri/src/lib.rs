@@ -562,24 +562,92 @@ async fn download_apk(app: AppHandle, url: String) -> Result<String, String> {
     let dir = app.path().app_cache_dir().map_err(|e| e.to_string())?.join("updates");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let file = dir.join("merkora-update.apk");
-    let mut res = CLIENT.get(&url).send().await.map_err(|e| format!("Download fehlgeschlagen: {e}"))?;
+    // a half-finished download must never be taken for the update: written to a side file, checked, then renamed
+    let part = dir.join("merkora-update.part");
+    let _ = std::fs::remove_file(&file);
+    let mut res = APK_CLIENT.get(&url).send().await.map_err(|e| format!("Download fehlgeschlagen: {e}"))?;
     if !res.status().is_success() {
         return Err(format!("Download fehlgeschlagen ({}).", res.status()));
     }
     let total = res.content_length().unwrap_or(0);
-    let mut data: Vec<u8> = Vec::with_capacity(total as usize);
-    let mut last = 0u64;
-    while let Some(chunk) = res.chunk().await.map_err(|e| format!("Download abgebrochen: {e}"))? {
-        data.extend_from_slice(&chunk);
-        let got = data.len() as u64;
+    let mut out = std::io::BufWriter::new(std::fs::File::create(&part).map_err(|e| e.to_string())?);
+    let (mut got, mut last) = (0u64, 0u64);
+    loop {
+        let chunk = match res.chunk().await {
+            Ok(Some(c)) => c,
+            Ok(None) => break,
+            Err(e) => {
+                drop(out);
+                let _ = std::fs::remove_file(&part);
+                return Err(format!("Download abgebrochen – bitte nochmal versuchen ({e})."));
+            }
+        };
+        std::io::Write::write_all(&mut out, &chunk).map_err(|e| e.to_string())?;
+        got += chunk.len() as u64;
         if total > 0 && (got - last) * 50 >= total {
             last = got;
             let _ = app.emit("apk-progress", got as f64 / total as f64);
         }
     }
-    std::fs::write(&file, &data).map_err(|e| e.to_string())?;
+    std::io::Write::flush(&mut out).map_err(|e| e.to_string())?;
+    drop(out);
+    if let Err(e) = check_apk(&part, total) {
+        let _ = std::fs::remove_file(&part);
+        return Err(e);
+    }
+    std::fs::rename(&part, &file).map_err(|e| e.to_string())?;
     let _ = app.emit("apk-progress", 1.0f64);
     Ok(file.to_string_lossy().into_owned())
+}
+
+/// For the ≈ 25 MB APK on a phone: no overall time limit (mobile data may be slow), but it gives up when
+/// nothing arrives for a minute; no gzip, so the bytes on disk are exactly the file.
+static APK_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
+    reqwest::Client::builder()
+        .user_agent(concat!("Merkora/", env!("CARGO_PKG_VERSION")))
+        .connect_timeout(std::time::Duration::from_secs(20))
+        .read_timeout(std::time::Duration::from_secs(60))
+        .no_gzip()
+        .build()
+        .expect("http client")
+});
+
+/// Is the downloaded file a complete APK? As long as announced, and an APK is a ZIP file (starts with "PK").
+fn check_apk(path: &std::path::Path, expected: u64) -> Result<(), String> {
+    let len = std::fs::metadata(path).map_err(|e| e.to_string())?.len();
+    if expected > 0 && len != expected {
+        return Err(format!("Download unvollständig ({} von {} MB) – bitte nochmal versuchen.", len / 1_000_000, expected / 1_000_000));
+    }
+    let mut head = [0u8; 2];
+    let ok = std::fs::File::open(path).and_then(|mut f| std::io::Read::read_exact(&mut f, &mut head)).is_ok() && &head == b"PK";
+    if !ok || len < 1_000_000 {
+        return Err("Die heruntergeladene Datei ist kein gültiges Update – bitte nochmal versuchen.".into());
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod apk_check_tests {
+    #[test]
+    fn only_complete_apks() {
+        let dir = std::env::temp_dir().join(format!("merkora-apk-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let good = dir.join("good.apk");
+        let mut data = b"PK".to_vec();
+        data.resize(1_200_000, 7);
+        std::fs::write(&good, &data).unwrap();
+        assert!(super::check_apk(&good, data.len() as u64).is_ok());
+        assert!(super::check_apk(&good, 0).is_ok());
+        let e = super::check_apk(&good, 2_000_000).unwrap_err();
+        assert!(e.contains("unvollständig"), "{e}");
+        let bad = dir.join("bad.apk");
+        std::fs::write(&bad, vec![b'<'; 1_200_000]).unwrap();
+        assert!(super::check_apk(&bad, 0).unwrap_err().contains("kein gültiges Update"));
+        let tiny = dir.join("tiny.apk");
+        std::fs::write(&tiny, b"PK1234").unwrap();
+        assert!(super::check_apk(&tiny, 0).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
 
 #[cfg(test)]
