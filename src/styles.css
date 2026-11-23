@@ -11649,3 +11649,27 @@ body.learn-focus .practice-tasks { min-height: calc(100vh - 220px); }
 .check-note.busy { color: var(--muted); animation: check-pulse 1.4s ease-in-out infinite; }
 @keyframes check-pulse { 50% { opacity: 0.5; } }
 .task-fixed { display: inline-flex; align-items: center; gap: 4px; margin-bottom: 6px; font-size: 12px; color: var(--ok-ink); }
+
+/* ---------- AI progress: steps, bar, time ---------- */
+.ai-progress { max-width: 460px; margin: 0 auto; gap: 10px; }
+.ai-progress-title { font-size: 16px; }
+.ai-steps { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 6px; text-align: left; justify-self: stretch; }
+.ai-steps li { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--muted); opacity: 0.55; transition: opacity 0.3s ease, color 0.3s ease; }
+.ai-steps li.done { opacity: 0.9; color: var(--ok-ink); }
+.ai-steps li.now { opacity: 1; color: var(--ink); font-weight: 600; }
+.ai-step-dot { flex: none; display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--line); color: #fff; }
+.ai-steps li.done .ai-step-dot { background: var(--ok); border-color: var(--ok); }
+.ai-steps li.now .ai-step-dot { border-color: var(--primary); border-top-color: transparent; animation: ai-spin 0.9s linear infinite; }
+@keyframes ai-spin { to { transform: rotate(360deg); } }
+.ai-bar { justify-self: stretch; height: 6px; }
+.ai-bar i { transition: width 0.4s linear; }
+.ai-hint { font-size: 12px; }
+.job-work { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--muted); }
+.job-work span { display: inline-flex; align-items: center; gap: 3px; opacity: 0.6; }
+.job-work span.done { color: var(--ok-ink); opacity: 0.9; }
+.job-work span.now { color: var(--ink); font-weight: 600; opacity: 1; }
+.job-work span.now::after { content: ''; width: 8px; height: 8px; margin-left: 4px; border-radius: 50%; border: 1.5px solid var(--primary); border-top-color: transparent; animation: ai-spin 0.9s linear infinite; }
+.job-parts i { transition: width 0.5s linear; }
+@media (prefers-reduced-motion: reduce) {
+  .ai-steps li.now .ai-step-dot, .job-work span.now::after { animation: none; }
+}

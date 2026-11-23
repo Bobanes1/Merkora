@@ -2110,6 +2110,16 @@ console.log('Gegenprüfung neuer Aufgaben');
   ok(a.fixed === 1 && a.dropped === 1 && (a.patch.tasks![0] as any).problem === 'p0' && (a.patch.tasks![1] as any).problem === 'p51' && a.patch.progress[1].fixed === true && a.patch.tasks!.length === 4 && a.patch.progress.length === 4, 'nur unberührte Aufgaben werden korrigiert oder entfernt, Fortschritt bleibt passend');
 }
 
+console.log('Fortschritt während die KI arbeitet');
+{
+  const T = await import('../src/lib/aiTiming');
+  ok(T.kindOfKey('sk1:questions') === 'questions' && T.kindOfKey('sk1:test:st') === 'test' && T.kindOfKey('sk1:l123') === 'lesson' && T.kindOfKey('sk1:check:x') === 'check' && T.kindOfKey('sk1:project:s') === 'project', 'Art der Anfrage aus dem Schlüssel');
+  ok(T.typicalAiSeconds('lesson', []) === 45 && T.typicalAiSeconds('lesson', [20, 30, 100]) === 30 && T.typicalAiSeconds('lesson', [20, 40]) === 30, 'übliche Dauer: eigene Messungen (Median), sonst Richtwert');
+  const at = (e: number) => T.aiProgress(e, 40);
+  ok(at(0) === 0 && at(10) < at(20) && Math.abs(at(40) - 0.7) < 0.02 && at(80) > 0.9 && at(1000) === 0.95, 'Balken: läuft stetig, ~70 % bei üblicher Dauer, nie „fertig“ vor der Antwort');
+  ok(T.aiStep(0, 5) === 0 && T.aiStep(0.5, 5) === 2 && T.aiStep(0.95, 5) === 4 && T.aiStep(2, 5) === 4, 'Schritte folgen dem Balken, der letzte bleibt bis zur Antwort');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

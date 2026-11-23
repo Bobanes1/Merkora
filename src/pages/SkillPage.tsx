@@ -12,6 +12,8 @@ import { CostHint } from '../components/CostHint';
 import { IconArrowDown, IconArrowUp, IconCheck, IconSkip, IconTools, IconLock, IconPlus, IconSparkle, IconStar, IconTrash, IconTrophy } from '../components/Icons';
 import { FloorDecor, NodeDecor, PATH_OFFSETS, PathLink, SandFloor, SwimmingFish, themeFor, Waves } from '../components/PathDecor';
 import { Mascot } from '../components/Mascot';
+import { AiProgress } from '../components/AiProgress';
+import type { AiKind } from '../lib/aiTiming';
 import { PracticeSetView, type SetHost } from '../components/practice/PracticeSetView';
 import { checkKey, buildMini, makeNextIdeas, startMiniSkill, startSkill, askQuestions, ensureLesson, redoLesson, makePlacement, makeProposal, makeReview, makeStageTest, reviseProposal, useSkillTask } from '../lib/skillRun';
 import {
@@ -108,7 +110,7 @@ function MiniBuilder({ skill }: { skill: Skill }) {
         <h1>{skill.title}</h1>
         <p className="muted">Mini-Skill: drei kurze Lektionen zum Ausprobieren.</p>
       </header>
-      {(t.busy || !t.error) && <Busy text="Pip baut deinen Mini-Skill …" />}
+      {(t.busy || !t.error) && <Busy kind="mini" task={t} text="Pip baut deinen Mini-Skill …" />}
       <Failed error={t.error} retry={() => void buildMini(skill.id)} />
     </>
   );
@@ -167,13 +169,9 @@ function CheckNote({ skillId, set }: { skillId: string; set?: PracticeSet }) {
   );
 }
 
-function Busy({ text }: { text: string }) {
-  return (
-    <div className="skill-busy" role="status">
-      <Mascot mood="think" size={56} />
-      <span>{text}</span>
-    </div>
-  );
+/** While the AI works: steps, a bar from the usual duration and the time so far (components/AiProgress). */
+function Busy({ text, kind, task }: { text: string; kind: AiKind; task?: { since?: number } }) {
+  return <AiProgress kind={kind} text={text} since={task?.since} />;
 }
 function Failed({ error, retry }: { error?: string; retry: () => void }) {
   if (!error) return null;
@@ -212,7 +210,7 @@ function Planner({ skill }: { skill: Skill }) {
       </header>
       <SkillMaterial skill={skill} />
 
-      {!questions.length && (q.busy || !q.error) && <Busy text="Pip überlegt sich Fragen zu deinem Ziel …" />}
+      {!questions.length && (q.busy || !q.error) && <Busy kind="questions" task={q} text="Pip überlegt sich Fragen zu deinem Ziel …" />}
       <Failed error={q.error} retry={() => void askQuestions(skill.id)} />
 
       {questions.length > 0 && !skill.stages.length && !testing && (
@@ -240,14 +238,14 @@ function Planner({ skill }: { skill: Skill }) {
             </button>
           </div>
           <p className="muted small">Der Einstufungstest (5 kurze Aufgaben) zeigt, was du schon kannst – das überspringst du dann im Lernpfad.</p>
-          {pr.busy && <Busy text="Pip plant deinen Lernpfad …" />}
+          {pr.busy && <Busy kind="proposal" task={pr} text="Pip plant deinen Lernpfad …" />}
           <Failed error={pr.error} retry={() => void makeProposal(skill.id)} />
         </section>
       )}
 
       {testing && !skill.stages.length && (
         <>
-          {pl.busy && <Busy text="Pip stellt den Einstufungstest zusammen …" />}
+          {pl.busy && <Busy kind="placement" task={pl} text="Pip stellt den Einstufungstest zusammen …" />}
           <Failed error={pl.error} retry={() => void makePlacement(skill.id)} />
           {skill.plan.placement && (
             <div className="practice">
@@ -386,7 +384,7 @@ function Proposal({ skill }: { skill: Skill }) {
           </button>
         </div>
       </div>
-      {pr.busy && <Busy text="Pip passt den Lernpfad an …" />}
+      {pr.busy && <Busy kind="proposal" task={pr} text="Pip passt den Lernpfad an …" />}
       <Failed error={pr.error} retry={() => void makeProposal(skill.id)} />
       <div className="row-gap">
         <button type="button" className="btn primary" disabled={pr.busy} onClick={() => updateSkill(skill.id, { status: 'active' })}>
@@ -709,7 +707,7 @@ function LessonView({ skill, lessonId, onBack, onPath, onOpen }: { skill: Skill;
       <button type="button" className="btn ghost sm" onClick={onBack}>
         ‹ {skill.title}
       </button>
-      {!lesson.set && (t.busy || !t.error) && <Busy text={`Pip bereitet die Lektion „${lesson.title}“ vor …`} />}
+      {!lesson.set && (t.busy || !t.error) && <Busy kind="lesson" task={t} text={`Pip bereitet die Lektion „${lesson.title}“ vor …`} />}
       <Failed error={t.error} retry={() => void ensureLesson(skill.id, lessonId)} />
       {lesson.set && (
         <PracticeSetView
@@ -804,7 +802,7 @@ function StageTestView({ skill, stageId, onBack }: { skill: Skill; stageId: stri
       <button type="button" className="btn ghost sm" onClick={onBack}>
         ‹ {skill.title}
       </button>
-      {!stage.test && (t.busy || !t.error) && <Busy text={`Pip stellt den Stufentest „${stage.name}“ zusammen …`} />}
+      {!stage.test && (t.busy || !t.error) && <Busy kind="test" task={t} text={`Pip stellt den Stufentest „${stage.name}“ zusammen …`} />}
       <Failed error={t.error} retry={() => void makeStageTest(skill.id, stageId)} />
       {stage.test && (
         <>
@@ -845,7 +843,7 @@ function ReviewView({ skill, plan, onBack }: { skill: Skill; plan?: ReviewPlan; 
       <button type="button" className="btn ghost sm" onClick={onBack}>
         ‹ {skill.title}
       </button>
-      {(t.busy || (fresh && !skill.review)) && <Busy text="Pip mischt Aufgaben aus deinen Lektionen …" />}
+      {(t.busy || (fresh && !skill.review)) && <Busy kind="review" task={t} text="Pip mischt Aufgaben aus deinen Lektionen …" />}
       <Failed error={t.error} retry={() => void makeReview(skill.id, plan?.focus, plan?.count)} />
       {skill.review && !t.busy && (
         <PracticeSetView

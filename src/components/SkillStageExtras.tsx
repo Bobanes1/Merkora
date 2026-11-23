@@ -4,17 +4,11 @@ import { projectPassed, type Skill } from '../lib/skills';
 import { CodeEditor } from './CodeEditor';
 import { IconCheck, IconSparkle } from './Icons';
 import { Markdown } from './Markdown';
-import { Mascot } from './Mascot';
+import { AiProgress } from './AiProgress';
 
 /** Points with a German decimal comma („4,5“). */
 const pts = (n: number) => String(Math.round(n * 2) / 2).replace('.', ',');
 
-const Busy = ({ text }: { text: string }) => (
-  <div className="skill-busy">
-    <Mascot mood="think" size={64} />
-    <p className="muted">{text}</p>
-  </div>
-);
 
 /** The mini project of a stage: brief, steps, your solution, grading with the rubric. */
 export function ProjectView({ skill, stageId, onBack }: { skill: Skill; stageId: string; onBack: () => void }) {
@@ -37,7 +31,7 @@ export function ProjectView({ skill, stageId, onBack }: { skill: Skill; stageId:
       <button type="button" className="btn ghost sm" onClick={onBack}>
         ‹ {skill.title}
       </button>
-      {!project && (t.busy || !t.error) && <Busy text={`Pip entwirft dein Projekt zur Stufe „${stage.name}“ …`} />}
+      {!project && (t.busy || !t.error) && <AiProgress kind="project" since={t.since} text={`Pip entwirft dein Projekt zur Stufe „${stage.name}“ …`} />}
       {t.error && !project && (
         <p className="err-msg">
           {t.error}{' '}
@@ -130,7 +124,7 @@ export function SheetView({ skill, stageId, onBack }: { skill: Skill; stageId: s
           </button>
         )}
       </div>
-      {!stage.sheet && (t.busy || !t.error) && <Busy text={`Pip fasst die Stufe „${stage.name}“ zusammen …`} />}
+      {!stage.sheet && (t.busy || !t.error) && <AiProgress kind="sheet" since={t.since} text={`Pip fasst die Stufe „${stage.name}“ zusammen …`} />}
       {t.error && !stage.sheet && (
         <p className="err-msg">
           {t.error}{' '}

@@ -4,7 +4,8 @@ import { askNotifications, cancelRun, canSurviveClose, dismissToast, getToasts, 
 import { deckUrl, getState, removeJob, useStore, type Job, type JobKind } from '../lib/store';
 import { IconBell, IconCheck, IconClose, IconSparkle, IconStop } from './Icons';
 import { Mascot } from './Mascot';
-import { etaText, JOB_STEPS, jobStep, overallProgress } from '../lib/jobProgress';
+import { etaText, JOB_STEPS, jobStep, overallProgress, typicalSeconds } from '../lib/jobProgress';
+import { aiProgress, aiStep } from '../lib/aiTiming';
 
 export function useJob(deckId: string, kind: JobKind): Job | undefined {
   return useStore((s) => {
@@ -42,6 +43,41 @@ const partOf = (job: Job) => {
   return p && p.n > 1 ? p : null;
 };
 
+/** What the AI does meanwhile, per kind of job – shown one after another along the usual duration. */
+const JOB_WORK: Record<JobKind, string[]> = {
+  cards: ['Material lesen', 'Themen sammeln', 'Karten schreiben', 'Karten prüfen und einsortieren'],
+  summary: ['Material lesen', 'Gliederung finden', 'Zusammenfassung schreiben'],
+  quiz: ['Material lesen', 'Fragen formulieren', 'Antworten mischen'],
+  practice: ['Material lesen', 'Aufgaben erstellen', 'Lösungswege aufschreiben'],
+};
+
+/** One job: the current step and a bar that follows the usual duration of this kind of job (never „done“ before it is). */
+function JobSteps({ job }: { job: Job }) {
+  const typical = useStore((s) => typicalSeconds(s.data.jobs, job.kind));
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(t);
+  }, []);
+  const steps = JOB_WORK[job.kind];
+  const share = job.status === 'queued' ? 0.03 : aiProgress((now - job.createdAt) / 1000, typical);
+  const step = job.status === 'queued' ? -1 : aiStep(share, steps.length);
+  return (
+    <>
+      <span className="job-work">
+        {job.status === 'queued' ? 'Wartet auf einen freien Platz …' : steps.map((t, k) => (
+          <span key={t} className={k < step ? 'done' : k === step ? 'now' : ''}>
+            {k < step && <IconCheck size={10} />} {t}
+          </span>
+        ))}
+      </span>
+      <span className="bar job-parts" aria-hidden="true">
+        <i style={{ width: `${Math.max(3, share * 100)}%` }} />
+      </span>
+    </>
+  );
+}
+
 export function JobBanner({ job }: { job: Job }) {
   // several parts of long material run at the same time: one line for all of them
   // (selected as text, so the same progress gives the same value and React does not redraw endlessly)
@@ -66,12 +102,12 @@ export function JobBanner({ job }: { job: Job }) {
               <i style={{ width: `${Math.max(4, (run.done / run.n) * 100)}%` }} />
             </span>
           </>
+        ) : partOf(job) ? (
+          <span className="bar job-parts" aria-hidden="true">
+            <i style={{ width: `${((partOf(job)!.i - 1) / partOf(job)!.n) * 100}%` }} />
+          </span>
         ) : (
-          partOf(job) && (
-            <span className="bar job-parts" aria-hidden="true">
-              <i style={{ width: `${((partOf(job)!.i - 1) / partOf(job)!.n) * 100}%` }} />
-            </span>
-          )
+          <JobSteps job={job} />
         )}
         <p>
           {remote ? (

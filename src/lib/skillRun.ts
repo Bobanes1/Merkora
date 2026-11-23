@@ -3,6 +3,7 @@
  * They keep running when you change pages; the result is saved into the skill. One request per key at a time.
  */
 import { useSyncExternalStore } from 'react';
+import { kindOfKey, recordAiTime } from './aiTiming';
 import { completeJson } from './ai';
 import { parsePractice, taskList, toDomain, type PracticeSet, type Task } from './practice';
 import { applyVerify, codeSelfCheck, parseVerify, plausibility, verifyPrompt } from './taskCheck';
@@ -36,7 +37,7 @@ import { LANG_RULE } from './ai';
 import { caseGradePrompt, fullGrade, matchesSolution, parseCaseGrade } from './tasks';
 import { addSkill, getState, updateSkill } from './store';
 
-type Status = { busy: boolean; error?: string };
+type Status = { busy: boolean; error?: string; /** When the request started (for the progress display). */ since?: number };
 const status = new Map<string, Status>();
 const subs = new Set<() => void>();
 const emit = () => subs.forEach((f) => f());
@@ -53,10 +54,13 @@ export function useSkillTask(key: string): Status {
 /** Runs `fn` once per key; errors are kept for the page to show („Nochmal versuchen“). */
 async function run(key: string, fn: () => Promise<void>) {
   if (status.get(key)?.busy) return;
-  status.set(key, { busy: true });
+  const since = Date.now();
+  status.set(key, { busy: true, since });
   emit();
   try {
     await fn();
+    // remembered, so the next wait of this kind shows a fitting progress
+    recordAiTime(kindOfKey(key), Date.now() - since);
     status.delete(key);
   } catch (e) {
     status.set(key, { busy: false, error: (e as Error).message || 'Unbekannter Fehler' });
