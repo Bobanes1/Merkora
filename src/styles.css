@@ -11752,3 +11752,31 @@ html.phone .goal-ring.in-hero .gr-legend { display: none; }
   .home-tile-icon { width: 28px; height: 28px; margin-bottom: 4px; }
   .home-tile-text { font-size: 14px; }
 }
+
+/* ---------- start page: focus timer + to-dos ---------- */
+.home-widgets { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 12px; margin-top: 12px; }
+.home-widget { min-width: 0; padding: 14px 16px; border-radius: var(--r-lg); border: 1px solid var(--line); background: var(--white); display: grid; align-content: start; gap: 10px; }
+.home-widget-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.home-widget-head h2 { margin: 0; font-size: 16px; }
+.home-widget .pomo-tool.compact { display: grid; grid-template-columns: auto 1fr; grid-template-rows: 1fr auto auto; align-items: center; gap: 6px 18px; padding: 0; background: none; border: 0; box-shadow: none; }
+.home-widget .pomo-tool.compact .pomo-ring-wrap { grid-row: span 3; margin: 0; }
+.home-widget .pomo-tool.compact .pomo-controls { justify-content: flex-start; flex-wrap: wrap; }
+.home-widget .pomo-tool.compact > :not(.pomo-ring-wrap) { grid-column: 2; }
+.home-todos { display: grid; gap: 8px; }
+.home-todos-add { display: flex; gap: 6px; }
+.home-todos-add .input { flex: 1; min-width: 0; height: 34px; }
+.home-todos-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: 172px; overflow: auto; }
+.home-todos-list li { display: flex; align-items: center; gap: 10px; min-height: 32px; padding: 2px 6px; border-radius: 8px; transition: opacity 0.3s ease, background 0.15s ease; }
+.home-todos-list li:hover { background: var(--surface-2); }
+.home-todos-list li.pop { opacity: 0.35; }
+.home-todos-list li.active { background: var(--primary-soft); }
+.home-todos-list .todo-check { flex: none; }
+.home-todo-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14px; }
+.home-todo-due { flex: none; color: var(--muted); font-size: 12px; }
+.home-todo-due.late { color: var(--danger, #d93f3f); font-weight: 600; }
+.home-todo-play { opacity: 0; transition: opacity 0.15s ease; }
+.home-todos-list li:hover .home-todo-play, .home-todo-play:focus-visible, .home-todos-list li.active .home-todo-play { opacity: 1; }
+.home-todos-empty { margin: 4px 2px; }
+.home-todos-all { justify-self: start; display: inline-flex; align-items: center; gap: 4px; }
+.deck-due-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; margin-bottom: 10px; border-radius: var(--r-md); background: var(--primary-soft); }
+@media (max-width: 900px) { .home-widgets { grid-template-columns: 1fr; } }

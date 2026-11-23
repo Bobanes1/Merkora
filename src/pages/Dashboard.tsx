@@ -22,6 +22,8 @@ import { deckUrl, dueCards, setSettings, useStore, type Deck } from '../lib/stor
 import { dayKey } from '../lib/util';
 import { shortName } from '../lib/deckNames';
 import { WeekReview } from '../components/WeekReview';
+import { HomeTodos } from '../components/HomeTodos';
+import { PomodoroTool } from '../components/tools/PomodoroTool';
 
 type Tab = 'tasks' | 'decks' | 'quick';
 const DECK_SORTS: { id: DeckSort; label: string }[] = [
@@ -216,6 +218,7 @@ export default function Dashboard() {
                   </small>
                 </Link>
               )}
+              {phone && (
               <Link to="/tools?tab=todos" className="home-tile t-todo">
                 <span className="home-tile-icon">
                   <IconChecklist size={18} />
@@ -224,6 +227,7 @@ export default function Dashboard() {
                 <span className="home-tile-text">{todosToday.length ? todosToday.slice(0, 2).map((t) => t.text).join(' · ') : 'Nichts fällig'}</span>
                 <small>{todosToday.length ? `${todosToday.length} für heute` : 'Nächste Schritte planen'}</small>
               </Link>
+              )}
               {skillNext && (
                 <Link to={`/skills/${skillNext.skill.id}`} className="home-tile t-skill" title={skillNext.lesson ? `Lektion: ${skillNext.lesson}` : 'Stufentest wartet'}>
                   <span className="home-tile-icon">
@@ -269,7 +273,26 @@ export default function Dashboard() {
                 </button>
               )}
             </div>
-            {dueDecks.length > 0 && (
+            {!phone && (
+              <div className="home-widgets">
+                <section className="home-widget">
+                  <div className="home-widget-head">
+                    <h2>Fokus</h2>
+                    <Link to="/tools?tab=pomodoro" className="small-link">
+                      Großer Timer <IconChevron size={12} />
+                    </Link>
+                  </div>
+                  <PomodoroTool compact />
+                </section>
+                <section className="home-widget">
+                  <div className="home-widget-head">
+                    <h2>To-dos</h2>
+                  </div>
+                  <HomeTodos />
+                </section>
+              </div>
+            )}
+            {phone && dueDecks.length > 0 && (
               <FoldPanel
                 className="home-due"
                 title="Heute fällig"
@@ -284,15 +307,6 @@ export default function Dashboard() {
                 </div>
               </FoldPanel>
             )}
-            {!exams.length && !dueDecks.length && (
-              <div className="home-empty">
-                <b>Keine anstehenden Aufgaben</b>
-                <p className="muted">Alles erledigt – oder hast du vergessen, deine Prüfungstermine einzutragen?</p>
-                <button type="button" className="btn primary" onClick={() => setExam(true)}>
-                  <IconCalendar size={16} /> Prüfung eintragen
-                </button>
-              </div>
-            )}
           </div>
         )}
 
@@ -300,6 +314,16 @@ export default function Dashboard() {
           <div className="home-panel">
             {data.decks.length ? (
               <>
+                {dueDecks.length > 0 && (
+                  <div className="deck-due-line">
+                    <span>
+                      <b>{due}</b> {due === 1 ? 'Karte' : 'Karten'} in {dueDecks.length} {dueDecks.length === 1 ? 'Deck' : 'Decks'} fällig
+                    </span>
+                    <Link to={deckUrl(data, dueDecks[0], 'learn')} className="btn primary sm">
+                      Fälligste zuerst lernen
+                    </Link>
+                  </div>
+                )}
                 <div className="deck-tools">
                   <div className="seg compact" role="radiogroup" aria-label="Sortierung">
                     {DECK_SORTS.map((o) => (
