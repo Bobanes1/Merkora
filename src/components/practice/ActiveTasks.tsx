@@ -1,13 +1,16 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { CardContent } from '../CardContent';
 import { IconArrowDown, IconArrowUp, IconGrip } from '../Icons';
-import { completeJson, LANG_RULE } from '../../lib/ai';
+import { completeJson, hasKey, LANG_RULE } from '../../lib/ai';
+import { taskList } from '../../lib/practice';
 import {
   caseGradePrompt,
   fullGrade,
   matchesSolution,
   checkClassify,
   checkCloze,
+  gapCheckPrompt,
+  parseGapCheck,
   checkMulti,
   checkOrder,
   slotFor,
@@ -272,10 +275,43 @@ export function ClozeTaskView({ ctx, task }: { ctx: TaskCtx; task: ClozeTask }) 
   const { prog, host, i } = ctx;
   const [given, setGiven] = useState<string[]>(() => (prog.solved ? task.gaps.map((g) => g[0]) : task.gaps.map(() => '')));
   const [marks, setMarks] = useState<boolean[] | null>(null);
-  const check = () => {
+  const [busy, setBusy] = useState(false);
+  // answers Pip also counted, with the reason (shown under the text)
+  const [notes, setNotes] = useState<string[]>([]);
+  const check = async () => {
     const r = checkCloze(task, given);
-    setMarks(r.gaps);
-    host.progress(i, { tries: prog.tries + 1, ...(r.right ? { solved: true } : { last: given.map((g, k) => `Lücke ${k + 1}: ${g || '(leer)'}`).join('; '), mistake: undefined }) });
+    let gaps = r.gaps;
+    // gaps not in the list: Pip looks once more whether the answer is right in content too
+    const unsure = gaps.map((ok, k) => !ok && !!given[k]?.trim());
+    if (unsure.some(Boolean) && hasKey()) {
+      setBusy(true);
+      const sentence = task.text.replace(/\{\{(\d+)\}\}/g, (_m, n) => (Number(n) - 1 === 0 ? '____' : '…'));
+      const got: string[] = [];
+      gaps = await Promise.all(
+        gaps.map(async (ok, k) => {
+          if (!unsure[k]) return ok;
+          try {
+            const text = task.text.replace(/\{\{(\d+)\}\}/g, (_m, n) => (Number(n) - 1 === k ? '____' : '…'));
+            const q = gapCheckPrompt(text || sentence, task.gaps[k], given[k].trim(), task.explain);
+            const v = parseGapCheck(await completeJson(q.system, q.user, 400));
+            if (v.ok) got.push(`„${given[k].trim()}“ zählt auch: ${v.note || 'passt inhaltlich.'}`);
+            return v.ok;
+          } catch {
+            return false;
+          }
+        }),
+      );
+      setBusy(false);
+      setNotes(got);
+      // remembered, so the same answer counts at once next time
+      if (got.length && host.updateSet) {
+        const tasks = taskList(ctx.set).map((t, j) => (j === i && t.type === 'cloze' ? { ...t, gaps: t.gaps.map((g, k) => (gaps[k] && !r.gaps[k] ? [...g, given[k].trim()] : g)) } : t));
+        host.updateSet({ tasks });
+      }
+    }
+    const right = gaps.every(Boolean);
+    setMarks(gaps);
+    host.progress(i, { tries: prog.tries + 1, ...(right ? { solved: true } : { last: given.map((g, k) => `Lücke ${k + 1}: ${g || '(leer)'}`).join('; '), mistake: undefined }) });
   };
   const right = !!marks?.every(Boolean);
   const mono = /[{};=()]/.test(task.text) && /\n/.test(task.text);
@@ -294,7 +330,7 @@ export function ClozeTaskView({ ctx, task }: { ctx: TaskCtx; task: ClozeTask }) 
               size={Math.max(6, (task.gaps[p]?.[0]?.length ?? 6) + 2)}
               aria-label={`Lücke ${p + 1}`}
               onChange={(e) => (setGiven((g) => g.map((x, j) => (j === p ? e.target.value : x))), setMarks(null))}
-              onKeyDown={(e) => e.key === 'Enter' && (right ? ctx.isLast || ctx.onNext() : check())}
+              onKeyDown={(e) => e.key === 'Enter' && !busy && (right ? ctx.isLast || ctx.onNext() : void check())}
               autoCapitalize="off"
               spellCheck={false}
             />
@@ -302,9 +338,10 @@ export function ClozeTaskView({ ctx, task }: { ctx: TaskCtx; task: ClozeTask }) 
         )}
       </div>
       <div className="row-gap">
-        <CheckButton ctx={ctx} right={right} onCheck={check} disabled={given.every((g) => !g.trim())} />
+        <CheckButton ctx={ctx} right={right} onCheck={() => void check()} disabled={given.every((g) => !g.trim())} busy={busy} />
       </div>
       <Verdict ok={marks ? right : null} text={marks && !right ? `${marks.filter(Boolean).length} von ${marks.length} Lücken richtig.` : ''} />
+      {notes.length > 0 && <small className="muted gap-notes">{notes.join(' ')}</small>}
       {right && <Explain text={task.explain} />}
       <Hints hints={task.hints} used={prog.hints} onMore={() => host.progress(i, { hints: prog.hints + 1 })} />
       <TaskFooter noNext

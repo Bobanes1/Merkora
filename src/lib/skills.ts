@@ -316,7 +316,7 @@ export const BITE_RULE = `ERKLÄRUNG IN HÄPPCHEN – keine Textwand. Feld "bite
 [{"title":"kurzer, themenspezifischer Titel","text":"Markdown, höchstens etwa 80 Wörter, ein Gedanke","figure":0,"check":{…}}]
 - Mische verschiedene kurze "check"-Formate – NICHT jedes Häppchen als Multiple Choice (höchstens 1× "choice" pro Lektion):
   • Wahr oder Irrtum: {"type":"tf","statement":"steile Behauptung oder typischer Irrtum","answer":false,"why":"ein Satz Auflösung"}
-  • Mini-Lücke: {"type":"gap","prompt":"Merksatz mit ___ für das Schlüsselwort","answer":["Wort","Synonym"],"why":"ein Satz"}
+  • Mini-Lücke: {"type":"gap","prompt":"Merksatz mit ___ für das Schlüsselwort","answer":["Wort","Synonym"],"why":"ein Satz"} – die Lücke muss EINDEUTIG sein (der Satz lässt nur diesen Begriff offen); "answer" enthält ALLE richtigen Varianten (Synonyme, Ein-/Mehrzahl, genauere Fachbegriffe, ß/ss).
   • Kurz überlegen & aufdecken: {"type":"reveal","q":"kurze Denkfrage zum Häppchen","answer":"knappe Antwort in 1–2 Sätzen","why":"optionaler Zusatz"}
   • Kurz schätzen: {"type":"estimate","q":"Schätzfrage","min":0,"max":100,"answer":37,"tolerance":5,"unit":"%","why":"ein Satz"}
   • Auswahl (höchstens 1×): {"type":"choice","q":"leichte Frage","options":["…","…","…"],"correct":1,"why":"ein Satz"}

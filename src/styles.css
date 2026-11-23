@@ -11673,3 +11673,4 @@ body.learn-focus .practice-tasks { min-height: calc(100vh - 220px); }
 @media (prefers-reduced-motion: reduce) {
   .ai-steps li.now .ai-step-dot, .job-work span.now::after { animation: none; }
 }
+.gap-notes { display: block; margin-top: -4px; }

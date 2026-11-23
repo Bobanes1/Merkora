@@ -5,7 +5,7 @@
  */
 import { compileExpr } from './plotExpr';
 import { DIAGRAM_RULE, parseDiagram, type Diagram } from './diagram';
-import { ACTIVE_TYPES, niceStep, parseActive, type ActiveTask } from './tasks';
+import { ACTIVE_TYPES, gapRight, niceStep, parseActive, type ActiveTask } from './tasks';
 import { LANG_RULE, type Prompt } from './ai';
 import { parseFormulaLab, parseProgram, parseScore, parseSketch, parseSyntax, parseTables, type FormulaLab, type Program, type Score, type Sentence, type Sketch, type Table } from './visuals';
 import { FORMULA_RULE } from './ai';
@@ -382,6 +382,8 @@ const normGap = (v: string) => v.trim().toLowerCase().replace(/\s+/g, ' ').repla
 export function checkBiteGap(check: BiteGap, input: string): boolean {
   const given = normGap(input);
   if (!given) return false;
+  // tolerant like the cloze gaps: ß/ss, ä/ae, singular/plural, a small typo
+  if (gapRight(check.answer, input)) return true;
   for (const ans of check.answer) {
     if (normGap(ans) === given) return true;
     const wantNum = parseNumber(ans);
@@ -494,7 +496,7 @@ const TASK_TYPES = {
   multi: `{"type":"multi","prompt":"…","options":["…","…","…","…"],"correct":[0,2],"explain":"…"} – mehrere richtige Antworten`,
   order: `{"type":"order","prompt":"Bringe … in die richtige Reihenfolge","items":["Schritt 1","Schritt 2","Schritt 3"],"explain":"…"} – items in RICHTIGER Reihenfolge (Merkora mischt sie)`,
   classify: `{"type":"classify","prompt":"Ordne zu","groups":["Kategorie A","Kategorie B","Kategorie C"],"items":[{"text":"…","group":0},{"text":"…","group":1},{"text":"…","group":2}],"explain":"…"} – 2–4 Kategorien (gerne 3–4 statt immer nur 2), 4–10 Elemente`,
-  cloze: `{"type":"cloze","prompt":"…","text":"Ein {{1}} ist … und {{2}} …","gaps":[["Antwort","Synonym"],["…"]],"explain":"…"} – Lücken {{1}}, {{2}} … mit erlaubten Antworten`,
+  cloze: `{"type":"cloze","prompt":"…","text":"Ein {{1}} ist … und {{2}} …","gaps":[["Antwort","Synonym"],["…"]],"explain":"…"} – Lücken {{1}}, {{2}} … mit erlaubten Antworten. Jede Lücke muss EINDEUTIG sein (der Satz lässt nur diesen Begriff offen); "gaps" enthält je Lücke ALLE richtigen Varianten (Synonyme, Ein-/Mehrzahl, genauere Fachbegriffe, ß/ss) – lieber eine klarere Lücke wählen als eine mehrdeutige`,
   case: `{"type":"case","law":"Schweizer Recht","facts":"Sachverhalt (realistisch, 6–14 Sätze)","question":"Aufgabe (z. B. Hat A gegen B einen Anspruch auf …? Prüfe im Gutachtenstil.)","norms":["Art. 641 ZGB – Eigentum: was der Artikel regelt, in einem Satz"],"rubric":[{"criterion":"Anspruchsgrundlage richtig benannt (Art. …)","points":2},{"criterion":"…","points":3}],"solution":"vollständige Musterlösung"} – Fallaufgabe, die man selbst ausformuliert. Der Sachverhalt enthält ALLE Angaben, die die Lösung braucht (wer, wann, Beträge, was vereinbart oder gesagt wurde, Beziehungen, Reihenfolge) – nichts, was man für die Lösung wissen muss, darf fehlen. Die Frage sagt genau, was zu prüfen ist (welcher Anspruch, wer gegen wen, Umfang). "law" = Rechtsordnung. "norms" = die einschlägigen Normen zum Nachschlagen (2–6, wie ein offenes Gesetzbuch in der Prüfung). Die Musterlösung erfüllt JEDES Kriterium des Schemas ausdrücklich und in dessen Reihenfolge; das Schema verlangt nichts, was nicht in der Musterlösung steht.`,
   code: `{"type":"code","lang":"java|javascript|python|sql","title":"…","task":"…","starter":"…","tests":[{"call":"…","expected":"…"}],"hints":["…"],"solution":"…"} – Programmieren; "lang" passend zum Thema (Standard java). Java: Klasse "Solution" ohne "public", statische Methoden, keine main, starter "class Solution {\\n    static int f(int[] a) {\\n        // dein Code\\n        return 0;\\n    }\\n}", call "Solution.f(new int[]{1,2})", expected wie String.valueOf / Arrays.toString ("[1, 2]"). JavaScript: Funktionen ("function f(a) { … }"), call "f([1,2])", expected wie JSON.stringify, Text ohne Anführungszeichen. Python: Funktionen ("def f(a):\\n    # dein Code\\n    pass"), call "f([1, 2])", expected wie repr() ("[1, 2]", Text ohne Anführungszeichen, True/False). tests 3–6 Aufrufe. SQL: statt tests "schema" (CREATE TABLE … ; INSERT … mit 5–15 Zeilen Beispieldaten, SQLite) und "solution" (die richtige Abfrage), starter "SELECT "; Merkora vergleicht die Ergebniszeilen`,
   music: `{"type":"music","prompt":"…","music":{"mode":"interval-ear","root":"C4","interval":"reine Quinte"}} – modes: "interval-ear" (Intervall hören: Prime … Oktave, z. B. "kleine Terz"), "chord-ear" (Akkord hören, "chord": Dur|Moll|vermindert|übermäßig|Dominantseptakkord|großer Septakkord|Moll-Septakkord|halbvermindert|verminderter Septakkord), "build-chord" (Akkord auf dem Klavier spielen, "root","chord"), "build-scale" (Tonleiter spielen, "scale": Dur|natürliches Moll|harmonisches Moll|melodisches Moll|dorisch|phrygisch|lydisch|mixolydisch|lokrisch|Dur-Pentatonik|Moll-Pentatonik), "name-note" (Note im Notensystem benennen, "note":"Fis4","clef":"treble|bass"), "rhythm" (Rhythmus klopfen, "beats":[1,0.5,0.5,1,1] in Vierteln, "tempo":80), "play-notes" (Noten vom Blatt spielen: "notes":["C4","E4","G4"] 1–6 Noten, "clef":"treble|bass"; Violinschlüssel C4–H5, Bassschlüssel C2–H3, alle innerhalb von zwei Oktaven). Deutsche Notennamen (H, B = H♭, Fis, Es …)`,

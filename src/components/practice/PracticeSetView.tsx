@@ -11,7 +11,8 @@ import { JavaSetup } from '../JavaSetup';
 import { IconBulb, IconCheck, IconChevron, IconClose, IconDoc, IconHelp, IconPlay, IconPlus, IconSparkle, IconStar, IconTarget } from '../Icons';
 import { useLearnFocus } from '../../lib/learnFocus';
 import { Lab } from '../labs/Labs';
-import { completeJson, gradeAnswer } from '../../lib/ai';
+import { completeJson, gradeAnswer, hasKey } from '../../lib/ai';
+import { gapCheckPrompt, parseGapCheck } from '../../lib/tasks';
 import { openExternal } from '../../lib/desktop';
 import { buildHarness, harnessOffset, localJava, mapErrors, parseResults, runJavaLocal, runJavaOnline, type RunResult, type TestResult } from '../../lib/javaRun';
 import { bitesFrom, checkAnswer, checkBiteGap, cleanSolve, goingWell, harderPrompt, insertTaskAfter, insertTaskLater, nextOpen, parseHarder, pickNext, settledCount, mistakePrompt, parseMistake, parseSimpler, simplerPrompt, DOMAIN_LABEL, problemCount, solvedCount, taskList, type Bite, type BiteCheck, type JavaProblem, type MathProblem, type PracticeSet, type ProblemProgress } from '../../lib/practice';
@@ -331,11 +332,13 @@ function formatEst(v: number, unit: string) {
 }
 
 /** Interactive check inside a bite or discovery hook: choice, true/false, mini-gap, reveal, or slider estimate. */
-function BiteCheckView({ check, done, onDone, hookMode, actions }: { check: BiteCheck; done: boolean; onDone: () => void; hookMode?: boolean; actions: { current: CheckActions } }) {
+function BiteCheckView({ check, done, onDone, hookMode, actions, onAccept }: { check: BiteCheck; done: boolean; onDone: () => void; hookMode?: boolean; actions: { current: CheckActions }; onAccept?: (answer: string) => void }) {
   const [pick, setPick] = useState<number | null>(null);
   const [tfPick, setTfPick] = useState<boolean | null>(null);
   const [gapVal, setGapVal] = useState('');
-  const [gapState, setGapState] = useState<'idle' | 'right' | 'wrong' | 'shown'>('idle');
+  const [gapState, setGapState] = useState<'idle' | 'checking' | 'right' | 'wrong' | 'shown'>('idle');
+  // an answer not in the list that Pip also counts (e.g. „Eiweiß“ for „Molekül“): why it is right
+  const [gapNote, setGapNote] = useState('');
   const [revealed, setRevealed] = useState(false);
   const mid = check.type === 'estimate' ? Math.round(((check.min + check.max) / 2 - check.min) / check.step) * check.step + check.min : 0;
   const [estVal, setEstVal] = useState(mid);
@@ -387,9 +390,24 @@ function BiteCheckView({ check, done, onDone, hookMode, actions }: { check: Bite
   }
 
   if (check.type === 'gap') {
-    const submit = () => {
-      if (!gapVal.trim() || done) return;
-      const ok = checkBiteGap(check, gapVal);
+    const submit = async () => {
+      if (!gapVal.trim() || done || gapState === 'checking') return;
+      let ok = checkBiteGap(check, gapVal);
+      // not in the list: Pip looks once more whether it is right in content too
+      if (!ok && hasKey()) {
+        setGapState('checking');
+        try {
+          const q = gapCheckPrompt(check.prompt, check.answer, gapVal.trim(), check.why);
+          const r = parseGapCheck(await completeJson(q.system, q.user, 400));
+          if (r.ok) {
+            ok = true;
+            setGapNote(r.note || 'Das passt inhaltlich auch.');
+            onAccept?.(gapVal.trim());
+          }
+        } catch {
+          /* no check possible: as before */
+        }
+      }
       if (ok) {
         setGapState('right');
         playUi('right');
@@ -417,7 +435,7 @@ function BiteCheckView({ check, done, onDone, hookMode, actions }: { check: Bite
           className="bite-gap-row"
           onSubmit={(e) => {
             e.preventDefault();
-            submit();
+            void submit();
           }}
         >
           <input
@@ -432,8 +450,8 @@ function BiteCheckView({ check, done, onDone, hookMode, actions }: { check: Bite
             }}
           />
           {!done && (
-            <button type="submit" className="btn primary sm" disabled={!gapVal.trim()}>
-              Prüfen
+            <button type="submit" className="btn primary sm" disabled={!gapVal.trim() || gapState === 'checking'}>
+              {gapState === 'checking' ? 'Pip prüft …' : 'Prüfen'}
             </button>
           )}
           {gapState === 'wrong' && !done && (
@@ -444,7 +462,14 @@ function BiteCheckView({ check, done, onDone, hookMode, actions }: { check: Bite
         </form>
         {gapState === 'right' && (
           <p className="form-ok">
-            <IconCheck size={15} /> Richtig! {check.why}
+            <IconCheck size={15} /> Richtig!{' '}
+            {gapNote ? (
+              <>
+                Pip zählt „{gapVal.trim()}“ auch: {gapNote} <span className="muted">(Hinterlegt war: {check.answer[0]})</span>
+              </>
+            ) : (
+              check.why
+            )}
           </p>
         )}
         {gapState === 'wrong' && (
@@ -723,7 +748,19 @@ function BitesView({ set, bites, host, onDone, onSkip }: { set: PracticeSet; bit
         <Markdown text={b.text} />
       </div>
       {fig && <Figures figures={[fig]} />}
-      {b.check && <BiteCheckView key={k} check={b.check} done={done} onDone={() => setDone(true)} actions={actions} />}
+      {b.check && (
+        <BiteCheckView
+          key={k}
+          check={b.check}
+          done={done}
+          onDone={() => setDone(true)}
+          actions={actions}
+          onAccept={(ans) =>
+            set.bites?.[k]?.check?.type === 'gap' &&
+            host.updateSet?.({ bites: set.bites.map((x, j) => (j === k && x.check?.type === 'gap' ? { ...x, check: { ...x.check, answer: [...x.check.answer, ans] } } : x)) })
+          }
+        />
+      )}
       <div className="row-gap bite-nav">
         {k > 0 && (
           <button type="button" className="btn ghost sm" onClick={() => go(k - 1)}>

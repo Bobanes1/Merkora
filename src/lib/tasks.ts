@@ -319,16 +319,40 @@ export function checkClassify(task: ClassifyTask, chosen: number[]) {
   return { right: items.every(Boolean), items };
 }
 
-/** One gap: right if it matches one of the allowed answers (tolerant: case, ß/ss, punctuation, small typo in long words). */
+/** Umlauts written out (ae/oe/ue) count like ä/ö/ü. */
+const plain = (t: string) => norm(t).replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue');
+/** The same word in singular and plural („Eiweiß/Eiweiße“, „Zelle/Zellen“, „Antigen/Antigene“). */
+function sameWord(a: string, b: string): boolean {
+  const [s, l] = a.length <= b.length ? [a, b] : [b, a];
+  return s.length >= 4 && l.startsWith(s) && ['e', 'n', 'en', 's', 'es', 'er', 'nen'].includes(l.slice(s.length));
+}
+
+/** One gap: right if it matches one of the allowed answers (tolerant: case, ß/ss, ä/ae, punctuation, singular/plural, small typo in long words). */
 export function gapRight(allowed: string[], given: string): boolean {
-  const g = norm(given);
+  const g = plain(given);
   if (!g) return false;
   return allowed.some((a) => {
-    const w = norm(a);
-    if (w === g) return true;
+    const w = plain(a);
+    if (w === g || sameWord(w, g)) return true;
     // one typo is fine in words of 6+ letters
     return w.length >= 6 && Math.abs(w.length - g.length) <= 1 && editDistance(w, g) <= 1;
   });
+}
+
+/**
+ * The AI looks once more when a gap answer is not in the list: is it right in content too (synonym, more
+ * precise or equivalent term)? Strict – merely related answers stay wrong.
+ */
+export function gapCheckPrompt(sentence: string, allowed: string[], given: string, why = '') {
+  return {
+    system: `Du prüfst eine Lückenantwort fair, aber streng. Antwort RICHTIG ("ok": true) nur, wenn sie inhaltlich korrekt in die Lücke passt: ein Synonym, ein genauerer oder gleichwertiger Fachbegriff oder eine andere korrekte Schreibweise. Nur verwandt, zu allgemein, halb richtig oder falsch → "ok": false. Tippfehler sind egal.
+Format: {"ok":true,"note":"ein kurzer Satz, warum"}`,
+    user: `SATZ MIT LÜCKE: ${sentence}\nHINTERLEGTE LÖSUNG(EN): ${allowed.join(' | ')}${why ? `\nERKLÄRUNG: ${why}` : ''}\nANTWORT DER PERSON: ${given}`,
+  };
+}
+export function parseGapCheck(raw: unknown): { ok: boolean; note: string } {
+  const r = (raw ?? {}) as { ok?: unknown; note?: unknown };
+  return { ok: r.ok === true, note: s(r.note, 300) };
 }
 export function checkCloze(task: ClozeTask, given: string[]) {
   const gaps = task.gaps.map((allowed, i) => gapRight(allowed, given[i] ?? ''));

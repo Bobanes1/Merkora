@@ -2120,6 +2120,21 @@ console.log('Fortschritt während die KI arbeitet');
   ok(T.aiStep(0, 5) === 0 && T.aiStep(0.5, 5) === 2 && T.aiStep(0.95, 5) === 4 && T.aiStep(2, 5) === 4, 'Schritte folgen dem Balken, der letzte bleibt bis zur Antwort');
 }
 
+console.log('Lücken fair bewerten');
+{
+  const P = await import('../src/lib/practice');
+  const T = await import('../src/lib/tasks');
+  const S = await import('../src/lib/skills');
+  const gap = (answer: string[]) => ({ type: 'gap', prompt: 'Ein Antigen ist ein ___', answer }) as any;
+  ok(P.checkBiteGap(gap(['Eiweiß']), 'eiweiss') && P.checkBiteGap(gap(['Eiweiß']), 'Eiweisse') && P.checkBiteGap(gap(['Zelle']), 'Zellen') && P.checkBiteGap(gap(['Muskulatur']), 'Muskelatur'), 'ß/ss, Mehrzahl und ein Tippfehler werden erkannt');
+  ok(P.checkBiteGap(gap(['Grüne']), 'gruene') && P.checkBiteGap(gap(['0,5']), '1/2') && !P.checkBiteGap(gap(['Molekül']), 'Zelle') && !P.checkBiteGap(gap(['Rot']), 'Rotation'), 'ä/ae und Zahlen ja, falsche oder nur ähnliche Wörter nein');
+  const q = T.gapCheckPrompt('Ein Antigen ist ein ____ auf der Oberfläche.', ['Molekül'], 'Eiweiß', 'Antigene sind meist Eiweiße.');
+  ok(q.user.includes('Molekül') && q.user.includes('Eiweiß') && q.user.includes('____') && q.system.includes('Nur verwandt'), 'KI-Nachprüfung kennt Satz, Lösung und Antwort und ist streng');
+  ok(T.parseGapCheck({ ok: true, note: 'x' }).ok && !T.parseGapCheck({ ok: 'yes' }).ok && !T.parseGapCheck(null).ok, 'nur ein klares „ok: true“ zählt');
+  const sk = { id: 'k', topic: 'T', title: 'T', domain: 'general', levels: ['a'], targetLevel: 0, level: '', status: 'active', plan: {}, stages: [{ id: 'st', name: 'S', goal: '', lessons: [{ id: 'l', title: 'L', goal: '' }] }], createdAt: 1, updatedAt: 1 } as any;
+  ok(S.lessonPrompt(sk, sk.stages[0], sk.stages[0].lessons[0]).system.includes('ALLE richtigen Varianten'), 'Lücken-Regel: eindeutig, alle richtigen Varianten');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));
