@@ -2087,6 +2087,29 @@ console.log('Schlauer „Weiter“-Knopf und Schwierigkeit, die sich anpasst');
   ok(S.reviewPrompt(sk(easy), undefined, 4).system.includes('4 Aufgaben') && S.reviewPrompt(sk(easy)).system.includes('8 Aufgaben'), 'kurze Wiederholung: 4 Aufgaben');
 }
 
+console.log('Gegenprüfung neuer Aufgaben');
+{
+  const C = await import('../src/lib/taskCheck');
+  const calc = (k: number, value = String(k)) => ({ type: 'calc', problem: 'p' + k, answer: { type: 'number', value }, hints: [], steps: [] });
+  const set = (n: number, progress?: any[]) => ({ id: 's', createdAt: 1, kind: 'math', topic: 'Rechnen', intro: '', labs: [], tasks: Array.from({ length: n }, (_, k) => calc(k)), progress: progress ?? Array.from({ length: n }, () => ({ tries: 0, hints: 0 })) }) as any;
+
+  ok(C.plausibility({ type: 'estimate', prompt: 'x', min: 0, max: 10, step: 1, unit: '', answer: 12, tolerance: 1, hints: [] } as any)?.includes('außerhalb') === true, 'Schätzen: Lösung außerhalb des Reglers erkannt');
+  ok(C.plausibility({ type: 'calc', problem: 'x', answer: { type: 'choice', value: 'C', options: ['A', 'B'] }, hints: [], steps: [] } as any)?.includes('Auswahl') === true && C.plausibility(calc(1) as any) === null, 'Auswahl ohne richtige Antwort erkannt, normale Aufgabe ok');
+
+  const p = C.verifyPrompt(set(3), { 2: 'Die Musterlösung besteht 1 von 3 Tests nicht' }, 'RECHTSORDNUNG: Schweiz');
+  ok(p.user.includes('AUFGABE 2 – BEFUND: Die Musterlösung') && p.user.includes('"p0"') && p.system.includes('RECHTSORDNUNG: Schweiz') && p.system.includes('Rechne bzw. löse sie selbst'), 'Prüf-Anweisung enthält Aufgaben, Befunde und Rechtsordnung');
+
+  const v = C.parseVerify({ fixes: [{ task: 2, why: 'falsch', fixed: calc(99, '42') }, { task: 9, fixed: calc(1) }, { task: 3, fixed: { type: 'calc' } }], drop: [4, 'x', 2] }, set(6));
+  ok(v.fixes.length === 1 && v.fixes[0].index === 1 && (v.fixes[0].task as any).answer.value === '42' && v.drop.join() === '3', 'Urteil: nur gültige Korrekturen, unsinnige Nummern weg');
+  const many = C.parseVerify({ fixes: [1, 2, 3, 4].map((k) => ({ task: k, fixed: calc(k, '9') })), drop: [5, 6] }, set(6));
+  ok(many.fixes.length === 3 && many.drop.length === 0, 'höchstens die Hälfte der Aufgaben wird geändert');
+  ok(C.parseVerify({ drop: [1, 2] }, set(4)).drop.length === 1, 'nach dem Entfernen bleiben mindestens 3 Aufgaben');
+
+  const touched = set(5, [{ tries: 1, hints: 0 }, { tries: 0, hints: 0 }, { tries: 0, hints: 0 }, { tries: 0, hints: 0, solved: true }, { tries: 0, hints: 0 }]);
+  const a = C.applyVerify(touched, { fixes: [{ index: 0, why: '', task: calc(50) as any }, { index: 1, why: '', task: calc(51) as any }], drop: [3, 4] });
+  ok(a.fixed === 1 && a.dropped === 1 && (a.patch.tasks![0] as any).problem === 'p0' && (a.patch.tasks![1] as any).problem === 'p51' && a.patch.progress[1].fixed === true && a.patch.tasks!.length === 4 && a.patch.progress.length === 4, 'nur unberührte Aufgaben werden korrigiert oder entfernt, Fortschritt bleibt passend');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

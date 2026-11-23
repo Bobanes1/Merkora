@@ -177,6 +177,11 @@ export function PracticeSetView({ set, host, head, onDone, guided, focus }: { se
         </span>
         {!guided && focus && focusTools}
       </div>
+      {set.progress[i]?.fixed && (
+        <small className="task-fixed" title="Pip hat in dieser Aufgabe vor dem Lösen einen Fehler gefunden und ihn korrigiert">
+          <IconCheck size={11} /> Von Pip geprüft und korrigiert
+        </small>
+      )}
       {t?.type === 'calc' && <CalcTask key={set.id + i} ctx={ctx} p={t} />}
         {t?.type === 'code' && (t.lang && t.lang !== 'java' ? <WebCodeTask key={set.id + i} ctx={ctx} p={t} /> : <CodeTask key={set.id + i} ctx={ctx} p={t} />)}
         {t?.type === 'order' && <OrderTaskView key={set.id + i} ctx={ctx} task={t} />}

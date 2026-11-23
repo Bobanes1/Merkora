@@ -4,10 +4,12 @@
  */
 import { useSyncExternalStore } from 'react';
 import { completeJson } from './ai';
-import { parsePractice, taskList, toDomain, type Task } from './practice';
+import { parsePractice, taskList, toDomain, type PracticeSet, type Task } from './practice';
+import { applyVerify, codeSelfCheck, parseVerify, plausibility, verifyPrompt } from './taskCheck';
 import {
   lessonAfter,
   jurisdictionOf,
+  JURISDICTION_RULE,
   lessonPrompt,
   miniPrompt,
   nextSkillsPrompt,
@@ -108,6 +110,50 @@ export function makeNextIdeas(id: string) {
   });
 }
 
+// ---------- counter-check of new tasks (lib/taskCheck.ts) ----------
+/** Where a set lives inside the skill: how to read it and how to put it back. */
+type SetSpot = { get: (s: Skill) => PracticeSet | undefined; put: (s: Skill, set: PracticeSet) => Partial<Skill> };
+const lessonSpot = (lessonId: string): SetSpot => ({
+  get: (s) => s.stages.flatMap((st) => st.lessons).find((l) => l.id === lessonId)?.set,
+  put: (s, set) => ({ stages: s.stages.map((st) => ({ ...st, lessons: st.lessons.map((l) => (l.id === lessonId ? { ...l, set } : l)) })) }),
+});
+/** The key of a running check (the lesson shows „Pip prüft die Aufgaben …“ meanwhile). */
+export const checkKey = (id: string, setId: string) => id + ':check:' + setId;
+
+/**
+ * Checks a freshly made set in the background: plausibility and the AI's own code solutions first, then the
+ * AI looks at every task and repairs broken ones. Only untouched tasks are changed; a failing check changes nothing.
+ */
+function checkSet(id: string, setId: string, spot: SetSpot) {
+  return run(checkKey(id, setId), async () => {
+    try {
+      const s = skill(id);
+      const set = s && spot.get(s);
+      if (!s || !set || set.id !== setId || set.checked) return;
+      const notes: Record<number, string> = {};
+      const tasks = taskList(set);
+      for (let k = 0; k < tasks.length; k++) {
+        const note = plausibility(tasks[k]) ?? (await codeSelfCheck(tasks[k]));
+        if (note) notes[k + 1] = note;
+      }
+      const extra = s.domain === 'law' && s.jurisdiction ? JURISDICTION_RULE[s.jurisdiction] : '';
+      const verdict = parseVerify(await ask(verifyPrompt(set, notes, extra)), set);
+      const now = skill(id);
+      const cur = now && spot.get(now);
+      if (!now || !cur || cur.id !== setId) return;
+      updateSkill(id, (x) => {
+        const latest = spot.get(x);
+        if (!latest || latest.id !== setId) return {};
+        // applied to the newest state, so progress made meanwhile is kept
+        const fresh = applyVerify(latest, verdict);
+        return spot.put(x, { ...latest, ...(fresh.fixed || fresh.dropped ? fresh.patch : {}), checked: { at: Date.now(), fixed: fresh.fixed, dropped: fresh.dropped } });
+      });
+    } catch {
+      // the check is a help, never a hurdle: without it the tasks stay as they are
+    }
+  });
+}
+
 /** Step 1: a new skill from a broad topic – the AI asks its questions. Returns the skill id at once. */
 export function startSkill(topic: string, level: string, material?: string): string {
   const id = newId();
@@ -147,6 +193,7 @@ export function makePlacement(id: string) {
     if (!s) return;
     const set = setOf(await ask(placementPrompt(s)));
     updateSkill(id, (x) => ({ plan: { ...x.plan, placement: set } }));
+    void checkSet(id, set.id, { get: (x) => x.plan.placement, put: (x, v) => ({ plan: { ...x.plan, placement: v } }) });
   });
 }
 
@@ -185,6 +232,7 @@ export function ensureLesson(id: string, lessonId: string) {
     if (!lesson.set) {
       const set = setOf(await ask(lessonPrompt(s, stage, lesson)));
       updateSkill(id, (x) => ({ stages: x.stages.map((st) => ({ ...st, lessons: st.lessons.map((l) => (l.id === lessonId ? { ...l, set } : l)) })) }));
+      void checkSet(id, set.id, lessonSpot(lessonId));
     }
     const next = lessonAfter(skill(id)!, lessonId);
     if (next) void run(id + ':' + next.lesson.id, async () => ensureLessonQuiet(id, next.lesson.id));
@@ -202,6 +250,7 @@ async function ensureLessonQuiet(id: string, lessonId: string) {
   if (!s || !stage || !lesson || lesson.set) return;
   const set = setOf(await ask(lessonPrompt(s, stage, lesson)));
   updateSkill(id, (x) => ({ stages: x.stages.map((st) => ({ ...st, lessons: st.lessons.map((l) => (l.id === lessonId ? { ...l, set } : l)) })) }));
+  void checkSet(id, set.id, lessonSpot(lessonId));
 }
 
 export function makeStageTest(id: string, stageId: string) {
@@ -211,6 +260,7 @@ export function makeStageTest(id: string, stageId: string) {
     if (!s || !stage) return;
     const set = setOf(await ask(stageTestPrompt(s, stage)));
     updateSkill(id, (x) => ({ stages: x.stages.map((st) => (st.id === stageId ? { ...st, test: set, passed: undefined } : st)) }));
+    void checkSet(id, set.id, { get: (x) => x.stages.find((st) => st.id === stageId)?.test, put: (x, v) => ({ stages: x.stages.map((st) => (st.id === stageId ? { ...st, test: v } : st)) }) });
   });
 }
 
@@ -264,5 +314,6 @@ export function makeReview(id: string, focusIds?: string[], count?: number) {
     updateSkill(id, focus?.length ? { lastWeakAt: Date.now() } : { lastReviewAt: Date.now() });
     const set = setOf(await ask(reviewPrompt(s, focus, count)));
     updateSkill(id, { review: set, reviewFocus: focus?.map((l) => l.title) });
+    void checkSet(id, set.id, { get: (x) => x.review, put: (_x, v) => ({ review: v }) });
   });
 }

@@ -49,6 +49,8 @@ export type ProblemProgress = {
   extra?: boolean;
   /** A bonus task, one level harder (offered when it goes very well). */
   bonus?: boolean;
+  /** Pip's counter-check found a mistake in this task and corrected it before it was solved. */
+  fixed?: boolean;
   /** A role play: the conversation so far. */
   chat?: { me: boolean; text: string }[];
 };
@@ -94,6 +96,8 @@ export type PracticeSet = {
   phase?: 'try' | 'learn' | 'example' | 'practice';
   /** The bonus task was offered already (once per set). */
   bonusAsked?: boolean;
+  /** The counter-check ran: when, and how many tasks it corrected or removed. */
+  checked?: { at: number; fixed: number; dropped: number };
   bite?: number;
   /** „Grundlagen“ before the explanation: what it is about, a picture in the head, the key terms (Markdown). */
   theory?: string;

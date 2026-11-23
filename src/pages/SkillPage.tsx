@@ -13,7 +13,7 @@ import { IconArrowDown, IconArrowUp, IconCheck, IconSkip, IconTools, IconLock, I
 import { FloorDecor, NodeDecor, PATH_OFFSETS, PathLink, SandFloor, SwimmingFish, themeFor, Waves } from '../components/PathDecor';
 import { Mascot } from '../components/Mascot';
 import { PracticeSetView, type SetHost } from '../components/practice/PracticeSetView';
-import { buildMini, makeNextIdeas, startMiniSkill, startSkill, askQuestions, ensureLesson, redoLesson, makePlacement, makeProposal, makeReview, makeStageTest, reviseProposal, useSkillTask } from '../lib/skillRun';
+import { checkKey, buildMini, makeNextIdeas, startMiniSkill, startSkill, askQuestions, ensureLesson, redoLesson, makePlacement, makeProposal, makeReview, makeStageTest, reviseProposal, useSkillTask } from '../lib/skillRun';
 import {
   addLesson,
   canReview,
@@ -145,6 +145,25 @@ function NextIdeas({ skill }: { skill: Skill }) {
         ))}
       </div>
     </section>
+  );
+}
+
+/** The counter-check of new tasks: running („Pip prüft …“), and afterwards what it corrected. */
+function CheckNote({ skillId, set }: { skillId: string; set?: PracticeSet }) {
+  const t = useSkillTask(checkKey(skillId, set?.id ?? ''));
+  if (!set) return null;
+  if (t.busy)
+    return (
+      <small className="check-note busy" title="Pip prüft im Hintergrund, ob Lösungen stimmen und alle Angaben da sind">
+        <IconSparkle size={12} /> Pip prüft die Aufgaben …
+      </small>
+    );
+  if (!set.checked) return null;
+  const n = set.checked.fixed + set.checked.dropped;
+  return (
+    <small className="check-note" title="Pip hat die Aufgaben vor dem Lösen gegengeprüft">
+      <IconCheck size={12} /> {n ? `Geprüft – ${n} ${n === 1 ? 'Aufgabe' : 'Aufgaben'} verbessert` : 'Aufgaben geprüft'}
+    </small>
   );
 }
 
@@ -700,6 +719,7 @@ function LessonView({ skill, lessonId, onBack, onPath, onOpen }: { skill: Skill;
           head={
             <div className="lesson-head">
               <p className="muted small grow">Lektion: {lesson.title}</p>
+              <CheckNote skillId={skill.id} set={lesson.set} />
               <SkillGoal skill={skill} compact />
             </div>
           }
@@ -791,6 +811,7 @@ function StageTestView({ skill, stageId, onBack }: { skill: Skill; stageId: stri
           <PracticeSetView set={stage.test} host={host} focus head={
                 <div className="lesson-head">
                   <p className="muted small grow">Stufentest: {stage.name} – ab 80 % richtig ist die Stufe erreicht.</p>
+                  <CheckNote skillId={skill.id} set={stage.test} />
                   <SkillGoal skill={skill} compact />
                 </div>
               } onDone={<p className="form-ok">Stufe „{stage.name}“ erreicht! +50 XP</p>} />
@@ -834,6 +855,7 @@ function ReviewView({ skill, plan, onBack }: { skill: Skill; plan?: ReviewPlan; 
           head={
             <div className="lesson-head">
               <p className="muted small grow">{skill.reviewFocus?.length ? `Schwachstellen-Training: ${skill.reviewFocus.join(', ')}` : 'Gemischte Wiederholung'}</p>
+              <CheckNote skillId={skill.id} set={skill.review} />
               <SkillGoal skill={skill} compact />
             </div>
           }

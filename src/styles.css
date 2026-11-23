@@ -11645,3 +11645,7 @@ body.learn-focus .practice-tasks { min-height: calc(100vh - 220px); }
 :is(.td, .td-drawer) .chip.on.prio-mid { background: color-mix(in srgb, var(--p-mid) 14%, transparent); color: var(--p-mid); border-color: var(--p-mid); }
 :is(.td, .td-drawer) .chip.on.prio-low { background: color-mix(in srgb, var(--p-low) 14%, transparent); color: var(--p-low); border-color: var(--p-low); }
 :is(.td, .td-drawer) .chip[class*='prio-']:not(.on) { background: none; color: var(--muted); border-color: var(--line); }
+.check-note { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--ok-ink); }
+.check-note.busy { color: var(--muted); animation: check-pulse 1.4s ease-in-out infinite; }
+@keyframes check-pulse { 50% { opacity: 0.5; } }
+.task-fixed { display: inline-flex; align-items: center; gap: 4px; margin-bottom: 6px; font-size: 12px; color: var(--ok-ink); }
