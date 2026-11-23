@@ -282,7 +282,7 @@ export default function Dashboard() {
                       Großer Timer <IconChevron size={12} />
                     </Link>
                   </div>
-                  <PomodoroTool compact />
+                  <PomodoroTool compact skip={false} />
                 </section>
                 <section className="home-widget">
                   <div className="home-widget-head">

@@ -11754,7 +11754,7 @@ html.phone .goal-ring.in-hero .gr-legend { display: none; }
 }
 
 /* ---------- start page: focus timer + to-dos ---------- */
-.home-widgets { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 12px; margin-top: 12px; }
+.home-widgets { display: grid; grid-template-columns: minmax(280px, 320px) minmax(0, 1fr); gap: 12px; margin-top: 12px; }
 .home-widget { min-width: 0; padding: 14px 16px; border-radius: var(--r-lg); border: 1px solid var(--line); background: var(--white); display: grid; align-content: start; gap: 10px; }
 .home-widget-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .home-widget-head h2 { margin: 0; font-size: 16px; }
@@ -11780,3 +11780,6 @@ html.phone .goal-ring.in-hero .gr-legend { display: none; }
 .home-todos-all { justify-self: start; display: inline-flex; align-items: center; gap: 4px; }
 .deck-due-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; margin-bottom: 10px; border-radius: var(--r-md); background: var(--primary-soft); }
 @media (max-width: 900px) { .home-widgets { grid-template-columns: 1fr; } }
+.pomo-sound.on { color: var(--primary); }
+.pomo-sound.off { color: var(--muted); opacity: 0.75; }
+.home-widget .pomo-tool.compact { gap: 6px 14px; }

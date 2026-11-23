@@ -13,7 +13,8 @@ let pomo: Pomo = initialPomo(25);
 let initialised = false;
 let activeTodoId: string | null = null;
 let customWorkMin: number | null = null;
-let soundOn = true;
+// the end chime: on unless switched off in the settings
+const soundIsOn = () => getState().data.settings.pomodoroSound !== false;
 
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
@@ -28,13 +29,31 @@ function currentWorkMin() {
   return customWorkMin ?? settings().work;
 }
 
-function playChime() {
-  if (!soundOn || typeof window === 'undefined') return;
+/**
+ * One audio context, made (and resumed) on a click – start, sound on. An audio context made only when the
+ * round ends, without a click, stays muted in browsers and the app window; that is why the chime was silent.
+ */
+let audio: AudioContext | null = null;
+function unlockAudio() {
+  if (typeof window === 'undefined') return;
   try {
     const AC = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AC) return;
-    const ctx = new AC();
-    const t = ctx.currentTime;
+    audio ??= new AC();
+    if (audio.state === 'suspended') void audio.resume();
+  } catch {
+    /* no audio */
+  }
+}
+
+function playChime(force = false) {
+  if ((!force && !soundIsOn()) || typeof window === 'undefined') return;
+  try {
+    unlockAudio();
+    const ctx = audio;
+    if (!ctx) return;
+    if (ctx.state === 'suspended') void ctx.resume();
+    const t = ctx.currentTime + 0.02;
     [523.25, 659.25, 783.99].forEach((freq, i) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
@@ -48,7 +67,6 @@ function playChime() {
       osc.start(t + i * 0.12);
       osc.stop(t + i * 0.12 + 0.38);
     });
-    setTimeout(() => void ctx.close(), 1200);
   } catch {
     /* ignore audio errors */
   }
@@ -89,6 +107,7 @@ function ensureInterval() {
 export const pomodoro = {
   start() {
     ensureInit();
+    unlockAudio();
     set(start(pomo, Date.now()));
     ensureInterval();
   },
@@ -132,6 +151,7 @@ export const pomodoro = {
   },
   startForTodo(todoId: string, minutes?: number) {
     ensureInit();
+    unlockAudio();
     activeTodoId = todoId;
     const dur = minutes && minutes >= 1 ? Math.min(180, Math.round(minutes)) : settings().work;
     customWorkMin = minutes && minutes >= 1 ? dur : null;
@@ -139,11 +159,13 @@ export const pomodoro = {
     set({ phase: 'work', running: true, endsAt: t + dur * MIN, left: dur * MIN, rounds: pomo.rounds });
     ensureInterval();
   },
+  /** Switches the end chime on or off (kept in the settings) – switching on plays it once, so you hear it works. */
   setSound(on: boolean) {
-    soundOn = on;
+    setSettings({ pomodoroSound: on ? undefined : false });
+    if (on) playChime(true);
     emit();
   },
-  getMeta: () => ({ activeTodoId, soundOn, workMin: currentWorkMin(), breakMin: settings().brk }),
+  getMeta: () => ({ activeTodoId, soundOn: soundIsOn(), workMin: currentWorkMin(), breakMin: settings().brk }),
   /** Running in a work phase – then the learning views don't count time themselves. */
   isStudying: () => pomo.running && pomo.phase === 'work',
 };
@@ -163,7 +185,7 @@ export function usePomodoro() {
 
 let metaSnap: { activeTodoId: string | null; soundOn: boolean; workMin: number; breakMin: number } = {
   activeTodoId,
-  soundOn,
+  soundOn: true,
   workMin: 25,
   breakMin: 5,
 };

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { fmtClock, pomodoro, usePomodoro, usePomodoroMeta } from '../../lib/pomodoro';
 import { MIN, remaining } from '../../lib/pomodoroRule';
 import { toggleTodo, useStore } from '../../lib/store';
-import { IconCheck, IconMore, IconPause, IconPlay, IconRefresh, IconSkip, IconSpeaker } from '../Icons';
+import { IconCheck, IconMore, IconPause, IconPlay, IconRefresh, IconSkip, IconSpeaker, IconSpeakerOff } from '../Icons';
 
 const PRESETS = [
   { label: '15 / 3', work: 15, brk: 3 },
@@ -13,7 +13,7 @@ const PRESETS = [
 /**
  * Redesigned Pomodoro Timer for the Merkora Tools area & floating popup window.
  */
-export function PomodoroTool({ compact = false }: { compact?: boolean }) {
+export function PomodoroTool({ compact = false, skip = true }: { compact?: boolean; skip?: boolean }) {
   const p = usePomodoro();
   const meta = usePomodoroMeta();
   const todos = useStore((s) => s.data.todos ?? []);
@@ -102,7 +102,7 @@ export function PomodoroTool({ compact = false }: { compact?: boolean }) {
             <IconPlay size={14} />{compact ? '' : ' Starten'}
           </button>
         )}
-        {compact && (
+        {compact && skip && (
           <button type="button" className="btn ghost" aria-label={p.phase === 'work' ? 'Zur Pause wechseln' : 'Zur Lernzeit wechseln'} title={p.phase === 'work' ? 'Pause' : 'Lernzeit'} onClick={() => pomodoro.setPhase(p.phase === 'work' ? 'break' : 'work')}>
             <IconSkip size={15} />
           </button>
@@ -112,12 +112,14 @@ export function PomodoroTool({ compact = false }: { compact?: boolean }) {
         </button>
         <button
           type="button"
-          className={`btn ghost ${meta.soundOn ? '' : 'muted'}`}
-          aria-label={meta.soundOn ? 'Ton ausschalten' : 'Ton einschalten'}
-          title={meta.soundOn ? 'Ton am Ende an' : 'Ton aus'}
+          className={`btn ghost pomo-sound ${meta.soundOn ? 'on' : 'off'}`}
+          aria-pressed={meta.soundOn}
+          aria-label={meta.soundOn ? 'Ton am Ende ist an – ausschalten' : 'Ton am Ende ist aus – einschalten'}
+          title={meta.soundOn ? 'Ton am Ende: an (klicken zum Ausschalten)' : 'Ton am Ende: aus (klicken zum Einschalten)'}
           onClick={() => pomodoro.setSound(!meta.soundOn)}
         >
-          <IconSpeaker size={15} />
+          {meta.soundOn ? <IconSpeaker size={15} /> : <IconSpeakerOff size={15} />}
+          {!compact && (meta.soundOn ? ' Ton an' : ' Ton aus')}
         </button>
         {compact && (
           <button type="button" className={more ? 'btn ghost on' : 'btn ghost'} aria-expanded={more} aria-label="Mehr" title="Aufgabe und Dauer" onClick={() => setMore((v) => !v)}>

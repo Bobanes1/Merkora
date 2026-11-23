@@ -282,6 +282,8 @@ export type Settings = {
   /** Pomodoro phases in minutes. */
   pomodoroWork: number;
   pomodoroBreak: number;
+  /** Pomodoro: chime at the end of a round (default on). */
+  pomodoroSound?: boolean;
   /** Use a different AI model for the chat (tutor, explanations, grading) than for generating content. */
   chatSeparate: boolean;
   chatProvider: Provider;
