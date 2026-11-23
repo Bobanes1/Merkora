@@ -11674,3 +11674,19 @@ body.learn-focus .practice-tasks { min-height: calc(100vh - 220px); }
   .ai-steps li.now .ai-step-dot, .job-work span.now::after { animation: none; }
 }
 .gap-notes { display: block; margin-top: -4px; }
+
+/* ---------- labelling by drag & drop ---------- */
+.sr-only { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.label-diagram.dnd .dg-slot { cursor: pointer; }
+.label-diagram.dnd .dg-slot rect { transition: stroke-width 0.15s ease, fill 0.15s ease; }
+.label-diagram.dnd .dg-slot:hover rect, .label-diagram.dnd .dg-slot[data-over] rect { stroke-width: 4; fill: color-mix(in srgb, var(--primary) 18%, transparent); }
+.label-diagram.dnd.picking .dg-slot rect { animation: slot-pulse 1.2s ease-in-out infinite; }
+@keyframes slot-pulse { 50% { stroke-width: 4; } }
+.label-bank { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px; border: 1px dashed var(--line); border-radius: var(--r-lg); background: var(--surface-2); min-height: 52px; align-items: center; }
+.label-chip { padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line-strong, var(--line)); background: var(--white); color: inherit; font: inherit; font-weight: 600; font-size: 14px; cursor: grab; touch-action: none; user-select: none; box-shadow: 0 2px 0 var(--line); transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease; }
+.label-chip:hover { border-color: var(--primary); transform: translateY(-1px); }
+.label-chip:active { cursor: grabbing; }
+.label-chip.picked { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 25%, transparent); }
+.label-ghost { position: fixed; z-index: 2000; pointer-events: none; transform: translate(-50%, -60%) rotate(-2deg); padding: 8px 14px; border-radius: 999px; border: 1px solid var(--primary); background: var(--white); color: var(--ink); font-weight: 700; font-size: 14px; box-shadow: 0 12px 28px -10px rgba(0, 0, 0, 0.45); }
+.label-help { display: block; margin-top: -4px; }
+@media (prefers-reduced-motion: reduce) { .label-diagram.dnd.picking .dg-slot rect { animation: none; } }

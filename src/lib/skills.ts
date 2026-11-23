@@ -154,7 +154,23 @@ const context = (skill: Skill) =>
   (skill.domain === 'law' && skill.jurisdiction ? JURISDICTION_RULE[skill.jurisdiction] + '\n' : '') +
   `Skill: ${skill.title || skill.topic}\nFach: ${skill.domain}\nBildungsniveau: ${skill.level || 'unbekannt'}\nNiveaustufen: ${skill.levels.join(' → ')}\nZielniveau: ${skill.levels[skill.targetLevel] ?? skill.levels[skill.levels.length - 1]}\nAntworten der Person:\n${answersText(skill)}${skill.plan.placementNote ? `\nEinstufung: ${skill.plan.placementNote}` : ''}${skill.material ? `\n\nMATERIAL:\n${spreadClip(skill.material, 20000)}` : ''}`;
 
-const kindRule = (skill: Skill) => `${LANG_RULE}\n${FORMULA_RULE}\n${setFrame(skill.domain)}`;
+/**
+ * Does the topic deal with numbers (calculating, statistics, money, physics …)? Only then do spreadsheet and
+ * calculation tasks fit – a PR, history or language topic gets no invented numbers. Pure – tested.
+ */
+export function numericTopic(skill: Pick<Skill, 'domain' | 'title' | 'topic' | 'material'>): boolean {
+  if (skill.domain === 'math') return true;
+  if (skill.domain !== 'general') return false;
+  const text = `${skill.title} ${skill.topic} ${(skill.material ?? '').slice(0, 4000)}`.toLowerCase();
+  return /statisti|mathe|rechn|finanz|buchhalt|bilanz|wirtschaft|ökonom|kalkulation|controlling|kosten|budget|steuer|excel|tabellenkalk|physik|chemie|elektro|zins|aktie|invest|prozent|datenanalyse|ernährung.*kalorien|kalorien/.test(text);
+}
+/** No numbers in the topic: no spreadsheet tasks and no invented statistics. */
+export const NO_NUMBERS_RULE =
+  'Das Thema handelt NICHT von Zahlen: keine Rechen- oder Tabellenaufgaben und keine erfundenen Zahlen, Studien oder Statistiken. "estimate" nur bei echten, bekannten Größen (z. B. Jahreszahlen); "calc" nur als Auswahl- oder Textantwort.';
+const kindRule = (skill: Skill) => {
+  const plain = skill.domain === 'general' && !numericTopic(skill);
+  return `${LANG_RULE}\n${FORMULA_RULE}\n${setFrame(skill.domain, plain ? ['sheet'] : [])}${plain ? '\n' + NO_NUMBERS_RULE : ''}`;
+};
 const JSON_ONLY = 'Antworte ausschließlich mit gültigem JSON, ohne Erklärtext und ohne Markdown-Codeblock.';
 
 // ---------- step 2: placement test ----------
@@ -408,7 +424,8 @@ export function lessonVariety(skill: Skill, stageIndex: number, lessonIndex: num
   for (const s of recentSets) {
     for (const t of taskList(s)) counts.set(t.type, (counts.get(t.type) ?? 0) + 1);
   }
-  const pool = OPENERS[skill.domain];
+  // a topic without numbers: no spreadsheet or calculation as a recommended start
+  const pool = skill.domain === 'general' && !numericTopic(skill) ? OPENERS.general.filter((t) => t !== 'sheet' && t !== 'calc') : OPENERS[skill.domain];
   const shift = (lessonIndex * 2) % pool.length;
   const rotated = [...pool.slice(shift), ...pool.slice(0, shift)];
   const fresh = rotated.filter((t) => !recentOpeners.has(t));

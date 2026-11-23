@@ -519,8 +519,8 @@ export const DOMAIN_TASKS: Record<Domain, (keyof typeof TASK_TYPES)[]> = {
 };
 
 /** The task rules for one subject (or all for "auto"). */
-export function taskRules(kind: PracticeKind): string {
-  const types = kind === 'auto' ? (Object.keys(TASK_TYPES) as (keyof typeof TASK_TYPES)[]) : DOMAIN_TASKS[kind];
+export function taskRules(kind: PracticeKind, exclude: string[] = []): string {
+  const types = (kind === 'auto' ? (Object.keys(TASK_TYPES) as (keyof typeof TASK_TYPES)[]) : DOMAIN_TASKS[kind]).filter((t) => !exclude.includes(t));
   return `Aufgabentypen (mische mindestens 3–4 verschiedene Typen und setze nicht denselben Typ zweimal direkt hintereinander; der Lernende soll SELBST etwas tun – rechnen, schätzen, ordnen, Lücken füllen, entscheiden, beschriften, ausformulieren, spielen, programmieren; keine reinen Wissensfragen):\n${types.map((t) => '- ' + TASK_TYPES[t]).join('\n')}${kind === 'math' || kind === 'auto' ? '\n' + LABS_RULE : ''}`;
 }
 
@@ -545,11 +545,11 @@ export const VISUAL_RULES: Record<Domain, string> = {
 };
 VISUAL_RULES.general = VISUAL_RULES.math.replace('Wo eine Formel', 'Nur wo eine Formel (Physik, Wirtschaft, Alltag)');
 
-export function setFrame(kind: PracticeKind) {
+export function setFrame(kind: PracticeKind, exclude: string[] = []) {
   return `${PLAIN_RULE}
 ${kind === 'auto' ? '' : VISUAL_RULES[kind]}
 Format: {"kind":"${kind === 'auto' ? 'math|java|law|music|language|general' : kind}","topic":"…","intro":"- Stichpunkt 1\\n- Stichpunkt 2 …","example":{"problem":"…","steps":["Schritt 1 …","Schritt 2 …"],"answer":"…","code":"(nur bei Programmieren)"},"problems":[…],"labs":[…]}
-${taskRules(kind)}
+${taskRules(kind, exclude)}
 Steigere die Schwierigkeit langsam: zuerst verstehen, dann anwenden, dann selbst lösen. Gib jeder Aufgabe "level": 1 (leicht), 2 (mittel) oder 3 (schwer) – Merkora passt die Reihenfolge daran an, wie es läuft; mische die Stufen, damit es zu jeder etwas gibt. Hinweise ("hints") helfen schrittweise, ohne die Lösung zu verraten.`;
 }
 

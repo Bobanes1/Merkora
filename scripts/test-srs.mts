@@ -2145,6 +2145,25 @@ console.log('Lange Lektionen: Aufgaben gehen nicht verloren');
   ok(R.RETRY_SHORTER.includes('KÜRZER') && R.RETRY_SHORTER.includes('"problems"'), 'zweiter Versuch: kürzer und unbedingt mit Aufgaben');
 }
 
+console.log('Beschriften per Drag & Drop, Aufgabentypen passend zum Thema');
+{
+  const S = await import('../src/lib/skills');
+  const D = await import('../src/lib/diagram');
+  const C = await import('../src/lib/taskCheck');
+  const sk = (title: string, domain = 'general') => ({ id: 'k', topic: title, title, domain, levels: ['a'], targetLevel: 0, level: '', status: 'active', plan: {}, stages: [{ id: 'st', name: 'S', goal: '', lessons: [{ id: 'l', title: 'L', goal: '' }] }], createdAt: 1, updatedAt: 1 }) as any;
+  ok(!S.numericTopic(sk('Public Relations auf Bachelor-Praxisniveau')) && S.numericTopic(sk('Statistik für die Uni')) && S.numericTopic(sk('Buchhaltung Grundlagen')) && S.numericTopic(sk('Ableitungen', 'math')), 'Zahlen-Thema erkannt: PR nein, Statistik/Buchhaltung/Mathe ja');
+  const pr = sk('Public Relations');
+  const pp = S.lessonPrompt(pr, pr.stages[0], pr.stages[0].lessons[0]).system;
+  const st = sk('Statistik für die Uni');
+  const sp = S.lessonPrompt(st, st.stages[0], st.stages[0].lessons[0]).system;
+  ok(!pp.includes('{"type":"sheet"') && pp.includes('keine erfundenen Zahlen') && !/Einstiegs-Typen[^\n]*"sheet"/.test(pp) && sp.includes('{"type":"sheet"') && !sp.includes('keine erfundenen Zahlen'), 'PR-Lektion: keine Tabellen-Aufgaben, keine erfundenen Zahlen; Statistik behält sie');
+  ok(C.verifyPrompt({ id: 's', createdAt: 1, kind: 'general', topic: 'PR', intro: '', labs: [], tasks: [], progress: [] } as any).system.includes('Passt der Aufgabentyp zum Thema'), 'Gegenprüfung ersetzt unpassende Aufgabentypen');
+
+  const dg = { type: 'flow', steps: ['Press Agentry', 'Public Information', 'Two-Way asymmetrisch', 'Two-Way symmetrisch'] } as any;
+  const svg = D.renderDiagram(dg, D.PALETTES.light, { hideMany: [0, 1, 2, 3], filled: ['Press Agentry', undefined, 'X', undefined], marks: [true, undefined, false, undefined] });
+  ok((svg.match(/data-slot="/g) ?? []).length === 4 && svg.includes('>Press Agentry<') && svg.includes('#1f9d6b') && svg.includes('#d93f3f') && svg.includes('>2<'), 'Grafik: Ablagefelder, abgelegte Begriffe, richtig/falsch farbig, freie Felder mit Nummer');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

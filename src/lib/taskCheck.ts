@@ -66,6 +66,7 @@ ${extraRule ? extraRule + '\n' : ''}Prüfe JEDE Aufgabe:
 3. Ist sie eindeutig – gibt es genau eine richtige Antwort (oder sind die Alternativen als richtig hinterlegt)?
 4. Fallaufgaben: Erfüllt die Musterlösung jedes Kriterium des Schemas, und verlangt das Schema nichts, was nicht in der Musterlösung steht?
 5. Code: Passen Tests, Startcode und Musterlösung zusammen? Ein BEFUND aus dem Ausführen ist verlässlich.
+6. Passt der Aufgabentyp zum Thema? Eine unpassende Aufgabe (z. B. eine Rechentabelle mit erfundenen Zahlen zu einem Theorie-Thema) ersetzt du durch einen passenden Typ zum selben Inhalt.
 Liste NUR Aufgaben mit einem echten Fehler. Korrigiere sie so wenig wie nötig (gleicher Typ, gleiches Thema, gleiche Schwierigkeit) und gib die vollständige korrigierte Aufgabe im selben JSON-Format zurück. Eine Aufgabe, die sich nicht sinnvoll reparieren lässt, kommt in "drop".
 Format: {"fixes":[{"task":3,"why":"kurzer Grund","fixed":{…vollständige Aufgabe…}}],"drop":[5]} – ist alles in Ordnung: {"fixes":[],"drop":[]}.
 Antworte ausschließlich mit gültigem JSON.`,

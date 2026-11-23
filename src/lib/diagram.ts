@@ -1396,7 +1396,28 @@ const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 const r1 = (n: number) => Math.round(n * 10) / 10;
 
 /** How a graphic is shown while learning: one label covered ("?") or shown as the answer, or built up step by step. */
-export type DiagramView = { hide?: number; reveal?: number; steps?: boolean; /** built up step by step: only the first `upto` text boxes are shown */ upto?: number; /** several labels covered, numbered 1, 2, 3 … (labelling tasks) */ hideMany?: number[] };
+export type DiagramView = { hide?: number; reveal?: number; steps?: boolean; /** built up step by step: only the first `upto` text boxes are shown */ upto?: number; /** several labels covered, numbered 1, 2, 3 … (labelling tasks) */ hideMany?: number[];
+  /** labelling by drag & drop: the term placed on covered box k (shown instead of the number) */ filled?: (string | undefined)[];
+  /** after checking: covered box k right (green) or wrong (red) */ marks?: (boolean | undefined)[] };
+
+/** A term inside a covered box: as many words per line as fit, at most two lines (the rest shortened). */
+function fitLines(text: string, width: number, fs: number): string[] {
+  const max = Math.max(4, Math.floor((width - 14) / (fs * 0.55)));
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let cur = '';
+  for (const w of words) {
+    if (!cur) cur = w;
+    else if ((cur + ' ' + w).length <= max) cur += ' ' + w;
+    else {
+      lines.push(cur);
+      cur = w;
+    }
+  }
+  if (cur) lines.push(cur);
+  if (lines.length > 2) lines.splice(1, lines.length - 1, lines.slice(1).join(' '));
+  return lines.map((l) => (l.length > max ? l.slice(0, max - 1) + '…' : l));
+}
 
 /** Kinds of boxes that hold a label one can be asked about (not titles, axis labels or small notes). */
 const QUIZ_KINDS = new Set<Box['kind']>(['node', 'node2', 'accent', 'accent2', 'soft']);
@@ -1474,12 +1495,26 @@ export function renderDiagram(d: Diagram, p: Palette = PALETTES.light, view?: Di
     const qi = quiz.indexOf(bi);
     const many = qi >= 0 && view?.hideMany ? view.hideMany.indexOf(qi) : -1;
     if (qi >= 0 && (qi === view?.hide || many >= 0)) {
-      // the covered label: dashed frame with a question mark
+      // the covered label: dashed frame with a number (or the term placed on it); a drop target for labelling
       const t1 = tn(1);
+      const term = many >= 0 ? view?.filled?.[many] : undefined;
+      const mark = many >= 0 ? view?.marks?.[many] : undefined;
+      const line = mark === true ? '#1f9d6b' : mark === false ? '#d93f3f' : t1.line;
+      const cx = r1(b.x + b.w / 2), cy = r1(b.y + b.h / 2);
       out.push(
-        `<rect class="dg-hidden" x="${r1(b.x)}" y="${r1(b.y)}" width="${r1(b.w)}" height="${r1(b.h)}" rx="${r1(Math.min(12, b.h / 2))}" fill="${t1.soft}" stroke="${t1.line}" stroke-width="2.5" stroke-dasharray="7 5"/>`,
-        `<text x="${r1(b.x + b.w / 2)}" y="${r1(b.y + b.h / 2)}" font-size="22" font-weight="800" fill="${t1.line}" text-anchor="middle" dominant-baseline="middle">${many >= 0 ? many + 1 : '?'}</text>`,
+        `${many >= 0 ? `<g class="dg-slot" data-slot="${many}">` : ''}<rect class="dg-hidden" x="${r1(b.x)}" y="${r1(b.y)}" width="${r1(b.w)}" height="${r1(b.h)}" rx="${r1(Math.min(12, b.h / 2))}" fill="${t1.soft}" stroke="${line}" stroke-width="2.5"${term ? '' : ' stroke-dasharray="7 5"'}/>`,
       );
+      if (term) {
+        const fs = 13;
+        const lines = fitLines(term, b.w, fs);
+        const top = cy - ((lines.length - 1) * (fs + 3)) / 2;
+        out.push(
+          `<text x="${cx}" font-size="${fs}" font-weight="700" fill="${p.text}" text-anchor="middle" dominant-baseline="middle">${lines.map((l, k) => `<tspan x="${cx}" y="${r1(top + k * (fs + 3))}">${esc(l)}</tspan>`).join('')}</text>`,
+        );
+      } else {
+        out.push(`<text x="${cx}" y="${cy}" font-size="22" font-weight="800" fill="${t1.line}" text-anchor="middle" dominant-baseline="middle">${many >= 0 ? many + 1 : '?'}</text>`);
+      }
+      if (many >= 0) out.push('</g>');
       return;
     }
     const t = tn(b.tone ?? (b.kind === 'node2' || b.kind === 'accent2' ? 2 : 1));

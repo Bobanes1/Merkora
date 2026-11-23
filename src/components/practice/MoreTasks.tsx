@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { CardContent } from '../CardContent';
 import { completeJson, LANG_RULE } from '../../lib/ai';
 import { PALETTES, renderDiagram } from '../../lib/diagram';
@@ -132,7 +133,93 @@ export function LabelTaskView({ ctx, task }: { ctx: TaskCtx; task: LabelTask }) 
   const [given, setGiven] = useState<string[]>(() => (prog.solved ? task.labels : task.labels.map(() => '')));
   const [marks, setMarks] = useState<boolean[] | null>(prog.solved ? task.labels.map(() => true) : null);
   const right = !!marks && marks.every(Boolean);
-  const svg = useMemo(() => renderDiagram(task.diagram, PALETTES[theme], right ? undefined : { hideMany: task.hide }), [task, theme, right]);
+  // drag & drop: a term is dragged (ghost under the pointer) or picked by a tap/keyboard and then put on a box
+  const [pick, setPick] = useState<string | null>(null);
+  const [drag, setDrag] = useState<{ term: string; x: number; y: number } | null>(null);
+  const [over, setOver] = useState<number | null>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const justDragged = useRef(false);
+  const svg = useMemo(
+    () => renderDiagram(task.diagram, PALETTES[theme], right ? undefined : { hideMany: task.hide, filled: given, marks: marks ?? undefined }),
+    [task, theme, right, given, marks],
+  );
+  const bank = terms.filter((t) => !given.includes(t));
+  /** Puts a term on box k; one already there goes to where the term came from (or back to the bank). */
+  const place = (term: string, k: number) => {
+    setGiven((g) => {
+      const n = [...g];
+      const from = n.indexOf(term);
+      const prev = n[k];
+      if (from >= 0) n[from] = prev && from !== k ? prev : '';
+      n[k] = term;
+      return n;
+    });
+    setMarks(null);
+    setPick(null);
+  };
+  const unplace = (k: number) => (setGiven((g) => g.map((x, j) => (j === k ? '' : x))), setMarks(null));
+  const slotAt = (x: number, y: number) => {
+    const el = document.elementFromPoint(x, y)?.closest('[data-slot]');
+    return el && boxRef.current?.contains(el) ? Number(el.getAttribute('data-slot')) : null;
+  };
+  /** Dragging with mouse or finger (pointer events); a short tap is left to the click (pick / send back). */
+  const startDrag = (e: ReactPointerEvent, term: string, from?: number) => {
+    if (right || e.button > 0) return;
+    const sx = e.clientX,
+      sy = e.clientY;
+    let moved = false;
+    const move = (ev: PointerEvent) => {
+      if (!moved && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 6) return;
+      moved = true;
+      setDrag({ term, x: ev.clientX, y: ev.clientY });
+      setOver(slotAt(ev.clientX, ev.clientY));
+    };
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      if (moved) {
+        const k = slotAt(ev.clientX, ev.clientY);
+        if (k !== null) place(term, k);
+        else if (from !== undefined) unplace(from);
+        justDragged.current = true;
+        setTimeout(() => (justDragged.current = false), 50);
+      }
+      setDrag(null);
+      setOver(null);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  // a box: drag its term away, or (tap) put the picked term on it / send its term back
+  const slotOf = (t: EventTarget | null) => {
+    const el = (t as Element | null)?.closest?.('[data-slot]');
+    return el ? Number(el.getAttribute('data-slot')) : null;
+  };
+  const onBoxDown = (e: ReactPointerEvent) => {
+    const k = slotOf(e.target);
+    if (k !== null && given[k]) startDrag(e, given[k], k);
+  };
+  const tapSlot = (k: number) => {
+    if (right || justDragged.current) return;
+    if (pick) place(pick, k);
+    else if (given[k]) unplace(k);
+  };
+  // highlight the box under the dragged term
+  useEffect(() => {
+    boxRef.current?.querySelectorAll('[data-slot]').forEach((n) => n.toggleAttribute('data-over', Number(n.getAttribute('data-slot')) === over));
+  }, [over, svg]);
+  // keyboard: with a picked term, 1–9 puts it on that box; Esc lets go
+  useEffect(() => {
+    if (!pick) return;
+    const onKey = (e: KeyboardEvent) => {
+      const n = Number(e.key);
+      if (Number.isInteger(n) && n >= 1 && n <= task.labels.length) (e.preventDefault(), place(pick, n - 1));
+      else if (e.key === 'Escape') setPick(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pick]);
   const check = () => {
     const r = checkLabels(task, given);
     setMarks(r.places);
@@ -141,23 +228,53 @@ export function LabelTaskView({ ctx, task }: { ctx: TaskCtx; task: LabelTask }) 
   return (
     <div className="practice-task">
       <CardContent text={task.prompt} className="practice-problem" />
-      {/* our own SVG with escaped labels – safe to insert */}
-      <div className="diagram label-diagram" dangerouslySetInnerHTML={{ __html: svg }} />
-      <div className="label-rows">
+      {/* our own SVG with escaped labels – safe to insert; the covered boxes are drop targets */}
+      <div
+        ref={boxRef}
+        className={'diagram label-diagram dnd' + (pick || drag ? ' picking' : '')}
+        onPointerDown={onBoxDown}
+        onClick={(e) => {
+          const k = slotOf(e.target);
+          if (k !== null) tapSlot(k);
+        }}
+        dangerouslySetInnerHTML={{ __html: svg }}
+      />
+      <div className="sr-only">
         {task.labels.map((_, k) => (
-          <label key={k} className={'label-row' + (marks ? (marks[k] ? ' ok' : ' bad') : '')}>
-            <span className="label-no">{k + 1}</span>
-            <select className="input" value={given[k]} onChange={(e) => (setGiven((g) => g.map((x, j) => (j === k ? e.target.value : x))), setMarks(null))} disabled={right}>
-              <option value="">– Begriff wählen –</option>
-              {terms.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </label>
+          <button key={k} type="button" onClick={() => tapSlot(k)}>
+            Kasten {k + 1}: {given[k] || 'leer'}
+          </button>
         ))}
       </div>
+      {!right && (
+        <div className="label-bank" aria-label="Begriffe">
+          {bank.map((t) => (
+            <button
+              key={t}
+              type="button"
+              className={'label-chip' + (pick === t ? ' picked' : '')}
+              aria-pressed={pick === t}
+              onPointerDown={(e) => startDrag(e, t)}
+              onClick={() => !justDragged.current && setPick((p) => (p === t ? null : t))}
+            >
+              {t}
+            </button>
+          ))}
+          {!bank.length && <small className="muted">Alle Begriffe verteilt – tippe auf einen Kasten, um einen Begriff zurückzulegen.</small>}
+        </div>
+      )}
+      {!right && (
+        <small className="muted label-help">
+          {pick ? `Tippe auf einen Kasten (oder drücke 1–${task.labels.length}), um „${pick}“ dort abzulegen.` : 'Zieh die Begriffe auf die Kästen – oder tippe erst einen Begriff, dann einen Kasten an.'}
+        </small>
+      )}
+      {drag &&
+        createPortal(
+          <div className="label-ghost" style={{ left: drag.x, top: drag.y }}>
+            {drag.term}
+          </div>,
+          document.body,
+        )}
       <div className="row-gap">
         <CheckButton ctx={ctx} right={right} onCheck={check} disabled={given.some((g) => !g)} />
       </div>
