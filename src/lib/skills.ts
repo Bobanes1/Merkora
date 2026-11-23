@@ -458,9 +458,10 @@ ${variety.styleRule}
 ${variety.taskRule}
 ${skill.mini ? MINI_RULE + ' Höchstens 3 Häppchen.' : paceOf(skill) === 'fast' ? FAST_RULE : paceOf(skill) === 'gentle' ? GENTLE_RULE + '\n' + beginnerRule(skill, stageIndex, i) : beginnerRule(skill, stageIndex, i)}
 ${FIGURE_RULE}
+REIHENFOLGE IM JSON: zuerst "topic", dann "problems" (die Aufgaben), danach alles andere (Häppchen, Beispiel, Bilder …) – so gehen bei einer zu langen Antwort nie die Aufgaben verloren. Halte Texte knapp.
 ${JSON_ONLY}`,
     user: `${context(skill)}\n\nSTUFE: ${stage.name} – ${stage.goal}\nLEKTION ${i + 1} von ${all.length}: ${lesson.title} – Ziel: ${lesson.goal}${before.length ? `\nVorher gelernt: ${before.slice(-8).join('; ')}` : ''}`,
-    maxTokens: Math.min(16000, 6000 + count * (skill.domain === 'java' || skill.domain === 'law' ? 900 : 600)),
+    maxTokens: Math.min(16000, 8000 + count * (skill.domain === 'java' || skill.domain === 'law' ? 900 : 700)),
     json: true,
   };
 }

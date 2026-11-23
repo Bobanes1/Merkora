@@ -4,7 +4,7 @@
  */
 import { useSyncExternalStore } from 'react';
 import { kindOfKey, recordAiTime } from './aiTiming';
-import { completeJson } from './ai';
+import { completeJson, type Prompt } from './ai';
 import { parsePractice, taskList, toDomain, type PracticeSet, type Task } from './practice';
 import { applyVerify, codeSelfCheck, parseVerify, plausibility, verifyPrompt } from './taskCheck';
 import {
@@ -76,11 +76,21 @@ const skill = (id: string) => {
   return j ? { ...s, jurisdiction: j } : s;
 };
 const ask = <T>(p: { system: string; user: string; maxTokens: number }) => completeJson<T>(p.system, p.user, p.maxTokens);
-const setOf = (raw: unknown) => {
-  const set = parsePractice(raw, newId(), Date.now());
-  if (!set) throw new Error('Die KI hat keine brauchbaren Aufgaben geliefert. Bitte versuche es noch einmal.');
-  return set;
-};
+/** The phrase that asks again when an answer brought no usable tasks (usually: too long and cut off). */
+export const RETRY_SHORTER =
+  'WICHTIG: Deine letzte Antwort enthielt keine gültigen Aufgaben – vermutlich war sie zu lang und wurde abgeschnitten. Schreibe Häppchen, Beispiel und Erklärungen diesmal KÜRZER und liefere unbedingt "problems" mit gültigen Aufgaben, als erstes Feld nach "topic".';
+
+/**
+ * A practice set from the AI. Brings the answer no usable tasks (long lessons get cut off at the length limit,
+ * and the tasks come last), Merkora asks once more – with more room and the request to be shorter.
+ */
+async function askSet(p: Prompt) {
+  const first = parsePractice(await ask(p), newId(), Date.now());
+  if (first) return first;
+  const again = parsePractice(await ask({ ...p, system: p.system + '\n' + RETRY_SHORTER, maxTokens: Math.min(24000, Math.round(p.maxTokens * 1.5)) }), newId(), Date.now());
+  if (!again) throw new Error('Die KI hat zweimal keine brauchbaren Aufgaben geliefert. Bitte versuche es noch einmal – oder wähle in den Einstellungen ein stärkeres Modell.');
+  return again;
+}
 
 /** A mini skill: one AI call makes the short path (3 lessons) – then it can be learned right away. Returns the id at once. */
 export function startMiniSkill(topic: string, level = ''): string {
@@ -195,7 +205,7 @@ export function makePlacement(id: string) {
   return run(id + ':placement', async () => {
     const s = skill(id);
     if (!s) return;
-    const set = setOf(await ask(placementPrompt(s)));
+    const set = await askSet(placementPrompt(s));
     updateSkill(id, (x) => ({ plan: { ...x.plan, placement: set } }));
     void checkSet(id, set.id, { get: (x) => x.plan.placement, put: (x, v) => ({ plan: { ...x.plan, placement: v } }) });
   });
@@ -234,7 +244,7 @@ export function ensureLesson(id: string, lessonId: string) {
     const lesson = stage?.lessons.find((l) => l.id === lessonId);
     if (!s || !stage || !lesson) return;
     if (!lesson.set) {
-      const set = setOf(await ask(lessonPrompt(s, stage, lesson)));
+      const set = await askSet(lessonPrompt(s, stage, lesson));
       updateSkill(id, (x) => ({ stages: x.stages.map((st) => ({ ...st, lessons: st.lessons.map((l) => (l.id === lessonId ? { ...l, set } : l)) })) }));
       void checkSet(id, set.id, lessonSpot(lessonId));
     }
@@ -252,7 +262,7 @@ async function ensureLessonQuiet(id: string, lessonId: string) {
   const stage = s?.stages.find((st) => st.lessons.some((l) => l.id === lessonId));
   const lesson = stage?.lessons.find((l) => l.id === lessonId);
   if (!s || !stage || !lesson || lesson.set) return;
-  const set = setOf(await ask(lessonPrompt(s, stage, lesson)));
+  const set = await askSet(lessonPrompt(s, stage, lesson));
   updateSkill(id, (x) => ({ stages: x.stages.map((st) => ({ ...st, lessons: st.lessons.map((l) => (l.id === lessonId ? { ...l, set } : l)) })) }));
   void checkSet(id, set.id, lessonSpot(lessonId));
 }
@@ -262,7 +272,7 @@ export function makeStageTest(id: string, stageId: string) {
     const s = skill(id);
     const stage = s?.stages.find((st) => st.id === stageId);
     if (!s || !stage) return;
-    const set = setOf(await ask(stageTestPrompt(s, stage)));
+    const set = await askSet(stageTestPrompt(s, stage));
     updateSkill(id, (x) => ({ stages: x.stages.map((st) => (st.id === stageId ? { ...st, test: set, passed: undefined } : st)) }));
     void checkSet(id, set.id, { get: (x) => x.stages.find((st) => st.id === stageId)?.test, put: (x, v) => ({ stages: x.stages.map((st) => (st.id === stageId ? { ...st, test: v } : st)) }) });
   });
@@ -316,7 +326,7 @@ export function makeReview(id: string, focusIds?: string[], count?: number) {
     const focus = focusIds?.length ? s.stages.flatMap((st) => st.lessons).filter((l) => focusIds.includes(l.id)) : undefined;
     // remembered at once, so the smart „Weiter“ does not offer the same again
     updateSkill(id, focus?.length ? { lastWeakAt: Date.now() } : { lastReviewAt: Date.now() });
-    const set = setOf(await ask(reviewPrompt(s, focus, count)));
+    const set = await askSet(reviewPrompt(s, focus, count));
     updateSkill(id, { review: set, reviewFocus: focus?.map((l) => l.title) });
     void checkSet(id, set.id, { get: (x) => x.review, put: (_x, v) => ({ review: v }) });
   });

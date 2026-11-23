@@ -2135,6 +2135,16 @@ console.log('Lücken fair bewerten');
   ok(S.lessonPrompt(sk, sk.stages[0], sk.stages[0].lessons[0]).system.includes('ALLE richtigen Varianten'), 'Lücken-Regel: eindeutig, alle richtigen Varianten');
 }
 
+console.log('Lange Lektionen: Aufgaben gehen nicht verloren');
+{
+  const S = await import('../src/lib/skills');
+  const sk = { id: 'k', topic: 'PR', title: 'PR', domain: 'general', levels: ['a'], targetLevel: 0, level: '', status: 'active', plan: {}, stages: [{ id: 'st', name: 'S', goal: '', lessons: [{ id: 'l', title: 'L', goal: '' }] }], createdAt: 1, updatedAt: 1 } as any;
+  const p = S.lessonPrompt(sk, sk.stages[0], sk.stages[0].lessons[0]);
+  ok(p.system.includes('zuerst "topic", dann "problems"') && p.maxTokens >= 12000, 'Lektion: Aufgaben zuerst im JSON, genug Platz für die Antwort');
+  const R = await import('../src/lib/skillRun');
+  ok(R.RETRY_SHORTER.includes('KÜRZER') && R.RETRY_SHORTER.includes('"problems"'), 'zweiter Versuch: kürzer und unbedingt mit Aufgaben');
+}
+
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));
