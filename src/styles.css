@@ -11714,3 +11714,41 @@ body.learn-focus .practice-tasks { min-height: calc(100vh - 220px); }
 .onb-q .input { max-width: 420px; }
 .onb-actions { display: flex; gap: 8px; margin-top: 18px; }
 @media (max-width: 640px) { .skill-new .mini-head, .mini-new .mini-head { flex-direction: row; } .mini-new .mini-head .btn { flex: none; } }
+
+/* ---------- start page: one column, daily goal in the banner, tiles ---------- */
+.home { grid-template-columns: minmax(0, 1fr); max-width: 1120px; }
+.hero-banner > div:not(.mascot-wrap) { flex: 1; min-width: 0; }
+.hero-ring { position: relative; z-index: 1; flex: none; margin-left: auto; padding: 4px; border: 0; border-radius: 18px; background: none; color: #fff; cursor: pointer; transition: transform 0.15s ease, background 0.15s ease; }
+.hero-ring:hover { transform: scale(1.04); background: rgba(255, 255, 255, 0.08); }
+.hero-ring:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.goal-ring.in-hero { gap: 4px; }
+.goal-ring.in-hero .gr-track { stroke: rgba(255, 255, 255, 0.18); }
+.goal-ring.in-hero .gr-big { fill: #fff; font-size: 34px; }
+.goal-ring.in-hero .gr-small { fill: rgba(255, 255, 255, 0.85); font-size: 15px; }
+.goal-ring.in-hero .gr-legend { grid-auto-flow: column; gap: 10px; font-size: 12px; color: rgba(255, 255, 255, 0.85); }
+.goal-ring.in-hero .gr-legend b { color: #fff; }
+
+.home-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.home-tile { --tile: var(--primary); position: relative; display: grid; align-content: start; gap: 3px; min-height: 118px; padding: 14px 16px; text-align: left; border-radius: var(--r-lg); border: 1px solid color-mix(in srgb, var(--tile) 30%, var(--line)); background: linear-gradient(150deg, color-mix(in srgb, var(--tile) 16%, var(--surface-2)), var(--surface-2) 70%); color: inherit; font: inherit; text-decoration: none; cursor: pointer; transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease; }
+.home-tile:hover { transform: translateY(-2px); border-color: var(--tile); box-shadow: 0 12px 26px -16px color-mix(in srgb, var(--tile) 70%, transparent); }
+.home-tile-icon { display: inline-grid; place-items: center; width: 34px; height: 34px; margin-bottom: 6px; border-radius: 10px; color: #fff; background: var(--tile); }
+.home-tile b { font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--tile); }
+.home-tile-text { font-weight: 700; font-size: 15px; line-height: 1.3; color: var(--ink); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.home-tile small { color: var(--muted); font-size: 12.5px; display: flex; align-items: center; gap: 6px; }
+.home-tile.t-path { --tile: var(--chart-1); }
+.home-tile.t-todo { --tile: var(--chart-2); }
+.home-tile.t-skill { --tile: var(--chart-3); }
+.home-tile.t-exam { --tile: var(--chart-4); }
+.tile-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--chart-2); }
+.tile-dot.late { background: var(--chart-4); }
+.home-panel > .home-tiles { margin-bottom: 4px; }
+
+html.phone .hero-banner > div:not(.mascot-wrap) { padding-bottom: 0; }
+html.phone .goal-ring.in-hero svg { width: 76px; height: 76px; }
+html.phone .goal-ring.in-hero .gr-legend { display: none; }
+@media (max-width: 560px) {
+  .home-tiles { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .home-tile { min-height: 96px; padding: 12px; }
+  .home-tile-icon { width: 28px; height: 28px; margin-bottom: 4px; }
+  .home-tile-text { font-size: 14px; }
+}

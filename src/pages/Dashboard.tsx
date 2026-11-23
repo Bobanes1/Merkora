@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Aquarium } from '../components/Aquarium';
 import { GoalRing } from '../components/GoalRing';
 import { HeroScene } from '../components/HeroScene';
 import { DeckCoverOf } from '../components/DeckCover';
@@ -9,16 +8,16 @@ import { Link, useNavigate } from 'react-router-dom';
 import { AnkiImport } from '../components/AnkiImport';
 import { CreateWithAI } from '../components/CreateWithAI';
 import { ExamDialog } from '../components/ExamDialog';
-import { IconCalendar, IconCards, IconChevron, IconFlame, IconPlay, IconPlus, IconSparkle, IconStar, IconTarget, IconSearch, IconUpload, IconPractice, IconChecklist } from '../components/Icons';
+import { IconCalendar, IconCards, IconChevron, IconFlame, IconPlus, IconSparkle, IconStar, IconTarget, IconSearch, IconUpload, IconPractice, IconChecklist } from '../components/Icons';
 import { nextLesson, skillStreak, skillToday } from '../lib/skills';
 import { FoldPanel } from '../components/FoldPanel';
 import { Mascot } from '../components/Mascot';
 import { usePhone } from '../lib/phone';
 import { pokeMove, type PokeMove } from '../lib/pipLines';
 import { NoKeyHint } from '../components/NoKey';
-import { countdownText, dailyPlan, examAt, examCards, examDecks, examForecast, forecastShort, forecastText, readiness, upcomingExams } from '../lib/exams';
+import { countdownText, dailyPlan, examAt, examCards, examForecast, forecastText, readiness, upcomingExams } from '../lib/exams';
 import { pathProgress, playerLevel, totalXp, xpStreak, xpToday } from '../lib/path';
-import { masteryPercent, sortDecks, streak, studyDays, type DeckSort } from '../lib/stats';
+import { masteryPercent, sortDecks, streak, type DeckSort } from '../lib/stats';
 import { deckUrl, dueCards, setSettings, useStore, type Deck } from '../lib/store';
 import { dayKey } from '../lib/util';
 import { shortName } from '../lib/deckNames';
@@ -52,32 +51,6 @@ function HeroStats({ serie }: { serie: number }) {
         <IconStar size={14} /> Stufe {lvl.level}
       </span>
     </p>
-  );
-}
-
-/** Progress ring for the widgets on the right. */
-function Ring({ value, goal, color, children }: { value: number; goal: number; color: string; children: ReactNode }) {
-  const pct = Math.min(1, value / Math.max(1, goal));
-  const r = 26;
-  const c = 2 * Math.PI * r;
-  return (
-    <span className="ring" style={{ ['--ring' as string]: color }}>
-      <svg viewBox="0 0 64 64" width="64" height="64" aria-hidden="true">
-        <circle cx="32" cy="32" r={r} fill="none" stroke="var(--line)" strokeWidth="6" />
-        <circle
-          cx="32"
-          cy="32"
-          r={r}
-          fill="none"
-          stroke={color}
-          strokeWidth="6"
-          strokeLinecap="round"
-          strokeDasharray={`${c * pct} ${c}`}
-          transform="rotate(-90 32 32)"
-        />
-      </svg>
-      <span className="ring-icon">{children}</span>
-    </span>
   );
 }
 
@@ -198,13 +171,10 @@ export default function Dashboard() {
             </p>
             <HeroStats serie={serie} />
           </div>
-          {dueDecks[0] && (
-            <Link to={deckUrl(data, dueDecks[0], 'learn')} className="btn hero-btn">
-              <IconPlay size={13} /> Jetzt lernen
-            </Link>
-          )}
+          <button type="button" className="hero-ring" title={dueDecks[0] ? 'Jetzt lernen' : 'Statistik ansehen'} onClick={() => navigate(dueDecks[0] ? deckUrl(data, dueDecks[0], 'learn') : '/stats')}>
+            <GoalRing cards={cardsToday} cardGoal={cardGoal} minutes={minutesToday} minuteGoal={minuteGoal} hero />
+          </button>
         </section>
-        {phone && <GoalRing cards={cardsToday} cardGoal={cardGoal} minutes={minutesToday} minuteGoal={minuteGoal} compact />}
 
 
         {!phone && (
@@ -233,113 +203,72 @@ export default function Dashboard() {
 
         {shownTab === 'tasks' && (
           <div className="home-panel">
-            {pathDeck && !phone && (
-              <Link to={deckUrl(data, pathDeck.deck, 'path') + '&play=1'} className="path-cta">
-                <span className="path-cta-icon">
-                  <IconStar size={24} />
-                </span>
-                <span className="grow">
-                  <b>Lernpfad: {pathDeck.deck.name}</b>
+            <div className="home-tiles">
+              {pathDeck && (
+                <Link to={deckUrl(data, pathDeck.deck, 'path') + '&play=1'} className="home-tile t-path" title={`Lernpfad: ${pathDeck.deck.name}`}>
+                  <span className="home-tile-icon">
+                    <IconStar size={18} />
+                  </span>
+                  <b>Lernpfad</b>
+                  <span className="home-tile-text">{pathDeck.deck.name}</span>
                   <small>
-                    {pathDeck.p.done} von {pathDeck.p.total} Stationen · {pathDeck.p.stars} Sterne gesammelt
+                    {pathDeck.p.done}/{pathDeck.p.total} Stationen · {pathDeck.p.stars} ★
                   </small>
+                </Link>
+              )}
+              <Link to="/tools?tab=todos" className="home-tile t-todo">
+                <span className="home-tile-icon">
+                  <IconChecklist size={18} />
                 </span>
-                <span className="btn outline sm">{pathDeck.p.done ? 'Weiterspielen' : 'Starten'}</span>
+                <b>To-dos</b>
+                <span className="home-tile-text">{todosToday.length ? todosToday.slice(0, 2).map((t) => t.text).join(' · ') : 'Nichts fällig'}</span>
+                <small>{todosToday.length ? `${todosToday.length} für heute` : 'Nächste Schritte planen'}</small>
               </Link>
-            )}
-            <Link to="/tools?tab=todos" className="path-cta todo-cta">
-              <span className="path-cta-icon">
-                <IconChecklist size={22} />
-              </span>
-              <span className="grow">
-                <b>To-dos{todosToday.length ? `: ${todosToday.length} für heute` : ''}</b>
-                <small>{todosToday.length ? todosToday.slice(0, 3).map((t) => t.text).join(' · ') : 'Nichts fällig – plane deine nächsten Schritte'}</small>
-              </span>
-              <span className="btn outline sm">Öffnen</span>
-            </Link>
-            {skillNext && (
-              <Link to={`/skills/${skillNext.skill.id}`} className="path-cta skill-cta">
-                <span className="path-cta-icon">
-                  <IconPractice size={22} />
-                </span>
-                <span className="grow">
-                  <b>Weiterüben: {skillNext.skill.title}</b>
+              {skillNext && (
+                <Link to={`/skills/${skillNext.skill.id}`} className="home-tile t-skill" title={skillNext.lesson ? `Lektion: ${skillNext.lesson}` : 'Stufentest wartet'}>
+                  <span className="home-tile-icon">
+                    <IconPractice size={18} />
+                  </span>
+                  <b>Weiterüben</b>
+                  <span className="home-tile-text">{skillNext.skill.title}</span>
                   <small>
-                    {skillNext.lesson ? `Lektion: ${skillNext.lesson}` : 'Alle Lektionen geschafft – Stufentest wartet'}
-                    {` · heute ${skillToday(skillNext.skill).done}/${skillToday(skillNext.skill).goal}`}
+                    heute {skillToday(skillNext.skill).done}/{skillToday(skillNext.skill).goal}
                     {skillStreak(skillNext.skill) > 0 && ` · Serie ${skillStreak(skillNext.skill)}`}
                   </small>
-                </span>
-                <span className="btn outline sm">Üben</span>
-              </Link>
-            )}
-            {phone && exams[0] && (
-              <Link to="/tools?tab=exams" className="phone-exam">
-                <IconCalendar size={16} />
-                <span className="grow">
-                  <b>{exams[0].title}</b>
-                  <small>
-                    {countdownText(exams[0])}
-                    {exams.length > 1 ? ` · +${exams.length - 1} weitere` : ''}
-                  </small>
-                </span>
-                <IconChevron size={14} />
-              </Link>
-            )}
-            {exams.length > 0 && !phone && (
-              <section className="panel">
-                <div className="panel-head">
-                  <h2>Anstehende Prüfungen</h2>
-                  <span className="row-gap">
-                    <button type="button" className="btn ghost sm" onClick={() => setExam(true)}>
-                      <IconPlus size={14} /> Prüfung eintragen
-                    </button>
-                    <Link to="/tools?tab=exams" className="small-link">
-                      Alle Prüfungen
-                    </Link>
-                  </span>
-                </div>
-                {exams.slice(0, 4).map((e) => {
+                </Link>
+              )}
+              {exams[0] ? (
+                (() => {
+                  const e = exams[0];
                   const r = readiness(data, e);
                   const p = dailyPlan(data, e);
                   const f = examForecast(examCards(data, e), data.reviews, examAt(e));
                   return (
-                    <div key={e.id} className="dash-exam-row">
-                      <Link to="/tools?tab=exams" className="dash-exam">
-                        <b>{e.title}</b>
-                        <span className="pill-count">{countdownText(e)}</span>
-                        <span className="bar">
-                          <i style={{ width: `${r.percent}%` }} />
-                        </span>
-                        <small>{r.total ? (p.left ? `heute ${p.left} Karten` : 'Tagesziel erreicht') : 'keine Decks'}</small>
-                      </Link>
-                      <div className="dash-exam-more">
-                        {r.total > 0 && (f.kind === 'ok' || f.kind === 'late') && (
-                          <span className={'fc-note ' + f.kind} title={forecastText(f)}>
-                            <i /> {forecastShort(f)}
-                          </span>
-                        )}
-                        {examDecks(data, e)[0] && (
-                          <Link to={deckUrl(data, examDecks(data, e)[0], 'exam')} className="small-link dash-exam-practice" title="Probeprüfung mit Note und Musterlösung">
-                            <IconTarget size={13} /> Prüfung üben
-                          </Link>
-                        )}
-                      </div>
-                    </div>
+                    <Link to="/tools?tab=exams" className="home-tile t-exam" title={r.total && (f.kind === 'ok' || f.kind === 'late') ? forecastText(f) : e.title}>
+                      <span className="home-tile-icon">
+                        <IconCalendar size={18} />
+                      </span>
+                      <b>Prüfung · {countdownText(e)}</b>
+                      <span className="home-tile-text">{e.title}</span>
+                      <small>
+                        {r.total > 0 && (f.kind === 'ok' || f.kind === 'late') && <i className={'tile-dot ' + f.kind} />}
+                        {r.total ? (p.left ? `heute ${p.left} ${p.left === 1 ? "Karte" : "Karten"}` : 'Tagesziel erreicht') : 'keine Decks'}
+                        {exams.length > 1 ? ` · +${exams.length - 1} weitere` : ''}
+                      </small>
+                    </Link>
                   );
-                })}
-              </section>
-            )}
-            {!exams.length && dueDecks.length > 0 && !phone && (
-              <button type="button" className="exam-cta" onClick={() => setExam(true)}>
-                <IconCalendar size={18} />
-                <span className="grow">
-                  <b>Prüfung eintragen</b>
-                  <small>Merkora plant deine Wiederholungen bis zum Termin</small>
-                </span>
-                <IconPlus size={16} />
-              </button>
-            )}
+                })()
+              ) : (
+                <button type="button" className="home-tile t-exam" onClick={() => setExam(true)}>
+                  <span className="home-tile-icon">
+                    <IconPlus size={18} />
+                  </span>
+                  <b>Prüfung</b>
+                  <span className="home-tile-text">Prüfung eintragen</span>
+                  <small>Merkora plant bis zum Termin</small>
+                </button>
+              )}
+            </div>
             {dueDecks.length > 0 && (
               <FoldPanel
                 className="home-due"
@@ -424,74 +353,9 @@ export default function Dashboard() {
         )}
       </div>
 
-      {!phone && (
-      <aside className="home-rail">
-        <div className="widget goal-widget">
-          <GoalRing cards={cardsToday} cardGoal={cardGoal} minutes={minutesToday} minuteGoal={minuteGoal} />
-        </div>
-        <Link to="/stats#aquarium" className="widget aquarium-widget" title="Dein Aquarium ansehen">
-          <small>Dein Aquarium</small>
-          <Aquarium compact />
-        </Link>
-        <MiniCalendar />
-      </aside>
-      )}
-
       {create && <CreateWithAI initialNotes={create.notes} initialFile={create.file} onClose={() => setCreate(null)} />}
       {anki && <AnkiImport onClose={() => setAnki(false)} />}
       {exam && <ExamDialog onClose={() => setExam(false)} />}
-    </div>
-  );
-}
-
-/** Small month calendar: exam days are filled, days you studied get a small orange dot. */
-function MiniCalendar() {
-  const data = useStore((s) => s.data);
-  const [month, setMonth] = useState(() => {
-    const d = new Date();
-    return new Date(d.getFullYear(), d.getMonth(), 1);
-  });
-  const examDays = new Map(data.exams.map((e) => [e.date, e.title]));
-  const studied = studyDays(data.reviews);
-  const first = (month.getDay() + 6) % 7;
-  const n = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
-  const today = dayKey(Date.now());
-  return (
-    <div className="widget mini-cal">
-      <div className="mini-cal-head">
-        <button type="button" className="icon-btn flip" aria-label="Vorheriger Monat" onClick={() => setMonth((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1))}>
-          <IconChevron size={14} />
-        </button>
-        <button type="button" className="icon-btn" aria-label="Nächster Monat" onClick={() => setMonth((m) => new Date(m.getFullYear(), m.getMonth() + 1, 1))}>
-          <IconChevron size={14} />
-        </button>
-        <b>{month.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}</b>
-        <span className="grow" />
-        <Link to="/tools?tab=exams" className="small-link">
-          Öffnen
-        </Link>
-      </div>
-      <div className="mini-grid">
-        {['M', 'D', 'M', 'D', 'F', 'S', 'S'].map((w, i) => (
-          <span key={i} className="mwd">
-            {w}
-          </span>
-        ))}
-        {Array.from({ length: first }, (_, i) => (
-          <span key={'e' + i} />
-        ))}
-        {Array.from({ length: n }, (_, i) => {
-          const k = dayKey(new Date(month.getFullYear(), month.getMonth(), i + 1).getTime());
-          const ex = examDays.get(k);
-          const learned = studied.get(k) ?? 0;
-          const tip = [ex, learned ? `gelernt: ${learned} ${learned === 1 ? 'Karte' : 'Karten'}` : ''].filter(Boolean).join(' · ');
-          return (
-            <Link key={k} to="/tools?tab=exams" className={`mcal-day ${k === today ? 'today' : ''} ${ex ? 'exam' : ''} ${learned ? 'studied' : ''}`} title={tip}>
-              {i + 1}
-            </Link>
-          );
-        })}
-      </div>
     </div>
   );
 }

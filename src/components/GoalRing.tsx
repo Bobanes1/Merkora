@@ -6,7 +6,7 @@ import { Confetti } from './Mascot';
  * The daily goal as a large double ring: outside the cards, inside the minutes. It fills up animated,
  * glows when the goal is reached, and celebrates once a day.
  */
-export function GoalRing({ cards, cardGoal, minutes, minuteGoal, compact = false }: { cards: number; cardGoal: number; minutes: number; minuteGoal: number; compact?: boolean }) {
+export function GoalRing({ cards, cardGoal, minutes, minuteGoal, compact = false, hero = false }: { cards: number; cardGoal: number; minutes: number; minuteGoal: number; compact?: boolean; hero?: boolean }) {
   const pc = Math.min(1, cards / Math.max(1, cardGoal));
   const pm = Math.min(1, minutes / Math.max(1, minuteGoal));
   const done = pc >= 1 && pm >= 1;
@@ -29,10 +29,10 @@ export function GoalRing({ cards, cardGoal, minutes, minuteGoal, compact = false
     }
     setParty(true);
   }, [done]);
-  const size = compact ? 120 : 168;
+  const size = hero ? 104 : compact ? 120 : 168;
   const R1 = 74, R2 = 54, c1 = 2 * Math.PI * R1, c2 = 2 * Math.PI * R2;
   return (
-    <div className={`goal-ring ${done ? 'done' : ''} ${compact ? 'compact' : ''}`}>
+    <div className={`goal-ring ${done ? 'done' : ''} ${compact ? 'compact' : ''} ${hero ? 'in-hero' : ''}`}>
       {party && <Confetti count={60} />}
       <svg viewBox="0 0 180 180" width={size} height={size} role="img" aria-label={`Tagesziel: ${cards} von ${cardGoal} Karten, ${minutes} von ${minuteGoal} Minuten`}>
         <defs>
