@@ -624,12 +624,12 @@ export function parseFigures(raw: unknown): { diagram: Diagram; caption?: string
 }
 
 /** Pictures for lessons: when and how (Studyflix-style visual templates first, plus optional custom SVG sketch). */
-export const FIGURE_RULE = `Bilder: Gib der Erklärung ein Feld "figures" mit 1–3 anschaulichen Grafiken im Erklärvideo-Stil – zu JEDER Lektion mindestens eine, sobald sich etwas zeigen lässt (nur reine Vokabel-Lektionen ohne Zusammenhang dürfen ohne). Wähle die Form passend zum Inhalt:
+export const FIGURE_RULE = `Bilder: Gib der Erklärung ein Feld "figures" mit 1–3 Grafiken im Erklärvideo-Stil – zu JEDER Lektion mindestens eine, sobald sich etwas zeigen lässt (nur reine Vokabel-Lektionen ohne Zusammenhang dürfen ohne). Wähle die Form passend zum Inhalt:
 - Kräfte, Einflüsse oder Richtungen an einem Objekt (z. B. Flugzeug, Auto, Schiff, Waage, Körper) → IMMER "forces" (NIE "concept"!) mit Bildmotiv ("icon"), echten Richtungen (up|down|left|right|up-left|up-right|down-left|down-right) und optional 2–3 umschaltbaren "states": [{"name":"Reiseflug","sizes":{"up":"m","down":"m","right":"m","left":"m"},"note":"…"},{"name":"Steigflug","sizes":{"up":"l","right":"l","down":"m","left":"s"},"tilt":-7,"note":"…"}].
 - Akteure & Wechselwirkung (z. B. Käufer ↔ Verkäufer, Sender → Empfänger, Sonne → Pflanze → Tier) → "scene" mit großen Bildmotiven.
 - Aufbau / Teile eines Objekts (z. B. Zelle, Herz, Tragfläche, Atom, Haus) → "callout" (mit optionalem "note" je Teil).
 - Bildmotive ("icon") für forces/scene/callout: ${ILLUSTRATION_NAMES.join(',')}.
-- Formel, Wachstum oder Abnahme → "plot" mit "expr" in x (z. B. "100/(1+3/100)^x", beide Achsen mit "label" UND Einheit); Trend ohne Formel → "axes"; Ablauf → "flow"; Kreislauf → "cycle"; Vergleich → "compare" oder "venn"; Gliederung → "hierarchy" oder "mindmap"; Anteile → "pie"; Zahlen → "bars"; Zeitliches → "timeline".
+- Formel, Wachstum oder Abnahme → "plot" mit der Formel als "expr" in x (z. B. "100/(1+3/100)^x", beide Achsen mit "label" UND Einheit); Trend ohne Formel → "axes"; Ablauf → "flow"; Kreislauf → "cycle"; Vergleich → "compare" oder "venn"; Gliederung → "hierarchy" oder "mindmap"; Anteile → "pie"; Zahlen → "bars"; Zeitliches → "timeline".
 - Nur für spezielle bildhafte Skizzen, die in keine Vorlage passen (z. B. Tragflächen-Querschnitt mit Luftstrom, Mondphasen, Stromkreis, Hebelgesetz): "illustration" {"title":"…","width":600,"height":320,"svg":"…nur innere SVG-Formen (path,circle,ellipse,rect,line,polygon,text) auf 600×320 mit Merkora-Farbplatzhaltern {{teal}},{{berry}},{{amber}},{{blue}},{{violet}},{{text}},{{muted}},{{soft}},{{node}} – sauber lesbar, keine Überlappungen…"}.
 Format: "figures":[{"caption":"ein Satz, was die Grafik zeigt","diagram":{"type":"…","title":"…",…}}]. Beschriftungen: Stichworte, höchstens 6 Wörter. ${DIAGRAM_RULE.slice(DIAGRAM_RULE.indexOf('Formen:'))}`;
 
