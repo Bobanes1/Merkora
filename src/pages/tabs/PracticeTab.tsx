@@ -54,7 +54,7 @@ export default function PracticeTab({ deck }: { deck: Deck }) {
         <button type="button" className="btn ghost sm" onClick={() => setOpenId(null)}>
           ‹ Alle Aufgaben
         </button>
-        <PracticeSetView set={open} host={host} />
+        <PracticeSetView key={open.id} set={open} host={host} />
       </div>
     );
   }

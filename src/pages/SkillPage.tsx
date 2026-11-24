@@ -250,6 +250,7 @@ function Planner({ skill }: { skill: Skill }) {
           {skill.plan.placement && (
             <div className="practice">
               <PracticeSetView
+                key={skill.plan.placement.id}
                 set={skill.plan.placement}
                 host={cardHost(
                   skill,
@@ -427,6 +428,7 @@ function Path({ skill }: { skill: Skill }) {
   if (view?.kind === 'lesson')
     return (
       <LessonView
+        key={view.id}
         skill={skill}
         lessonId={view.id}
         onBack={() => setView(null)}
@@ -722,6 +724,7 @@ function LessonView({ skill, lessonId, onBack, onPath, onOpen }: { skill: Skill;
       <Failed error={t.error} retry={() => void ensureLesson(skill.id, lessonId)} />
       {lesson.set && (
         <PracticeSetView
+          key={lesson.set.id}
           set={lesson.set}
           host={host}
           guided
@@ -817,7 +820,7 @@ function StageTestView({ skill, stageId, onBack, onProject }: { skill: Skill; st
       <Failed error={t.error} retry={() => void makeStageTest(skill.id, stageId)} />
       {stage.test && (
         <>
-          <PracticeSetView set={stage.test} host={host} focus head={
+          <PracticeSetView key={stage.test.id} set={stage.test} host={host} focus head={
                 <div className="lesson-head">
                   <p className="muted small grow">Stufentest: {stage.name} – ab 80 % richtig ist die Stufe erreicht.</p>
                   <CheckNote skillId={skill.id} set={stage.test} />
@@ -874,6 +877,7 @@ function ReviewView({ skill, plan, onBack }: { skill: Skill; plan?: ReviewPlan; 
       <Failed error={t.error} retry={() => void makeReview(skill.id, plan?.focus, plan?.count)} />
       {skill.review && !t.busy && (
         <PracticeSetView
+          key={skill.review.id}
           set={skill.review}
           host={host}
           focus

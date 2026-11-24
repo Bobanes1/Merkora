@@ -260,7 +260,7 @@ export function PracticeSetView({ set, host, head, onDone, guided, focus }: { se
         (isSprint ? (
           <SprintOverview set={set} bites={bites} host={host} hasExample={hasExample} labs={labs} onDone={() => setPhase('practice')} />
         ) : (
-          <BitesView set={set} bites={bites} host={host} onDone={() => setPhase(after('learn'))} onSkip={() => setPhase('practice')} />
+          <BitesView set={set} bites={bites} host={host} hasExample={hasExample} onDone={() => setPhase(after('learn'))} onSkip={() => setPhase('practice')} />
         ))}
       {phase === 'example' && (
         <>
@@ -643,7 +643,7 @@ function SprintOverview({ set, bites, host, hasExample, labs, onDone }: { set: P
     <>
       <section className="panel bite-card">
         <div className="bite-dots">
-          <span className="muted small">Kurz-Überblick · direkt ins Üben</span>
+          <span className="muted small">Kompakt-Theorie · danach direkt üben</span>
         </div>
         {bites.map((b, k) => (
           <div key={k} className="sprint-bite">
@@ -659,7 +659,7 @@ function SprintOverview({ set, bites, host, hasExample, labs, onDone }: { set: P
       {labs}
       <div className="phase-next">
         <button type="button" className="btn primary" onClick={onDone}>
-          Direkt zu den Aufgaben <IconChevron size={15} />
+          Jetzt selbst üben <IconChevron size={15} />
         </button>
       </div>
     </>
@@ -667,7 +667,7 @@ function SprintOverview({ set, bites, host, hasExample, labs, onDone }: { set: P
 }
 
 /** The explanation in bites: read a little, interact with a varied quick check, go on. */
-function BitesView({ set, bites, host, onDone, onSkip }: { set: PracticeSet; bites: Bite[]; host: SetHost; onDone: () => void; onSkip: () => void }) {
+function BitesView({ set, bites, host, hasExample, onDone, onSkip }: { set: PracticeSet; bites: Bite[]; host: SetHost; hasExample: boolean; onDone: () => void; onSkip: () => void }) {
   const [k, setK] = useState(() => Math.max(0, Math.min(set.bite ?? 0, bites.length - 1)));
   const [done, setDone] = useState(false);
   const actions = useRef<CheckActions>({});
@@ -678,6 +678,7 @@ function BitesView({ set, bites, host, onDone, onSkip }: { set: PracticeSet; bit
     setDone(false);
     actions.current = {};
     host.updateSet?.({ bite: to });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
   const next = () => (k < bites.length - 1 ? go(k + 1) : onDone());
   // keys: 1–4 answer choice/tf checks, Enter reveals/submits or goes on
@@ -703,10 +704,10 @@ function BitesView({ set, bites, host, onDone, onSkip }: { set: PracticeSet; bit
     <section className="panel bite-card" key={k}>
       <div className="bite-dots">
         {bites.map((_, j) => (
-          <button key={j} type="button" className={j === k ? 'on' : j < k ? 'done' : ''} onClick={() => go(j)} aria-label={`Häppchen ${j + 1}`} />
+          <button key={j} type="button" className={j === k ? 'on' : j < k ? 'done' : ''} onClick={() => go(j)} aria-label={`Theorie ${j + 1}`} />
         ))}
         <span className="muted small">
-          Häppchen {k + 1} von {bites.length}
+          Theorie {k + 1} von {bites.length}
         </span>
         <button type="button" className="link-btn small bite-skip" onClick={onSkip} title="Erklärung überspringen – direkt zu den Aufgaben">
           Kenn ich schon – direkt üben ›
@@ -743,7 +744,7 @@ function BitesView({ set, bites, host, onDone, onSkip }: { set: PracticeSet; bit
           </button>
         )}
         <button type="button" className="btn primary" onClick={next} disabled={!answered}>
-          {k < bites.length - 1 ? 'Weiter' : 'Verstanden'} <IconChevron size={15} />
+          {k < bites.length - 1 ? 'Weiter' : hasExample ? 'Weiter zum Beispiel' : 'Jetzt selbst üben'} <IconChevron size={15} />
         </button>
       </div>
     </section>

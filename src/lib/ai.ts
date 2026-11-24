@@ -593,7 +593,7 @@ Regeln: Eine Idee pro Karte. Vorderseite = präzise Frage oder Begriff. Rücksei
 ${TERM_RULE}
 ${FORMULA_RULE}
 Wähle prüfungsorientiert aus: Karten zu dem, was in einer Prüfung zu diesem Stoff gefragt werden kann – nicht zu Organisatorischem, Agenda oder Literaturlisten.${boldOn() ? '\n' + EMPHASIS_RULE : ''}
-${graphics ? DIAGRAM_RULE + '\n' : ''}${figures ? FIGURE_RULE + '\n' : ''}${slides.length ? SLIDE_IMAGE_RULE + '\n' : ''}Format: {${withTopics ? '"topics":["Thema 1","Thema 2"],' : ''}"cards":[{"front":"...","back":"..."${auto && !part?.gaps?.length ? ',"topic":1' : ''}${graphics ? ',"diagram":{"type":"flow","title":"…","steps":["…","…","…"]}' : ''}${figures ? ',"figure":7 (optional)' : ''}}]}${graphics ? ' – "diagram" bei den Karten, zu denen eine Grafik passt (etwa jede dritte Karte), sonst weglassen.' : ''}${JSON_RULE}`,
+${graphics ? DIAGRAM_RULE + '\n' : ''}${figures ? FIGURE_RULE + '\n' : ''}${slides.length ? SLIDE_IMAGE_RULE + '\n' : ''}Format: {${withTopics ? '"topics":["Thema 1","Thema 2"],' : ''}"cards":[{"front":"...","back":"..."${auto && !part?.gaps?.length ? ',"topic":1' : ''}${graphics ? ',"diagram":{"type":"scene","title":"…","actors":[{"id":"a","label":"…","icon":"…"},{"id":"b","label":"…","icon":"…"}],"arrows":[{"from":"a","to":"b","label":"…"}]}' : ''}${figures ? ',"figure":7 (optional)' : ''}}]}${graphics ? ' – Nutze "diagram" im Erklärvideo-Stil (bevorzugt scene, forces, callout, layers, plot oder Bild-compare mit "icon" statt trockener Texttabellen!) bei allen Karten, bei denen ein Bild das Verstehen erleichtert (etwa jede 2.–3. Karte), sonst weglassen.' : ''}${JSON_RULE}`,
     user: `${
       count > 0
         ? `Erstelle genau ${count} Karteikarten zu diesem Material.`
@@ -965,11 +965,11 @@ export async function testConnection(purpose: Purpose = 'gen'): Promise<string> 
  */
 export async function diagramForCard(front: string, back: string, kind?: string): Promise<Diagram> {
   const raw = await completeJson<Record<string, unknown>>(
-    `Du veranschaulichst Lernkarten mit einer einfachen Grafik. ${LANG_RULE}
+    `Du veranschaulichst Lernkarten mit einer bildhaften Grafik im Studyflix-Erklärvideo-Stil (bevorzugt scene, forces, callout, layers, plot oder Bild-compare mit "icon" statt trockener Textkästen). ${LANG_RULE}
 ${DIAGRAM_RULE}
-Antworte nur mit dem einen Grafik-Objekt (z. B. {"type":"flow",...}), ohne "diagram"-Hülle.`,
-    `Beschreibe eine Grafik, die diese Karte am besten veranschaulicht${kind ? ` – als Art „${kind}“ ("type":"${DIAGRAM_KINDS.find((k) => k.label === kind)?.id ?? ''}")` : ''}.\n\nFrage: ${front}\nAntwort: ${back}`,
-    800,
+Antworte nur mit dem einen Grafik-Objekt (z. B. {"type":"scene",...} oder {"type":"callout",...}), ohne "diagram"-Hülle.`,
+    `Beschreibe eine bildhafte Grafik, die diese Karte am besten veranschaulicht${kind ? ` – als Art „${kind}“ ("type":"${DIAGRAM_KINDS.find((k) => k.label === kind)?.id ?? ''}")` : ''}.\n\nFrage: ${front}\nAntwort: ${back}`,
+    1200,
   );
   const d = parseDiagram((raw as { diagram?: unknown }).diagram ?? raw);
   if (!d) throw new AiError('Die KI hat keine brauchbare Grafik beschrieben. Versuch es noch einmal oder wähle eine andere Art.');

@@ -1225,7 +1225,7 @@ console.log('Folien-Bilder für die KI');
   const withSlides = cardsPrompt('Material', 5, '', true, undefined, false, ['Folie 3 aus a.pdf', 'Folie 9 aus a.pdf']);
   ok(withSlides.system.includes('Angehängt sind Bilder') && withSlides.user.includes('Bild 1 = Folie 3 aus a.pdf; Bild 2 = Folie 9 aus a.pdf'), 'Prompt nennt die angehängten Folien');
   const plain = cardsPrompt('Material', 5, '', true);
-  ok(!plain.system.includes('Angehängt sind Bilder') && plain.system.includes('etwa jeder dritten Karte') && plain.system.includes('"diagram":{"type":"flow"') && !plain.system.includes('(optional)'), 'Grafik-Ziel im Prompt, Bilder-Hinweis nur mit Bildern');
+  ok(!plain.system.includes('Angehängt sind Bilder') && plain.system.includes('etwa jeder dritten Karte') && plain.system.includes('"diagram":{"type":"scene"') && !plain.system.includes('(optional)'), 'Grafik-Ziel im Prompt, Bilder-Hinweis nur mit Bildern');
   ok(plain.maxTokens === 400 + 5 * 500, 'mehr Platz pro Karte mit Grafik');
 
   const { slidesInPart } = await import('../src/lib/slideImages');
@@ -2493,7 +2493,63 @@ console.log('Bildhafte Erklärgrafiken (forces, scene, callout, illustration)');
   ok(illSvg.includes(D.PALETTES.dark.tones[0].line) && illSvg.includes(D.PALETTES.dark.tones[2].line), 'illustration setzt Merkora-Farbplatzhalter um');
   ok(D.sanitizeSvg('<script>alert(1)</script>') === null && D.sanitizeSvg('<rect x="0" y="0" width="10" height="10"/>') === null, 'sanitizeSvg lehnt leere oder zu kleine SVGs ab');
   ok(I.resolveIllustration('flugzeug')?.key === 'flugzeug' && I.resolveIllustration(undefined, 'Pflanzenzelle')?.key === 'zelle' && I.resolveIllustration('reise')?.key === 'flugzeug', 'resolveIllustration findet Motive per Name, Alias und Teilwort');
-  ok(P.FIGURE_RULE.includes('"forces"') && P.FIGURE_RULE.includes('"scene"') && P.FIGURE_RULE.includes('"callout"') && P.FIGURE_RULE.includes('"illustration"'), 'FIGURE_RULE beschreibt alle 4 neuen bildhaften Formen');
+  ok(I.ILLUSTRATION_NAMES.length >= 65, `Studyflix-Bibliothek hat ${I.ILLUSTRATION_NAMES.length} Bildmotive (mind. 65)`);
+  ok(
+    I.matchIllustration('Paketvermittlung') === 'paket' &&
+      I.matchIllustration('Leitungsvermittlung') === 'kabel' &&
+      I.matchIllustration('Kaufvertrag') === 'vertrag' &&
+      I.matchIllustration('DNA-Replikation') === 'dna' &&
+      I.matchIllustration('Führung') === null &&
+      I.matchIllustration('automatisch') === null,
+    'matchIllustration erkennt deutsche Zusammensetzungen ohne Fehlzuordnungen',
+  );
+
+  const layers = D.parseDiagram({
+    type: 'schichten',
+    title: 'TCP/IP-Schichtenmodell',
+    layers: [
+      { label: 'Anwendung', note: 'HTTP, DNS, E-Mail', icon: 'browser' },
+      { label: 'Transport', note: 'Pakete nummerieren & sichern', icon: 'paket' },
+      { label: 'Internet', note: 'Routing durch das Netz', icon: 'router' },
+      { label: 'Netzzugang', note: 'Kabel & WLAN', icon: 'kabel' },
+    ],
+  })!;
+  ok(layers?.type === 'layers' && layers.layers.length === 4 && D.diagramLabels(layers).length === 4, 'layers: Schichtenmodell & 4 Quiz-Labels');
+  const layersL = D.layoutDiagram(layers);
+  checkClean(layersL, 'layers 4 Schichten');
+  ok((layersL.art?.length ?? 0) === 4, 'layers: jede Schicht hat ein Studyflix-Motiv');
+
+  const flowArt = D.parseDiagram({
+    type: 'flow',
+    title: 'Vom Brief zum Paket',
+    steps: ['Nachricht in Pakete zerlegen', 'Jedes Paket einzeln senden', 'Pakete nehmen unterschiedliche Wege', 'Empfänger setzt Pakete zusammen'],
+  })!;
+  const flowL = D.layoutDiagram(flowArt);
+  checkClean(flowL, 'Studyflix-Flow Brief zum Paket');
+  ok((flowL.art?.length ?? 0) === 4, 'flow: Schritte bekommen automatisch Studyflix-Motive/Badges');
+
+  const cmpArt = D.parseDiagram({
+    type: 'compare',
+    title: 'Leitung gegen Paket',
+    columns: [
+      { title: 'Leitungsvermittlung', items: ['Feste Leitung', 'Blockiert bei Stille'] },
+      { title: 'Paketvermittlung', items: ['Daten in Pakete zerlegt', 'Jedes Paket sucht seinen Weg'] },
+    ],
+  })!;
+  const cmpL = D.layoutDiagram(cmpArt);
+  checkClean(cmpL, 'Studyflix-Compare Leitung vs Paket');
+  ok((cmpL.art?.length ?? 0) === 3 && cmpL.art!.some((a) => a.badge === 'VS'), 'compare: Spalten bekommen Studyflix-Motive und VS-Badge');
+
+  const cycArt = D.parseDiagram({
+    type: 'cycle',
+    title: 'Wasserkreislauf',
+    steps: ['Verdunstung', 'Wolkenbildung', 'Niederschlag', 'Abfluss'],
+  })!;
+  const cycL = D.layoutDiagram(cycArt);
+  checkClean(cycL, 'Studyflix-Cycle Wasserkreislauf');
+  ok((cycL.art?.length ?? 0) === 1, 'cycle: passendes Studyflix-Motiv im Zentrum');
+
+  ok(P.FIGURE_RULE.includes('"forces"') && P.FIGURE_RULE.includes('"scene"') && P.FIGURE_RULE.includes('"callout"') && P.FIGURE_RULE.includes('"layers"') && P.FIGURE_RULE.includes('"illustration"'), 'FIGURE_RULE beschreibt alle 5 bildhaften Formen');
 }
 
 console.log(failures ? `\n${failures} Test(s) fehlgeschlagen` : '\nAlle SRS-Tests bestanden');
