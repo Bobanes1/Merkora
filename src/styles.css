@@ -11847,3 +11847,14 @@ html.phone .goal-ring.in-hero .gr-legend { display: none; }
 .label-chip.ok { border-color: #1f9d6b; background: color-mix(in srgb, #1f9d6b 14%, var(--white)); }
 .label-chip.bad { border-color: #d93f3f; background: color-mix(in srgb, #d93f3f 12%, var(--white)); }
 .label-chip:disabled { cursor: default; opacity: 0.85; transform: none; }
+
+/* ---------- Studyflix visual diagrams: interactive states & crisp vector motion ---------- */
+.figure-states { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-bottom: 8px; }
+.figure-state-note { margin: 8px 0 0; padding: 8px 12px; border-radius: var(--r-md); background: var(--surface-2); border: 1px solid var(--line); font-size: 13.5px; color: var(--ink); text-align: center; }
+.diagram .dg-art { transition: transform 0.35s ease; }
+.diagram .dg-vec { animation: dg-vec-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes dg-vec-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .diagram .dg-vec, .diagram .dg-art { animation: none; transition: none; }
+}
+

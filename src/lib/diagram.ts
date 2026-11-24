@@ -4,7 +4,15 @@
  * Pure (no DOM) – tested in scripts/test-srs.mts.
  */
 import { ICON_NAMES, ICONS } from './diagramIcons';
+import { renderIllustration, type IllustrationPalette } from './illustrations';
 import { compileExpr, sampleCurve } from './plotExpr';
+
+export type ForceDir = 'up' | 'down' | 'left' | 'right' | 'up-left' | 'up-right' | 'down-left' | 'down-right';
+export type ForceVec = { dir: ForceDir; label: string; note?: string; size?: 's' | 'm' | 'l' };
+export type ForceState = { name: string; note?: string; sizes?: Partial<Record<ForceDir, 's' | 'm' | 'l'>>; tilt?: number };
+export type SceneActor = { id: string; label: string; icon?: string; sub?: string };
+export type SceneArrow = { from: string; to: string; label?: string; both?: boolean; dashed?: boolean };
+export type CalloutPart = { side: 'left' | 'right'; label: string; note?: string };
 
 export type Diagram = DiagramBase & {
   /** Small symbol per box: box label → symbol name (see lib/diagramIcons.ts). */
@@ -29,7 +37,11 @@ type DiagramBase =
   | { type: 'pie'; title?: string; unit?: string; slices: { label: string; value: number }[] }
   | { type: 'fishbone'; title?: string; effect: string; causes: { label: string; items: string[] }[] }
   | { type: 'numberline'; title?: string; min: number; max: number; unit?: string; marks: { value: number; label: string }[]; ranges?: { from: number; to: number; label: string }[] }
-  | { type: 'network'; title?: string; nodes: string[]; links: { from: string; to: string; label?: string }[] };
+  | { type: 'network'; title?: string; nodes: string[]; links: { from: string; to: string; label?: string }[] }
+  | { type: 'forces'; title?: string; subject: string; icon?: string; vectors: ForceVec[]; states?: ForceState[] }
+  | { type: 'scene'; title?: string; actors: SceneActor[]; arrows: SceneArrow[] }
+  | { type: 'callout'; title?: string; subject: string; icon?: string; parts: CalloutPart[] }
+  | { type: 'illustration'; title?: string; width: number; height: number; svg: string };
 
 export type PlotAxis = { label: string; min: number; max: number };
 
@@ -188,6 +200,10 @@ const TYPE_ALIASES: Record<string, string> = {
   ishikawa: 'fishbone', 'ursache-wirkung': 'fishbone', 'cause-effect': 'fishbone',
   zahlenstrahl: 'numberline', 'number-line': 'numberline', skala: 'numberline', scale: 'numberline',
   netz: 'network', netzwerk: 'network', begriffsnetz: 'network', 'concept-map': 'network', graphnetwork: 'network',
+  kraft: 'forces', kraefte: 'forces', kräfte: 'forces', force: 'forces', vektor: 'forces', vektoren: 'forces', vectors: 'forces',
+  szene: 'scene', akteure: 'scene', wechselwirkung: 'scene', interaction: 'scene',
+  beschriftung: 'callout', aufbau: 'callout', teile: 'callout', anatomie: 'callout', querschnitt: 'callout', annotated: 'callout',
+  svg: 'illustration', skizze: 'illustration', zeichnung: 'illustration', bild: 'illustration', sketch: 'illustration',
 };
 
 /**
@@ -399,9 +415,188 @@ function parseBase(raw: unknown): DiagramBase | null {
       if (!x || !y) return null;
       return { type: 'axes', title, x, y, shape, ...(marks.length ? { marks } : {}), ...(label ? { label } : {}), ...second };
     }
+    case 'forces': {
+      const subject = str(r.subject ?? r.center ?? r.object ?? r.label, 40);
+      if (!subject) return null;
+      const icon = str(r.icon ?? r.motif, 30) || undefined;
+      const seen = new Set<ForceDir>();
+      const vectors: ForceVec[] = [];
+      for (const rawV of Array.isArray(r.vectors ?? r.forces) ? ((r.vectors ?? r.forces) as unknown[]) : []) {
+        const o = (rawV ?? {}) as Record<string, unknown>;
+        const dir = parseForceDir(o.dir ?? o.direction ?? o.pos);
+        const label = str(o.label ?? o.name, 40);
+        if (!dir || !label || seen.has(dir)) continue;
+        seen.add(dir);
+        const note = str(o.note ?? o.text, 55) || undefined;
+        const size = parseForceSize(o.size);
+        vectors.push({ dir, label, ...(note ? { note } : {}), ...(size ? { size } : {}) });
+        if (vectors.length >= 6) break;
+      }
+      if (vectors.length < 2) return null;
+      const states: ForceState[] = [];
+      for (const rawS of Array.isArray(r.states) ? (r.states as unknown[]) : []) {
+        const o = (rawS ?? {}) as Record<string, unknown>;
+        const name = str(o.name ?? o.label, 28);
+        if (!name) continue;
+        const note = str(o.note ?? o.text, 140) || undefined;
+        const sizes: Partial<Record<ForceDir, 's' | 'm' | 'l'>> = {};
+        if (o.sizes && typeof o.sizes === 'object') {
+          for (const [dk, dv] of Object.entries(o.sizes as Record<string, unknown>)) {
+            const d2 = parseForceDir(dk);
+            const sz = parseForceSize(dv);
+            if (d2 && sz) sizes[d2] = sz;
+          }
+        }
+        const tiltNum = Number(o.tilt);
+        const tilt = Number.isFinite(tiltNum) ? Math.max(-18, Math.min(18, Math.round(tiltNum))) : undefined;
+        states.push({ name, ...(note ? { note } : {}), ...(Object.keys(sizes).length ? { sizes } : {}), ...(tilt !== undefined ? { tilt } : {}) });
+        if (states.length >= 4) break;
+      }
+      return { type: 'forces', title, subject, ...(icon ? { icon } : {}), vectors, ...(states.length >= 2 ? { states } : {}) };
+    }
+    case 'scene': {
+      const actors: SceneActor[] = [];
+      const alias = new Map<string, string>();
+      for (const rawA of Array.isArray(r.actors ?? r.nodes) ? ((r.actors ?? r.nodes) as unknown[]) : []) {
+        const o = (rawA ?? {}) as Record<string, unknown>;
+        const label = typeof rawA === 'string' || typeof rawA === 'number' ? str(rawA, 36) : str(o.label ?? o.name ?? o.id, 36);
+        if (!label || actors.some((a) => key(a.label) === key(label)) || actors.length >= 4) continue;
+        const id = typeof rawA === 'object' && rawA && o.id != null ? str(o.id, 24) || label : label;
+        const icon = typeof rawA === 'object' && rawA ? str(o.icon ?? o.motif, 30) || undefined : undefined;
+        const sub = typeof rawA === 'object' && rawA ? str(o.sub ?? o.note ?? o.role, 36) || undefined : undefined;
+        actors.push({ id, label, ...(icon ? { icon } : {}), ...(sub ? { sub } : {}) });
+        alias.set(key(id), id);
+        alias.set(key(label), id);
+      }
+      if (actors.length < 2) return null;
+      const resolveActor = (v: unknown) => alias.get(key(str(v, 36)));
+      const arrows: SceneArrow[] = [];
+      for (const rawL of Array.isArray(r.arrows ?? r.links) ? ((r.arrows ?? r.links) as unknown[]) : []) {
+        const o = (rawL ?? {}) as Record<string, unknown>;
+        const from = resolveActor(o.from), to = resolveActor(o.to);
+        if (!from || !to || from === to) continue;
+        if (arrows.some((a) => a.from === from && a.to === to)) continue;
+        const label = str(o.label, 34) || undefined;
+        arrows.push({ from, to, ...(label ? { label } : {}), ...(o.both === true ? { both: true } : {}), ...(o.dashed === true ? { dashed: true } : {}) });
+        if (arrows.length >= 6) break;
+      }
+      if (!arrows.length) return null;
+      return { type: 'scene', title, actors, arrows };
+    }
+    case 'callout': {
+      const subject = str(r.subject ?? r.center ?? r.object, 40);
+      if (!subject) return null;
+      const icon = str(r.icon ?? r.motif, 30) || undefined;
+      const rawParts = Array.isArray(r.parts ?? r.labels ?? r.items) ? ((r.parts ?? r.labels ?? r.items) as unknown[]) : [];
+      const parts: CalloutPart[] = [];
+      rawParts.forEach((rawP, idx) => {
+        if (parts.length >= 6) return;
+        const o = (rawP ?? {}) as Record<string, unknown>;
+        const label = typeof rawP === 'string' || typeof rawP === 'number' ? str(rawP, 36) : str(o.label ?? o.name ?? o.text, 36);
+        if (!label) return;
+        const sideRaw = String(o.side ?? '').toLowerCase().trim();
+        const side: 'left' | 'right' = sideRaw === 'left' || sideRaw === 'links' ? 'left' : sideRaw === 'right' || sideRaw === 'rechts' ? 'right' : idx % 2 === 0 ? 'left' : 'right';
+        const note = typeof rawP === 'object' && rawP ? str(o.note ?? o.desc, 48) || undefined : undefined;
+        parts.push({ side, label, ...(note ? { note } : {}) });
+      });
+      if (parts.length < 2) return null;
+      return { type: 'callout', title, subject, ...(icon ? { icon } : {}), parts };
+    }
+    case 'illustration': {
+      const cleaned = sanitizeSvg(r.svg, r.width, r.height);
+      if (!cleaned) return null;
+      return { type: 'illustration', title, width: cleaned.width, height: cleaned.height, svg: cleaned.svg };
+    }
     default:
       return null;
   }
+}
+
+const FORCE_DIR_MAP: Record<string, ForceDir> = {
+  up: 'up', oben: 'up', nord: 'up', n: 'up', hoch: 'up', top: 'up',
+  down: 'down', unten: 'down', sued: 'down', s: 'down', runter: 'down', bottom: 'down',
+  right: 'right', rechts: 'right', vorn: 'right', vorne: 'right', ost: 'right', e: 'right', forward: 'right', front: 'right',
+  left: 'left', links: 'left', hinten: 'left', west: 'left', w: 'left', back: 'left', backward: 'left',
+  'up-left': 'up-left', 'oben-links': 'up-left', 'links-oben': 'up-left', nw: 'up-left',
+  'up-right': 'up-right', 'oben-rechts': 'up-right', 'rechts-oben': 'up-right', 'oben-vorn': 'up-right', ne: 'up-right',
+  'down-left': 'down-left', 'unten-links': 'down-left', 'links-unten': 'down-left', sw: 'down-left',
+  'down-right': 'down-right', 'unten-rechts': 'down-right', 'rechts-unten': 'down-right', se: 'down-right',
+};
+function parseForceDir(v: unknown): ForceDir | null {
+  const k = String(v ?? '').toLowerCase().replace(/ü/g, 'ue').replace(/[\s_]+/g, '-').trim();
+  return FORCE_DIR_MAP[k] ?? null;
+}
+function parseForceSize(v: unknown): 's' | 'm' | 'l' | undefined {
+  const k = String(v ?? '').toLowerCase().trim();
+  if (k === 's' || k === 'small' || k === 'klein' || k === 'kurz') return 's';
+  if (k === 'm' || k === 'medium' || k === 'mittel' || k === 'normal') return 'm';
+  if (k === 'l' || k === 'large' || k === 'gross' || k === 'groß' || k === 'lang') return 'l';
+  return undefined;
+}
+
+const SVG_ALLOWED_TAGS = new Set([
+  'g', 'path', 'circle', 'ellipse', 'rect', 'line', 'polyline', 'polygon',
+  'text', 'tspan', 'defs', 'marker', 'lineargradient', 'radialgradient', 'stop',
+]);
+const SVG_SHAPE_TAGS = new Set(['path', 'circle', 'ellipse', 'rect', 'line', 'polyline', 'polygon']);
+const SVG_ALLOWED_ATTRS = new Set([
+  'd', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry', 'width', 'height', 'points',
+  'fill', 'fill-opacity', 'stroke', 'stroke-width', 'stroke-dasharray', 'stroke-linecap', 'stroke-linejoin',
+  'opacity', 'transform', 'font-size', 'font-weight', 'text-anchor', 'dominant-baseline', 'dx', 'dy',
+  'id', 'marker-end', 'marker-start', 'viewbox', 'refx', 'refy', 'markerwidth', 'markerheight', 'orient',
+  'offset', 'stop-color', 'stop-opacity', 'gradientunits',
+]);
+const SVG_ATTR_CASE: Record<string, string> = {
+  viewbox: 'viewBox', refx: 'refX', refy: 'refY', markerwidth: 'markerWidth', markerheight: 'markerHeight', gradientunits: 'gradientUnits',
+};
+const SVG_TAG_CASE: Record<string, string> = { lineargradient: 'linearGradient', radialgradient: 'radialGradient' };
+
+/**
+ * Strictly sanitizes AI-generated Studyflix SVG snippets (pure, no DOM).
+ * Keeps only safe drawing tags/attributes, strips scripts/links/event handlers, and requires at least 2 shapes.
+ */
+export function sanitizeSvg(raw: unknown, widthHint?: unknown, heightHint?: unknown): { svg: string; width: number; height: number } | null {
+  if (typeof raw !== 'string') return null;
+  let text = raw.trim();
+  if (!text || text.length > 16000) return null;
+  let w = Number(widthHint), h = Number(heightHint);
+  const vb = /\bviewBox\s*=\s*["']\s*0\s+0\s+([\d.]+)\s+([\d.]+)\s*["']/i.exec(text);
+  if (vb) {
+    if (!Number.isFinite(w)) w = Number(vb[1]);
+    if (!Number.isFinite(h)) h = Number(vb[2]);
+  }
+  const width = Number.isFinite(w) ? Math.max(320, Math.min(800, Math.round(w))) : 600;
+  const height = Number.isFinite(h) ? Math.max(180, Math.min(480, Math.round(h))) : 320;
+  // Strip outer <svg> wrapper and remove dangerous blocks completely
+  text = text
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<(script|style|foreignobject|iframe|object|embed)\b[\s\S]*?<\/\1>/gi, '')
+    .replace(/<\/?svg\b[^>]*>/gi, '')
+    .trim();
+  if (!text) return null;
+
+  let shapes = 0;
+  const out = text.replace(/<(\/?)([a-zA-Z][\w:-]*)([^>]*)(\/?)>/g, (_m, close: string, rawTag: string, rawAttrs: string, selfClose: string) => {
+    const tag = rawTag.toLowerCase();
+    if (!SVG_ALLOWED_TAGS.has(tag)) return '';
+    const canonTag = SVG_TAG_CASE[tag] ?? tag;
+    if (close) return `</${canonTag}>`;
+    if (SVG_SHAPE_TAGS.has(tag)) shapes++;
+    const safeAttrs: string[] = [];
+    const attrRe = /([a-zA-Z_:][\w:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
+    let m: RegExpExecArray | null;
+    while ((m = attrRe.exec(rawAttrs))) {
+      const k = m[1].toLowerCase();
+      const v = (m[2] ?? m[3] ?? '').trim();
+      if (k.startsWith('on') || !SVG_ALLOWED_ATTRS.has(k)) continue;
+      if (/javascript:|data:|vbscript:|expression\(|https?:\/\//i.test(v)) continue;
+      if (/url\(/i.test(v) && !/^url\(#[\w-]+\)$/i.test(v)) continue;
+      const canonAttr = SVG_ATTR_CASE[k] ?? k;
+      safeAttrs.push(`${canonAttr}="${v.replace(/"/g, '&quot;')}"`);
+    }
+    return `<${canonTag}${safeAttrs.length ? ' ' + safeAttrs.join(' ') : ''}${selfClose ? '/' : ''}>`;
+  });
+  return shapes >= 2 ? { svg: out.trim(), width, height } : null;
 }
 
 // ---------- layout ----------
@@ -457,11 +652,13 @@ export type Box = {
   icon?: string;
 };
 const ICON_KINDS = new Set<Box['kind']>(['node', 'accent', 'node2', 'accent2', 'soft', 'text', 'textOn']);
-export type Line = { pts: [number, number][]; arrow?: boolean; dashed?: boolean; curve?: boolean; both?: boolean; tone?: number; muted?: boolean };
+export type Line = { pts: [number, number][]; arrow?: boolean; dashed?: boolean; curve?: boolean; both?: boolean; tone?: number; muted?: boolean; width?: number; quad?: [number, number]; dotStart?: boolean };
 /** Filled areas behind everything (Venn circles, pyramid steps), in colour `hue` (1–5). */
 export type Area = { circle?: [number, number, number]; poly?: [number, number][]; fill: 'node' | 'accent' | 'soft'; hue?: number };
+/** Illustrated motif placed inside a visual diagram (forces, scene, callout). */
+export type ArtItem = { icon?: string; subject?: string; x: number; y: number; w: number; h: number; tilt?: number; tone?: number };
 const hueOf = (i: number) => (i % 5) + 1;
-export type Layout = { width: number; height: number; boxes: Box[]; lines: Line[]; areas: Area[]; fs: number };
+export type Layout = { width: number; height: number; boxes: Box[]; lines: Line[]; areas: Area[]; art?: ArtItem[]; rawSvg?: { svg: string; width: number; height: number; y: number }; fs: number };
 
 let NF = FS; // font size of the boxes of the diagram being laid out
 /** Symbols of the diagram being laid out (by label, spaces/hyphens ignored); a box with a symbol has 24 px less room for text. */
@@ -788,12 +985,14 @@ function layoutModel(d: Extract<Diagram, { type: 'model' }>, top: number, boxes:
 
 const NODE_KINDS = (hl: boolean, i: number, highlightIndex: number): Box['kind'] => (hl ? (i === highlightIndex ? 'accent' : 'node') : i === 0 ? 'accent' : 'node');
 
-export function layoutDiagram(d: Diagram): Layout {
+export function layoutDiagram(d: Diagram, stateIndex?: number): Layout {
   NF = FS;
   ICON_OF = new Map(Object.entries(d.icons ?? {}).map(([l, i]) => [nk(l), i]));
   const boxes: Box[] = [];
   const lines: Line[] = [];
   const areas: Area[] = [];
+  const art: ArtItem[] = [];
+  let rawSvg: Layout['rawSvg'];
   let y = PAD;
   if (d.title) {
     const tl = wrap(d.title, W - 2 * PAD, 17);
@@ -1332,6 +1531,199 @@ export function layoutDiagram(d: Diagram): Layout {
         boxes.push({ ...tag(yes ? 'Ja' : 'Nein', cx, (midY + b.y - 6) / 2 + 2, 60), ...(c.no ? { tone: 2 } : {}) });
       }
     }
+  } else if (d.type === 'forces') {
+    const cx = W / 2;
+    const artW = 152, artH = 98;
+    const st = stateIndex !== undefined ? d.states?.[stateIndex] : undefined;
+    const tilt = st?.tilt ?? 0;
+    const dy = tilt ? Math.max(-7, Math.min(7, Math.round(tilt * 0.75))) : 0;
+    const hasTop = d.vectors.some((v) => v.dir === 'up' || v.dir === 'up-left' || v.dir === 'up-right');
+    const hasBot = d.vectors.some((v) => v.dir === 'down' || v.dir === 'down-left' || v.dir === 'down-right');
+    const cy = y + (hasTop ? 156 : 74);
+    art.push({ icon: d.icon, subject: d.subject, x: cx - artW / 2, y: cy - artH / 2 + dy, w: artW, h: artH, tilt, tone: 1 });
+    // Show subtle subject caption only when no downward vector claims the space right beneath the object
+    if (!d.vectors.some((v) => v.dir === 'down')) {
+      const sl = wrap(d.subject, 170, 13);
+      boxes.push({ x: cx - 85, y: cy + artH / 2 + 6, w: 170, h: sl.length * 17, lines: sl, kind: 'label', fs: 13 });
+    }
+    const dirTone: Record<ForceDir, number> = { up: 1, down: 2, right: 3, left: 4, 'up-right': 3, 'up-left': 4, 'down-right': 5, 'down-left': 2 };
+    const lenOf = (sz?: 's' | 'm' | 'l') => (sz === 's' ? 42 : sz === 'l' ? 74 : 58);
+    let maxY = cy + artH / 2 + (hasBot ? 148 : 34);
+    for (const v of d.vectors) {
+      const tone = dirTone[v.dir];
+      const len = lenOf(st?.sizes?.[v.dir] ?? v.size);
+      const isLR = v.dir === 'left' || v.dir === 'right';
+      const maxBW = isLR ? 132 : 164;
+      const linesV = wrap(v.label, maxBW - 18, 14);
+      const bw = Math.min(maxBW, Math.max(96, Math.max(...linesV.map((l) => l.length)) * charW(14) + 26));
+      const bh = linesV.length * 18 + 14;
+      let sx = cx, sy = cy, ex = cx, ey = cy, bx = cx - bw / 2, by = cy - bh / 2;
+      if (v.dir === 'up') {
+        sy = cy - artH / 2 - 4;
+        ey = sy - len;
+        bx = cx - bw / 2;
+        by = Math.max(y, ey - bh - 10);
+      } else if (v.dir === 'down') {
+        sy = cy + artH / 2 + 4;
+        ey = sy + len;
+        bx = cx - bw / 2;
+        by = ey + 10;
+      } else if (v.dir === 'right') {
+        sx = cx + artW / 2 + 4;
+        ex = sx + len;
+        bx = Math.min(W - PAD - bw, ex + 10);
+        by = cy - bh / 2;
+      } else if (v.dir === 'left') {
+        sx = cx - artW / 2 - 4;
+        ex = sx - len;
+        bx = Math.max(PAD, ex - 10 - bw);
+        by = cy - bh / 2;
+      } else {
+        const dx = v.dir.endsWith('right') ? 1 : -1;
+        const vy = v.dir.startsWith('up') ? -1 : 1;
+        const dLen = Math.round(len * 0.82);
+        sx = cx + dx * 60;
+        sy = cy + vy * 38;
+        ex = sx + dx * dLen;
+        ey = sy + vy * dLen;
+        bx = dx > 0 ? Math.min(W - PAD - bw, ex + 8) : Math.max(PAD, ex - 8 - bw);
+        by = vy < 0 ? Math.max(y, ey - bh - 4) : ey + 4;
+      }
+      lines.push({ pts: [[sx, sy], [ex, ey]], arrow: true, tone, width: 4 });
+      boxes.push({ x: bx, y: by, w: bw, h: bh, lines: linesV, kind: 'node', fs: 14, tone });
+      let bottom = by + bh;
+      if (v.note) {
+        const nl = wrap(v.note, Math.max(bw, 130), 12);
+        const nw = Math.max(bw, 130);
+        const nx = Math.max(PAD, Math.min(W - PAD - nw, bx + bw / 2 - nw / 2));
+        const ny = by + bh + 4;
+        boxes.push({ x: nx, y: ny, w: nw, h: nl.length * 15, lines: nl, kind: 'label', fs: 12 });
+        bottom = ny + nl.length * 15;
+      }
+      maxY = Math.max(maxY, bottom);
+    }
+    y = maxY + 4;
+  } else if (d.type === 'scene') {
+    const n = d.actors.length;
+    const cardW = n === 2 ? 164 : n === 3 ? 148 : 172;
+    const artW = n === 3 ? 82 : 94;
+    const artH = n === 3 ? 54 : 62;
+    const placed = new Map<string, { x: number; y: number; w: number; h: number; cx: number; cy: number }>();
+    const hasSub = d.actors.some((a) => !!a.sub);
+    const cardH = artH + (hasSub ? 66 : 48);
+    // Reserve space above row 1 if two actors exchange opposing arrows (top curve)
+    const hasPairOpp = d.arrows.some((a) => d.arrows.some((b) => b.from === a.to && b.to === a.from));
+    const topY = y + (n <= 3 && hasPairOpp ? 24 : 8);
+    const coords: [number, number][] =
+      n === 2
+        ? [[24, topY], [W - 24 - cardW, topY]]
+        : n === 3
+          ? [[16, topY], [Math.round((W - cardW) / 2), topY], [W - 16 - cardW, topY]]
+          : [[24, topY], [W - 24 - cardW, topY], [24, topY + cardH + 68], [W - 24 - cardW, topY + cardH + 68]];
+    let maxY = topY + cardH;
+    d.actors.forEach((a, idx) => {
+      const [x0, y0] = coords[idx];
+      const tone = hueOf(idx);
+      // Soft Studyflix stage card behind motif + label
+      boxes.push({ x: x0, y: y0, w: cardW, h: cardH, lines: [], kind: 'soft', tone });
+      art.push({ icon: a.icon, subject: a.label, x: x0 + (cardW - artW) / 2, y: y0 + 8, w: artW, h: artH, tone });
+      const ll = wrap(a.label, cardW - 16, 14);
+      const lh = ll.length * 18 + 8;
+      boxes.push({ x: x0 + 6, y: y0 + artH + 10, w: cardW - 12, h: lh, lines: ll, kind: 'node', fs: 14, tone });
+      if (a.sub) {
+        const sl = wrap(a.sub, cardW - 14, 12);
+        boxes.push({ x: x0 + 7, y: y0 + artH + 12 + lh, w: cardW - 14, h: sl.length * 15, lines: sl, kind: 'label', fs: 12 });
+      }
+      placed.set(a.id, { x: x0, y: y0, w: cardW, h: cardH, cx: x0 + cardW / 2, cy: y0 + cardH / 2 });
+      maxY = Math.max(maxY, y0 + cardH);
+    });
+    const usedPair = new Set<string>();
+    d.arrows.forEach((ar, idx) => {
+      const A = placed.get(ar.from), B = placed.get(ar.to);
+      if (!A || !B) return;
+      const opp = d.arrows.some((o) => o.from === ar.to && o.to === ar.from);
+      const pairKey = [ar.from, ar.to].sort().join('|');
+      const secondOfPair = opp && usedPair.has(pairKey);
+      usedPair.add(pairKey);
+      const tone = hueOf(idx);
+      const dx = B.cx - A.cx, dy = B.cy - A.cy;
+      const dist = Math.hypot(dx, dy) || 1;
+      const nx = -dy / dist, ny = dx / dist;
+      const longJump = n === 3 && Math.abs(dx) > 300;
+      const bow = longJump ? 68 : opp ? (secondOfPair ? 34 : -34) : 0;
+      const sPt: [number, number] = Math.abs(dx) >= Math.abs(dy)
+        ? [A.cx + Math.sign(dx) * (A.w / 2 + 4), A.cy + (opp ? (secondOfPair ? 14 : -14) : longJump ? A.h / 2 + 4 : 0)]
+        : [A.cx + (opp ? (secondOfPair ? 16 : -16) : 0), A.cy + Math.sign(dy) * (A.h / 2 + 4)];
+      const ePt: [number, number] = Math.abs(dx) >= Math.abs(dy)
+        ? [B.cx - Math.sign(dx) * (B.w / 2 + 6), B.cy + (opp ? (secondOfPair ? 14 : -14) : longJump ? B.h / 2 + 4 : 0)]
+        : [B.cx + (opp ? (secondOfPair ? 16 : -16) : 0), B.cy - Math.sign(dy) * (B.h / 2 + 6)];
+      const mx = (sPt[0] + ePt[0]) / 2 + (longJump ? 0 : nx * bow);
+      const my = (sPt[1] + ePt[1]) / 2 + (longJump ? bow : ny * bow);
+      if (bow) lines.push({ pts: [sPt, ePt], quad: [mx, my], arrow: true, both: ar.both, dashed: ar.dashed, tone, width: 3 });
+      else lines.push({ pts: [sPt, ePt], arrow: true, both: ar.both, dashed: ar.dashed, tone, width: 3 });
+      if (ar.label) {
+        // Point on quadratic Bezier at t=0.5 is 0.25*P0 + 0.5*Q + 0.25*P1
+        const tx = bow ? 0.25 * sPt[0] + 0.5 * mx + 0.25 * ePt[0] : (sPt[0] + ePt[0]) / 2;
+        const ty = (bow ? 0.25 * sPt[1] + 0.5 * my + 0.25 * ePt[1] : (sPt[1] + ePt[1]) / 2) + (longJump ? 14 : opp ? (secondOfPair ? 14 : -14) : -14);
+        const tb = tag(ar.label, tx, ty, n === 2 ? 190 : 124);
+        boxes.push({ ...tb, tone });
+        maxY = Math.max(maxY, tb.y + tb.h);
+      }
+      if (longJump) maxY = Math.max(maxY, my);
+    });
+    y = maxY + 6;
+  } else if (d.type === 'callout') {
+    const lefts = d.parts.filter((p) => p.side === 'left');
+    const rights = d.parts.filter((p) => p.side === 'right');
+    // Balance automatically if all parts ended up on one side
+    if (!lefts.length || !rights.length) {
+      const allP = [...d.parts];
+      lefts.length = 0;
+      rights.length = 0;
+      allP.forEach((p, idx) => (idx % 2 === 0 ? lefts : rights).push(p));
+    }
+    const bw = 166;
+    const rows = Math.max(lefts.length, rights.length, 2);
+    const stepH = 66;
+    const blockH = Math.max(138, rows * stepH);
+    const artW = 164, artH = 112;
+    const cx = W / 2, cy = y + blockH / 2;
+    art.push({ icon: d.icon, subject: d.subject, x: cx - artW / 2, y: cy - artH / 2 - 6, w: artW, h: artH, tone: 1 });
+    const sl = wrap(d.subject, 170, 13);
+    boxes.push({ x: cx - 85, y: cy + artH / 2 - 2, w: 170, h: sl.length * 17, lines: sl, kind: 'bold', fs: 13 });
+    let maxY = cy + artH / 2 + sl.length * 17 + 8;
+    const placeCol = (col: CalloutPart[], isLeft: boolean, toneStart: number) => {
+      const colStep = blockH / Math.max(1, col.length);
+      col.forEach((part, idx) => {
+        const tone = hueOf(toneStart + idx);
+        const py = y + idx * colStep + colStep / 2;
+        const pl = wrap(part.label, bw - 18, 14);
+        const bh = pl.length * 18 + 14;
+        const bx = isLeft ? PAD : W - PAD - bw;
+        const by = Math.max(y, py - bh / 2);
+        boxes.push({ x: bx, y: by, w: bw, h: bh, lines: pl, kind: 'node', fs: 14, tone });
+        let bottom = by + bh;
+        if (part.note) {
+          const nl = wrap(part.note, bw, 12);
+          boxes.push({ x: bx, y: by + bh + 3, w: bw, h: nl.length * 15, lines: nl, kind: 'label', fs: 12 });
+          bottom = by + bh + 3 + nl.length * 15;
+        }
+        maxY = Math.max(maxY, bottom);
+        const midY = by + bh / 2;
+        const anchorY = cy - artH * 0.34 + (col.length > 1 ? (idx / (col.length - 1)) * (artH * 0.68) : artH * 0.34);
+        const anchorX = isLeft ? cx - artW * 0.42 : cx + artW * 0.42;
+        const elbowX = isLeft ? bx + bw + 18 : bx - 18;
+        const boxEdgeX = isLeft ? bx + bw + 2 : bx - 2;
+        lines.push({ pts: [[anchorX, anchorY], [elbowX, midY], [boxEdgeX, midY]], tone, width: 2.2, dotStart: true });
+      });
+    };
+    placeCol(lefts, true, 0);
+    placeCol(rights, false, lefts.length);
+    y = maxY + 4;
+  } else if (d.type === 'illustration') {
+    const scaledH = Math.round(((W - 2 * PAD) * d.height) / d.width);
+    rawSvg = { svg: d.svg, width: d.width, height: d.height, y };
+    y += scaledH;
   }
   // symbols: on the boxes whose label has one (the text was wrapped narrower for it above)
   if (ICON_OF.size)
@@ -1340,7 +1732,7 @@ export function layoutDiagram(d: Diagram): Layout {
       const ic = ICON_OF.get(nk(b.lines.join(' ')));
       if (ic) b.icon = ic;
     }
-  return { width: W, height: Math.ceil(y + PAD), boxes, lines, areas, fs: NF };
+  return { width: W, height: Math.ceil(y + PAD), boxes, lines, areas, ...(art.length ? { art } : {}), ...(rawSvg ? { rawSvg } : {}), fs: NF };
 }
 
 function curve(s: Shape): (t: number) => number {
@@ -1398,7 +1790,8 @@ const r1 = (n: number) => Math.round(n * 10) / 10;
 /** How a graphic is shown while learning: one label covered ("?") or shown as the answer, or built up step by step. */
 export type DiagramView = { hide?: number; reveal?: number; steps?: boolean; /** built up step by step: only the first `upto` text boxes are shown */ upto?: number; /** several labels covered, numbered 1, 2, 3 … (labelling tasks) */ hideMany?: number[];
   /** labelling by drag & drop: the term placed on covered box k (shown instead of the number) */ filled?: (string | undefined)[];
-  /** after checking: covered box k right (green) or wrong (red) */ marks?: (boolean | undefined)[] };
+  /** after checking: covered box k right (green) or wrong (red) */ marks?: (boolean | undefined)[];
+  /** active state index for interactive `forces` diagrams (e.g. Reiseflug / Steigflug / Landung) */ state?: number };
 
 /** A term inside a covered box: as many words per line as fit, at most two lines (the rest shortened). */
 function fitLines(text: string, width: number, fs: number): string[] {
@@ -1457,7 +1850,7 @@ export function diagramBoxCount(d: Diagram): number {
 export const STEP_TYPES: Diagram['type'][] = ['flow', 'cycle', 'timeline', 'pyramid'];
 
 export function renderDiagram(d: Diagram, p: Palette = PALETTES.light, view?: DiagramView): string {
-  const L = layoutDiagram(d);
+  const L = layoutDiagram(d, view?.state);
   const quiz = view && (view.hide !== undefined || view.reveal !== undefined || view.hideMany?.length) ? quizBoxes(L) : [];
   const steps = !!view?.steps && STEP_TYPES.includes(d.type);
   let step = 0;
@@ -1465,11 +1858,11 @@ export function renderDiagram(d: Diagram, p: Palette = PALETTES.light, view?: Di
   const id = 'dg' + (p.tones[0].line + p.tones[1].line + (p.bg ?? '')).replace(/[^0-9a-z]/gi, '');
   const tn = (h?: number) => p.tones[(Math.max(1, h ?? 1) - 1) % p.tones.length];
   const out: string[] = [];
-  const marker = (name: string, color: string) =>
-    `<marker id="${id}-${name}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 1.2 L10 5 L0 8.8 z" fill="${color}"/></marker>`;
+  const marker = (name: string, color: string, sz = 8, refX = 9) =>
+    `<marker id="${id}-${name}" viewBox="0 0 10 10" refX="${refX}" refY="5" markerWidth="${sz}" markerHeight="${sz}" orient="auto-start-reverse"><path d="M0 1.2 L10 5 L0 8.8 z" fill="${color}"/></marker>`;
   out.push(
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${L.width} ${L.height}" width="${L.width}" height="${L.height}" font-family="Manrope, Arial, sans-serif" role="img">`,
-    `<defs>${p.tones.map((t, i) => marker('a' + (i + 1), t.line)).join('')}${marker('m', p.muted)}<filter id="${id}-s" x="-10%" y="-10%" width="120%" height="150%"><feDropShadow dx="0" dy="1.5" stdDeviation="1.6" flood-color="${p.shadow}"/></filter></defs>`,
+    `<defs>${p.tones.map((t, i) => marker('a' + (i + 1), t.line) + marker('b' + (i + 1), t.line, 5.5, 7.5)).join('')}${marker('m', p.muted)}<filter id="${id}-s" x="-10%" y="-10%" width="120%" height="150%"><feDropShadow dx="0" dy="1.5" stdDeviation="1.6" flood-color="${p.shadow}"/></filter></defs>`,
   );
   if (p.bg) out.push(`<rect width="100%" height="100%" fill="${p.bg}"/>`);
   for (const a of L.areas) {
@@ -1482,16 +1875,73 @@ export function renderDiagram(d: Diagram, p: Palette = PALETTES.light, view?: Di
       out.push(`<polygon points="${a.poly.map(([x, y]) => `${r1(x)},${r1(y)}`).join(' ')}" fill="${fill}" stroke="${a.fill === 'accent' ? fill : t.stroke}" stroke-width="1.4" stroke-linejoin="round" filter="url(#${id}-s)"/>`);
     }
   }
+  // Empty soft backdrop cards (used in `scene` behind illustrations) render before art and lines
+  const backdrop = (b: Box) => !b.lines.length && b.kind === 'soft';
+  for (const b of L.boxes) {
+    if (!backdrop(b)) continue;
+    const t = tn(b.tone);
+    out.push(`<rect x="${r1(b.x)}" y="${r1(b.y)}" width="${r1(b.w)}" height="${r1(b.h)}" rx="14" fill="${t.soft}" stroke="${t.stroke}" stroke-width="1.2" stroke-opacity="0.5"/>`);
+  }
+  if (L.art?.length) {
+    for (const item of L.art) {
+      const t = tn(item.tone);
+      const artPal: IllustrationPalette = {
+        accent: t.accent,
+        node: t.node,
+        stroke: t.stroke,
+        text: p.text,
+        onAccent: p.onAccent,
+        berry: p.tones[1].line,
+        amber: p.tones[2].line,
+        blue: p.tones[3].line,
+        violet: p.tones[4].line,
+      };
+      const inner = renderIllustration(item.icon, item.subject, item.x, item.y, item.w, item.h, artPal);
+      const cx = r1(item.x + item.w / 2), cy = r1(item.y + item.h / 2);
+      out.push(item.tilt ? `<g class="dg-art" transform="rotate(${item.tilt} ${cx} ${cy})">${inner}</g>` : `<g class="dg-art">${inner}</g>`);
+    }
+  }
+  if (L.rawSvg) {
+    const scale = (L.width - 2 * PAD) / L.rawSvg.width;
+    const themed = L.rawSvg.svg
+      .replace(/\{\{teal\}\}/g, p.tones[0].line)
+      .replace(/\{\{berry\}\}/g, p.tones[1].line)
+      .replace(/\{\{amber\}\}/g, p.tones[2].line)
+      .replace(/\{\{blue\}\}/g, p.tones[3].line)
+      .replace(/\{\{violet\}\}/g, p.tones[4].line)
+      .replace(/\{\{text\}\}/g, p.text)
+      .replace(/\{\{muted\}\}/g, p.muted)
+      .replace(/\{\{soft\}\}/g, p.tones[0].soft)
+      .replace(/\{\{node\}\}/g, p.tones[0].node)
+      .replace(/\{\{bg\}\}/g, p.bg ?? p.tones[0].soft)
+      .replace(/\bid="([\w-]+)"/g, `id="${id}-i-$1"`)
+      .replace(/url\(#([\w-]+)\)/g, `url(#${id}-i-$1)`);
+    out.push(`<g transform="translate(${PAD} ${r1(L.rawSvg.y)}) scale(${scale.toFixed(4)})">${themed}</g>`);
+  }
   for (const l of L.lines) {
-    const pts = l.pts.map(([x, y]) => `${r1(x)},${r1(y)}`).join(' ');
     const color = l.muted ? p.muted : tn(l.tone).line;
-    const m = `url(#${id}-${l.muted ? 'm' : 'a' + (((Math.max(1, l.tone ?? 1) - 1) % p.tones.length) + 1)})`;
-    out.push(
-      `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="${l.muted && !l.arrow ? 1.5 : l.pts.length > 10 ? 2.6 : 2}"${l.dashed ? ' stroke-dasharray="6 5"' : ''} stroke-linejoin="round" stroke-linecap="round"${l.arrow ? ` marker-end="${m}"` : ''}${l.both ? ` marker-start="${m}"` : ''}/>`,
-    );
+    const sw = l.width ?? (l.muted && !l.arrow ? 1.5 : l.pts.length > 10 ? 2.6 : 2);
+    const toneIdx = ((Math.max(1, l.tone ?? 1) - 1) % p.tones.length) + 1;
+    const m = `url(#${id}-${l.muted ? 'm' : (sw >= 3.5 ? 'b' : 'a') + toneIdx})`;
+    if (l.quad && l.pts.length === 2) {
+      const [[x1, y1], [x2, y2]] = l.pts;
+      const [qx, qy] = l.quad;
+      out.push(
+        `<path class="dg-vec" d="M ${r1(x1)} ${r1(y1)} Q ${r1(qx)} ${r1(qy)} ${r1(x2)} ${r1(y2)}" fill="none" stroke="${color}" stroke-width="${sw}"${l.dashed ? ' stroke-dasharray="6 5"' : ''} stroke-linecap="round"${l.arrow ? ` marker-end="${m}"` : ''}${l.both ? ` marker-start="${m}"` : ''}/>`,
+      );
+    } else {
+      const pts = l.pts.map(([x, y]) => `${r1(x)},${r1(y)}`).join(' ');
+      out.push(
+        `<polyline${sw >= 3 ? ' class="dg-vec"' : ''} points="${pts}" fill="none" stroke="${color}" stroke-width="${sw}"${l.dashed ? ' stroke-dasharray="6 5"' : ''} stroke-linejoin="round" stroke-linecap="round"${l.arrow ? ` marker-end="${m}"` : ''}${l.both ? ` marker-start="${m}"` : ''}/>`,
+      );
+    }
+    if (l.dotStart && l.pts.length) {
+      out.push(`<circle cx="${r1(l.pts[0][0])}" cy="${r1(l.pts[0][1])}" r="3.6" fill="${color}"/>`);
+    }
   }
   const isMatrixY = (b: Box) => d.type === 'matrix' && b.kind === 'label' && b.w < 40;
   const drawBox = (b: Box, bi: number) => {
+    if (backdrop(b)) return;
     const qi = quiz.indexOf(bi);
     const many = qi >= 0 && view?.hideMany ? view.hideMany.indexOf(qi) : -1;
     if (qi >= 0 && (qi === view?.hide || many >= 0)) {
@@ -1627,7 +2077,9 @@ export function diagramsToSvg(html: string): string {
 export const RULE_ICONS = ['person', 'gruppe', 'gehirn', 'idee', 'frage', 'warnung', 'haken', 'kreuz', 'uhr', 'kalender', 'geld', 'trend', 'ziel', 'suche', 'chat', 'megafon', 'fernseher', 'smartphone', 'internet', 'zeitung', 'buch', 'schule', 'herz', 'gesundheit', 'firma', 'gesetz', 'politik', 'natur', 'wasser', 'zahnrad', 'daten', 'dokument', 'liste', 'waage', 'forschung', 'experiment', 'rechnen', 'wachstum', 'austausch', 'beziehung', 'erfolg', 'schutz', 'gesellschaft', 'familie', 'technik', 'loesung', 'medizin', 'stufen'];
 
 /** What the AI is told when cards may get a graphic: describe it, never draw it. Kept short – it goes with every card request. */
-export const DIAGRAM_RULE = `Grafiken: Gib etwa jeder dritten Karte ein Feld "diagram" – wo das Material Abläufe, Modelle, Gliederungen, Vergleiche, Zahlen, Formeln oder Zusammenhänge enthält; keine bei reinen Begriffen/Fakten. Nur eine Beschreibung (kein SVG), Merkora zeichnet. Beschriftungen: Stichworte, höchstens 6 Wörter. Formen:
+export const DIAGRAM_RULE = `Grafiken: Gib etwa jeder dritten Karte ein Feld "diagram" – wo das Material Abläufe, Kräfte, Akteure, Aufbau, Modelle, Gliederungen, Vergleiche, Zahlen, Formeln oder Zusammenhänge enthält; keine bei reinen Begriffen/Fakten. Beschriftungen: Stichworte, höchstens 6 Wörter. Formen:
+forces {"subject":"Flugzeug","icon":"flugzeug","vectors":[{"dir":"up","label":"Auftrieb"},{"dir":"down","label":"Gewicht"}]} Kräfte/Richtungen (dir: up|down|left|right; nie concept!)
+scene {"actors":[{"id":"a","label":"Käufer","icon":"person"},{"id":"b","label":"Verkäufer","icon":"fabrik"}],"arrows":[{"from":"a","to":"b","label":"Geld"}]} 2–4 Akteure · callout {"subject":"Zelle","icon":"zelle","parts":[{"side":"left","label":"Kern"},{"side":"right","label":"Membran"}]} 2–6 Teile
 flow {"steps":["…","…"]} Ablauf 2–8 · cycle {"steps":[…]} Kreislauf 3–8
 hierarchy {"root":"…","children":[{"label":"…","children":["…"]}]} Gliederung, bis 5 Äste à 4
 compare {"columns":[{"title":"…","items":["…"]}]} Vergleich, 2–3 Spalten · venn {"sets":[{"label":"…","items":[…]},{…}],"shared":[…]}
@@ -1639,7 +2091,7 @@ bars {"unit":"%","bars":[{"label":"…","value":42}]} · pie {"slices":[{"label"
 plot {"x":{"label":"…","min":0,"max":10},"y":{…},"functions":[{"label":"…","expr":"10 - x"}],"points":[{"x":5,"label":"…"}]} exakte Kurve aus Formel in x (+-*/^ sqrt exp ln log sin cos pi e), bis 3
 axes {"x":"…","y":"…","shape":"steigend|fallend|u|umgekehrtes-u|s-kurve|linear"} Verlauf ohne Formel
 fishbone {"effect":"…","causes":[{"label":"…","items":["…"]}]} Ursache-Wirkung · numberline {"min":0,"max":14,"marks":[{"value":7,"label":"…"}],"ranges":[{"from":0,"to":7,"label":"…"}]}
-Immer mit "type" und "title". Optional "highlight":"Kasten" (Kern der Karte) und "icons":{"Beschriftung":"symbol"} für die meisten Kästen; Symbole: ${RULE_ICONS.join(',')}.`;
+Immer mit "type" und "title". Optional "highlight":"Kasten" und "icons":{"Beschriftung":"symbol"}; Symbole: ${RULE_ICONS.join(',')}.`;
 
 // ---------- graphics of one card (improve per card) ----------
 const DIAGRAM_RE = /<div class="diagram" data-diagram="([^"]*)"><\/div>/;
@@ -1680,6 +2132,9 @@ export const withDiagram = (html: string, d: Diagram) => stripGraphics(html) + d
 
 /** Names of the diagram kinds (for choosing one). */
 export const DIAGRAM_KINDS: { id: Diagram['type']; label: string }[] = [
+  { id: 'forces', label: 'Kräfte & Richtungen am Objekt' },
+  { id: 'scene', label: 'Bildhafte Szene (Akteure & Pfeile)' },
+  { id: 'callout', label: 'Objekt-Aufbau (Beschriftung)' },
   { id: 'flow', label: 'Ablauf' },
   { id: 'cycle', label: 'Kreislauf' },
   { id: 'hierarchy', label: 'Gliederung' },

@@ -382,14 +382,42 @@ export function TablesView({ tables }: { tables: Table[] }) {
 }
 
 // ---------- a picture of the explanation ----------
-/** A graphic of the explanation, shown whole with its caption. (narration is still accepted from older lessons, not shown) */
+/** A graphic of the explanation, shown whole immediately (with optional state switches for `forces` diagrams). */
 export function BuildFigure({ diagram, caption }: { diagram: Diagram; caption?: string; narration?: string[] }) {
   const theme = useResolvedTheme();
-  const svg = useMemo(() => renderDiagram(diagram, PALETTES[theme]), [diagram, theme]);
+  const states = diagram.type === 'forces' && diagram.states?.length ? diagram.states : undefined;
+  const [stateIdx, setStateIdx] = useState(0);
+  const active = states ? Math.min(stateIdx, states.length - 1) : undefined;
+  const svg = useMemo(
+    () => renderDiagram(diagram, PALETTES[theme], active !== undefined ? { state: active } : undefined),
+    [diagram, theme, active],
+  );
+  const stateNote = states && active !== undefined ? states[active]?.note : undefined;
   return (
     <figure className="practice-figure build-figure">
-      {/* our own SVG with escaped labels – safe to insert */}
+      {states && (
+        <div className="figure-states" role="tablist" aria-label="Zustand umschalten">
+          {states.map((st, idx) => (
+            <button
+              key={idx}
+              type="button"
+              role="tab"
+              aria-selected={idx === active}
+              className={'btn sm ' + (idx === active ? 'primary' : 'outline')}
+              onClick={() => setStateIdx(idx)}
+            >
+              {st.name}
+            </button>
+          ))}
+        </div>
+      )}
+      {/* our own SVG with escaped labels / strictly sanitized illustration – safe to insert */}
       <div className="diagram" dangerouslySetInnerHTML={{ __html: svg }} />
+      {stateNote && (
+        <p className="figure-state-note">
+          <CardContent text={stateNote} className="inline" />
+        </p>
+      )}
       {caption && <figcaption>{caption}</figcaption>}
     </figure>
   );
