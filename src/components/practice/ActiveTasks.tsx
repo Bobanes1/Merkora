@@ -2,16 +2,13 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEven
 import { createPortal } from 'react-dom';
 import { CardContent } from '../CardContent';
 import { IconArrowDown, IconArrowUp, IconGrip } from '../Icons';
-import { completeJson, hasKey, LANG_RULE } from '../../lib/ai';
-import { taskList } from '../../lib/practice';
+import { completeJson, LANG_RULE } from '../../lib/ai';
 import {
   caseGradePrompt,
   fullGrade,
   matchesSolution,
   checkClassify,
   checkCloze,
-  gapCheckPrompt,
-  parseGapCheck,
   checkMulti,
   checkOrder,
   slotFor,
@@ -371,78 +368,132 @@ export function ClassifyTaskView({ ctx, task }: { ctx: TaskCtx; task: ClassifyTa
 }
 
 
-/** Fill gaps in a text (or code / a scheme). */
+/** Fill the gaps from a word bank: drag a word into a gap – or tap a word (it goes into the chosen or next free gap). No typing. */
 export function ClozeTaskView({ ctx, task }: { ctx: TaskCtx; task: ClozeTask }) {
   const { prog, host, i } = ctx;
-  const [given, setGiven] = useState<string[]>(() => (prog.solved ? task.gaps.map((g) => g[0]) : task.gaps.map(() => '')));
+  // the bank: the right word of every gap plus the distractors, mixed the same way each time
+  const bank = useMemo(() => {
+    const words = [...task.gaps.map((g) => g[0]), ...(task.distractors ?? [])];
+    return shuffled(words.map((_, k) => k), seedOf(ctx.set.id) + i * 7).map((k) => words[k]);
+  }, [task, ctx.set.id, i]);
+  // placed[gap] = index into bank (or -1)
+  const [placed, setPlaced] = useState<number[]>(() => {
+    if (!prog.solved) return task.gaps.map(() => -1);
+    const taken = new Set<number>();
+    return task.gaps.map((g) => {
+      const j = bank.findIndex((w, k) => w === g[0] && !taken.has(k));
+      taken.add(j);
+      return j;
+    });
+  });
   const [marks, setMarks] = useState<boolean[] | null>(null);
-  const [busy, setBusy] = useState(false);
-  // answers Pip also counted, with the reason (shown under the text)
-  const [notes, setNotes] = useState<string[]>([]);
-  const check = async () => {
-    const r = checkCloze(task, given);
-    let gaps = r.gaps;
-    // gaps not in the list: Pip looks once more whether the answer is right in content too
-    const unsure = gaps.map((ok, k) => !ok && !!given[k]?.trim());
-    if (unsure.some(Boolean) && hasKey()) {
-      setBusy(true);
-      const sentence = task.text.replace(/\{\{(\d+)\}\}/g, (_m, n) => (Number(n) - 1 === 0 ? '____' : '…'));
-      const got: string[] = [];
-      gaps = await Promise.all(
-        gaps.map(async (ok, k) => {
-          if (!unsure[k]) return ok;
-          try {
-            const text = task.text.replace(/\{\{(\d+)\}\}/g, (_m, n) => (Number(n) - 1 === k ? '____' : '…'));
-            const q = gapCheckPrompt(text || sentence, task.gaps[k], given[k].trim(), task.explain);
-            const v = parseGapCheck(await completeJson(q.system, q.user, 400));
-            if (v.ok) got.push(`„${given[k].trim()}“ zählt auch: ${v.note || 'passt inhaltlich.'}`);
-            return v.ok;
-          } catch {
-            return false;
-          }
-        }),
-      );
-      setBusy(false);
-      setNotes(got);
-      // remembered, so the same answer counts at once next time
-      if (got.length && host.updateSet) {
-        const tasks = taskList(ctx.set).map((t, j) => (j === i && t.type === 'cloze' ? { ...t, gaps: t.gaps.map((g, k) => (gaps[k] && !r.gaps[k] ? [...g, given[k].trim()] : g)) } : t));
-        host.updateSet({ tasks });
-      }
-    }
-    const right = gaps.every(Boolean);
-    setMarks(gaps);
-    host.progress(i, { tries: prog.tries + 1, ...(right ? { solved: true } : { last: given.map((g, k) => `Lücke ${k + 1}: ${g || '(leer)'}`).join('; '), mistake: undefined }) });
+  const [sel, setSel] = useState<number | null>(null);
+  const [drag, setDrag] = useState<{ w: number; x: number; y: number } | null>(null);
+  const [over, setOver] = useState<number | null>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const justDragged = useRef(false);
+  const right = !!marks?.every(Boolean) || (!!prog.solved && placed.every((w, k) => w >= 0 && task.gaps[k].includes(bank[w])));
+  const given = placed.map((w) => (w >= 0 ? bank[w] : ''));
+  const used = new Set(placed.filter((w) => w >= 0));
+
+  const put = (w: number, gap: number) => {
+    if (right) return;
+    setPlaced((p) => p.map((x, k) => (k === gap ? w : x === w ? -1 : x)));
+    setMarks(null);
+    setSel(null);
   };
-  const right = !!marks?.every(Boolean);
+  const takeOut = (gap: number) => {
+    if (right) return;
+    setPlaced((p) => p.map((x, k) => (k === gap ? -1 : x)));
+    setMarks(null);
+  };
+  const tapWord = (w: number) => {
+    if (justDragged.current || right) return;
+    const target = sel ?? placed.findIndex((x) => x < 0);
+    if (target >= 0) put(w, target);
+  };
+  const tapGap = (gap: number) => {
+    if (justDragged.current || right) return;
+    if (placed[gap] >= 0) return takeOut(gap);
+    setSel((s) => (s === gap ? null : gap));
+  };
+  const gapAt = (x: number, y: number): number | null => {
+    const el = document.elementFromPoint(x, y)?.closest('[data-gap]') as HTMLElement | null;
+    return el && boxRef.current?.contains(el) ? Number(el.dataset.gap) : null;
+  };
+  const startDrag = (e: ReactPointerEvent, w: number, from?: number) => {
+    if (right || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    const sx = e.clientX, sy = e.clientY;
+    let moved = false;
+    const move = (ev: PointerEvent) => {
+      if (!moved && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 6) return;
+      moved = true;
+      ev.preventDefault();
+      setDrag({ w, x: ev.clientX, y: ev.clientY });
+      setOver(gapAt(ev.clientX, ev.clientY));
+    };
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      if (!moved) return;
+      justDragged.current = true;
+      setTimeout(() => (justDragged.current = false), 50);
+      const g = gapAt(ev.clientX, ev.clientY);
+      if (g !== null) put(w, g);
+      else if (from !== undefined) takeOut(from);
+      setDrag(null);
+      setOver(null);
+    };
+    window.addEventListener('pointermove', move, { passive: false });
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+  };
+  const check = () => {
+    const r = checkCloze(task, given);
+    setMarks(r.gaps);
+    host.progress(i, { tries: prog.tries + 1, ...(r.right ? { solved: true } : { last: given.map((g, k) => `Lücke ${k + 1}: ${g || '(leer)'}`).join('; '), mistake: undefined }) });
+  };
   const mono = /[{};=()]/.test(task.text) && /\n/.test(task.text);
   return (
-    <div className="practice-task">
+    <div className="practice-task" ref={boxRef}>
       <CardContent text={task.prompt} className="practice-problem" />
       <div className={'cloze' + (mono ? ' mono' : '')}>
         {clozeParts(task.text).map((p, k) =>
           typeof p === 'string' ? (
             <span key={k}>{p}</span>
           ) : (
-            <input
+            <button
               key={k}
-              className={'cloze-gap' + (marks ? (marks[p] ? ' ok' : ' bad') : '')}
-              value={given[p] ?? ''}
-              size={Math.max(6, (task.gaps[p]?.[0]?.length ?? 6) + 2)}
-              aria-label={`Lücke ${p + 1}`}
-              onChange={(e) => (setGiven((g) => g.map((x, j) => (j === p ? e.target.value : x))), setMarks(null))}
-              onKeyDown={(e) => e.key === 'Enter' && !busy && (right ? ctx.isLast || ctx.onNext() : void check())}
-              autoCapitalize="off"
-              spellCheck={false}
-            />
+              type="button"
+              data-gap={p}
+              className={'cloze-slot' + (placed[p] >= 0 ? ' filled' : '') + (sel === p ? ' sel' : '') + (over === p ? ' over' : '') + (marks ? (marks[p] ? ' ok' : ' bad') : '')}
+              style={{ minWidth: `${Math.max(5, (task.gaps[p]?.[0]?.length ?? 5) + 2)}ch` }}
+              onClick={() => tapGap(p)}
+              onPointerDown={(e) => placed[p] >= 0 && startDrag(e, placed[p], p)}
+              aria-label={placed[p] >= 0 ? `Lücke ${p + 1}: ${bank[placed[p]]} – antippen zum Entfernen` : `Lücke ${p + 1} (leer)`}
+            >
+              {placed[p] >= 0 ? bank[placed[p]] : p + 1}
+            </button>
           ),
         )}
       </div>
+      {!right && (
+        <div className="cloze-bank" aria-label="Wörter">
+          {bank.map((w, k) =>
+            used.has(k) ? null : (
+              <button key={k} type="button" className="label-chip" onPointerDown={(e) => startDrag(e, k)} onClick={() => tapWord(k)}>
+                {w}
+              </button>
+            ),
+          )}
+        </div>
+      )}
+      {!right && <small className="muted label-help">Zieh die Wörter in die Lücken – oder tippe ein Wort an. Eine gefüllte Lücke antippen nimmt das Wort wieder heraus.</small>}
       <div className="row-gap">
-        <CheckButton ctx={ctx} right={right} onCheck={() => void check()} disabled={given.every((g) => !g.trim())} busy={busy} />
+        <CheckButton ctx={ctx} right={right} onCheck={check} disabled={placed.some((w) => w < 0)} />
       </div>
-      <Verdict ok={marks ? right : null} text={marks && !right ? `${marks.filter(Boolean).length} von ${marks.length} Lücken richtig.` : ''} />
-      {notes.length > 0 && <small className="muted gap-notes">{notes.join(' ')}</small>}
+      <Verdict ok={marks ? right : null} text={marks && !right ? `${marks.filter(Boolean).length} von ${marks.length} Lücken richtig – tausch die roten aus.` : ''} />
       {right && <Explain text={task.explain} />}
       <Hints hints={task.hints} used={prog.hints} onMore={() => host.progress(i, { hints: prog.hints + 1 })} />
       <TaskFooter noNext
@@ -450,6 +501,13 @@ export function ClozeTaskView({ ctx, task }: { ctx: TaskCtx; task: ClozeTask }) 
         solution={<p className="practice-steps">{clozeParts(task.text).map((p) => (typeof p === 'string' ? p : `[${task.gaps[p][0]}]`)).join('')}</p>}
         card={() => [task.prompt + '\n\n' + task.text.replace(/\{\{(\d+)\}\}/g, '___'), clozeParts(task.text).map((p) => (typeof p === 'string' ? p : task.gaps[p][0])).join('')]}
       />
+      {drag &&
+        createPortal(
+          <div className="label-ghost" style={{ left: drag.x, top: drag.y }}>
+            {bank[drag.w]}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

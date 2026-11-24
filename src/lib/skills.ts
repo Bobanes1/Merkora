@@ -329,11 +329,12 @@ function priorPace(skill: Skill): 'fast' | 'normal' {
 }
 
 /** Skill lessons explain in bites with varied mini-checks (not only multiple choice). */
-export const BITE_RULE = `ERKLÄRUNG IN HÄPPCHEN – keine Textwand. Feld "bites": 3–4 Häppchen in sinnvoller Reihenfolge:
-[{"title":"kurzer, themenspezifischer Titel","text":"Markdown, höchstens etwa 80 Wörter, ein Gedanke","figure":0,"check":{…}}]
-- Mische verschiedene kurze "check"-Formate – NICHT jedes Häppchen als Multiple Choice (höchstens 1× "choice" pro Lektion):
+export const BITE_RULE = `ERKLÄRUNG IN HÄPPCHEN – keine Textwand. Feld "bites": 3–5 Häppchen in sinnvoller Reihenfolge:
+[{"title":"kurzer, themenspezifischer Titel","text":"Markdown, höchstens etwa 100 Wörter, ein Gedanke","figure":0,"check":{…}}]
+- Höchstens 2 Häppchen pro Lektion bekommen einen "check" – die anderen sind reine Erklärung (kein "check"). Erklären geht vor Abfragen.
+- Mische die kurzen "check"-Formate – NICHT jedes Häppchen als Multiple Choice (höchstens 1× "choice" pro Lektion):
   • Wahr oder Irrtum: {"type":"tf","statement":"steile Behauptung oder typischer Irrtum","answer":false,"why":"ein Satz Auflösung"}
-  • Mini-Lücke: {"type":"gap","prompt":"Merksatz mit ___ für das Schlüsselwort","answer":["Wort","Synonym"],"why":"ein Satz"} – die Lücke muss EINDEUTIG sein (der Satz lässt nur diesen Begriff offen); "answer" enthält ALLE richtigen Varianten (Synonyme, Ein-/Mehrzahl, genauere Fachbegriffe, ß/ss).
+  • Mini-Lücke: {"type":"gap","prompt":"Merksatz mit ___ für das Schlüsselwort","answer":["Wort","Synonym"],"options":["Wort","Ablenker 1","Ablenker 2"],"why":"ein Satz"} – "options": das richtige Wort plus 2 plausible falsche, die Person tippt eines an – die Lücke muss EINDEUTIG sein (der Satz lässt nur diesen Begriff offen); "answer" enthält ALLE richtigen Varianten (Synonyme, Ein-/Mehrzahl, genauere Fachbegriffe, ß/ss).
   • Kurz überlegen & aufdecken: {"type":"reveal","q":"kurze Denkfrage zum Häppchen","answer":"knappe Antwort in 1–2 Sätzen","why":"optionaler Zusatz"}
   • Kurz schätzen: {"type":"estimate","q":"Schätzfrage","min":0,"max":100,"answer":37,"tolerance":5,"unit":"%","why":"ein Satz"}
   • Auswahl (höchstens 1×): {"type":"choice","q":"leichte Frage","options":["…","…","…"],"correct":1,"why":"ein Satz"}
@@ -462,7 +463,7 @@ export function lessonVariety(skill: Skill, stageIndex: number, lessonIndex: num
   return { style, preferredOpeners, overused, avoidClassify, styleRule, taskRule: parts.join('\n') };
 }
 
-export function lessonPrompt(skill: Skill, stage: Stage, lesson: Lesson, count = skill.mini ? 4 : 6): Prompt {
+export function lessonPrompt(skill: Skill, stage: Stage, lesson: Lesson, count = skill.mini ? 4 : 5): Prompt {
   const all = skill.stages.flatMap((st) => st.lessons);
   const i = all.findIndex((l) => l.id === lesson.id);
   const stageIndex = skill.stages.findIndex((st) => st.id === stage.id);
@@ -477,10 +478,11 @@ ${variety.styleRule}
 ${variety.taskRule}
 ${skill.mini ? MINI_RULE + ' Höchstens 3 Häppchen.' : paceOf(skill) === 'fast' ? FAST_RULE : paceOf(skill) === 'gentle' ? GENTLE_RULE + '\n' + beginnerRule(skill, stageIndex, i) : beginnerRule(skill, stageIndex, i)}
 ${FIGURE_RULE}
+NUR ERKLÄRTES ABFRAGEN: Jede Aufgabe prüft nur, was in den Häppchen, im Beispiel oder in früheren Lektionen erklärt wurde. Braucht eine Aufgabe einen neuen Begriff oder Sachverhalt (z. B. „Orderbuch“), muss er vorher in einem Häppchen erklärt sein – sonst lass ihn weg.
 REIHENFOLGE IM JSON: zuerst "topic", dann "problems" (die Aufgaben), danach alles andere (Häppchen, Beispiel, Bilder …) – so gehen bei einer zu langen Antwort nie die Aufgaben verloren. Halte Texte knapp.
 ${JSON_ONLY}`,
     user: `${context(skill)}\n\nSTUFE: ${stage.name} – ${stage.goal}\nLEKTION ${i + 1} von ${all.length}: ${lesson.title} – Ziel: ${lesson.goal}${before.length ? `\nVorher gelernt: ${before.slice(-8).join('; ')}` : ''}`,
-    maxTokens: Math.min(16000, 8000 + count * (skill.domain === 'java' || skill.domain === 'law' ? 900 : 700)),
+    maxTokens: Math.min(16000, 8500 + count * (skill.domain === 'java' || skill.domain === 'law' ? 900 : 700)),
     json: true,
   };
 }

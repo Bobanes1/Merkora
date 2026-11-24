@@ -2218,6 +2218,24 @@ console.log('Formeln in Erklärungen, mehr Grafiken');
   const figs = P.parsePractice({ kind: 'general', topic: 't', intro: 'x', figures: [1, 2, 3, 4].map((k) => ({ diagram: { type: 'flow', steps: ['a' + k, 'b', 'c'] } })), problems: [{ type: 'calc', problem: 'p', answer: { type: 'number', value: '1' } }] }, 'i', 1);
   ok(figs?.figures?.length === 3, 'bis zu 3 Grafiken pro Lektion');
 }
+console.log('Nur Erklärtes abfragen, weniger Abfragen, Wörter statt Tippen');
+{
+  const S = await import('../src/lib/skills');
+  const P = await import('../src/lib/practice');
+  const T = await import('../src/lib/tasks');
+  const C = await import('../src/lib/taskCheck');
+  const sk = { id: 'k', topic: 'Börse', title: 'Börse', domain: 'general', levels: ['a'], targetLevel: 0, level: '', status: 'active', plan: {}, stages: [{ id: 'st', name: 'S', goal: '', lessons: [{ id: 'l', title: 'L', goal: '' }] }], createdAt: 1, updatedAt: 1 } as any;
+  const sys = S.lessonPrompt(sk, sk.stages[0], sk.stages[0].lessons[0]).system;
+  ok(sys.includes('NUR ERKLÄRTES ABFRAGEN') && sys.includes('dann 5 Aufgaben') && sys.includes('Höchstens 2 Häppchen pro Lektion bekommen einen "check"'), 'Lektion: nur Erklärtes abfragen, 5 Aufgaben, höchstens 2 Kurz-Checks');
+  const set = { id: 's', createdAt: 1, kind: 'general', topic: 'Börse', intro: 'x', labs: [], bites: [{ title: 'Kurs', text: 'Der Kurs ist der Preis des letzten Abschlusses.' }], tasks: [{ type: 'multi', prompt: 'p', options: ['a', 'b', 'c'], correct: [0], hints: [] }], progress: [{ tries: 0, hints: 0 }] } as any;
+  const v = C.verifyPrompt(set);
+  ok(v.user.includes('ERKLÄRUNG DER LEKTION') && v.user.includes('Preis des letzten Abschlusses') && v.system.includes('Orderbuch'), 'Gegenprüfung kennt die Erklärung und ersetzt Aufgaben zu nicht Erklärtem');
+  ok(!C.verifyPrompt({ ...set, bites: undefined, intro: '' }).system.includes('7. Wurde alles'), 'ohne Erklärung (z. B. Stufentest) keine solche Prüfung');
+  const cz = T.parseActive({ type: 'cloze', text: 'Ein {{1}} ist ein {{2}}.', gaps: [['Hund'], ['Tier']], distractors: ['Katze', 'tier', 'Baum'] }) as any;
+  ok(cz.distractors.join() === 'Katze,Baum', 'Lückentext: Ablenker-Wörter, keine die in eine Lücke passen');
+  const b = P.parseBites([{ title: 'T', text: 'x', check: { type: 'gap', prompt: 'Der ___ ist …', answer: ['Kurs'], options: ['Kurs', 'Zins', 'Index'] } }, { title: 'U', text: 'y', check: { type: 'gap', prompt: 'a ___', answer: ['Kurs'], options: ['Zins', 'Index'] } }], 0) as any;
+  ok(b[0].check.options.length === 3 && !b[1].check.options, 'Kurz-Lücke: Wörter zum Antippen nur, wenn das richtige dabei ist');
+}
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

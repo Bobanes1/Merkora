@@ -58,9 +58,21 @@ export async function codeSelfCheck(t: Task): Promise<string | null> {
   return null;
 }
 
+/** What the lesson explained (snippets, intro, theory, worked example) – so the check sees what may be asked. Pure – tested. */
+export function explanationOf(set: PracticeSet): string {
+  const parts = [
+    ...(set.bites ?? []).map((b) => `${b.title ? b.title + ': ' : ''}${b.text}`),
+    set.theory ?? '',
+    set.bites?.length ? '' : set.intro,
+    set.example ? `Beispiel: ${set.example.problem} ${set.example.steps.join(' ')}` : '',
+  ].filter((x) => x && x.trim());
+  return parts.join('\n').slice(0, 6000);
+}
+
 /** The AI check of a whole set; `notes` = what the checks without AI found per task number (from 1). */
 export function verifyPrompt(set: PracticeSet, notes: Record<number, string> = {}, extraRule = ''): Prompt {
   const tasks = taskList(set);
+  const explained = explanationOf(set);
   const list = tasks.map((t, k) => `AUFGABE ${k + 1}${notes[k + 1] ? ` – BEFUND: ${notes[k + 1]}` : ''}:\n${JSON.stringify(t).slice(0, 4000)}`).join('\n\n');
   return {
     system: `Du prüfst Übungsaufgaben, bevor Lernende sie lösen – wie ein sorgfältiger Tutor. ${LANG_RULE}
@@ -71,10 +83,11 @@ ${extraRule ? extraRule + '\n' : ''}Prüfe JEDE Aufgabe:
 4. Fallaufgaben: Erfüllt die Musterlösung jedes Kriterium des Schemas, und verlangt das Schema nichts, was nicht in der Musterlösung steht?
 5. Code: Passen Tests, Startcode und Musterlösung zusammen? Ein BEFUND aus dem Ausführen ist verlässlich.
 6. Passt der Aufgabentyp zum Thema? Eine unpassende Aufgabe (z. B. eine Rechentabelle mit erfundenen Zahlen zu einem Theorie-Thema) ersetzt du durch einen passenden Typ zum selben Inhalt.
+${explained ? '7. Wurde alles, was die Aufgabe verlangt, in der ERKLÄRUNG DER LEKTION behandelt (oder ist es Allgemeinwissen)? Fragt eine Aufgabe einen Begriff oder Sachverhalt ab, der dort nicht vorkommt (z. B. „Orderbuch“, ohne dass es erklärt wurde), ersetze sie durch eine Aufgabe zum erklärten Inhalt.\n' : ''}
 Liste NUR Aufgaben mit einem echten Fehler. Korrigiere sie so wenig wie nötig (gleicher Typ, gleiches Thema, gleiche Schwierigkeit) und gib die vollständige korrigierte Aufgabe im selben JSON-Format zurück. Eine Aufgabe, die sich nicht sinnvoll reparieren lässt, kommt in "drop".
 Format: {"fixes":[{"task":3,"why":"kurzer Grund","fixed":{…vollständige Aufgabe…}}],"drop":[5]} – ist alles in Ordnung: {"fixes":[],"drop":[]}.
 Antworte ausschließlich mit gültigem JSON.`,
-    user: `THEMA: ${set.topic}\n\n${list}`,
+    user: `THEMA: ${set.topic}${explained ? `\n\nERKLÄRUNG DER LEKTION (nur das wurde erklärt):\n${explained}` : ''}\n\n${list}`,
     maxTokens: 6000,
     json: true,
   };

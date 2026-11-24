@@ -391,11 +391,11 @@ function BiteCheckView({ check, done, onDone, hookMode, actions, onAccept }: { c
   }
 
   if (check.type === 'gap') {
-    const submit = async () => {
-      if (!gapVal.trim() || done || gapState === 'checking') return;
-      let ok = checkBiteGap(check, gapVal);
-      // not in the list: Pip looks once more whether it is right in content too
-      if (!ok && hasKey()) {
+    const submit = async (val = gapVal) => {
+      if (!val.trim() || done || gapState === 'checking') return;
+      let ok = checkBiteGap(check, val);
+      // not in the list: Pip looks once more whether it is right in content too (only typed answers – tapped words are clear)
+      if (!ok && hasKey() && !check.options) {
         setGapState('checking');
         try {
           const q = gapCheckPrompt(check.prompt, check.answer, gapVal.trim(), check.why);
@@ -432,6 +432,29 @@ function BiteCheckView({ check, done, onDone, hookMode, actions, onAccept }: { c
         <p>
           <b>{hookMode ? 'Dein Tipp:' : 'Kurz ergänzen:'}</b> <CardContent text={check.prompt} className="inline" />
         </p>
+        {check.options ? (
+          <div className="bite-gap-options">
+            {check.options.map((o) => (
+              <button
+                key={o}
+                type="button"
+                className={'label-chip' + (gapVal === o ? (gapState === 'right' ? ' ok' : gapState === 'wrong' || gapState === 'shown' ? ' bad' : ' picked') : '')}
+                disabled={done || gapState === 'checking'}
+                onClick={() => {
+                  setGapVal(o);
+                  void submit(o);
+                }}
+              >
+                {o}
+              </button>
+            ))}
+            {gapState === 'wrong' && !done && (
+              <button type="button" className="btn ghost sm" onClick={show}>
+                Lösung zeigen
+              </button>
+            )}
+          </div>
+        ) : (
         <form
           className="bite-gap-row"
           onSubmit={(e) => {
@@ -461,6 +484,7 @@ function BiteCheckView({ check, done, onDone, hookMode, actions, onAccept }: { c
             </button>
           )}
         </form>
+        )}
         {gapState === 'right' && (
           <p className="form-ok">
             <IconCheck size={15} /> Richtig!{' '}

@@ -10,7 +10,7 @@ import { cellPos, evalSheet, isErr, type CellValue } from './sheet';
 
 export type OrderTask = { type: 'order'; prompt: string; items: string[]; hints: string[]; explain?: string };
 export type ClassifyTask = { type: 'classify'; prompt: string; groups: string[]; items: { text: string; group: number }[]; hints: string[]; explain?: string };
-export type ClozeTask = { type: 'cloze'; prompt: string; text: string; gaps: string[][]; hints: string[]; explain?: string };
+export type ClozeTask = { type: 'cloze'; prompt: string; text: string; gaps: string[][]; hints: string[]; explain?: string; /** extra wrong words for the word bank */ distractors?: string[] };
 export type MultiTask = { type: 'multi'; prompt: string; options: string[]; correct: number[]; hints: string[]; explain?: string };
 export type CaseTask = {
   type: 'case';
@@ -70,7 +70,8 @@ export function parseActive(raw: unknown): ActiveTask | null {
       const text = s(r.text, 4000);
       const gaps = (Array.isArray(r.gaps) ? r.gaps : []).map((g) => (Array.isArray(g) ? arr(g, 6, 120) : arr([g], 1, 120))).filter((g) => g.length);
       const marks = (text.match(/\{\{\d+\}\}/g) ?? []).length;
-      return text && gaps.length && marks === gaps.length ? { type: 'cloze', prompt: prompt || 'Fülle die Lücken.', text, gaps, hints, explain } : null;
+      const distractors = arr(r.distractors ?? r.wrong, 4, 120).filter((d) => !gaps.some((g) => g.some((a) => a.toLowerCase() === d.toLowerCase())));
+      return text && gaps.length && marks === gaps.length ? { type: 'cloze', prompt: prompt || 'Fülle die Lücken.', text, gaps, hints, explain, ...(distractors.length ? { distractors } : {}) } : null;
     }
     case 'multi': {
       const options = arr(r.options, 8, 300);
