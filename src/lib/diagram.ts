@@ -1118,7 +1118,7 @@ export function layoutDiagram(d: Diagram, stateIndex?: number): Layout {
       boxes.push(cb);
       nodes.forEach((b, i) => lines.push({ ...connect(cb, b), arrow: false, tone: hueOf(i) }));
     } else {
-      const centerArt = matchIllustration(d.title) || matchIllustration(d.steps.join(' '));
+      const centerArt = matchIllustration(d.title) || matchIllustration(items.join(' '));
       if (centerArt && R >= 110 && rY >= 70) {
         art.push({ icon: centerArt, subject: d.title, x: cx - 44, y: cy - 30, w: 88, h: 60, tone: 1 });
       }
