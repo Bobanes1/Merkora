@@ -37,7 +37,7 @@ export type StageProject = {
   grade?: CaseGrade;
   done?: boolean;
 };
-export type Stage = { id: string; name: string; goal: string; lessons: Lesson[]; test?: PracticeSet; passed?: boolean; project?: StageProject; sheet?: string };
+export type Stage = { id: string; name: string; goal: string; lessons: Lesson[]; test?: PracticeSet; passed?: boolean; project?: StageProject; sheet?: string; /** the mini project was skipped – „Weiter“ no longer suggests it */ projectSkipped?: boolean };
 export type Jurisdiction = 'ch' | 'de' | 'at';
 export const JURISDICTION_RULE: Record<Jurisdiction, string> = {
   ch: 'RECHTSORDNUNG: Schweiz – nur Schweizer Recht (ZGB, OR, StGB, SchKG, BV …), Normen als "Art. … ZGB/OR", Schweizer Begriffe (z. B. Besitz, Eigentum, Grundbuch nach ZGB). "law": "Schweizer Recht".',
@@ -362,10 +362,10 @@ const OPENERS: Record<Domain, string[]> = {
 const TOPIC_FIT_HINT: Record<Domain, string> = {
   math: 'Mathe-Mix: verbinde Rechnen ("calc"), Schätzen ("estimate"), Rechenwege ordnen ("order"), Formeltabellen ("sheet") und Grafik beschriften ("label").',
   java: 'Programmier-Mix: Schwerpunkt auf eigenem "code", ergänzt durch Code-Lücken ("cloze"), Programmablauf ordnen ("order") und Ausgabe vorhersagen ("calc").',
-  law: 'Rechts-Mix: echte Fallarbeit ("case"), Entscheidungs-Szenarien ("scenario"), Prüfungsschemata ("order"), Tatbestands-Lücken ("cloze") und Beratungs-Rollenspiel ("roleplay") statt bloßer 2-Gruppen-Zuordnung.',
+  law: 'Rechts-Mix: echte Fallarbeit ("case"), Entscheidungs-Szenarien ("scenario"), Prüfungsschemata ("order"), Tatbestands-Lücken ("cloze") und Beratungs-Rollenspiel ("roleplay") und einmal einen Begriff in eigenen Worten erklären ("explain") statt bloßer 2-Gruppen-Zuordnung.',
   music: 'Musik-Mix: Schwerpunkt auf interaktiven "music"-Aufgaben (Hören, Klavier, Rhythmus, Noten), ergänzt durch "order", "label" und "cloze".',
   language: 'Sprach-Mix: Lücken ("cloze"), kurze Gespräche ("roleplay"), Alltagsszenarien ("scenario"), Satzbau ordnen ("order") und kurze Übersetzungen ("calc").',
-  general: 'Themen-Mix: wähle die Typen passend zum konkreten Thema – Zahlen/Wirtschaft/Tabellen → "sheet", "estimate", "calc"; Abläufe/Praxis/Erste Hilfe/Kochen → "order", "scenario", "label"; Kommunikation/Psychologie/Verhandeln → "roleplay", "scenario", "case"; Naturwissenschaft/Technik/Geschichte → "label", "estimate", "order", "cloze".',
+  general: 'Themen-Mix: wähle die Typen passend zum konkreten Thema – Zahlen/Wirtschaft/Tabellen → "sheet", "estimate", "calc"; Abläufe/Praxis/Erste Hilfe/Kochen → "order", "scenario", "label"; Kommunikation/Psychologie/Verhandeln → "roleplay", "scenario", "case"; Naturwissenschaft/Technik/Geschichte → "label", "estimate", "order", "cloze"; Theorie-Begriffe → einmal "explain" (in eigenen Worten erklären).',
 };
 
 /**
@@ -842,7 +842,8 @@ export function parseNextIdeas(raw: unknown): NextIdea[] {
 export type NextStep =
   | { kind: 'lesson'; stage: Stage; lesson: Lesson }
   | { kind: 'review'; reason: string }
-  | { kind: 'weak'; lesson: Lesson; reason: string };
+  | { kind: 'weak'; lesson: Lesson; reason: string }
+  | { kind: 'project'; stage: Stage; reason: string };
 
 /**
  * The smart „Weiter“: what is best now. A short mixed review after every two new lessons (at most once a day),
@@ -859,6 +860,9 @@ export function nextStep(skill: Skill, now = Date.now()): NextStep | null {
     .filter((r) => r.state === 'weak' && r.share < 0.5 && mastered(r.lesson.set))
     .sort((a, b) => a.share - b.share)[0];
   if (weak && now - (skill.lastWeakAt ?? 0) > 2 * DAY) return { kind: 'weak', lesson: weak.lesson, reason: 'da bist du noch unsicher' };
+  // a passed stage: apply it once in the mini project (suggested once, can be skipped)
+  const proj = skill.mini ? undefined : skill.stages.find((st) => st.passed && !st.project?.done && !st.projectSkipped);
+  if (proj) return { kind: 'project', stage: proj, reason: 'wende die Stufe einmal praktisch an' };
   const next = nextLesson(skill);
   return next ? { kind: 'lesson', ...next } : null;
 }

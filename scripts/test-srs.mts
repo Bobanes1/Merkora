@@ -2182,6 +2182,24 @@ console.log('Skill-Vorschläge: getrennt blättern, Kategorien, Kurzinfo');
   ok(all.every((x) => P.TOPIC_CATS.includes(x.cat) && x.info.trim().length > 0 && x.info.length <= 140), 'jedes Thema hat Kategorie und Kurzinfo');
   ok(P.TOPIC_CATS.every((c) => P.SKILL_IDEAS.some((x) => x.cat === c) && P.MINI_IDEAS.some((x) => x.cat === c)), 'jede Kategorie hat Skills und Mini-Skills');
 }
+console.log('Erklär es mir, Zuordnen, Mini-Projekt im Weiter');
+{
+  const T = await import('../src/lib/tasks');
+  const P = await import('../src/lib/practice');
+  const S = await import('../src/lib/skills');
+  const ex = T.parseActive({ type: 'explain', concept: 'Public Relations', prompt: 'Erkläre PR', keyPoints: [{ criterion: 'was es ist', points: 2 }, { criterion: 'Abgrenzung zu Werbung', points: 2 }], solution: 'PR ist …' });
+  ok(!!ex && ex.type === 'explain' && ex.keyPoints.length === 2 && !T.parseActive({ type: 'explain', concept: 'X', keyPoints: ['nur einer'], solution: 'y' }) && !T.parseActive({ type: 'explain', concept: 'X', keyPoints: ['a', 'b'] }), 'Erklär-Aufgabe: gültig nur mit Begriff, mind. 2 Kernpunkten und Mustererklärung');
+  const c = T.explainAsCase(ex as any);
+  ok(c.type === 'case' && c.rubric.length === 2 && c.solution === 'PR ist …' && c.question.includes('eigenen Worten'), 'Erklär-Aufgabe wird wie ein Fall bewertet (Kernpunkte = Schema)');
+  ok(P.taskRules('law').includes('"type":"explain"') && !P.taskRules('java').includes('"type":"explain"'), 'Erklär-Aufgabe bei Recht ja, bei Programmieren nein');
+  const lesson = (id: string) => ({ id, title: id, goal: '', set: { id: 's' + id, createdAt: 1, kind: 'general', topic: '', intro: '', labs: [], tasks: [{ type: 'multi', prompt: 'p', options: ['a', 'b', 'c'], correct: [0], hints: [] }], progress: [{ tries: 1, hints: 0, solved: true }] } });
+  const sk = { id: 'k', topic: 'T', title: 'T', domain: 'general', levels: ['a'], targetLevel: 0, level: '', status: 'active', plan: {}, lastReviewAt: Date.now(), createdAt: 1, updatedAt: 1,
+    stages: [{ id: 'a', name: 'Stufe A', goal: '', passed: true, lessons: [lesson('l1')] }, { id: 'b', name: 'Stufe B', goal: '', lessons: [{ id: 'l2', title: 'l2', goal: '' }] }] } as any;
+  const st = S.nextStep(sk);
+  ok(st?.kind === 'project' && st.stage.id === 'a', 'Weiter schlägt nach bestandener Stufe das Mini-Projekt vor');
+  sk.stages[0].projectSkipped = true;
+  ok(S.nextStep(sk)?.kind === 'lesson', 'übersprungenes Projekt wird nicht mehr vorgeschlagen');
+}
 console.log('Kurze Decknamen');
 {
   const decks = ['01 Grundbegriffe', '02 Geschichte', '03 Ethik'].map((n, i) => ({ id: 'd' + i, name: 'PR-Forschung HS26 › ' + n }));

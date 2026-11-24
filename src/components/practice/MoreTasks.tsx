@@ -9,6 +9,7 @@ import {
   checkEstimate,
   checkLabels,
   checkSheet,
+  explainAsCase,
   parseCaseGrade,
   roleplayAsCase,
   roleplayReplyPrompt,
@@ -19,6 +20,7 @@ import {
   type CaseGrade,
   type ChatLine,
   type EstimateTask,
+  type ExplainTask,
   type LabelTask,
   type RoleplayTask,
   type ScenarioTask,
@@ -566,6 +568,76 @@ export function RoleplayTaskView({ ctx, task }: { ctx: TaskCtx; task: RoleplayTa
         solution={task.solution ? <CardContent text={task.solution} className="case-solution" /> : undefined}
         card={() => [`${task.scenario}\n\nZiel: ${task.goal}`, task.solution || task.rubric.map((r) => r.criterion).join('\n')]}
       />
+    </div>
+  );
+}
+
+/** „Erklär es mir“: explain a concept in your own words; the AI checks the key points (graded like a case). */
+export function ExplainTaskView({ ctx, task }: { ctx: TaskCtx; task: ExplainTask }) {
+  const { prog, host, i } = ctx;
+  const key = `merkora.explain.${ctx.set.id}.${i}`;
+  const [answer, setAnswer] = useState(() => {
+    try {
+      return localStorage.getItem(key) ?? '';
+    } catch {
+      return '';
+    }
+  });
+  const [grade, setGrade] = useState<CaseGrade | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const words = answer.trim() ? answer.trim().split(/\s+/).length : 0;
+  const write = (v: string) => {
+    setAnswer(v);
+    try {
+      localStorage.setItem(key, v);
+    } catch {
+      /* no storage */
+    }
+  };
+  const submit = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      const asCase = explainAsCase(task);
+      const p = caseGradePrompt(asCase, answer, LANG_RULE);
+      const g = parseCaseGrade(asCase, await completeJson(p.system, p.user, 2000));
+      setGrade(g);
+      const right = g.total / g.max >= 0.6;
+      host.progress(i, { tries: prog.tries + 1, ...(right ? { solved: true } : { last: answer.slice(0, 600), mistake: undefined }) });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const passed = !!grade && grade.total / grade.max >= 0.6;
+  return (
+    <div className="practice-task explain-task">
+      <div className="explain-head">
+        <span className="explain-badge">Erklär es mir</span>
+        <b className="explain-concept">{task.concept}</b>
+      </div>
+      <CardContent text={task.prompt} className="practice-problem" />
+      <p className="muted small explain-tip">
+        Schreib so, als würdest du es {task.audience ?? 'einem Freund ohne Vorwissen'} erklären – einfache Worte, gern mit eigenem Beispiel.
+      </p>
+      <textarea className="input explain-answer" rows={6} value={answer} onChange={(e) => write(e.target.value)} placeholder="Also, stell dir vor …" aria-label={`Erklärung zu ${task.concept}`} />
+      <div className="row-gap">
+        <button type="button" className="btn primary" onClick={() => void submit()} disabled={busy || words < 15 || (passed && prog.solved)}>
+          {busy ? 'Pip liest …' : grade ? (passed ? 'Bestanden' : 'Verbesserte Erklärung prüfen') : 'Prüfen lassen'}
+        </button>
+        <span className="muted small">
+          {words} Wörter{words < 15 ? ' – erklär noch etwas mehr' : ''} · {task.keyPoints.length} Kernpunkte
+        </span>
+      </div>
+      {error && <p className="form-error">{error}</p>}
+      {grade && <GradeBox grade={grade} />}
+      {grade && !passed && <p className="muted small">Ergänze die fehlenden Punkte direkt im Text oben und lass es nochmal prüfen.</p>}
+      {prog.solved && !grade && <Verdict ok text="Schon gut erklärt." />}
+      {(passed || prog.solved) && <CheckButton ctx={ctx} right onCheck={() => undefined} />}
+      {hintsOf(ctx, task.hints)}
+      <TaskFooter ctx={ctx} solution={<CardContent text={task.solution} className="case-solution" />} card={() => [`Erkläre: ${task.concept}`, task.solution]} />
     </div>
   );
 }

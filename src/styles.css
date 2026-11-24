@@ -11783,3 +11783,49 @@ html.phone .goal-ring.in-hero .gr-legend { display: none; }
 .pomo-sound.on { color: var(--primary); }
 .pomo-sound.off { color: var(--muted); opacity: 0.75; }
 .home-widget .pomo-tool.compact { gap: 6px 14px; }
+
+/* ---------- sort into groups by drag & drop ---------- */
+.classify-dnd { display: grid; gap: 12px; margin: 10px 0; }
+.classify-pile { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px; min-height: 52px; border: 1px dashed var(--line); border-radius: var(--r-lg); background: var(--surface-2); }
+.classify-boxes { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.classify-box { display: grid; align-content: start; gap: 8px; min-height: 110px; padding: 10px; border-radius: var(--r-lg); border: 2px solid var(--line); background: var(--white); cursor: default; transition: border-color 0.15s ease, background 0.15s ease; }
+.classify-dnd.picking .classify-box { cursor: pointer; border-style: dashed; border-color: color-mix(in srgb, var(--primary) 55%, var(--line)); }
+.classify-box.over, .classify-dnd.picking .classify-box:hover { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, var(--white)); }
+.classify-box-head { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; }
+.classify-num { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 6px; font-size: 11px; background: var(--surface-2); color: var(--muted); flex: none; }
+.classify-box-cards { display: flex; flex-wrap: wrap; gap: 6px; }
+.classify-empty { color: var(--muted); font-size: 12.5px; font-style: italic; padding: 6px 2px; }
+.classify-card { max-width: 100%; padding: 7px 12px; border-radius: 12px; border: 1px solid var(--line-strong, var(--line)); background: var(--white); color: inherit; font: inherit; font-size: 14px; font-weight: 600; text-align: left; cursor: grab; touch-action: none; user-select: none; box-shadow: 0 2px 0 var(--line); transition: transform 0.12s ease, border-color 0.12s ease, opacity 0.12s ease; }
+.classify-card:hover { border-color: var(--primary); transform: translateY(-1px); }
+.classify-card.picked { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 25%, transparent); }
+.classify-card.dragging { opacity: 0.35; }
+.classify-card.ok { border-color: #1f9d6b; background: color-mix(in srgb, #1f9d6b 14%, var(--white)); }
+.classify-card.bad { border-color: #d93f3f; background: color-mix(in srgb, #d93f3f 12%, var(--white)); }
+.classify-card .inline p { margin: 0; }
+
+/* ---------- explain it (Feynman) ---------- */
+.explain-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.explain-badge { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--primary); background: var(--primary-soft); padding: 3px 9px; border-radius: 999px; }
+.explain-concept { font-family: var(--font-display); font-size: 19px; }
+.explain-tip { margin: -2px 0 2px; }
+.explain-answer { width: 100%; min-height: 130px; resize: vertical; line-height: 1.5; }
+
+/* ---------- skills: competence strip under the header, project teaser ---------- */
+.comp-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 10px 0 4px; }
+.comp-cells { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.comp-stage { display: inline-flex; align-items: center; gap: 4px; }
+.comp-sep { width: 1px; height: 18px; margin: 0 4px; background: var(--line); }
+.comp-cell { width: 18px; height: 18px; padding: 0; border-radius: 5px; border: 1px solid var(--line); background: var(--surface-2); cursor: pointer; transition: transform 0.12s ease; }
+.comp-cell:hover, .comp-cell:focus-visible { transform: scale(1.2); }
+.comp-cell.good { background: var(--sc-good); border-color: transparent; }
+.comp-cell.ok { background: var(--sc-ok); border-color: transparent; }
+.comp-cell.weak { background: var(--sc-weak); border-color: transparent; }
+.comp-cell.skipped { background: repeating-linear-gradient(45deg, var(--surface-2) 0 3px, var(--line) 3px 5px); }
+.comp-sum { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--muted); }
+.comp-sum i { width: 8px; height: 8px; border-radius: 50%; margin-left: 6px; }
+.comp-sum i.good { background: var(--sc-good); } .comp-sum i.ok { background: var(--sc-ok); } .comp-sum i.weak { background: var(--sc-weak); }
+.test-done { display: grid; gap: 10px; }
+.project-teaser { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: var(--r-lg); border: 1px solid color-mix(in srgb, var(--primary) 40%, var(--line)); background: var(--primary-soft); }
+.project-teaser svg { color: var(--primary); flex: none; }
+.project-teaser .grow { display: grid; gap: 2px; }
+.project-teaser small { color: var(--muted); }

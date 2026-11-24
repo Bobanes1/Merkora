@@ -20,6 +20,10 @@ export function plausibility(t: Task): string | null {
     case 'case':
       if (!t.solution.trim()) return 'Die Musterlösung fehlt.';
       return null;
+    case 'explain':
+      if (!t.solution.trim()) return 'Die Mustererklärung fehlt.';
+      if (t.keyPoints.length < 2) return 'Es gibt zu wenige Kernpunkte.';
+      return null;
     case 'code':
       if (!t.solution.trim()) return 'Die Musterlösung fehlt.';
       if (t.lang !== 'sql' && !t.tests.length) return 'Es gibt keine Tests.';

@@ -35,8 +35,10 @@ export type ScenarioNode = { id: string; text: string; choices: { text: string; 
 export type ScenarioTask = { type: 'scenario'; prompt: string; start: string; nodes: ScenarioNode[]; hints: string[]; explain?: string };
 /** A conversation with an AI character; graded with a scheme at the end. */
 export type RoleplayTask = { type: 'roleplay'; prompt: string; scenario: string; persona: string; goal: string; opening: string; turns: number; rubric: { criterion: string; points: number }[]; solution: string; hints: string[] };
-export type ActiveTask = OrderTask | ClassifyTask | ClozeTask | MultiTask | CaseTask | MusicTask | EstimateTask | LabelTask | SheetTask | ScenarioTask | RoleplayTask;
-export const ACTIVE_TYPES = ['order', 'classify', 'cloze', 'multi', 'case', 'music', 'estimate', 'label', 'sheet', 'scenario', 'roleplay'];
+/** „Erklär es mir“ (Feynman): explain a concept in your own words; the AI checks the key points. */
+export type ExplainTask = { type: 'explain'; prompt: string; concept: string; audience?: string; keyPoints: { criterion: string; points: number }[]; solution: string; hints: string[] };
+export type ActiveTask = OrderTask | ClassifyTask | ClozeTask | MultiTask | CaseTask | MusicTask | EstimateTask | LabelTask | SheetTask | ScenarioTask | RoleplayTask | ExplainTask;
+export const ACTIVE_TYPES = ['order', 'classify', 'cloze', 'multi', 'case', 'music', 'estimate', 'label', 'sheet', 'scenario', 'roleplay', 'explain'];
 
 const s = (v: unknown, max = 4000) => (typeof v === 'string' || typeof v === 'number' ? String(v).trim().slice(0, max) : '');
 const arr = (v: unknown, max = 12, len = 2000) => (Array.isArray(v) ? v : []).map((x) => s(x, len)).filter(Boolean).slice(0, max);
@@ -90,6 +92,22 @@ export function parseActive(raw: unknown): ActiveTask | null {
       const norms = arr(r.norms ?? r.normen, 8, 300);
       return facts && question && rubric.length >= 2
         ? { type: 'case', facts, question, rubric, solution: s(r.solution, 8000), hints, ...(law ? { law } : {}), ...(norms.length ? { norms } : {}) }
+        : null;
+    }
+    case 'explain': {
+      const concept = s(r.concept ?? r.term ?? r.begriff, 200);
+      const keyPoints = (Array.isArray(r.keyPoints ?? r.keypoints ?? r.rubric) ? ((r.keyPoints ?? r.keypoints ?? r.rubric) as unknown[]) : [])
+        .map((c) => {
+          const o = (c ?? {}) as Record<string, unknown>;
+          const points = Math.round(Number(o.points ?? 2));
+          return { criterion: s(typeof c === 'string' ? c : o.criterion ?? o.point ?? o.text, 300), points: Number.isFinite(points) && points > 0 ? Math.min(points, 10) : 2 };
+        })
+        .filter((c) => c.criterion)
+        .slice(0, 6);
+      const solution = s(r.solution ?? r.sample, 3000);
+      const audience = s(r.audience, 120) || undefined;
+      return concept && keyPoints.length >= 2 && solution
+        ? { type: 'explain', prompt: prompt || `Erkläre „${concept}“ in eigenen Worten.`, concept, ...(audience ? { audience } : {}), keyPoints, solution, hints }
         : null;
     }
     case 'music': {
@@ -396,6 +414,18 @@ function wordCounts(t: string) {
   const m = new Map<string, number>();
   for (const w of norm(t).split(' ').filter(Boolean)) m.set(w, (m.get(w) ?? 0) + 1);
   return m;
+}
+/** An explanation is graded like a case: the key points are the scheme, the sample explanation the solution. Pure – tested. */
+export function explainAsCase(t: ExplainTask): CaseTask {
+  return {
+    type: 'case',
+    facts: `Die lernende Person soll den Begriff „${t.concept}“ in eigenen Worten erklären${t.audience ? ` – für: ${t.audience}` : ' – so, dass jemand ohne Vorwissen es versteht'}.`,
+    question: `${t.prompt}
+Bewerte, ob jeder Kernpunkt in eigenen Worten verständlich und richtig erklärt ist. Fachbegriffe allein oder auswendig gelernte Definitionen ohne Erklärung reichen nicht; ein gutes eigenes Beispiel zählt positiv. Sachliche Fehler kosten Punkte.`,
+    rubric: t.keyPoints,
+    solution: t.solution,
+    hints: [],
+  };
 }
 
 /**

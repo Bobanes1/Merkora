@@ -21,7 +21,7 @@ export function SkillCompetence({ skill, onOpen, onTrain }: { skill: Skill; onOp
     onTrain();
   };
   return (
-    <details className="panel skill-competence">
+    <details className="panel skill-competence" open>
       <summary>
         Kompetenz-Karte
         <span className="sc-sum">
@@ -56,5 +56,55 @@ export function SkillCompetence({ skill, onOpen, onTrain }: { skill: Skill; onOp
       ))}
       <p className="muted small">Grundlage: deine ersten Versuche, Hinweise und angezeigte Lösungen – und der Stufentest, falls gemacht.</p>
     </details>
+  );
+}
+
+/**
+ * The competence map at a glance, right under the skill header: one small field per lesson
+ * (green = sitzt, yellow = fast, orange = wackelt, grey = offen), counts and „Schwachstellen üben“.
+ */
+export function CompetenceStrip({ skill, onOpen, onTrain }: { skill: Skill; onOpen: (lessonId: string) => void; onTrain: () => void }) {
+  const t = useSkillTask(skill.id + ':review');
+  const map = competenceMap(skill);
+  const rows = map.flatMap((g) => g.rows);
+  if (!rows.some((r) => r.state !== 'new' && r.state !== 'skipped')) return null;
+  const weak = weakLessons(skill);
+  const count = (s: CompetenceState) => rows.filter((r) => r.state === s).length;
+  const train = () => {
+    void makeReview(
+      skill.id,
+      weak.map((l) => l.id),
+    );
+    onTrain();
+  };
+  return (
+    <div className="comp-strip skill-competence">
+      <div className="comp-cells" role="list" aria-label="Kompetenz je Lektion">
+        {map.map((g, gi) => (
+          <span key={g.stage.id} className="comp-stage" title={g.stage.name}>
+            {gi > 0 && <i className="comp-sep" aria-hidden="true" />}
+            {g.rows.map((r) => (
+              <button
+                key={r.lesson.id}
+                type="button"
+                role="listitem"
+                className={'comp-cell ' + r.state}
+                onClick={() => onOpen(r.lesson.id)}
+                title={`${r.lesson.title}: ${r.state === 'new' || r.state === 'skipped' ? LABEL[r.state] : `${Math.round(r.share * 100)} % · ${LABEL[r.state]}`}`}
+                aria-label={`${r.lesson.title}: ${LABEL[r.state]}`}
+              />
+            ))}
+          </span>
+        ))}
+      </div>
+      <span className="comp-sum">
+        <i className="good" /> {count('good')} sitzen <i className="ok" /> {count('ok')} fast <i className="weak" /> {count('weak')} wackeln
+      </span>
+      {weak.length > 0 && (
+        <button type="button" className="btn outline sm" onClick={train} disabled={t.busy}>
+          <IconSparkle size={13} /> Schwachstellen üben
+        </button>
+      )}
+    </div>
   );
 }

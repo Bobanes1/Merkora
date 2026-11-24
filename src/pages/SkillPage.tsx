@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { SkillCelebration, SkillGoal, SkillSchedule } from '../components/SkillSchedule';
-import { SkillCompetence } from '../components/SkillCompetence';
+import { CompetenceStrip, SkillCompetence } from '../components/SkillCompetence';
 import { playUi } from '../lib/uiSound';
 import { ProjectView, SheetView } from '../components/SkillStageExtras';
 import { SkillMaterial } from '../components/SkillMaterial';
@@ -434,7 +434,7 @@ function Path({ skill }: { skill: Skill }) {
         onOpen={(lid) => setView({ kind: 'lesson', id: lid })}
       />
     );
-  if (view?.kind === 'test') return <StageTestView skill={skill} stageId={view.stageId} onBack={() => setView(null)} />;
+  if (view?.kind === 'test') return <StageTestView skill={skill} stageId={view.stageId} onBack={() => setView(null)} onProject={() => setView({ kind: 'project', stageId: view.stageId })} />;
   if (view?.kind === 'review') return <ReviewView skill={skill} plan={view.plan} onBack={() => setView(null)} />;
   if (view?.kind === 'project') return <ProjectView skill={skill} stageId={view.stageId} onBack={() => setView(null)} />;
   if (view?.kind === 'sheet') return <SheetView skill={skill} stageId={view.stageId} onBack={() => setView(null)} />;
@@ -455,8 +455,19 @@ function Path({ skill }: { skill: Skill }) {
         <span className="bar skill-bar" aria-hidden="true">
           <i style={{ width: `${Math.round(p.share * 100)}%` }} />
         </span>
+        <CompetenceStrip skill={skill} onOpen={(lid) => setView({ kind: 'lesson', id: lid })} onTrain={() => setView({ kind: 'review' })} />
         <div className="row-gap">
-          {step && step.kind !== 'lesson' ? (
+          {step?.kind === 'project' ? (
+            <span className="skill-next-row">
+              <button type="button" className="btn primary" onClick={() => setView({ kind: 'project', stageId: step.stage.id })}>
+                Weiter: Mini-Projekt „{step.stage.name}“ ›
+              </button>
+              <small className="muted skill-next-why">{step.reason}</small>
+              <button type="button" className="link-btn small" onClick={() => updateSkill(skill.id, (s) => ({ stages: s.stages.map((st) => (st.id === step.stage.id ? { ...st, projectSkipped: true } : st)) }))}>
+                Projekt überspringen
+              </button>
+            </span>
+          ) : step && step.kind !== 'lesson' ? (
             <span className="skill-next-row">
               <button
                 type="button"
@@ -778,7 +789,7 @@ function LessonEnd({ lesson, after, onPath, onNext }: { lesson: Lesson; after?: 
   );
 }
 
-function StageTestView({ skill, stageId, onBack }: { skill: Skill; stageId: string; onBack: () => void }) {
+function StageTestView({ skill, stageId, onBack, onProject }: { skill: Skill; stageId: string; onBack: () => void; onProject: () => void }) {
   const stage = skill.stages.find((st) => st.id === stageId);
   const t = useSkillTask(skill.id + ':test:' + stageId);
   useEffect(() => {
@@ -812,7 +823,23 @@ function StageTestView({ skill, stageId, onBack }: { skill: Skill; stageId: stri
                   <CheckNote skillId={skill.id} set={stage.test} />
                   <SkillGoal skill={skill} compact />
                 </div>
-              } onDone={<p className="form-ok">Stufe „{stage.name}“ erreicht! +50 XP</p>} />
+              } onDone={
+                <div className="test-done">
+                  <p className="form-ok">Stufe „{stage.name}“ erreicht! +50 XP</p>
+                  {!skill.mini && !stage.project?.done && (
+                    <div className="project-teaser">
+                      <IconTools size={22} />
+                      <span className="grow">
+                        <b>Jetzt anwenden: das Mini-Projekt</b>
+                        <small>Eine praktische Aufgabe, die alles aus „{stage.name}“ verbindet – etwa 30–60 Minuten, mit Bewertung nach Kriterien.</small>
+                      </span>
+                      <button type="button" className="btn primary sm" onClick={onProject}>
+                        Projekt starten
+                      </button>
+                    </div>
+                  )}
+                </div>
+              } />
           <button type="button" className="btn ghost sm" onClick={() => void makeStageTest(skill.id, stageId)} disabled={t.busy}>
             Neuen Stufentest erstellen
           </button>

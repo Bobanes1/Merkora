@@ -505,17 +505,18 @@ const TASK_TYPES = {
   sheet: `{"type":"sheet","prompt":"…","rows":[["Artikel","Menge","Preis","Summe"],["Äpfel","3","0,50",""],["Brot","1","2,40",""],["","","Gesamt",""]],"expect":{"D2":"=B2*C2","D3":"=B3*C3","D4":"=SUMME(D2:D3)"},"explain":"…"} – kleine Tabelle (höchstens 10 Zeilen × 6 Spalten); die Zellen aus "expect" füllt die Person mit Zahl oder Formel (=, Zellbezüge wie A1, + - * / ^, SUMME, MITTELWERT, MIN, MAX, ANZAHL mit Bereichen A1:A5, Argumente mit ;); Merkora vergleicht die berechneten Werte`,
   scenario: `{"type":"scenario","prompt":"…","start":"a","nodes":[{"id":"a","text":"Ausgangslage …","choices":[{"text":"…","next":"b","score":2,"feedback":"warum gut"},{"text":"…","next":"c","score":0,"feedback":"warum ungünstig"}]},{"id":"b","text":"…","choices":[{"text":"…","next":"ende1","score":2,"feedback":"…"}]},{"id":"ende1","text":"Ausgang …","choices":[]}]} – Entscheidungsgeschichte mit Folgen: 2–4 Entscheidungen tief, 2–3 Möglichkeiten je Knoten, score 0–2 pro Wahl, Enden ohne choices, keine Schleifen; realistisch, mit nachvollziehbarem Feedback`,
   roleplay: `{"type":"roleplay","prompt":"…","scenario":"Situation in 2–4 Sätzen","persona":"wer das Gegenüber ist und wie es sich verhält","goal":"was die Person im Gespräch erreichen soll","opening":"erster Satz des Gegenübers","turns":5,"rubric":[{"criterion":"…","points":2},{"criterion":"…","points":2}],"solution":"kurzes Beispiel für ein gutes Gespräch"} – Rollenspiel-Gespräch (Merkora spielt das Gegenüber), am Ende Bewertung nach Schema; für Gesprächsführung, Verhandeln, Beraten, Fremdsprache`,
+  explain: `{"type":"explain","prompt":"Erkläre einem Freund ohne Vorwissen, was … ist und warum es wichtig ist.","concept":"Begriff","audience":"ein Freund ohne Vorwissen","keyPoints":[{"criterion":"Kernpunkt 1 (was es ist)","points":2},{"criterion":"Kernpunkt 2 (wozu/warum)","points":2},{"criterion":"ein passendes Beispiel","points":1}],"solution":"Mustererklärung in 3–6 einfachen Sätzen","hints":["…"]} – „Erklär es mir“: die Person erklärt einen zentralen Begriff der Lektion in eigenen Worten (Feynman-Methode); 2–4 Kernpunkte, die eine gute Erklärung enthalten muss; höchstens EINE solche Aufgabe pro Lektion, am besten gegen Ende`,
 };
 const LABS_RULE = `"labs" (0–2, nur wenn sie zum Thema passen): {"type":"coin","p":0.5} · {"type":"dice","dice":2} · {"type":"binomial","n":10,"p":0.3} · {"type":"normal","mu":100,"sigma":15,"a":85,"b":115} · {"type":"tree","pA":0.3,"pBA":0.8,"pBnA":0.1,"a":"krank","b":"positiv"} · {"type":"bayes","prevalence":0.01,"sensitivity":0.95,"specificity":0.9} · {"type":"urn","N":10,"K":3,"n":4} · {"type":"function","expr":"a*x^2+b","params":{"a":1,"b":0},"min":-5,"max":5} · {"type":"vectors","matrix":[[1,1],[0,1]]}; jeweils mit "ask": eine Frage zum Ausprobieren.`;
 
 /** Which task types fit which subject (most active ones first; classify last so it is not the default opener). */
 export const DOMAIN_TASKS: Record<Domain, (keyof typeof TASK_TYPES)[]> = {
-  math: ['calc', 'estimate', 'order', 'sheet', 'label', 'cloze', 'multi', 'classify'],
+  math: ['calc', 'estimate', 'order', 'sheet', 'label', 'cloze', 'explain', 'multi', 'classify'],
   java: ['code', 'cloze', 'order', 'calc', 'multi'],
-  law: ['case', 'scenario', 'order', 'cloze', 'roleplay', 'multi', 'classify'],
+  law: ['case', 'scenario', 'order', 'cloze', 'explain', 'roleplay', 'multi', 'classify'],
   music: ['music', 'order', 'label', 'cloze', 'calc', 'multi', 'classify'],
-  language: ['cloze', 'roleplay', 'scenario', 'order', 'calc', 'multi', 'classify'],
-  general: ['scenario', 'order', 'cloze', 'estimate', 'label', 'calc', 'case', 'roleplay', 'sheet', 'multi', 'classify'],
+  language: ['cloze', 'roleplay', 'scenario', 'order', 'calc', 'explain', 'multi', 'classify'],
+  general: ['scenario', 'order', 'cloze', 'estimate', 'label', 'calc', 'case', 'explain', 'roleplay', 'sheet', 'multi', 'classify'],
 };
 
 /** The task rules for one subject (or all for "auto"). */

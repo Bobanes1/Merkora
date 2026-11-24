@@ -21,7 +21,7 @@ import { CaseTaskView, ClassifyTaskView, ClozeTaskView, MultiTaskView, OrderTask
 import { MusicTaskView } from './MusicTask';
 import { WebCodeTask } from './WebCodeTask';
 import { BuildFigure, ProgramView, ScoreView, SketchView, SyntaxView, TablesView } from './Visuals';
-import { EstimateTaskView, LabelTaskView, RoleplayTaskView, ScenarioTaskView, SheetTaskView } from './MoreTasks';
+import { EstimateTaskView, LabelTaskView, RoleplayTaskView, ExplainTaskView, ScenarioTaskView, SheetTaskView } from './MoreTasks';
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -196,6 +196,7 @@ export function PracticeSetView({ set, host, head, onDone, guided, focus }: { se
         {t?.type === 'sheet' && <SheetTaskView key={set.id + i} ctx={ctx} task={t} />}
         {t?.type === 'scenario' && <ScenarioTaskView key={set.id + i} ctx={ctx} task={t} />}
         {t?.type === 'roleplay' && <RoleplayTaskView key={set.id + i} ctx={ctx} task={t} />}
+        {t?.type === 'explain' && <ExplainTaskView key={set.id + i} ctx={ctx} task={t} />}
         {settled === n && (onDone ?? <p className="form-ok">{done === n ? 'Alle Aufgaben gelöst – stark!' : 'Alle Aufgaben durch.'}</p>)}
         {settled === n && startDone < n && <Confetti count={50} />}
     </section>

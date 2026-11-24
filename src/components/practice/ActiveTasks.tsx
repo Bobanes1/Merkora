@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { CardContent } from '../CardContent';
 import { IconArrowDown, IconArrowUp, IconGrip } from '../Icons';
 import { completeJson, hasKey, LANG_RULE } from '../../lib/ai';
@@ -212,45 +213,137 @@ export function OrderTaskView({ ctx, task }: { ctx: TaskCtx; task: OrderTask }) 
   );
 }
 
-/** Sort into groups: tap a group for every item (works the same with finger and mouse). */
+/** Sort into groups: drag the cards into the boxes – or tap a card, then a box; keys 1–n while a card is picked. */
 export function ClassifyTaskView({ ctx, task }: { ctx: TaskCtx; task: ClassifyTask }) {
   const { prog, host, i } = ctx;
   const order = useMemo(() => shuffled(task.items.map((_, k) => k), seedOf(ctx.set.id) + i), [task, ctx.set.id, i]);
   const [chosen, setChosen] = useState<number[]>(() => (prog.solved ? task.items.map((it) => it.group) : task.items.map(() => -1)));
   const [marks, setMarks] = useState<boolean[] | null>(null);
-  const pick = (item: number, g: number) => {
-    setChosen((c) => c.map((x, k) => (k === item ? g : x)));
+  const [pick, setPick] = useState<number | null>(null);
+  const [drag, setDrag] = useState<{ k: number; x: number; y: number } | null>(null);
+  const [over, setOver] = useState<number | null>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const justDragged = useRef(false);
+  const right = !!marks?.every(Boolean) || (!!prog.solved && chosen.every((g, k) => g === task.items[k].group));
+  const locked = right;
+
+  const put = (k: number, g: number) => {
+    if (locked) return;
+    setChosen((c) => c.map((x, j) => (j === k ? g : x)));
     setMarks(null);
+    setPick(null);
   };
+  const groupAt = (x: number, y: number): number | null => {
+    const el = document.elementFromPoint(x, y)?.closest('[data-group]') as HTMLElement | null;
+    if (!el || !boxRef.current?.contains(el)) return null;
+    return Number(el.dataset.group);
+  };
+  const startDrag = (e: ReactPointerEvent, k: number) => {
+    if (locked || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    const sx = e.clientX, sy = e.clientY;
+    let moved = false;
+    const move = (ev: PointerEvent) => {
+      if (!moved && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 6) return;
+      moved = true;
+      ev.preventDefault();
+      setDrag({ k, x: ev.clientX, y: ev.clientY });
+      setOver(groupAt(ev.clientX, ev.clientY));
+    };
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      if (!moved) return;
+      justDragged.current = true;
+      setTimeout(() => (justDragged.current = false), 50);
+      const g = groupAt(ev.clientX, ev.clientY);
+      if (g !== null) put(k, g);
+      else if (!boxRef.current?.contains(document.elementFromPoint(ev.clientX, ev.clientY))) put(k, -1);
+      setDrag(null);
+      setOver(null);
+    };
+    window.addEventListener('pointermove', move, { passive: false });
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+  };
+  const tapCard = (k: number) => {
+    if (justDragged.current || locked) return;
+    if (chosen[k] >= 0 && pick === null) return put(k, -1); // a sorted card goes back to the pile
+    setPick((p) => (p === k ? null : k));
+  };
+  const tapGroup = (g: number) => {
+    if (justDragged.current || pick === null) return;
+    put(pick, g);
+  };
+  // keyboard: with a card picked, 1–n sorts it into box n; Esc drops the pick
+  useEffect(() => {
+    if (pick === null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') return setPick(null);
+      const n = Number(e.key);
+      if (n >= 1 && n <= task.groups.length) {
+        e.preventDefault();
+        put(pick, n - 1);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
   const check = () => {
     const r = checkClassify(task, chosen);
     setMarks(r.items);
     const last = task.items.map((it, k) => `${it.text} → ${task.groups[chosen[k] as number] ?? '–'}`).join('; ');
     host.progress(i, { tries: prog.tries + 1, ...(r.right ? { solved: true } : { last, mistake: undefined }) });
   };
-  const right = !!marks?.every(Boolean);
+  const card = (k: number) => (
+    <button
+      key={k}
+      type="button"
+      className={'classify-card' + (pick === k ? ' picked' : '') + (drag?.k === k ? ' dragging' : '') + (marks && chosen[k] >= 0 ? (marks[k] ? ' ok' : ' bad') : '')}
+      onPointerDown={(e) => startDrag(e, k)}
+      onClick={(e) => (e.stopPropagation(), tapCard(k))}
+      aria-pressed={pick === k}
+      title={chosen[k] >= 0 && !locked ? 'Antippen: zurück in den Stapel' : undefined}
+    >
+      <CardContent text={task.items[k].text} className="inline" />
+    </button>
+  );
+  const pile = order.filter((k) => chosen[k] < 0);
   return (
     <div className="practice-task">
       <CardContent text={task.prompt} className="practice-problem" />
-      <div className="classify">
-        {order.map((k) => (
-          <div key={k} className={'classify-item' + (marks ? (marks[k] ? ' ok' : ' bad') : '')}>
-            <CardContent text={task.items[k].text} className="classify-text" />
-            <div className="classify-groups" role="radiogroup" aria-label="Gruppe">
-              {task.groups.map((g, gi) => (
-                <button key={g} type="button" role="radio" aria-checked={chosen[k] === gi} className={'chip' + (chosen[k] === gi ? ' on' : '')} onClick={() => pick(k, gi)}>
-                  {g}
-                </button>
-              ))}
-            </div>
+      <div className={'classify-dnd' + (pick !== null ? ' picking' : '')} ref={boxRef}>
+        {pile.length > 0 && (
+          <div className="classify-pile" aria-label="Noch nicht zugeordnet">
+            {pile.map(card)}
           </div>
-        ))}
+        )}
+        <div className="classify-boxes" style={{ ['--groups' as string]: task.groups.length }}>
+          {task.groups.map((g, gi) => (
+            <div key={g} className={'classify-box' + (over === gi ? ' over' : '')} data-group={gi} onClick={() => tapGroup(gi)}>
+              <div className="classify-box-head">
+                <span className="classify-num">{gi + 1}</span> {g}
+              </div>
+              <div className="classify-box-cards">
+                {order.filter((k) => chosen[k] === gi).map(card)}
+                {!order.some((k) => chosen[k] === gi) && <span className="classify-empty">{pick !== null ? 'Hier ablegen' : 'Hierher ziehen'}</span>}
+              </div>
+              {pick !== null && (
+                <button type="button" className="sr-only" onClick={() => put(pick, gi)}>
+                  In „{g}“ einordnen
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
+      {!locked && <small className="muted label-help">Zieh die Karten in die passende Gruppe – oder tippe erst eine Karte, dann die Gruppe (Tasten 1–{task.groups.length}).</small>}
       <div className="row-gap">
         <CheckButton ctx={ctx} right={right} onCheck={check} disabled={chosen.some((c) => c < 0)} />
         {!right && chosen.some((c) => c < 0) && <span className="muted small">Ordne zuerst alles zu.</span>}
       </div>
-      <Verdict ok={marks ? right : null} text={marks && !right ? `${marks.filter(Boolean).length} von ${marks.length} richtig zugeordnet.` : ''} />
+      <Verdict ok={marks ? right : null} text={marks && !right ? `${marks.filter(Boolean).length} von ${marks.length} richtig – zieh die roten Karten um.` : ''} />
       {right && <Explain text={task.explain} />}
       <Hints hints={task.hints} used={prog.hints} onMore={() => host.progress(i, { hints: prog.hints + 1 })} />
       <TaskFooter noNext
@@ -266,9 +359,17 @@ export function ClassifyTaskView({ ctx, task }: { ctx: TaskCtx; task: ClassifyTa
         }
         card={() => [task.prompt, task.groups.map((g, gi) => `${g}: ${task.items.filter((it) => it.group === gi).map((it) => it.text).join(', ')}`).join('\n')]}
       />
+      {drag &&
+        createPortal(
+          <div className="label-ghost" style={{ left: drag.x, top: drag.y }}>
+            {task.items[drag.k].text}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
+
 
 /** Fill gaps in a text (or code / a scheme). */
 export function ClozeTaskView({ ctx, task }: { ctx: TaskCtx; task: ClozeTask }) {
