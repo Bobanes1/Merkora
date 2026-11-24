@@ -40,13 +40,13 @@ export type SetHost = {
 /** Shared by all task views: progress of this task, saving it, going on. */
 export type TaskCtx = { set: PracticeSet; i: number; prog: ProblemProgress; host: SetHost; onNext: () => void; isLast: boolean };
 
-type Phase = 'try' | 'learn' | 'example' | 'practice';
+type Phase = 'learn' | 'example' | 'practice';
 const READ_ALL_KEY = 'merkora.readAll';
 
 /**
  * A practice set: explanation, worked example, labs, then the tasks one after another.
- * `guided` (skill lessons): supports three flows – classic (bites → example → practice),
- * discovery (try-it-first hook → bites → example → practice), and sprint (compact overview → practice).
+ * `guided` (skill lessons): always starts with theory – classic (bites → example → practice)
+ * or sprint (compact multi-section overview → practice).
  * `focus`: focus mode for the tasks (stage tests, reviews).
  */
 export function PracticeSetView({ set, host, head, onDone, guided, focus }: { set: PracticeSet; host: SetHost; head?: ReactNode; onDone?: ReactNode; guided?: boolean; focus?: boolean }) {
@@ -75,14 +75,14 @@ export function PracticeSetView({ set, host, head, onDone, guided, focus }: { se
     }
   };
   const bites = guided ? bitesFrom(set) : [];
-  const hasHook = !!guided && set.style === 'discovery' && !!set.hook?.check;
   const isSprint = !!guided && set.style === 'sprint';
   const hasExample = !!(set.example || set.figures?.length || set.score || set.sketch || set.syntax?.length || set.tables?.length || set.program || set.labs.length);
   const order: Phase[] = isSprint
     ? [...(bites.length || hasExample ? (['learn'] as Phase[]) : []), 'practice']
-    : [...(hasHook ? (['try'] as Phase[]) : []), ...(bites.length ? (['learn'] as Phase[]) : []), ...(hasExample ? (['example'] as Phase[]) : []), 'practice'];
+    : [...(bites.length ? (['learn'] as Phase[]) : []), ...(hasExample ? (['example'] as Phase[]) : []), 'practice'];
   const started = set.progress.some((p) => p.solved || p.tries > 0 || p.shown);
-  const [phase, setPhaseState] = useState<Phase>(() => (set.phase && order.includes(set.phase) ? set.phase : started ? 'practice' : order[0] ?? 'practice'));
+  const savedPhase = set.phase && set.phase !== 'try' ? set.phase : undefined;
+  const [phase, setPhaseState] = useState<Phase>(() => (savedPhase && order.includes(savedPhase) ? savedPhase : started ? 'practice' : order[0] ?? 'practice'));
   const g = !!guided && !readAll;
   const setPhase = (p: Phase) => {
     setPhaseState(p);
@@ -232,7 +232,6 @@ export function PracticeSetView({ set, host, head, onDone, guided, focus }: { se
           <>
             <div className="guided-badges">
               <span className={'badge ' + set.kind}>{DOMAIN_LABEL[set.kind] ?? 'Übung'}</span>
-              {hasHook && <span className="style-pill">Erst probieren</span>}
               {isSprint && <span className="style-pill">Praxis-Sprint</span>}
             </div>
             <h2>{set.topic}</h2>
@@ -257,14 +256,11 @@ export function PracticeSetView({ set, host, head, onDone, guided, focus }: { se
           )}
         </div>
       </section>
-      {phase === 'try' && set.hook?.check && (
-        <HookView set={set} hook={set.hook} check={set.hook.check} onDone={() => setPhase(after('try'))} onSkip={() => setPhase('practice')} />
-      )}
       {phase === 'learn' &&
         (isSprint ? (
           <SprintOverview set={set} bites={bites} host={host} hasExample={hasExample} labs={labs} onDone={() => setPhase('practice')} />
         ) : (
-          <BitesView set={set} bites={bites} host={host} onDone={() => setPhase(after('learn'))} onSkip={() => setPhase('practice')} />
+          <BitesView set={set} bites={bites} host={host} hasExample={hasExample} onDone={() => setPhase(after('learn'))} onSkip={() => setPhase('practice')} />
         ))}
       {phase === 'example' && (
         <>
@@ -316,7 +312,7 @@ export function PracticeSetView({ set, host, head, onDone, guided, focus }: { se
 const LEVEL_NAME: Record<number, string> = { 1: 'leicht', 2: 'mittel', 3: 'schwer' };
 
 const phaseLabel = (p: Phase, sprint: boolean) =>
-  p === 'try' ? 'Ausprobieren' : p === 'learn' ? (sprint ? 'Überblick' : 'Verstehen') : p === 'example' ? 'Beispiel' : 'Üben';
+  p === 'learn' ? (sprint ? 'Überblick' : 'Verstehen') : p === 'example' ? 'Beispiel' : 'Üben';
 
 /** Index of the last solved task (for the filled part of the line on the mini path); −1 if none. */
 function lastSolved(set: PracticeSet, n: number) {
@@ -641,65 +637,13 @@ function BiteCheckView({ check, done, onDone, hookMode, actions, onAccept }: { c
   );
 }
 
-/** Opening try-it-first card for `discovery` lessons: spark intuition before explaining. */
-function HookView({ set, hook, check, onDone, onSkip }: { set: PracticeSet; hook: Bite; check: BiteCheck; onDone: () => void; onSkip: () => void }) {
-  const [done, setDone] = useState(false);
-  const actions = useRef<CheckActions>({});
-  const keys = useRef({ onDone, done });
-  keys.current = { onDone, done };
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const el = e.target as HTMLElement;
-      if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || el.closest?.('input, textarea, select, [contenteditable="true"], .lab, .cheat-sheet')) return;
-      if (/^[1-4]$/.test(e.key)) actions.current.pick?.(Number(e.key) - 1);
-      else if (e.key === 'Enter' && el.tagName !== 'BUTTON' && el.tagName !== 'A') {
-        e.preventDefault();
-        if (keys.current.done) keys.current.onDone();
-        else actions.current.primary?.();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
-  const fig = hook.figure !== undefined ? set.figures?.[hook.figure] : undefined;
-  return (
-    <section className="panel bite-card hook-card">
-      <div className="bite-dots">
-        <span className="muted small">Erst probieren · zählt nicht gegen dich</span>
-        <button type="button" className="link-btn small bite-skip" onClick={onSkip} title="Direkt zu den Aufgaben">
-          Direkt üben ›
-        </button>
-      </div>
-      {hook.title && <h3>{hook.title}</h3>}
-      {hook.text && (
-        <div className="md bite-text">
-          <Markdown text={hook.text} />
-        </div>
-      )}
-      {fig && <Figures figures={[fig]} />}
-      <BiteCheckView check={check} done={done} onDone={() => setDone(true)} hookMode actions={actions} />
-      <div className="row-gap bite-nav">
-        <span className="grow" />
-        {!done && (
-          <button type="button" className="btn ghost sm" onClick={onDone}>
-            Überspringen
-          </button>
-        )}
-        <button type="button" className="btn primary" onClick={onDone} disabled={!done}>
-          Weiter zur Erklärung <IconChevron size={15} />
-        </button>
-      </div>
-    </section>
-  );
-}
-
-/** Compact one-card overview for `sprint` lessons: brief recap + optional example, then straight to tasks. */
+/** Compact overview card for `sprint` lessons: full explanation without intermediate checks + optional example, then straight to tasks. */
 function SprintOverview({ set, bites, host, hasExample, labs, onDone }: { set: PracticeSet; bites: Bite[]; host: SetHost; hasExample: boolean; labs: ReactNode; onDone: () => void }) {
   return (
     <>
       <section className="panel bite-card">
         <div className="bite-dots">
-          <span className="muted small">Kurz-Überblick · direkt ins Üben</span>
+          <span className="muted small">Kompakt-Theorie · danach direkt üben</span>
         </div>
         {bites.map((b, k) => (
           <div key={k} className="sprint-bite">
@@ -715,7 +659,7 @@ function SprintOverview({ set, bites, host, hasExample, labs, onDone }: { set: P
       {labs}
       <div className="phase-next">
         <button type="button" className="btn primary" onClick={onDone}>
-          Direkt zu den Aufgaben <IconChevron size={15} />
+          Jetzt selbst üben <IconChevron size={15} />
         </button>
       </div>
     </>
@@ -723,7 +667,7 @@ function SprintOverview({ set, bites, host, hasExample, labs, onDone }: { set: P
 }
 
 /** The explanation in bites: read a little, interact with a varied quick check, go on. */
-function BitesView({ set, bites, host, onDone, onSkip }: { set: PracticeSet; bites: Bite[]; host: SetHost; onDone: () => void; onSkip: () => void }) {
+function BitesView({ set, bites, host, hasExample, onDone, onSkip }: { set: PracticeSet; bites: Bite[]; host: SetHost; hasExample: boolean; onDone: () => void; onSkip: () => void }) {
   const [k, setK] = useState(() => Math.max(0, Math.min(set.bite ?? 0, bites.length - 1)));
   const [done, setDone] = useState(false);
   const actions = useRef<CheckActions>({});
@@ -734,6 +678,7 @@ function BitesView({ set, bites, host, onDone, onSkip }: { set: PracticeSet; bit
     setDone(false);
     actions.current = {};
     host.updateSet?.({ bite: to });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
   const next = () => (k < bites.length - 1 ? go(k + 1) : onDone());
   // keys: 1–4 answer choice/tf checks, Enter reveals/submits or goes on
@@ -759,10 +704,10 @@ function BitesView({ set, bites, host, onDone, onSkip }: { set: PracticeSet; bit
     <section className="panel bite-card" key={k}>
       <div className="bite-dots">
         {bites.map((_, j) => (
-          <button key={j} type="button" className={j === k ? 'on' : j < k ? 'done' : ''} onClick={() => go(j)} aria-label={`Häppchen ${j + 1}`} />
+          <button key={j} type="button" className={j === k ? 'on' : j < k ? 'done' : ''} onClick={() => go(j)} aria-label={`Theorie ${j + 1}`} />
         ))}
         <span className="muted small">
-          Häppchen {k + 1} von {bites.length}
+          Theorie {k + 1} von {bites.length}
         </span>
         <button type="button" className="link-btn small bite-skip" onClick={onSkip} title="Erklärung überspringen – direkt zu den Aufgaben">
           Kenn ich schon – direkt üben ›
@@ -799,7 +744,7 @@ function BitesView({ set, bites, host, onDone, onSkip }: { set: PracticeSet; bit
           </button>
         )}
         <button type="button" className="btn primary" onClick={next} disabled={!answered}>
-          {k < bites.length - 1 ? 'Weiter' : 'Verstanden'} <IconChevron size={15} />
+          {k < bites.length - 1 ? 'Weiter' : hasExample ? 'Weiter zum Beispiel' : 'Jetzt selbst üben'} <IconChevron size={15} />
         </button>
       </div>
     </section>

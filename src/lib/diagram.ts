@@ -4,7 +4,7 @@
  * Pure (no DOM) – tested in scripts/test-srs.mts.
  */
 import { ICON_NAMES, ICONS } from './diagramIcons';
-import { renderIllustration, type IllustrationPalette } from './illustrations';
+import { ILLUSTRATION_NAMES, matchIllustration, renderIllustration, type IllustrationPalette } from './illustrations';
 import { compileExpr, sampleCurve } from './plotExpr';
 
 export type ForceDir = 'up' | 'down' | 'left' | 'right' | 'up-left' | 'up-right' | 'down-left' | 'down-right';
@@ -13,6 +13,7 @@ export type ForceState = { name: string; note?: string; sizes?: Partial<Record<F
 export type SceneActor = { id: string; label: string; icon?: string; sub?: string };
 export type SceneArrow = { from: string; to: string; label?: string; both?: boolean; dashed?: boolean };
 export type CalloutPart = { side: 'left' | 'right'; label: string; note?: string };
+export type LayerItem = { label: string; note?: string; icon?: string };
 
 export type Diagram = DiagramBase & {
   /** Small symbol per box: box label → symbol name (see lib/diagramIcons.ts). */
@@ -22,7 +23,7 @@ type DiagramBase =
   | { type: 'flow'; title?: string; steps: string[]; highlight?: string }
   | { type: 'cycle'; title?: string; steps: string[]; highlight?: string }
   | { type: 'hierarchy'; title?: string; root: string; children: { label: string; children?: string[] }[]; highlight?: string }
-  | { type: 'compare'; title?: string; columns: { title: string; items: string[] }[] }
+  | { type: 'compare'; title?: string; columns: { title: string; items: string[]; icon?: string }[] }
   | { type: 'timeline'; title?: string; events: { when: string; label: string }[] }
   | { type: 'concept'; title?: string; center: string; branches: string[]; highlight?: string }
   | { type: 'matrix'; title?: string; x: string; y: string; cells: string[] }
@@ -41,6 +42,7 @@ type DiagramBase =
   | { type: 'forces'; title?: string; subject: string; icon?: string; vectors: ForceVec[]; states?: ForceState[] }
   | { type: 'scene'; title?: string; actors: SceneActor[]; arrows: SceneArrow[] }
   | { type: 'callout'; title?: string; subject: string; icon?: string; parts: CalloutPart[] }
+  | { type: 'layers'; title?: string; layers: LayerItem[] }
   | { type: 'illustration'; title?: string; width: number; height: number; svg: string };
 
 export type PlotAxis = { label: string; min: number; max: number };
@@ -203,6 +205,7 @@ const TYPE_ALIASES: Record<string, string> = {
   kraft: 'forces', kraefte: 'forces', kräfte: 'forces', force: 'forces', vektor: 'forces', vektoren: 'forces', vectors: 'forces',
   szene: 'scene', akteure: 'scene', wechselwirkung: 'scene', interaction: 'scene',
   beschriftung: 'callout', aufbau: 'callout', teile: 'callout', anatomie: 'callout', querschnitt: 'callout', annotated: 'callout',
+  schichten: 'layers', schichtenmodell: 'layers', ebenen: 'layers', stack: 'layers', stapel: 'layers',
   svg: 'illustration', skizze: 'illustration', zeichnung: 'illustration', bild: 'illustration', sketch: 'illustration',
 };
 
@@ -313,7 +316,11 @@ function parseBase(raw: unknown): DiagramBase | null {
     }
     case 'compare': {
       const columns = (Array.isArray(r.columns) ? r.columns : [])
-        .map((c) => ({ title: str((c as { title?: unknown })?.title), items: list((c as { items?: unknown })?.items, 6) }))
+        .map((c) => {
+          const o = (c ?? {}) as { title?: unknown; items?: unknown; icon?: unknown; motif?: unknown };
+          const icon = str(o.icon ?? o.motif, 30) || undefined;
+          return { title: str(o.title), items: list(o.items, 6), ...(icon ? { icon } : {}) };
+        })
         .filter((c) => c.title && c.items.length)
         .slice(0, 3);
       if (columns.length < 2) return null;
@@ -502,6 +509,21 @@ function parseBase(raw: unknown): DiagramBase | null {
       if (parts.length < 2) return null;
       return { type: 'callout', title, subject, ...(icon ? { icon } : {}), parts };
     }
+    case 'layers': {
+      const rawLayers = Array.isArray(r.layers ?? r.levels ?? r.items) ? ((r.layers ?? r.levels ?? r.items) as unknown[]) : [];
+      const layers: LayerItem[] = [];
+      for (const rawL of rawLayers) {
+        if (layers.length >= 7) break;
+        const o = (rawL ?? {}) as Record<string, unknown>;
+        const label = typeof rawL === 'string' || typeof rawL === 'number' ? str(rawL, 42) : str(o.label ?? o.name ?? o.title, 42);
+        if (!label) continue;
+        const note = typeof rawL === 'object' && rawL ? str(o.note ?? o.desc ?? o.sub, 72) || undefined : undefined;
+        const icon = typeof rawL === 'object' && rawL ? str(o.icon ?? o.motif, 30) || undefined : undefined;
+        layers.push({ label, ...(note ? { note } : {}), ...(icon ? { icon } : {}) });
+      }
+      if (layers.length < 2) return null;
+      return { type: 'layers', title, layers };
+    }
     case 'illustration': {
       const cleaned = sanitizeSvg(r.svg, r.width, r.height);
       if (!cleaned) return null;
@@ -655,8 +677,8 @@ const ICON_KINDS = new Set<Box['kind']>(['node', 'accent', 'node2', 'accent2', '
 export type Line = { pts: [number, number][]; arrow?: boolean; dashed?: boolean; curve?: boolean; both?: boolean; tone?: number; muted?: boolean; width?: number; quad?: [number, number]; dotStart?: boolean };
 /** Filled areas behind everything (Venn circles, pyramid steps), in colour `hue` (1–5). */
 export type Area = { circle?: [number, number, number]; poly?: [number, number][]; fill: 'node' | 'accent' | 'soft'; hue?: number };
-/** Illustrated motif placed inside a visual diagram (forces, scene, callout). */
-export type ArtItem = { icon?: string; subject?: string; x: number; y: number; w: number; h: number; tilt?: number; tone?: number };
+/** Illustrated motif or circular badge placed inside a visual diagram (forces, scene, callout, layers, flow, compare, cycle). */
+export type ArtItem = { icon?: string; subject?: string; badge?: string; x: number; y: number; w: number; h: number; tilt?: number; tone?: number };
 const hueOf = (i: number) => (i % 5) + 1;
 export type Layout = { width: number; height: number; boxes: Box[]; lines: Line[]; areas: Area[]; art?: ArtItem[]; rawSvg?: { svg: string; width: number; height: number; y: number }; fs: number };
 
@@ -1004,26 +1026,48 @@ export function layoutDiagram(d: Diagram, stateIndex?: number): Layout {
   if (d.type === 'flow') {
     const n = d.steps.length;
     const cols = n <= 4 ? n : Math.ceil(n / Math.ceil(n / 4));
-    const gap = 30;
+    const matched = d.steps.map((s) => matchIllustration(s));
+    const hasArt = n <= 6 && matched.some(Boolean);
+    const gap = hasArt ? 24 : 30;
     const bw = (inner - (cols - 1) * gap) / cols;
+    const artH = hasArt ? (cols <= 3 ? 54 : 46) : 0;
+    const artW = hasArt ? Math.min(bw - 12, cols <= 3 ? 86 : 72) : 0;
     NF = nodeFont(d.steps.map((t) => ({ text: t, w: bw - 16 - iw(t) })));
     const rows: Box[][] = [];
     for (let i = 0; i < n; i += cols) {
-      const row = d.steps.slice(i, i + cols).map((s) => wrap(s, bw - 16 - iw(s), NF));
+      const slice = d.steps.slice(i, i + cols);
+      const row = slice.map((s) => wrap(s, bw - 16 - iw(s), NF));
       const h = Math.max(...row.map((l) => boxH(l)));
-      rows.push(row.map((l, k) => ({ x: PAD + k * (bw + gap), y, w: bw, h, lines: l, kind: NODE_KINDS(!!d.highlight, i + k, d.steps.indexOf(d.highlight ?? '')) })));
-      y += h + 40;
+      const rowTop = y;
+      const boxY = hasArt ? rowTop + artH + 10 : rowTop;
+      const rowBoxes: Box[] = [];
+      row.forEach((l, k) => {
+        const idx = i + k;
+        const bx = PAD + k * (bw + gap);
+        const tone = hasArt ? hueOf(idx) : undefined;
+        if (hasArt) {
+          boxes.push({ x: bx, y: rowTop, w: bw, h: artH + 10 + h + 4, lines: [], kind: 'soft', tone });
+          const m = matched[idx];
+          if (m) art.push({ icon: m, subject: d.steps[idx], x: bx + (bw - artW) / 2, y: rowTop + 5, w: artW, h: artH, tone });
+          else art.push({ badge: String(idx + 1), x: bx + bw / 2 - 18, y: rowTop + 5 + (artH - 36) / 2, w: 36, h: 36, tone });
+        }
+        rowBoxes.push({ x: bx, y: boxY, w: bw, h, lines: l, kind: NODE_KINDS(!!d.highlight, idx, d.steps.indexOf(d.highlight ?? '')), ...(tone ? { tone } : {}) });
+      });
+      rows.push(rowBoxes);
+      y = boxY + h + (hasArt ? 38 : 40);
     }
-    y -= 40;
+    y -= hasArt ? 34 : 40;
     const flat = rows.flat();
     boxes.push(...flat);
     flat.forEach((b, i) => {
       const nb = flat[i + 1];
       if (!nb) return;
-      if (nb.y === b.y) lines.push({ pts: [[b.x + b.w + 4, b.y + b.h / 2], [nb.x - 6, nb.y + nb.h / 2]], arrow: true });
+      const arrowTone = hasArt ? hueOf(i) : undefined;
+      const arrowW = hasArt ? 2.6 : undefined;
+      if (nb.y === b.y) lines.push({ pts: [[b.x + b.w + 4, b.y + b.h / 2], [nb.x - 6, nb.y + nb.h / 2]], arrow: true, ...(arrowTone ? { tone: arrowTone } : {}), ...(arrowW ? { width: arrowW } : {}) });
       else {
-        const midY = b.y + b.h + 20;
-        lines.push({ pts: [[b.x + b.w / 2, b.y + b.h + 4], [b.x + b.w / 2, midY], [nb.x + nb.w / 2, midY], [nb.x + nb.w / 2, nb.y - 6]], arrow: true });
+        const midY = b.y + b.h + 18;
+        lines.push({ pts: [[b.x + b.w / 2, b.y + b.h + 4], [b.x + b.w / 2, midY], [nb.x + nb.w / 2, midY], [nb.x + nb.w / 2, nb.y - (hasArt ? artH + 16 : 6)]], arrow: true, ...(arrowTone ? { tone: arrowTone } : {}), ...(arrowW ? { width: arrowW } : {}) });
       }
     });
   } else if (d.type === 'cycle' || d.type === 'concept') {
@@ -1073,7 +1117,13 @@ export function layoutDiagram(d: Diagram, stateIndex?: number): Layout {
       const cb = pl.cb;
       boxes.push(cb);
       nodes.forEach((b, i) => lines.push({ ...connect(cb, b), arrow: false, tone: hueOf(i) }));
-    } else nodes.forEach((b, i) => lines.push({ ...connect(b, nodes[(i + 1) % n]), curve: true, tone: hueOf(i) }));
+    } else {
+      const centerArt = matchIllustration(d.title) || matchIllustration(d.steps.join(' '));
+      if (centerArt && R >= 110 && rY >= 70) {
+        art.push({ icon: centerArt, subject: d.title, x: cx - 44, y: cy - 30, w: 88, h: 60, tone: 1 });
+      }
+      nodes.forEach((b, i) => lines.push({ ...connect(b, nodes[(i + 1) % n]), curve: true, tone: hueOf(i) }));
+    }
     y = cy + rY + bh / 2;
   } else if (d.type === 'hierarchy') {
     // a long root gets a wider box instead of many lines
@@ -1109,19 +1159,32 @@ export function layoutDiagram(d: Diagram, stateIndex?: number): Layout {
     y = bottom;
   } else if (d.type === 'compare') {
     const k = d.columns.length;
-    const gap = 14;
+    const colArt = d.columns.map((c) => c.icon || matchIllustration(c.title) || matchIllustration(c.items.join(' ')));
+    const hasArt = colArt.some(Boolean);
+    const gap = hasArt && k === 2 ? 26 : 14;
     const cw = (inner - (k - 1) * gap) / k;
     NF = nodeFont(d.columns.map((c) => ({ text: c.title, w: cw - 16 - iw(c.title) })));
     const heads = d.columns.map((c) => wrap(c.title, cw - 16 - iw(c.title), NF, 2));
     const hh = Math.max(...heads.map((l) => boxH(l, 8)));
     const bodies = d.columns.map((c) => c.items.flatMap((it) => wrap('• ' + it, cw - 20, 14, 3)));
     const bh = Math.max(...bodies.map((l) => l.length * 19 + 20));
-    d.columns.forEach((_, i) => {
+    const stageH = hasArt ? 64 : 0;
+    const headY = hasArt ? y + stageH + 6 : y;
+    d.columns.forEach((col, i) => {
       const x = PAD + i * (cw + gap);
-      boxes.push({ x, y, w: cw, h: hh, lines: heads[i], kind: 'accent', tone: hueOf(i) });
-      boxes.push({ x, y: y + hh + 6, w: cw, h: bh, lines: bodies[i], kind: 'soft', align: 'start', tone: hueOf(i) });
+      const tone = hueOf(i);
+      if (hasArt) {
+        boxes.push({ x, y, w: cw, h: stageH, lines: [], kind: 'soft', tone });
+        if (colArt[i]) art.push({ icon: colArt[i]!, subject: col.title, x: x + (cw - 84) / 2, y: y + 5, w: 84, h: 54, tone });
+        else art.push({ badge: String(i + 1), x: x + cw / 2 - 18, y: y + 14, w: 36, h: 36, tone });
+      }
+      boxes.push({ x, y: headY, w: cw, h: hh, lines: heads[i], kind: 'accent', tone });
+      boxes.push({ x, y: headY + hh + 6, w: cw, h: bh, lines: bodies[i], kind: 'soft', align: 'start', tone });
     });
-    y += hh + 6 + bh;
+    if (hasArt && k === 2) {
+      art.push({ badge: 'VS', x: W / 2 - 17, y: y + (stageH - 34) / 2, w: 34, h: 34, tone: 2 });
+    }
+    y = headY + hh + 6 + bh;
   } else if (d.type === 'timeline') {
     const n = d.events.length;
     const step = inner / n;
@@ -1720,6 +1783,33 @@ export function layoutDiagram(d: Diagram, stateIndex?: number): Layout {
     placeCol(lefts, true, 0);
     placeCol(rights, false, lefts.length);
     y = maxY + 4;
+  } else if (d.type === 'layers') {
+    const iconCol = 64;
+    const labelW = d.layers.some((l) => !!l.note) ? 200 : inner - iconCol - 24;
+    const noteW = inner - iconCol - labelW - 30;
+    const gapY = 10;
+    d.layers.forEach((layer, idx) => {
+      const tone = hueOf(idx);
+      const ll = wrap(layer.label, labelW - 18, 14);
+      const nl = layer.note ? wrap(layer.note, noteW - 12, 13) : [];
+      const rowH = Math.max(54, ll.length * 18 + 16, nl.length * 17 + 16);
+      // Full-width Studyflix layer ribbon backdrop
+      boxes.push({ x: PAD, y, w: inner, h: rowH, lines: [], kind: 'soft', tone });
+      const m = layer.icon || matchIllustration(layer.label) || matchIllustration(layer.note);
+      if (m) art.push({ icon: m, subject: layer.label, x: PAD + 8, y: y + (rowH - 42) / 2, w: 54, h: 42, tone });
+      else art.push({ badge: String(idx + 1), x: PAD + 17, y: y + (rowH - 34) / 2, w: 34, h: 34, tone });
+      const lh = ll.length * 18 + 12;
+      boxes.push({ x: PAD + iconCol + 8, y: y + (rowH - lh) / 2, w: labelW, h: lh, lines: ll, kind: 'node', fs: 14, tone });
+      if (nl.length) {
+        const nh = nl.length * 17 + 4;
+        boxes.push({ x: PAD + iconCol + labelW + 20, y: y + (rowH - nh) / 2, w: noteW, h: nh, lines: nl, kind: 'label', align: 'start', fs: 13 });
+      }
+      if (idx < d.layers.length - 1) {
+        lines.push({ pts: [[PAD + iconCol / 2 + 4, y + rowH + 1], [PAD + iconCol / 2 + 4, y + rowH + gapY - 1]], tone, width: 2.2 });
+      }
+      y += rowH + gapY;
+    });
+    y -= gapY;
   } else if (d.type === 'illustration') {
     const scaledH = Math.round(((W - 2 * PAD) * d.height) / d.width);
     rawSvg = { svg: d.svg, width: d.width, height: d.height, y };
@@ -1885,6 +1975,15 @@ export function renderDiagram(d: Diagram, p: Palette = PALETTES.light, view?: Di
   if (L.art?.length) {
     for (const item of L.art) {
       const t = tn(item.tone);
+      const cx = r1(item.x + item.w / 2), cy = r1(item.y + item.h / 2);
+      if (item.badge) {
+        const rad = r1(Math.min(item.w, item.h) / 2);
+        const fs = item.badge.length > 1 ? 11 : 15;
+        out.push(
+          `<g class="dg-art"><circle cx="${cx}" cy="${cy}" r="${rad}" fill="${t.accent}" stroke="${p.onAccent}" stroke-width="2" filter="url(#${id}-s)"/><text x="${cx}" y="${cy}" font-size="${fs}" font-weight="800" fill="${p.onAccent}" text-anchor="middle" dominant-baseline="central">${esc(item.badge)}</text></g>`,
+        );
+        continue;
+      }
       const artPal: IllustrationPalette = {
         accent: t.accent,
         node: t.node,
@@ -1897,7 +1996,6 @@ export function renderDiagram(d: Diagram, p: Palette = PALETTES.light, view?: Di
         violet: p.tones[4].line,
       };
       const inner = renderIllustration(item.icon, item.subject, item.x, item.y, item.w, item.h, artPal);
-      const cx = r1(item.x + item.w / 2), cy = r1(item.y + item.h / 2);
       out.push(item.tilt ? `<g class="dg-art" transform="rotate(${item.tilt} ${cx} ${cy})">${inner}</g>` : `<g class="dg-art">${inner}</g>`);
     }
   }
@@ -2077,21 +2175,18 @@ export function diagramsToSvg(html: string): string {
 export const RULE_ICONS = ['person', 'gruppe', 'gehirn', 'idee', 'frage', 'warnung', 'haken', 'kreuz', 'uhr', 'kalender', 'geld', 'trend', 'ziel', 'suche', 'chat', 'megafon', 'fernseher', 'smartphone', 'internet', 'zeitung', 'buch', 'schule', 'herz', 'gesundheit', 'firma', 'gesetz', 'politik', 'natur', 'wasser', 'zahnrad', 'daten', 'dokument', 'liste', 'waage', 'forschung', 'experiment', 'rechnen', 'wachstum', 'austausch', 'beziehung', 'erfolg', 'schutz', 'gesellschaft', 'familie', 'technik', 'loesung', 'medizin', 'stufen'];
 
 /** What the AI is told when cards may get a graphic: describe it, never draw it. Kept short – it goes with every card request. */
-export const DIAGRAM_RULE = `Grafiken: Gib etwa jeder dritten Karte ein Feld "diagram" – wo das Material Abläufe, Kräfte, Akteure, Aufbau, Modelle, Gliederungen, Vergleiche, Zahlen, Formeln oder Zusammenhänge enthält; keine bei reinen Begriffen/Fakten. Beschriftungen: Stichworte, höchstens 6 Wörter. Formen:
-forces {"subject":"Flugzeug","icon":"flugzeug","vectors":[{"dir":"up","label":"Auftrieb"},{"dir":"down","label":"Gewicht"}]} Kräfte/Richtungen (dir: up|down|left|right; nie concept!)
-scene {"actors":[{"id":"a","label":"Käufer","icon":"person"},{"id":"b","label":"Verkäufer","icon":"fabrik"}],"arrows":[{"from":"a","to":"b","label":"Geld"}]} 2–4 Akteure · callout {"subject":"Zelle","icon":"zelle","parts":[{"side":"left","label":"Kern"},{"side":"right","label":"Membran"}]} 2–6 Teile
-flow {"steps":["…","…"]} Ablauf 2–8 · cycle {"steps":[…]} Kreislauf 3–8
-hierarchy {"root":"…","children":[{"label":"…","children":["…"]}]} Gliederung, bis 5 Äste à 4
-compare {"columns":[{"title":"…","items":["…"]}]} Vergleich, 2–3 Spalten · venn {"sets":[{"label":"…","items":[…]},{…}],"shared":[…]}
-timeline {"events":[{"when":"1990","label":"…"}]} · concept {"center":"…","branches":[…]} 3–8 Merkmale
-matrix {"x":"…","y":"…","cells":["o.l.","o.r.","u.l.","u.r."]} Vierfelder/SWOT · pyramid {"levels":["Spitze",…,"Basis"]} 3–6
-model {"nodes":["A","B","M"],"links":[{"from":"A","to":"B","label":"+"},{"from":"M","to":"A -> B","label":"moderiert"}]} Pfeile zwischen Begriffen/Variablen, 2–8; optional "both":true, "dashed":true
-network {"nodes":[…],"links":[{"from":"A","to":"B","label":"…"}]} Begriffsnetz 3–8 · decision {"question":"…?","yes":"…","no":{"question":"…?","yes":"…","no":"…"}}
-bars {"unit":"%","bars":[{"label":"…","value":42}]} · pie {"slices":[{"label":"…","value":40},…]} – nur Zahlen aus dem Material
-plot {"x":{"label":"…","min":0,"max":10},"y":{…},"functions":[{"label":"…","expr":"10 - x"}],"points":[{"x":5,"label":"…"}]} exakte Kurve aus Formel in x (+-*/^ sqrt exp ln log sin cos pi e), bis 3
-axes {"x":"…","y":"…","shape":"steigend|fallend|u|umgekehrtes-u|s-kurve|linear"} Verlauf ohne Formel
-fishbone {"effect":"…","causes":[{"label":"…","items":["…"]}]} Ursache-Wirkung · numberline {"min":0,"max":14,"marks":[{"value":7,"label":"…"}],"ranges":[{"from":0,"to":7,"label":"…"}]}
-Immer mit "type" und "title". Optional "highlight":"Kasten" und "icons":{"Beschriftung":"symbol"}; Symbole: ${RULE_ICONS.join(',')}.`;
+export const DIAGRAM_RULE = `Grafiken im Erklärvideo-Stil: Gib mindestens etwa jeder dritten Karte ein Feld "diagram" – nutze bildhafte Formen (scene, forces, callout, layers, plot) statt trockener Textkästen/Tabellen! Stichworte max. 6 Wörter. Formen:
+forces {"subject":"Flugzeug","icon":"flugzeug","vectors":[{"dir":"up","label":"Auftrieb"},{"dir":"down","label":"Gewicht"}]} Kräfte (dir: up|down|left|right; nie concept!)
+scene {"actors":[{"id":"a","label":"Sender","icon":"computer"},{"id":"b","label":"Router","icon":"router"}],"arrows":[{"from":"a","to":"b","label":"Paket"}]} 2–4 Akteure & Pfeile (Abläufe, Netze, Handel, Bio)
+callout {"subject":"Zelle","icon":"zelle","parts":[{"side":"left","label":"Kern"},{"side":"right","label":"Membran"}]} 2–6 Teile · layers {"layers":[{"label":"Schicht","note":"Aufgabe","icon":"paket"}]} 2–7 Ebenen
+compare {"columns":[{"title":"A","icon":"kabel","items":["…"]},{"title":"B","icon":"paket","items":["…"]}]} Bild-Vergleich (mit "icon") · venn {"sets":[{"label":"…","items":[…]},{…}],"shared":[…]}
+flow {"steps":["…","…"]} Bild-Ablauf 2–6 · cycle {"steps":[…]} Kreislauf 3–8 · timeline {"events":[{"when":"1990","label":"…"}]}
+hierarchy {"root":"…","children":[{"label":"…","children":["…"]}]} · concept {"center":"…","branches":[…]} · pyramid {"levels":["Spitze",…,"Basis"]}
+matrix {"x":"…","y":"…","cells":["o.l.","o.r.","u.l.","u.r."]} · decision {"question":"…?","yes":"…","no":{"question":"…?","yes":"…","no":"…"}}
+model {"nodes":["A","B","M"],"links":[{"from":"A","to":"B","label":"+"},{"from":"M","to":"A -> B","label":"moderiert"}]} · network {"nodes":[…],"links":[{"from":"A","to":"B","label":"…"}]}
+bars {"unit":"%","bars":[{"label":"…","value":42}]} · pie {"slices":[{"label":"…","value":40},…]} · numberline {"min":0,"max":14,"marks":[{"value":7,"label":"…"}]}
+plot {"x":{"label":"…","min":0,"max":10},"y":{…},"functions":[{"label":"…","expr":"10 - x"}]} · axes {"x":"…","y":"…","shape":"steigend|fallend|u|umgekehrtes-u|s-kurve|linear"} · fishbone {"effect":"…","causes":[{"label":"…","items":["…"]}]}
+Mit "type"+"title". Bildmotive ("icon"): ${ILLUSTRATION_NAMES.slice(0, 32).join(',')} u.a. Optional "highlight" & "icons":{"Label":"symbol"}; Symbole: ${RULE_ICONS.join(',')}.`;
 
 // ---------- graphics of one card (improve per card) ----------
 const DIAGRAM_RE = /<div class="diagram" data-diagram="([^"]*)"><\/div>/;
@@ -2132,23 +2227,24 @@ export const withDiagram = (html: string, d: Diagram) => stripGraphics(html) + d
 
 /** Names of the diagram kinds (for choosing one). */
 export const DIAGRAM_KINDS: { id: Diagram['type']; label: string }[] = [
-  { id: 'forces', label: 'Kräfte & Richtungen am Objekt' },
   { id: 'scene', label: 'Bildhafte Szene (Akteure & Pfeile)' },
+  { id: 'forces', label: 'Kräfte & Richtungen am Objekt' },
   { id: 'callout', label: 'Objekt-Aufbau (Beschriftung)' },
-  { id: 'flow', label: 'Ablauf' },
+  { id: 'layers', label: 'Schichten / Ebenen (Aufbau)' },
+  { id: 'flow', label: 'Bild-Ablauf (Schritte)' },
+  { id: 'compare', label: 'Bild-Vergleich (Gegenüberstellung)' },
   { id: 'cycle', label: 'Kreislauf' },
+  { id: 'plot', label: 'Exakte Kurve (Formel)' },
+  { id: 'axes', label: 'Graph / Verlauf' },
   { id: 'hierarchy', label: 'Gliederung' },
-  { id: 'compare', label: 'Vergleich' },
   { id: 'timeline', label: 'Zeitstrahl' },
   { id: 'concept', label: 'Begriffsnetz' },
   { id: 'matrix', label: 'Vierfeldertafel' },
-  { id: 'axes', label: 'Graph / Kurve' },
   { id: 'model', label: 'Modell (Pfeile zwischen Begriffen)' },
   { id: 'venn', label: 'Venn-Diagramm' },
   { id: 'pyramid', label: 'Pyramide / Stufen' },
   { id: 'bars', label: 'Balkendiagramm' },
   { id: 'decision', label: 'Entscheidungsbaum' },
-  { id: 'plot', label: 'Exakte Kurve (Formel)' },
   { id: 'pie', label: 'Kreisdiagramm' },
   { id: 'fishbone', label: 'Ursache-Wirkung (Ishikawa)' },
   { id: 'numberline', label: 'Zahlenstrahl / Skala' },

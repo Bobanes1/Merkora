@@ -238,37 +238,429 @@ export const ILLUSTRATIONS: Record<string, string> = {
     <path d="M48 16 L38 32 L45 29 L48 34 L53 29 L58 32 Z" fill="{{w}}" opacity="0.92"/>
     <path d="M78 24 L70 37 L76 34 L79 38 L86 37 Z" fill="{{w}}" opacity="0.88"/>
   `,
+  // ---------- IT, Netzwerke & Informatik ----------
+  paket: `
+    <ellipse cx="60" cy="67" rx="30" ry="5" fill="{{t}}" opacity="0.12"/>
+    <path d="M26 28 L60 13 L94 28 L60 43 Z" fill="{{y}}"/>
+    <path d="M26 28 L60 43 L60 66 L26 51 Z" fill="{{a}}"/>
+    <path d="M94 28 L60 43 L60 66 L94 51 Z" fill="{{s}}"/>
+    <path d="M43 20.5 L77 35.5" stroke="{{w}}" stroke-width="3.2" stroke-linecap="round" opacity="0.85"/>
+    <rect x="33" y="42" width="14" height="9" rx="2" fill="{{w}}" opacity="0.85"/>
+  `,
+  brief: `
+    <ellipse cx="60" cy="64" rx="36" ry="5" fill="{{t}}" opacity="0.12"/>
+    <rect x="20" y="20" width="80" height="44" rx="7" fill="{{n}}" stroke="{{s}}" stroke-width="2.5"/>
+    <path d="M22 23 L60 46 L98 23" fill="none" stroke="{{a}}" stroke-width="3" stroke-linejoin="round"/>
+    <circle cx="88" cy="24" r="9" fill="{{b}}"/>
+    <path d="M84 24 L87 27 L93 21" fill="none" stroke="{{w}}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+  `,
+  kabel: `
+    <path d="M12 40 L108 40" stroke="{{a}}" stroke-width="7" stroke-linecap="round"/>
+    <path d="M12 40 L108 40" stroke="{{w}}" stroke-width="2" stroke-dasharray="6 6" opacity="0.75"/>
+    <rect x="10" y="30" width="16" height="20" rx="4" fill="{{s}}"/>
+    <rect x="94" y="30" width="16" height="20" rx="4" fill="{{s}}"/>
+    <circle cx="42" cy="40" r="6" fill="{{y}}"/>
+    <circle cx="78" cy="40" r="6" fill="{{y}}"/>
+  `,
+  router: `
+    <line x1="36" y1="36" x2="30" y2="14" stroke="{{s}}" stroke-width="3.2" stroke-linecap="round"/>
+    <line x1="84" y1="36" x2="90" y2="14" stroke="{{s}}" stroke-width="3.2" stroke-linecap="round"/>
+    <path d="M22 18 Q30 9 38 18 M82 18 Q90 9 98 18" fill="none" stroke="{{u}}" stroke-width="2.2" stroke-linecap="round"/>
+    <rect x="18" y="36" width="84" height="26" rx="7" fill="{{a}}"/>
+    <circle cx="33" cy="49" r="3.5" fill="{{y}}"/>
+    <circle cx="45" cy="49" r="3.5" fill="{{w}}" opacity="0.9"/>
+    <circle cx="57" cy="49" r="3.5" fill="{{w}}" opacity="0.9"/>
+    <rect x="74" y="45" width="18" height="8" rx="3" fill="{{n}}" opacity="0.9"/>
+  `,
+  server: `
+    <rect x="28" y="12" width="64" height="17" rx="4" fill="{{a}}"/>
+    <rect x="28" y="32" width="64" height="17" rx="4" fill="{{s}}"/>
+    <rect x="28" y="52" width="64" height="17" rx="4" fill="{{a}}"/>
+    <g fill="{{y}}">
+      <circle cx="38" cy="20.5" r="2.8"/><circle cx="38" cy="40.5" r="2.8"/><circle cx="38" cy="60.5" r="2.8"/>
+    </g>
+    <g stroke="{{w}}" stroke-width="2.4" stroke-linecap="round" opacity="0.85">
+      <line x1="48" y1="20.5" x2="82" y2="20.5"/><line x1="48" y1="40.5" x2="82" y2="40.5"/><line x1="48" y1="60.5" x2="82" y2="60.5"/>
+    </g>
+  `,
+  netzwerk: `
+    <g stroke="{{s}}" stroke-width="2.4" opacity="0.8">
+      <line x1="60" y1="40" x2="26" y2="20"/><line x1="60" y1="40" x2="94" y2="20"/>
+      <line x1="60" y1="40" x2="26" y2="60"/><line x1="60" y1="40" x2="94" y2="60"/>
+      <line x1="26" y1="20" x2="94" y2="20" stroke-dasharray="4 3"/>
+      <line x1="26" y1="60" x2="94" y2="60" stroke-dasharray="4 3"/>
+    </g>
+    <circle cx="26" cy="20" r="9" fill="{{u}}"/><circle cx="94" cy="20" r="9" fill="{{v}}"/>
+    <circle cx="26" cy="60" r="9" fill="{{y}}"/><circle cx="94" cy="60" r="9" fill="{{b}}"/>
+    <circle cx="60" cy="40" r="13" fill="{{a}}" stroke="{{w}}" stroke-width="2.5"/>
+  `,
+  schloss: `
+    <path d="M42 36 L42 26 C42 16 50 10 60 10 C70 10 78 16 78 26 L78 36" fill="none" stroke="{{s}}" stroke-width="6" stroke-linecap="round"/>
+    <rect x="30" y="34" width="60" height="36" rx="8" fill="{{a}}"/>
+    <circle cx="60" cy="49" r="5" fill="{{y}}"/>
+    <rect x="57.5" y="51" width="5" height="10" rx="2" fill="{{y}}"/>
+  `,
+  schluessel: `
+    <circle cx="38" cy="40" r="16" fill="{{y}}" stroke="{{s}}" stroke-width="2.5"/>
+    <circle cx="38" cy="40" r="6" fill="{{n}}"/>
+    <rect x="52" y="35" width="48" height="10" rx="4" fill="{{y}}" stroke="{{s}}" stroke-width="2"/>
+    <rect x="76" y="45" width="7" height="10" rx="2" fill="{{y}}"/>
+    <rect x="89" y="45" width="7" height="13" rx="2" fill="{{y}}"/>
+  `,
+  datenbank: `
+    <path d="M30 22 L30 58 C30 64 43 68 60 68 C77 68 90 64 90 58 L90 22 Z" fill="{{a}}"/>
+    <ellipse cx="60" cy="22" rx="30" ry="9" fill="{{n}}" stroke="{{s}}" stroke-width="2.4"/>
+    <path d="M30 35 C30 41 43 45 60 45 C77 45 90 41 90 35" fill="none" stroke="{{w}}" stroke-width="2.2" opacity="0.8"/>
+    <path d="M30 48 C30 54 43 58 60 58 C77 58 90 54 90 48" fill="none" stroke="{{w}}" stroke-width="2.2" opacity="0.8"/>
+  `,
+  smartphone: `
+    <rect x="40" y="8" width="40" height="64" rx="8" fill="{{a}}"/>
+    <rect x="45" y="15" width="30" height="46" rx="3" fill="{{n}}"/>
+    <rect x="54" y="11" width="12" height="2.2" rx="1" fill="{{w}}" opacity="0.7"/>
+    <circle cx="60" cy="66" r="2.6" fill="{{w}}" opacity="0.85"/>
+    <rect x="49" y="21" width="22" height="9" rx="2.5" fill="{{u}}" opacity="0.8"/>
+    <rect x="49" y="34" width="10" height="10" rx="2.5" fill="{{y}}"/>
+    <rect x="61" y="34" width="10" height="10" rx="2.5" fill="{{b}}"/>
+    <rect x="49" y="47" width="22" height="8" rx="2.5" fill="{{s}}" opacity="0.45"/>
+  `,
+  browser: `
+    <rect x="16" y="12" width="88" height="56" rx="7" fill="{{n}}" stroke="{{s}}" stroke-width="2.4"/>
+    <path d="M16 24 L104 24" stroke="{{s}}" stroke-width="2"/>
+    <circle cx="25" cy="18" r="2.6" fill="{{b}}"/><circle cx="33" cy="18" r="2.6" fill="{{y}}"/><circle cx="41" cy="18" r="2.6" fill="{{a}}"/>
+    <rect x="50" y="15" width="46" height="6" rx="3" fill="{{w}}" opacity="0.85"/>
+    <rect x="24" y="31" width="32" height="29" rx="4" fill="{{a}}" opacity="0.85"/>
+    <path d="M63 36 L94 36 M63 45 L90 45 M63 54 L84 54" stroke="{{s}}" stroke-width="3" stroke-linecap="round"/>
+  `,
+  code: `
+    <rect x="18" y="14" width="84" height="52" rx="8" fill="{{t}}" opacity="0.88"/>
+    <path d="M44 30 L32 40 L44 50" fill="none" stroke="{{a}}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M76 30 L88 40 L76 50" fill="none" stroke="{{y}}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <line x1="65" y1="26" x2="55" y2="54" stroke="{{b}}" stroke-width="4" stroke-linecap="round"/>
+  `,
+  chip: `
+    <g stroke="{{s}}" stroke-width="3" stroke-linecap="round">
+      <line x1="46" y1="10" x2="46" y2="20"/><line x1="60" y1="10" x2="60" y2="20"/><line x1="74" y1="10" x2="74" y2="20"/>
+      <line x1="46" y1="60" x2="46" y2="70"/><line x1="60" y1="60" x2="60" y2="70"/><line x1="74" y1="60" x2="74" y2="70"/>
+      <line x1="26" y1="30" x2="36" y2="30"/><line x1="26" y1="40" x2="36" y2="40"/><line x1="26" y1="50" x2="36" y2="50"/>
+      <line x1="84" y1="30" x2="94" y2="30"/><line x1="84" y1="40" x2="94" y2="40"/><line x1="84" y1="50" x2="94" y2="50"/>
+    </g>
+    <rect x="36" y="20" width="48" height="40" rx="6" fill="{{a}}"/>
+    <rect x="46" y="29" width="28" height="22" rx="3" fill="{{y}}"/>
+  `,
+  // ---------- Physik & Technik ----------
+  zahnrad: `
+    <circle cx="48" cy="44" r="20" fill="{{a}}" stroke="{{s}}" stroke-width="2.5" stroke-dasharray="7 5"/>
+    <circle cx="48" cy="44" r="14" fill="{{a}}"/>
+    <circle cx="48" cy="44" r="6" fill="{{n}}"/>
+    <circle cx="79" cy="28" r="13" fill="{{y}}" stroke="{{s}}" stroke-width="2.2" stroke-dasharray="5 4"/>
+    <circle cx="79" cy="28" r="9" fill="{{y}}"/>
+    <circle cx="79" cy="28" r="3.8" fill="{{n}}"/>
+  `,
+  hebel: `
+    <polygon points="52,66 64,44 76,66" fill="{{s}}"/>
+    <line x1="18" y1="49" x2="104" y2="35" stroke="{{a}}" stroke-width="5.5" stroke-linecap="round"/>
+    <rect x="18" y="31" width="18" height="16" rx="3" fill="{{b}}"/>
+    <rect x="86" y="19" width="14" height="14" rx="3" fill="{{y}}"/>
+    <circle cx="64" cy="42" r="4.5" fill="{{w}}" stroke="{{t}}" stroke-width="1.5"/>
+  `,
+  feder: `
+    <rect x="36" y="10" width="48" height="7" rx="3" fill="{{s}}"/>
+    <path d="M60 17 L60 22 L46 28 L74 35 L46 42 L74 49 L46 56 L60 61 L60 66" fill="none" stroke="{{a}}" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="44" y="61" width="32" height="13" rx="4" fill="{{b}}"/>
+  `,
+  welle: `
+    <line x1="12" y1="40" x2="108" y2="40" stroke="{{s}}" stroke-width="1.6" stroke-dasharray="4 4" opacity="0.6"/>
+    <path d="M14 40 Q26 12 38 40 T62 40 T86 40 T106 40" fill="none" stroke="{{a}}" stroke-width="4" stroke-linecap="round"/>
+    <path d="M14 40 Q26 24 38 40 T62 40 T86 40 T106 40" fill="none" stroke="{{u}}" stroke-width="2.2" stroke-linecap="round" opacity="0.7"/>
+  `,
+  prisma: `
+    <line x1="10" y1="44" x2="46" y2="38" stroke="{{t}}" stroke-width="3.2" stroke-linecap="round" opacity="0.8"/>
+    <polygon points="60,12 32,64 88,64" fill="{{n}}" stroke="{{s}}" stroke-width="2.8" stroke-linejoin="round"/>
+    <line x1="72" y1="34" x2="108" y2="24" stroke="{{b}}" stroke-width="3" stroke-linecap="round"/>
+    <line x1="74" y1="39" x2="108" y2="39" stroke="{{y}}" stroke-width="3" stroke-linecap="round"/>
+    <line x1="76" y1="44" x2="108" y2="54" stroke="{{u}}" stroke-width="3" stroke-linecap="round"/>
+  `,
+  lampe: `
+    <path d="M44 48 C37 42 35 30 42 21 C49 12 71 12 78 21 C85 30 83 42 76 48 C72 52 71 55 71 58 L49 58 C49 55 48 52 44 48 Z" fill="{{y}}"/>
+    <path d="M52 24 C47 28 47 35 50 40" fill="none" stroke="{{w}}" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
+    <rect x="49" y="58" width="22" height="6" rx="2" fill="{{s}}"/>
+    <rect x="52" y="65" width="16" height="5" rx="2.5" fill="{{a}}"/>
+  `,
+  stromkreis: `
+    <rect x="24" y="18" width="72" height="44" rx="10" fill="none" stroke="{{a}}" stroke-width="3.2"/>
+    <rect x="16" y="30" width="16" height="20" rx="3" fill="{{y}}" stroke="{{s}}" stroke-width="2"/>
+    <circle cx="96" cy="40" r="10" fill="{{b}}"/>
+    <path d="M92 36 L100 44 M100 36 L92 44" stroke="{{w}}" stroke-width="2.2" stroke-linecap="round"/>
+    <rect x="48" y="12" width="24" height="12" rx="3" fill="{{u}}"/>
+  `,
+  thermometer: `
+    <rect x="52" y="10" width="16" height="44" rx="8" fill="{{n}}" stroke="{{s}}" stroke-width="2.5"/>
+    <circle cx="60" cy="57" r="13" fill="{{b}}"/>
+    <rect x="56.5" y="26" width="7" height="26" rx="3.5" fill="{{b}}"/>
+    <g stroke="{{s}}" stroke-width="2" stroke-linecap="round">
+      <line x1="72" y1="20" x2="80" y2="20"/><line x1="72" y1="30" x2="78" y2="30"/><line x1="72" y1="40" x2="80" y2="40"/>
+    </g>
+  `,
+  satellit: `
+    <rect x="14" y="28" width="28" height="20" rx="3" fill="{{u}}" stroke="{{s}}" stroke-width="2"/>
+    <rect x="78" y="28" width="28" height="20" rx="3" fill="{{u}}" stroke="{{s}}" stroke-width="2"/>
+    <rect x="46" y="24" width="28" height="28" rx="5" fill="{{a}}"/>
+    <circle cx="60" cy="38" r="6" fill="{{y}}"/>
+    <path d="M52 56 Q60 66 68 56 M46 62 Q60 75 74 62" fill="none" stroke="{{b}}" stroke-width="2.4" stroke-linecap="round"/>
+  `,
+  // ---------- Biologie & Medizin ----------
+  dna: `
+    <path d="M38 10 C38 25 82 25 82 40 C82 55 38 55 38 70" fill="none" stroke="{{a}}" stroke-width="4" stroke-linecap="round"/>
+    <path d="M82 10 C82 25 38 25 38 40 C38 55 82 55 82 70" fill="none" stroke="{{b}}" stroke-width="4" stroke-linecap="round"/>
+    <g stroke="{{y}}" stroke-width="3" stroke-linecap="round">
+      <line x1="45" y1="18" x2="75" y2="18"/><line x1="48" y1="31" x2="72" y2="31"/>
+      <line x1="48" y1="49" x2="72" y2="49"/><line x1="45" y1="62" x2="75" y2="62"/>
+    </g>
+  `,
+  lunge: `
+    <path d="M60 12 L60 32 M60 28 L46 38 M60 28 L74 38" fill="none" stroke="{{s}}" stroke-width="4.5" stroke-linecap="round"/>
+    <path d="M53 24 C36 24 24 38 24 54 C24 64 32 68 42 66 C50 64 54 56 54 46 Z" fill="{{b}}" opacity="0.86"/>
+    <path d="M67 24 C84 24 96 38 96 54 C96 64 88 68 78 66 C70 64 66 56 66 46 Z" fill="{{b}}" opacity="0.86"/>
+  `,
+  auge: `
+    <path d="M16 40 C30 18 90 18 104 40 C90 62 30 62 16 40 Z" fill="{{n}}" stroke="{{s}}" stroke-width="2.8"/>
+    <circle cx="60" cy="40" r="15" fill="{{u}}"/>
+    <circle cx="60" cy="40" r="7.5" fill="{{t}}"/>
+    <circle cx="55" cy="35" r="3" fill="{{w}}"/>
+  `,
+  bakterie: `
+    <g stroke="{{a}}" stroke-width="3" stroke-linecap="round">
+      <line x1="60" y1="10" x2="60" y2="19"/><line x1="60" y1="61" x2="60" y2="70"/>
+      <line x1="30" y1="40" x2="39" y2="40"/><line x1="81" y1="40" x2="90" y2="40"/>
+      <line x1="38" y1="18" x2="45" y2="25"/><line x1="75" y1="55" x2="82" y2="62"/>
+      <line x1="82" y1="18" x2="75" y2="25"/><line x1="45" y1="55" x2="38" y2="62"/>
+    </g>
+    <circle cx="60" cy="40" r="22" fill="{{a}}"/>
+    <circle cx="53" cy="35" r="4.5" fill="{{y}}"/>
+    <circle cx="68" cy="44" r="5.5" fill="{{b}}"/>
+    <circle cx="58" cy="50" r="3" fill="{{w}}" opacity="0.7"/>
+  `,
+  blut: `
+    <path d="M60 12 C74 30 82 40 82 50 C82 62 72 70 60 70 C48 70 38 62 38 50 C38 40 46 30 60 12 Z" fill="{{b}}"/>
+    <path d="M49 48 C49 55 54 60 60 60" fill="none" stroke="{{w}}" stroke-width="3" stroke-linecap="round" opacity="0.55"/>
+  `,
+  knochen: `
+    <circle cx="30" cy="33" r="8" fill="{{n}}" stroke="{{s}}" stroke-width="2.2"/>
+    <circle cx="30" cy="47" r="8" fill="{{n}}" stroke="{{s}}" stroke-width="2.2"/>
+    <circle cx="90" cy="33" r="8" fill="{{n}}" stroke="{{s}}" stroke-width="2.2"/>
+    <circle cx="90" cy="47" r="8" fill="{{n}}" stroke="{{s}}" stroke-width="2.2"/>
+    <rect x="30" y="34" width="60" height="12" fill="{{n}}"/>
+    <line x1="34" y1="34" x2="86" y2="34" stroke="{{s}}" stroke-width="2.2"/>
+    <line x1="34" y1="46" x2="86" y2="46" stroke="{{s}}" stroke-width="2.2"/>
+  `,
+  baum: `
+    <rect x="54" y="44" width="12" height="24" rx="3" fill="{{y}}"/>
+    <circle cx="60" cy="28" r="18" fill="{{a}}"/>
+    <circle cx="44" cy="38" r="14" fill="{{s}}"/>
+    <circle cx="76" cy="38" r="14" fill="{{s}}"/>
+  `,
+  mikroskop: `
+    <rect x="32" y="62" width="56" height="8" rx="4" fill="{{s}}"/>
+    <path d="M68 62 C82 56 84 36 72 28" fill="none" stroke="{{s}}" stroke-width="5" stroke-linecap="round"/>
+    <rect x="50" y="14" width="14" height="30" rx="4" transform="rotate(18 57 29)" fill="{{a}}"/>
+    <rect x="40" y="48" width="28" height="5" rx="2.5" fill="{{y}}"/>
+  `,
+  // ---------- Chemie & Erde ----------
+  molekuel: `
+    <line x1="34" y1="54" x2="60" y2="28" stroke="{{s}}" stroke-width="4"/>
+    <line x1="86" y1="54" x2="60" y2="28" stroke="{{s}}" stroke-width="4"/>
+    <circle cx="60" cy="28" r="15" fill="{{b}}"/>
+    <circle cx="34" cy="54" r="11" fill="{{u}}"/>
+    <circle cx="86" cy="54" r="11" fill="{{u}}"/>
+    <circle cx="55" cy="23" r="4" fill="{{w}}" opacity="0.35"/>
+  `,
+  kolben: `
+    <path d="M50 14 L70 14 L70 30 L88 60 C90 64 87 68 82 68 L38 68 C33 68 30 64 32 60 L50 30 Z" fill="{{n}}" stroke="{{s}}" stroke-width="2.6" stroke-linejoin="round"/>
+    <path d="M40 48 L80 48 L86 60 C87 63 85 66 81 66 L39 66 C35 66 33 63 34 60 Z" fill="{{a}}"/>
+    <circle cx="52" cy="56" r="3" fill="{{w}}" opacity="0.8"/><circle cx="66" cy="53" r="2.5" fill="{{y}}"/>
+    <rect x="46" y="10" width="28" height="5" rx="2.5" fill="{{s}}"/>
+  `,
+  flamme: `
+    <path d="M60 10 C78 26 84 40 80 54 C77 64 69 70 60 70 C51 70 43 64 40 54 C36 40 44 26 60 10 Z" fill="{{b}}"/>
+    <path d="M60 30 C70 40 72 50 69 58 C67 64 64 67 60 67 C56 67 53 64 51 58 C48 50 51 40 60 30 Z" fill="{{y}}"/>
+  `,
+  tropfen: `
+    <path d="M60 12 C75 31 83 41 83 51 C83 63 73 71 60 71 C47 71 37 63 37 51 C37 41 45 31 60 12 Z" fill="{{u}}"/>
+    <path d="M49 48 C49 56 54 61 60 61" fill="none" stroke="{{w}}" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
+  `,
+  kompass: `
+    <circle cx="60" cy="40" r="28" fill="{{n}}" stroke="{{s}}" stroke-width="3"/>
+    <polygon points="60,16 67,40 53,40" fill="{{b}}"/>
+    <polygon points="60,64 67,40 53,40" fill="{{u}}"/>
+    <circle cx="60" cy="40" r="4" fill="{{w}}" stroke="{{t}}" stroke-width="1.5"/>
+  `,
+  vulkan: `
+    <path d="M18 68 L48 26 L72 26 L102 68 Z" fill="{{s}}"/>
+    <path d="M48 26 L54 36 L60 28 L66 37 L72 26 Z" fill="{{b}}"/>
+    <circle cx="56" cy="15" r="7" fill="{{y}}" opacity="0.85"/>
+    <circle cx="68" cy="14" r="5" fill="{{b}}" opacity="0.8"/>
+  `,
+  // ---------- Wirtschaft, Recht, Kommunikation & Musik ----------
+  vertrag: `
+    <rect x="30" y="10" width="54" height="62" rx="6" fill="{{n}}" stroke="{{s}}" stroke-width="2.4"/>
+    <g stroke="{{s}}" stroke-width="2.4" stroke-linecap="round">
+      <line x1="40" y1="23" x2="72" y2="23"/><line x1="40" y1="33" x2="74" y2="33"/><line x1="40" y1="43" x2="66" y2="43"/>
+    </g>
+    <path d="M40 58 Q48 52 54 58 T68 56" fill="none" stroke="{{a}}" stroke-width="2.6" stroke-linecap="round"/>
+    <circle cx="82" cy="56" r="11" fill="{{b}}"/>
+    <path d="M77 56 L80.5 59.5 L87 53" fill="none" stroke="{{w}}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+  `,
+  gericht: `
+    <rect x="26" y="60" width="44" height="8" rx="3" fill="{{s}}"/>
+    <rect x="44" y="18" width="32" height="16" rx="4" transform="rotate(-30 60 26)" fill="{{a}}"/>
+    <line x1="62" y1="30" x2="90" y2="58" stroke="{{y}}" stroke-width="6" stroke-linecap="round"/>
+  `,
+  bank: `
+    <polygon points="18,30 60,10 102,30" fill="{{a}}"/>
+    <rect x="22" y="30" width="76" height="6" rx="2" fill="{{s}}"/>
+    <rect x="28" y="36" width="10" height="24" fill="{{n}}" stroke="{{s}}" stroke-width="1.8"/>
+    <rect x="55" y="36" width="10" height="24" fill="{{n}}" stroke="{{s}}" stroke-width="1.8"/>
+    <rect x="82" y="36" width="10" height="24" fill="{{n}}" stroke="{{s}}" stroke-width="1.8"/>
+    <rect x="18" y="60" width="84" height="8" rx="3" fill="{{s}}"/>
+  `,
+  handel: `
+    <path d="M20 20 L32 20 L40 50 L88 50 L96 28 L35 28" fill="none" stroke="{{a}}" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <polygon points="36,28 94,28 87,49 41,49" fill="{{a}}" opacity="0.22"/>
+    <circle cx="48" cy="61" r="6" fill="{{s}}"/><circle cx="82" cy="61" r="6" fill="{{s}}"/>
+    <rect x="50" y="14" width="14" height="14" rx="2.5" fill="{{y}}"/>
+    <rect x="68" y="17" width="12" height="11" rx="2.5" fill="{{b}}"/>
+  `,
+  lkw: `
+    <rect x="16" y="22" width="56" height="34" rx="5" fill="{{a}}"/>
+    <path d="M72 30 L92 30 L102 42 L102 56 L72 56 Z" fill="{{y}}"/>
+    <path d="M77 35 L90 35 L96 42 L77 42 Z" fill="{{w}}" opacity="0.85"/>
+    <circle cx="34" cy="58" r="8.5" fill="{{t}}"/><circle cx="34" cy="58" r="3.8" fill="{{w}}"/>
+    <circle cx="86" cy="58" r="8.5" fill="{{t}}"/><circle cx="86" cy="58" r="3.8" fill="{{w}}"/>
+  `,
+  chart: `
+    <rect x="22" y="44" width="14" height="22" rx="3" fill="{{u}}"/>
+    <rect x="44" y="34" width="14" height="32" rx="3" fill="{{a}}"/>
+    <rect x="66" y="24" width="14" height="42" rx="3" fill="{{v}}"/>
+    <path d="M22 36 L48 26 L70 20 L94 12" fill="none" stroke="{{b}}" stroke-width="3.2" stroke-linecap="round"/>
+    <polygon points="98,10 88,9 93,18" fill="{{b}}"/>
+  `,
+  megafon: `
+    <path d="M26 34 L46 34 L82 16 L82 62 L46 44 L26 44 Z" fill="{{a}}"/>
+    <rect x="32" y="44" width="10" height="18" rx="4" fill="{{s}}"/>
+    <path d="M90 28 Q98 39 90 50 M96 22 Q107 39 96 56" fill="none" stroke="{{y}}" stroke-width="3" stroke-linecap="round"/>
+  `,
+  uhr: `
+    <circle cx="60" cy="40" r="27" fill="{{n}}" stroke="{{a}}" stroke-width="4"/>
+    <line x1="60" y1="40" x2="60" y2="23" stroke="{{t}}" stroke-width="3.2" stroke-linecap="round"/>
+    <line x1="60" y1="40" x2="74" y2="46" stroke="{{b}}" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="60" cy="40" r="3.5" fill="{{a}}"/>
+  `,
+  ziel: `
+    <circle cx="60" cy="40" r="27" fill="{{b}}" opacity="0.22" stroke="{{b}}" stroke-width="3"/>
+    <circle cx="60" cy="40" r="18" fill="{{n}}" stroke="{{a}}" stroke-width="3"/>
+    <circle cx="60" cy="40" r="8" fill="{{b}}"/>
+    <line x1="86" y1="14" x2="63" y2="37" stroke="{{t}}" stroke-width="3" stroke-linecap="round"/>
+    <polygon points="60,40 69,37 63,31" fill="{{t}}"/>
+  `,
+  sprechblase: `
+    <rect x="18" y="16" width="54" height="34" rx="10" fill="{{a}}"/>
+    <polygon points="32,50 26,62 44,50" fill="{{a}}"/>
+    <rect x="50" y="30" width="52" height="30" rx="9" fill="{{n}}" stroke="{{u}}" stroke-width="2.6"/>
+    <polygon points="84,60 92,70 76,60" fill="{{u}}"/>
+    <g stroke="{{w}}" stroke-width="2.6" stroke-linecap="round">
+      <line x1="30" y1="29" x2="58" y2="29"/><line x1="30" y1="38" x2="48" y2="38"/>
+    </g>
+  `,
+  note: `
+    <path d="M46 56 L46 20 L86 14 L86 50" fill="none" stroke="{{a}}" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M46 28 L86 22" stroke="{{v}}" stroke-width="4"/>
+    <ellipse cx="38" cy="57" rx="11" ry="8" transform="rotate(-18 38 57)" fill="{{b}}"/>
+    <ellipse cx="78" cy="51" rx="11" ry="8" transform="rotate(-18 78 51)" fill="{{a}}"/>
+  `,
 };
 
 export const ILLUSTRATION_NAMES = Object.keys(ILLUSTRATIONS);
 
 /** Aliases so German/English topic nouns map naturally to a crisp Studyflix illustration. */
 const ALIASES: Record<string, string> = {
-  plane: 'flugzeug', aircraft: 'flugzeug', jet: 'flugzeug', flieger: 'flugzeug', reise: 'flugzeug',
-  wing: 'tragflaeche', fluegel: 'tragflaeche', airfoil: 'tragflaeche',
-  car: 'auto', fahrzeug: 'auto', pkw: 'auto', lkw: 'auto', transport: 'auto',
+  plane: 'flugzeug', aircraft: 'flugzeug', jet: 'flugzeug', flieger: 'flugzeug', reise: 'flugzeug', luftfahrt: 'flugzeug',
+  wing: 'tragflaeche', fluegel: 'tragflaeche', airfoil: 'tragflaeche', auftrieb: 'tragflaeche',
+  car: 'auto', fahrzeug: 'auto', pkw: 'auto', bremsweg: 'auto', motor: 'auto',
   ship: 'schiff', boot: 'schiff', boat: 'schiff', segelboot: 'schiff',
-  rocket: 'rakete', innovation: 'rakete',
+  rocket: 'rakete', innovation: 'rakete', antrieb: 'rakete', weltraum: 'rakete',
   block: 'koerper', kiste: 'koerper', box: 'koerper', masse: 'koerper', objekt: 'koerper', wuerfel: 'koerper',
-  kugel: 'ball', sphere: 'ball', planet: 'erde', welt: 'erde', internet: 'erde', globus: 'erde',
-  sun: 'sonne', stern: 'sonne',
-  moon: 'mond',
-  cell: 'zelle', biologie: 'zelle', bakterie: 'zelle',
-  heart: 'herz', kreislauf: 'herz', gesundheit: 'herz',
-  brain: 'gehirn', kopf: 'gehirn', denken: 'gehirn',
-  baum: 'pflanze', tree: 'pflanze', natur: 'pflanze', blatt: 'pflanze', wachstum: 'pflanze',
-  wissenschaft: 'atom', physik: 'atom', chemie: 'atom', molekel: 'atom',
-  strom: 'batterie', blitz: 'batterie', energie: 'batterie', akku: 'batterie',
-  gesetz: 'waage', recht: 'waage', gleichgewicht: 'waage', gericht: 'waage',
-  mensch: 'person', kaeufer: 'person', verkaeufer: 'person', sender: 'person', empfaenger: 'person', nutzer: 'person', kunde: 'person',
-  team: 'gruppe', gesellschaft: 'gruppe', markt: 'gruppe',
-  gebaeude: 'haus', home: 'haus', wohnung: 'haus',
-  firma: 'fabrik', unternehmen: 'fabrik', bank: 'fabrik', industrie: 'fabrik',
-  euro: 'geld', preis: 'geld', kapital: 'geld', finanz: 'geld',
-  laptop: 'computer', server: 'computer', pc: 'computer', technik: 'computer',
-  wissen: 'buch', lernen: 'buch', vertrag: 'buch', dokument: 'buch',
-  wetter: 'wolke', regen: 'wolke', klima: 'wolke',
-  mountain: 'berg', naturlandschaft: 'berg',
+  kugel: 'ball', sphere: 'ball',
+  planet: 'erde', welt: 'erde', globus: 'erde', erdkugel: 'erde', oekologie: 'erde',
+  sun: 'sonne', stern: 'sonne', solar: 'sonne', licht: 'sonne',
+  moon: 'mond', gezeiten: 'mond',
+  cell: 'zelle', biologie: 'zelle', membran: 'zelle', zellkern: 'zelle', mitose: 'zelle',
+  heart: 'herz', kreislauf: 'herz', puls: 'herz', medizin: 'herz', gesundheit: 'herz',
+  brain: 'gehirn', kopf: 'gehirn', denken: 'gehirn', psychologie: 'gehirn', gedaechtnis: 'gehirn', neuron: 'gehirn',
+  blatt: 'pflanze', fotosynthese: 'pflanze', photosynthese: 'pflanze', natur: 'pflanze', wachstum: 'pflanze',
+  wald: 'baum', oekosystem: 'baum', umwelt: 'baum',
+  wissenschaft: 'atom', physik: 'atom', kern: 'atom', elektron: 'atom', proton: 'atom',
+  strom: 'batterie', blitz: 'batterie', energie: 'batterie', akku: 'batterie', spannung: 'batterie',
+  gleichgewicht: 'waage', gerechtigkeit: 'waage', abwaegen: 'waage', bilanz: 'waage',
+  mensch: 'person', kaeufer: 'person', verkaeufer: 'person', sender: 'person', empfaenger: 'person', nutzer: 'person', kunde: 'person', benutzer: 'person', patient: 'person', schueler: 'person',
+  team: 'gruppe', gesellschaft: 'gruppe', publikum: 'gruppe', zielgruppe: 'gruppe', gemeinschaft: 'gruppe',
+  gebaeude: 'haus', home: 'haus', wohnung: 'haus', haushalt: 'haus',
+  firma: 'fabrik', unternehmen: 'fabrik', industrie: 'fabrik', produktion: 'fabrik', hersteller: 'fabrik',
+  euro: 'geld', preis: 'geld', kapital: 'geld', finanz: 'geld', zins: 'geld', kosten: 'geld', lohn: 'geld', steuer: 'geld', inflation: 'geld',
+  laptop: 'computer', pc: 'computer', rechner: 'computer', geraet: 'computer', client: 'computer',
+  wissen: 'buch', lernen: 'buch', literatur: 'buch', geschichte: 'buch', theorie: 'buch', lehrbuch: 'buch',
+  wetter: 'wolke', regen: 'wolke', klima: 'wolke', cloud: 'wolke', atmosphaere: 'wolke',
+  mountain: 'berg', gebirge: 'berg', gipfel: 'berg',
+  // IT & Netzwerke
+  datenpaket: 'paket', packet: 'paket', pakete: 'paket', paketvermittlung: 'paket', sendung: 'paket', payload: 'paket',
+  nachricht: 'brief', mail: 'brief', email: 'brief', post: 'brief', botschaft: 'brief',
+  leitung: 'kabel', leitungsvermittlung: 'kabel', kanal: 'kabel', glasfaser: 'kabel', verbindung: 'kabel', leiter: 'kabel',
+  switch: 'router', gateway: 'router', vermittlung: 'router', wlan: 'router', wifi: 'router',
+  host: 'server', rechenzentrum: 'server', backend: 'server',
+  internet: 'netzwerk', netz: 'netzwerk', knoten: 'netzwerk', topologie: 'netzwerk', dns: 'netzwerk', ipv4: 'netzwerk', ipv6: 'netzwerk', tcp: 'netzwerk', http: 'netzwerk', protokoll: 'netzwerk',
+  sicherheit: 'schloss', verschluesselung: 'schloss', datenschutz: 'schloss', firewall: 'schloss', https: 'schloss', passwort: 'schloss', schutz: 'schloss',
+  key: 'schluessel', kryptografie: 'schluessel', authentifizierung: 'schluessel', zugang: 'schluessel',
+  sql: 'datenbank', speicher: 'datenbank', archiv: 'datenbank', register: 'datenbank',
+  handy: 'smartphone', mobil: 'smartphone', app: 'smartphone', streaming: 'smartphone',
+  web: 'browser', website: 'browser', webseite: 'browser', url: 'browser', fernseher: 'browser', bildschirm: 'browser',
+  programm: 'code', algorithmus: 'code', software: 'code', skript: 'code', funktion: 'code', java: 'code', python: 'code',
+  cpu: 'chip', prozessor: 'chip', hardware: 'chip', mikrochip: 'chip', transistor: 'chip',
+  // Physik & Technik
+  mechanik: 'zahnrad', prozess: 'zahnrad', system: 'zahnrad', getriebe: 'zahnrad', ablauf: 'zahnrad',
+  drehmoment: 'hebel', kraftarm: 'hebel', wippe: 'hebel',
+  schwingung: 'feder', elastizitaet: 'feder', hooke: 'feder',
+  frequenz: 'welle', schall: 'welle', signal: 'welle', strahlung: 'welle', elektromagnetism: 'welle',
+  optik: 'prisma', brechung: 'prisma', spektrum: 'prisma', farbe: 'prisma',
+  idee: 'lampe', gluhbirne: 'lampe', gluehbirne: 'lampe', leuchte: 'lampe', erkenntnis: 'lampe',
+  schaltung: 'stromkreis', widerstand: 'stromkreis', ohm: 'stromkreis',
+  waerme: 'thermometer', temperatur: 'thermometer', fieber: 'thermometer', thermodynamik: 'thermometer',
+  gps: 'satellit', funk: 'satellit', orbit: 'satellit',
+  // Biologie & Medizin
+  genetik: 'dna', rna: 'dna', gen: 'dna', vererbung: 'dna', mutation: 'dna', chromosom: 'dna', meiose: 'dna',
+  atmung: 'lunge', sauerstoff: 'lunge', gasaustausch: 'lunge',
+  sehen: 'auge', wahrnehmung: 'auge', linse: 'auge', blick: 'auge',
+  virus: 'bakterie', keim: 'bakterie', infektion: 'bakterie', immunsystem: 'bakterie', erreger: 'bakterie',
+  blutkoerperchen: 'blut', gefaess: 'blut', arterie: 'blut', vene: 'blut',
+  skelett: 'knochen', anatomie: 'knochen', gelenk: 'knochen',
+  labor: 'mikroskop', forschung: 'mikroskop', analyse: 'mikroskop',
+  // Chemie & Erde
+  chemie: 'molekuel', bindung: 'molekuel', stoff: 'molekuel', verbindungchemie: 'molekuel',
+  reaktion: 'kolben', experiment: 'kolben', saeure: 'kolben', base: 'kolben', loesung: 'kolben',
+  feuer: 'flamme', verbrennung: 'flamme', exotherm: 'flamme', hitze: 'flamme',
+  wasser: 'tropfen', fluessigkeit: 'tropfen', osmose: 'tropfen',
+  navigation: 'kompass', richtung: 'kompass', orientierung: 'kompass', geografie: 'kompass',
+  tektonik: 'vulkan', geologie: 'vulkan', erdkruste: 'vulkan', magma: 'vulkan',
+  // Wirtschaft, Recht, Kommunikation & Musik
+  dokument: 'vertrag', gesetz: 'vertrag', regel: 'vertrag', norm: 'vertrag', kaufvertrag: 'vertrag', antrag: 'vertrag',
+  recht: 'gericht', urteil: 'gericht', justiz: 'gericht', klage: 'gericht', strafrecht: 'gericht', zivilrecht: 'gericht',
+  kredit: 'bank', zentralbank: 'bank', konto: 'bank', boerse: 'bank',
+  markt: 'handel', konsum: 'handel', einkauf: 'handel', nachfrage: 'handel', verkauf: 'handel',
+  logistik: 'lkw', lieferung: 'lkw', transport: 'lkw', angebot: 'lkw', lieferkette: 'lkw',
+  kurs: 'chart', statistik: 'chart', trend: 'chart', rendite: 'chart', umsatz: 'chart', wirtschaft: 'chart',
+  werbung: 'megafon', marketing: 'megafon', pr: 'megafon', oeffentlichkeit: 'megafon', medium: 'megafon', medien: 'megafon',
+  zeit: 'uhr', dauer: 'uhr', frist: 'uhr', takt: 'uhr', deadline: 'uhr',
+  strategie: 'ziel', fokus: 'ziel', erfolg: 'ziel', ergebnis: 'ziel',
+  dialog: 'sprechblase', gespraech: 'sprechblase', sprache: 'sprechblase', kommunikation: 'sprechblase', verhandlung: 'sprechblase', rhetorik: 'sprechblase',
+  musik: 'note', ton: 'note', melodie: 'note', akkord: 'note', rhythmus: 'note', intervall: 'note',
 };
 
 const norm = (v?: string) =>
@@ -278,19 +670,56 @@ const norm = (v?: string) =>
     .replace(/ö/g, 'oe')
     .replace(/ü/g, 'ue')
     .replace(/ß/g, 'ss')
-    .replace(/[^a-z]/g, '');
+    .replace(/[^a-z0-9]/g, '');
+
+const wordsOf = (v?: string) =>
+  String(v ?? '')
+    .toLowerCase()
+    .replace(/ä/g, 'ae')
+    .replace(/ö/g, 'oe')
+    .replace(/ü/g, 'ue')
+    .replace(/ß/g, 'ss')
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+
+// Short names that should only match whole words (to avoid e.g. "automatisch" → "auto" or "führung" → "uhr")
+const EXACT_ONLY = new Set(['auto', 'ball', 'bank', 'uhr', 'lkw', 'dna', 'rna', 'gen', 'key', 'web', 'app', 'url', 'cpu', 'sql', 'tcp', 'dns', 'gps', 'pr', 'ton', 'box', 'pc']);
+
+/** Strict Studyflix preset matcher for a label/title (returns a key in ILLUSTRATIONS or null). */
+export function matchIllustration(text?: string): string | null {
+  if (!text) return null;
+  const full = norm(text);
+  if (!full) return null;
+  if (ILLUSTRATIONS[full]) return full;
+  if (ALIASES[full]) return ALIASES[full];
+  const words = wordsOf(text);
+  for (const w of words) {
+    if (ILLUSTRATIONS[w]) return w;
+    if (ALIASES[w]) return ALIASES[w];
+  }
+  // Compound German words (e.g. "Paketvermittlung", "Leitungsvermittlung", "Pflanzenzelle", "Kaufvertrag")
+  for (const w of words) {
+    if (w.length < 5) continue;
+    for (const name of ILLUSTRATION_NAMES) {
+      if (name.length >= 4 && !EXACT_ONLY.has(name) && (w.startsWith(name) || w.endsWith(name))) return name;
+    }
+    for (const [alias, target] of Object.entries(ALIASES)) {
+      if (alias.length >= 4 && !EXACT_ONLY.has(alias) && (w.startsWith(alias) || w.endsWith(alias))) return target;
+    }
+  }
+  // Longer phrase substring fallback (e.g. "Kräfte am Flugzeug")
+  for (const name of ILLUSTRATION_NAMES) if (name.length >= 5 && full.includes(name)) return name;
+  for (const [alias, target] of Object.entries(ALIASES)) if (alias.length >= 5 && full.includes(alias)) return target;
+  return null;
+}
 
 /** Picks the best illustration key for an icon name or subject label (substring match included). */
 export function resolveIllustration(icon?: string, subject?: string): { kind: 'art' | 'icon'; key: string } | null {
   for (const raw of [icon, subject]) {
+    const art = matchIllustration(raw);
+    if (art) return { kind: 'art', key: art };
     const k = norm(raw);
-    if (!k) continue;
-    if (ILLUSTRATIONS[k]) return { kind: 'art', key: k };
-    if (ALIASES[k]) return { kind: 'art', key: ALIASES[k] };
-    if (ICONS[k]) return { kind: 'icon', key: k };
-    // Substring match for phrases like "Kräfte am Flugzeug" or "Pflanzenzelle"
-    for (const name of ILLUSTRATION_NAMES) if (k.includes(name)) return { kind: 'art', key: name };
-    for (const [alias, target] of Object.entries(ALIASES)) if (alias.length >= 4 && k.includes(alias)) return { kind: 'art', key: target };
+    if (k && ICONS[k]) return { kind: 'icon', key: k };
   }
   return null;
 }

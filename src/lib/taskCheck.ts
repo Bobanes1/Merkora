@@ -83,7 +83,7 @@ ${extraRule ? extraRule + '\n' : ''}Prüfe JEDE Aufgabe:
 4. Fallaufgaben: Erfüllt die Musterlösung jedes Kriterium des Schemas, und verlangt das Schema nichts, was nicht in der Musterlösung steht?
 5. Code: Passen Tests, Startcode und Musterlösung zusammen? Ein BEFUND aus dem Ausführen ist verlässlich.
 6. Passt der Aufgabentyp zum Thema? Eine unpassende Aufgabe (z. B. eine Rechentabelle mit erfundenen Zahlen zu einem Theorie-Thema) ersetzt du durch einen passenden Typ zum selben Inhalt.
-${explained ? '7. Wurde alles, was die Aufgabe verlangt, in der ERKLÄRUNG DER LEKTION behandelt (oder ist es Allgemeinwissen)? Fragt eine Aufgabe einen Begriff oder Sachverhalt ab, der dort nicht vorkommt (z. B. „Orderbuch“, ohne dass es erklärt wurde), ersetze sie durch eine Aufgabe zum erklärten Inhalt.\n' : ''}
+${explained ? '7. Wurde alles, was die Aufgabe verlangt, ausdrücklich in der ERKLÄRUNG DER LEKTION behandelt? Fragt eine Aufgabe einen Begriff, eine Abkürzung (z. B. „IPv4“, „Orderbuch“) oder eine Schätz-/Faktenzahl ab, die dort nicht erklärt wurde, ersetze sie streng durch eine Aufgabe zum tatsächlich erklärten Inhalt (kein blindes Raten!).\n' : ''}
 Liste NUR Aufgaben mit einem echten Fehler. Korrigiere sie so wenig wie nötig (gleicher Typ, gleiches Thema, gleiche Schwierigkeit) und gib die vollständige korrigierte Aufgabe im selben JSON-Format zurück. Eine Aufgabe, die sich nicht sinnvoll reparieren lässt, kommt in "drop".
 Format: {"fixes":[{"task":3,"why":"kurzer Grund","fixed":{…vollständige Aufgabe…}}],"drop":[5]} – ist alles in Ordnung: {"fixes":[],"drop":[]}.
 Antworte ausschließlich mit gültigem JSON.`,

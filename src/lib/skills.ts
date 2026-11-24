@@ -328,56 +328,60 @@ function priorPace(skill: Skill): 'fast' | 'normal' {
   return said || placed || known ? 'fast' : 'normal';
 }
 
-/** Skill lessons explain in bites with varied mini-checks (not only multiple choice). */
-export const BITE_RULE = `ERKLÄRUNG IN HÄPPCHEN – keine Textwand. Feld "bites": 3–5 Häppchen in sinnvoller Reihenfolge:
-[{"title":"kurzer, themenspezifischer Titel","text":"Markdown, höchstens etwa 100 Wörter, ein Gedanke","figure":0,"check":{…}}]
-- Höchstens 2 Häppchen pro Lektion bekommen einen "check" – die anderen sind reine Erklärung (kein "check"). Erklären geht vor Abfragen.
+/** Skill lessons explain in structured, memorable bites (Goldilocks length) with varied mini-checks. */
+export const BITE_RULE = `ERKLÄRUNG IN HÄPPCHEN – fundiert, aber gut merkbar (keine Mini-Stichpunkte und keine endlose Textwand!). Feld "bites": 3–4 klar aufgebaute Häppchen (je etwa 65–110 Wörter, gesamt ~250–380 Wörter):
+[{"title":"kurzer, themenspezifischer Titel","text":"Markdown, ~65–110 Wörter, ein klarer Gedanke mit Alltagsbeispiel","figure":0,"check":{…}}]
+- Klarer 3–4-Schritte-Bogen:
+  1. Häppchen 1 (Ankommen & Grundidee, OHNE "check"): konkretes Alltagsbild („Stell dir vor …“), wozu man das Thema braucht und der erste Kernbegriff verständlich erklärt.
+  2. Häppchen 2 (So funktioniert es, MIT bildhafter Grafik "figure": 0): der Kernmechanismus Schritt für Schritt, jeder neue Begriff und jede Abkürzung sofort erklärt – hier passt 1 kurzer aktiver "check" zum gerade Gelesenen.
+  3. Häppchen 3 (Vertiefung, Abgrenzung oder typische Stolperfalle, gern mit 2. Grafik "figure": 1): alles Weitere, was die Aufgaben brauchen (Unterschiede, Regeln, Grenzen) – optional mit 2. kurzem "check".
+  4. Optional Häppchen 4 (Kurz-Merksatz „Auf einen Blick“, OHNE "check"): nur wenn das Thema es braucht, 2–3 knackige Merkpunkte zum Behalten.
+- Höchstens 2 Häppchen pro Lektion bekommen einen "check" (NIE Häppchen 1!) – die anderen sind reine Erklärung (kein "check"). Erklären geht vor Abfragen.
 - Mische die kurzen "check"-Formate – NICHT jedes Häppchen als Multiple Choice (höchstens 1× "choice" pro Lektion):
   • Wahr oder Irrtum: {"type":"tf","statement":"steile Behauptung oder typischer Irrtum","answer":false,"why":"ein Satz Auflösung"}
   • Mini-Lücke: {"type":"gap","prompt":"Merksatz mit ___ für das Schlüsselwort","answer":["Wort","Synonym"],"options":["Wort","Ablenker 1","Ablenker 2"],"why":"ein Satz"} – "options": das richtige Wort plus 2 plausible falsche, die Person tippt eines an – die Lücke muss EINDEUTIG sein (der Satz lässt nur diesen Begriff offen); "answer" enthält ALLE richtigen Varianten (Synonyme, Ein-/Mehrzahl, genauere Fachbegriffe, ß/ss).
   • Kurz überlegen & aufdecken: {"type":"reveal","q":"kurze Denkfrage zum Häppchen","answer":"knappe Antwort in 1–2 Sätzen","why":"optionaler Zusatz"}
-  • Kurz schätzen: {"type":"estimate","q":"Schätzfrage","min":0,"max":100,"answer":37,"tolerance":5,"unit":"%","why":"ein Satz"}
+  • Kurz schätzen (nur wenn die Größenordnung im Häppchen eingeordnet wurde): {"type":"estimate","q":"Schätzfrage","min":0,"max":100,"answer":37,"tolerance":5,"unit":"%","why":"ein Satz"}
   • Auswahl (höchstens 1×): {"type":"choice","q":"leichte Frage","options":["…","…","…"],"correct":1,"why":"ein Satz"}
-- Mindestens ein Häppchen – am besten das mit dem Kernzusammenhang oder der Formel – zeigt eine Grafik ("figure": Index in "figures"); sein Text bezieht sich darauf („Im Diagramm siehst du …“).
-- Häppchen mit einer Grafik ("figure") dürfen "check" auch weglassen, wenn die Grafik für sich spricht.
-- Jeder Check prüft nur, was in diesem Häppchen steht – kein Wissen von später.
+- Mindestens ein Häppchen – am besten das mit dem Kernzusammenhang oder der Formel – zeigt eine bildhafte Studyflix-Grafik ("figure": Index in "figures"); sein Text bezieht sich direkt darauf („In der Grafik siehst du …“).
+- Jeder Check prüft ausschließlich, was genau in DIESEM Häppchen erklärt wurde – kein Vorwissen, kein Raten.
 - "intro" ist dann nur EIN Satz Zusammenfassung; "theory" lässt du weg.`;
 
 const BITE_DOMAIN_HINT: Record<Domain, string> = {
-  math: 'Bei Mathe passen als Häppchen-Checks besonders "estimate" (Größenordnung/Wahrscheinlichkeit), "gap" (Zahl oder Begriff) und "reveal".',
+  math: 'Bei Mathe passen als Häppchen-Checks besonders "gap" (Zahl oder Begriff), "reveal" und "estimate" (nur wenn die Größenordnung im Häppchen erklärt wurde).',
   java: 'Bei Programmieren passen als Häppchen-Checks besonders "gap" (Ausgabe/Codewort tippen), "tf" (Verhalten/Irrtum) und "reveal".',
   law: 'Bei Recht passen als Häppchen-Checks besonders "tf" („Stimmt das juristisch?“), "reveal" (kurze Fallfrage) und "gap" (Tatbestandsmerkmal).',
   language: 'Bei Sprachen passen als Häppchen-Checks besonders "gap" (Wort/Endung), "reveal" (Übersetzung) und "tf" (typischer Fehler / Falscher Freund).',
   music: 'Bei Musik passen als Häppchen-Checks besonders "reveal", "tf" und "gap" (Intervall/Notenname); Häppchen mit Notenblatt brauchen keinen Check.',
-  general: 'Wähle die Häppchen-Checks passend zum Thema: bei Zahlen/Geschichte/Natur gerne "estimate", bei Mythen "tf", bei Begriffen und Abläufen "gap" oder "reveal".',
+  general: 'Wähle die Häppchen-Checks passend zum Thema: bei Mythen/Regeln "tf", bei Begriffen und Abläufen "gap" oder "reveal" – kein blindes Zahlen-Raten.',
 };
 
 const OPENERS: Record<Domain, string[]> = {
-  math: ['estimate', 'calc', 'order', 'label', 'cloze', 'sheet'],
+  math: ['calc', 'order', 'label', 'cloze', 'sheet', 'estimate'],
   java: ['code', 'cloze', 'order', 'calc'],
   law: ['scenario', 'order', 'cloze', 'case', 'multi'],
   music: ['music', 'order', 'label', 'cloze'],
   language: ['cloze', 'scenario', 'order', 'roleplay', 'calc'],
-  general: ['estimate', 'order', 'cloze', 'scenario', 'label', 'calc', 'case', 'roleplay', 'sheet'],
+  general: ['order', 'cloze', 'scenario', 'label', 'calc', 'case', 'roleplay', 'sheet'],
 };
 
 const TOPIC_FIT_HINT: Record<Domain, string> = {
-  math: 'Mathe-Mix: verbinde Rechnen ("calc"), Schätzen ("estimate"), Rechenwege ordnen ("order"), Formeltabellen ("sheet") und Grafik beschriften ("label").',
+  math: 'Mathe-Mix: verbinde Rechnen ("calc"), Rechenwege ordnen ("order"), Formeltabellen ("sheet"), Grafik beschriften ("label") und Schätzen ("estimate", nur wenn vorher eingeordnet).',
   java: 'Programmier-Mix: Schwerpunkt auf eigenem "code", ergänzt durch Code-Lücken ("cloze"), Programmablauf ordnen ("order") und Ausgabe vorhersagen ("calc").',
   law: 'Rechts-Mix: echte Fallarbeit ("case"), Entscheidungs-Szenarien ("scenario"), Prüfungsschemata ("order"), Tatbestands-Lücken ("cloze") und Beratungs-Rollenspiel ("roleplay") und einmal einen Begriff in eigenen Worten erklären ("explain") statt bloßer 2-Gruppen-Zuordnung.',
   music: 'Musik-Mix: Schwerpunkt auf interaktiven "music"-Aufgaben (Hören, Klavier, Rhythmus, Noten), ergänzt durch "order", "label" und "cloze".',
   language: 'Sprach-Mix: Lücken ("cloze"), kurze Gespräche ("roleplay"), Alltagsszenarien ("scenario"), Satzbau ordnen ("order") und kurze Übersetzungen ("calc").',
-  general: 'Themen-Mix: wähle die Typen passend zum konkreten Thema – Zahlen/Wirtschaft/Tabellen → "sheet", "estimate", "calc"; Abläufe/Praxis/Erste Hilfe/Kochen → "order", "scenario", "label"; Kommunikation/Psychologie/Verhandeln → "roleplay", "scenario", "case"; Naturwissenschaft/Technik/Geschichte → "label", "estimate", "order", "cloze"; Theorie-Begriffe → einmal "explain" (in eigenen Worten erklären).',
+  general: 'Themen-Mix: wähle die Typen passend zum konkreten Thema – Zahlen/Wirtschaft/Tabellen → "sheet", "calc"; Abläufe/Praxis/Erste Hilfe/Kochen → "order", "scenario", "label"; Kommunikation/Psychologie/Verhandeln → "roleplay", "scenario", "case"; Naturwissenschaft/Technik/Geschichte → "label", "order", "cloze"; Theorie-Begriffe → einmal "explain" (in eigenen Worten erklären).',
 };
 
 /**
- * Chooses a varied lesson style (`classic`, `discovery`, or `sprint`) based on position in the stage,
- * pace, and the previous lessons' styles so consecutive lessons do not feel identical. Pure – tested.
+ * Chooses a lesson flow (`classic` or `sprint`) – always theory first, never a blind question before
+ * the explanation. Pure – tested.
  */
 export function lessonStyleOf(skill: Skill, stageIndex: number, lessonIndex: number, inStageIndex: number): LessonStyle {
   const pace = paceOf(skill);
   if (pace === 'gentle') return 'classic';
-  if (skill.mini) return lessonIndex === 0 ? 'discovery' : lessonIndex === 1 ? 'classic' : 'sprint';
+  if (skill.mini) return lessonIndex < 2 ? 'classic' : 'sprint';
   const all = skill.stages.flatMap((st) => st.lessons);
   const recent = all
     .slice(0, Math.max(0, lessonIndex))
@@ -385,20 +389,10 @@ export function lessonStyleOf(skill: Skill, stageIndex: number, lessonIndex: num
     .filter((x): x is LessonStyle => !!x)
     .slice(-2);
   const last = recent[recent.length - 1];
-  if (pace === 'fast') {
-    if (lessonIndex === 0) return 'discovery';
-    if (last !== 'sprint' && !recent.includes('sprint')) return 'sprint';
-    if (last === 'sprint') return 'discovery';
-    return inStageIndex === 0 ? 'classic' : 'sprint';
-  }
-  if (lessonIndex === 0) return 'classic';
-  if (inStageIndex === 0 && stageIndex > 0) return last === 'classic' ? 'discovery' : 'classic';
+  if (lessonIndex === 0 || (inStageIndex === 0 && stageIndex > 0)) return 'classic';
+  if (pace === 'fast') return last === 'sprint' ? 'classic' : 'sprint';
   if (inStageIndex >= 2 && last !== 'sprint' && !recent.includes('sprint')) return 'sprint';
-  if (last === 'classic') return 'discovery';
-  if (last === 'discovery') return inStageIndex >= 2 ? 'sprint' : 'classic';
-  if (last === 'sprint') return 'discovery';
-  // Fallback when earlier lessons have no generated set yet (e.g. skipped/planned): alternate by position
-  return inStageIndex >= 2 && inStageIndex % 3 === 2 ? 'sprint' : inStageIndex % 2 === 1 ? 'discovery' : 'classic';
+  return 'classic';
 }
 
 export type LessonVariety = {
@@ -439,20 +433,16 @@ export function lessonVariety(skill: Skill, stageIndex: number, lessonIndex: num
     .map(([t]) => t);
 
   const styleRule =
-    style === 'discovery'
-      ? `LEKTIONS-STIL: "style": "discovery" (Erst probieren, dann verstehen).
-- Gib das Feld "hook" an: {"title":"kurze, neugierig machende Überschrift","text":"knappe Alltagssituation oder verblüffende Frage (1–3 Sätze, ohne Fachwissen lösbar)","check":{…ein Check vom Typ estimate, tf, gap, reveal oder choice…}}.
-- Danach nur 2–3 kurze "bites", die direkt an den Einstieg anknüpfen („Warum ist das so?“).`
-      : style === 'sprint'
-        ? `LEKTIONS-STIL: "style": "sprint" (Praxis-Sprint – kurz einstimmen, direkt üben).
-- Gib "style": "sprint" an.
-- Feld "bites": genau 1 kompaktes Überblicks-Häppchen (3–4 knappe Merkpunkte, OHNE "check"), damit man sofort zu den Aufgaben kommt. Ein kurzes "example" genügt.`
-        : `LEKTIONS-STIL: "style": "classic" (Verstehen in Häppchen → Beispiel → Üben). Gib "style": "classic" an.`;
+    style === 'sprint'
+      ? `LEKTIONS-STIL: "style": "sprint" (Kompakt-Theorie auf einen Blick → direkt üben, kein Frage-Einstieg).
+- Gib "style": "sprint" an (KEIN "hook").
+- Feld "bites": genau 3 klare, vollständige Theorie-Abschnitte OHNE "check" (je ~60–90 Wörter, mit mindestens einer Studyflix-Grafik), die JEDEN neuen Begriff und Zusammenhang der Lektion sauber erklären, bevor die Aufgaben beginnen. Ein konkretes "example" rundet die Theorie ab.`
+      : `LEKTIONS-STIL: "style": "classic" (3–4 gut merkbare Theorie-Häppchen → anschauliches Beispiel → gestuftes Üben, immer erst Theorie). Gib "style": "classic" an (KEIN "hook").`;
 
   const parts = [
     `ABWECHSLUNG BEI DEN AUFGABEN (${skill.domain}):`,
     `- ${TOPIC_FIT_HINT[skill.domain]}`,
-    `- Starte Aufgabe 1 NICHT mit "classify". Gute Einstiegs-Typen für Aufgabe 1 diesmal: ${preferredOpeners.map((t) => `"${t}"`).join(', ')} – wähle den, der inhaltlich am besten passt.`,
+    `- Starte Aufgabe 1 NICHT mit "classify" und NICHT mit einer blinden Schätzfrage ("estimate"). Gute Einstiegs-Typen für Aufgabe 1 diesmal: ${preferredOpeners.map((t) => `"${t}"`).join(', ')} – wähle den, der inhaltlich am besten zum Erklärten passt.`,
     avoidClassify
       ? `- "classify" kam gerade erst vor: lass "classify" in dieser Lektion ganz weg.`
       : `- Wenn du "classify" überhaupt nutzt, dann erst später in der Lektion und mit 3–4 Kategorien statt nur 2.`,
@@ -471,15 +461,15 @@ export function lessonPrompt(skill: Skill, stage: Stage, lesson: Lesson, count =
   const before = all.slice(0, Math.max(0, i)).map((l) => l.title);
   const variety = lessonVariety(skill, stageIndex, Math.max(0, i), inStageIndex);
   return {
-    system: `Du bist ein geduldiger Tutor. Du erstellst eine Lektion, in der man durch eigenes Tun lernt: kurze Erklärung, ein durchgerechnetes Beispiel, dann ${count} Aufgaben, die man selbst löst. ${kindRule(skill)}
+    system: `Du bist ein geduldiger Tutor. Du erstellst eine Lektion mit idealer Balance aus klarer Theorie und eigenem Tun: zuerst eine gut merkbare, bildhafte Erklärung (genug Substanz zum echten Verstehen, aber nie überladen), dann ein konkretes durchgespieltes Beispiel, dann ${count} Aufgaben, die man selbst löst (gestuft: Aufgabe 1 = sicherer Einstieg direkt zum Erklärten, danach anwenden, am Ende Transfer). ${kindRule(skill)}
 ${BITE_RULE}
 ${BITE_DOMAIN_HINT[skill.domain]}
 ${variety.styleRule}
 ${variety.taskRule}
-${skill.mini ? MINI_RULE + ' Höchstens 3 Häppchen.' : paceOf(skill) === 'fast' ? FAST_RULE : paceOf(skill) === 'gentle' ? GENTLE_RULE + '\n' + beginnerRule(skill, stageIndex, i) : beginnerRule(skill, stageIndex, i)}
+${skill.mini ? MINI_RULE + ' Genau 3 klare, vollständige Erklär-Häppchen (je ~65–100 Wörter, 1–2 Grafiken, höchstens 1 Check ab Häppchen 2).' : paceOf(skill) === 'fast' ? FAST_RULE : paceOf(skill) === 'gentle' ? GENTLE_RULE + '\n' + beginnerRule(skill, stageIndex, i) : beginnerRule(skill, stageIndex, i)}
 ${FIGURE_RULE}
-NUR ERKLÄRTES ABFRAGEN: Jede Aufgabe prüft nur, was in den Häppchen, im Beispiel oder in früheren Lektionen erklärt wurde. Braucht eine Aufgabe einen neuen Begriff oder Sachverhalt (z. B. „Orderbuch“), muss er vorher in einem Häppchen erklärt sein – sonst lass ihn weg.
-REIHENFOLGE IM JSON: zuerst "topic", dann "problems" (die Aufgaben), danach alles andere (Häppchen, Beispiel, Bilder …) – so gehen bei einer zu langen Antwort nie die Aufgaben verloren. Halte Texte knapp.
+NUR ERKLÄRTES ABFRAGEN (streng!): Jede einzelne Aufgabe darf AUSSCHLIESSLICH Begriffe, Abkürzungen (z. B. IPv4, DNS, Fachkürzel), Zahlen, Regeln und Zusammenhänge abfragen, die vorher ausdrücklich in deinen "bites" oder im "example" erklärt wurden (oder nachweislich aus einer früheren Lektion bekannt sind). Keine Fakten- oder Schätzfragen zu Zahlen oder Begriffen, die nicht im Text standen – die Person soll Gelerntes anwenden, niemals blind raten!
+REIHENFOLGE IM JSON: zuerst "kind", "topic", "style", "intro", "bites" (die vollständige Erklärung), "example", "figures" (und ggf. Fach-Visuals/"labs"), und ERST DANACH "problems" – schreibe die Aufgaben erst, wenn deine gesamte Erklärung feststeht, und prüfe bei jeder Aufgabe, ob wirklich jeder abgefragte Begriff vorher in "bites" erklärt wurde. Halte Texte knapp und klar.
 ${JSON_ONLY}`,
     user: `${context(skill)}\n\nSTUFE: ${stage.name} – ${stage.goal}\nLEKTION ${i + 1} von ${all.length}: ${lesson.title} – Ziel: ${lesson.goal}${before.length ? `\nVorher gelernt: ${before.slice(-8).join('; ')}` : ''}`,
     maxTokens: Math.min(16000, 8500 + count * (skill.domain === 'java' || skill.domain === 'law' ? 900 : 700)),

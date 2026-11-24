@@ -1225,7 +1225,7 @@ console.log('Folien-Bilder für die KI');
   const withSlides = cardsPrompt('Material', 5, '', true, undefined, false, ['Folie 3 aus a.pdf', 'Folie 9 aus a.pdf']);
   ok(withSlides.system.includes('Angehängt sind Bilder') && withSlides.user.includes('Bild 1 = Folie 3 aus a.pdf; Bild 2 = Folie 9 aus a.pdf'), 'Prompt nennt die angehängten Folien');
   const plain = cardsPrompt('Material', 5, '', true);
-  ok(!plain.system.includes('Angehängt sind Bilder') && plain.system.includes('etwa jeder dritten Karte') && plain.system.includes('"diagram":{"type":"flow"') && !plain.system.includes('(optional)'), 'Grafik-Ziel im Prompt, Bilder-Hinweis nur mit Bildern');
+  ok(!plain.system.includes('Angehängt sind Bilder') && plain.system.includes('etwa jeder dritten Karte') && plain.system.includes('"diagram":{"type":"scene"') && !plain.system.includes('(optional)'), 'Grafik-Ziel im Prompt, Bilder-Hinweis nur mit Bildern');
   ok(plain.maxTokens === 400 + 5 * 500, 'mehr Platz pro Karte mit Grafik');
 
   const { slidesInPart } = await import('../src/lib/slideImages');
@@ -2140,7 +2140,7 @@ console.log('Lange Lektionen: Aufgaben gehen nicht verloren');
   const S = await import('../src/lib/skills');
   const sk = { id: 'k', topic: 'PR', title: 'PR', domain: 'general', levels: ['a'], targetLevel: 0, level: '', status: 'active', plan: {}, stages: [{ id: 'st', name: 'S', goal: '', lessons: [{ id: 'l', title: 'L', goal: '' }] }], createdAt: 1, updatedAt: 1 } as any;
   const p = S.lessonPrompt(sk, sk.stages[0], sk.stages[0].lessons[0]);
-  ok(p.system.includes('zuerst "topic", dann "problems"') && p.maxTokens >= 12000, 'Lektion: Aufgaben zuerst im JSON, genug Platz für die Antwort');
+  ok(p.system.includes('"bites" (die vollständige Erklärung)') && p.system.includes('ERST DANACH "problems"') && p.maxTokens >= 12000, 'Lektion: Erklärung vor Aufgaben im JSON, genug Platz für die Antwort');
   const R = await import('../src/lib/skillRun');
   ok(R.RETRY_SHORTER.includes('KÜRZER') && R.RETRY_SHORTER.includes('"problems"'), 'zweiter Versuch: kürzer und unbedingt mit Aufgaben');
 }
@@ -2389,23 +2389,24 @@ console.log('Abwechslung in Skills: Häppchen-Checks, Lektions-Stile, Aufgaben-R
   } as any;
 
   ok(S.lessonStyleOf(sk, 0, 0, 0) === 'classic', 'Lektion 1 normal → classic');
-  ok(S.lessonStyleOf(sk, 0, 1, 1) === 'discovery', 'nach classic → discovery');
-  ok(S.lessonStyleOf(sk, 0, 2, 2) === 'sprint', 'Lektion 3 in Stufe nach classic+discovery → sprint');
+  ok(S.lessonStyleOf(sk, 0, 1, 1) === 'classic', 'Lektion 2 normal → classic (immer erst Theorie, nie discovery)');
+  ok(S.lessonStyleOf(sk, 0, 2, 2) === 'sprint', 'Lektion 3 in Stufe → sprint');
   const fastSk = { ...sk, plan: { questions: [{ q: 'Vorwissen?', options: ['Keins', 'Viel'] }], answers: { 0: 'Viel' } } };
-  ok(S.lessonStyleOf(fastSk, 0, 0, 0) === 'discovery' && S.lessonStyleOf(fastSk, 0, 2, 2) === 'sprint', 'Tempo fast: Einstieg discovery, danach sprint');
+  ok(S.lessonStyleOf(fastSk, 0, 0, 0) === 'classic' && S.lessonStyleOf(fastSk, 0, 1, 1) === 'sprint' && S.lessonStyleOf(fastSk, 0, 2, 2) === 'sprint', 'Tempo fast: Einstieg classic (Theorie zuerst), danach sprint');
   const gentleSk = {
     ...sk,
     stages: [{ ...sk.stages[0], lessons: [{ id: 'l1', title: 'L1', goal: 'g', set: { ...mkSet('classic', ['calc', 'calc', 'calc']), progress: [{ tries: 3, hints: 2 }, { tries: 2, hints: 1 }, { tries: 2, hints: 1 }] } }, { id: 'l2', title: 'L2', goal: 'g' }] }],
   };
   ok(S.lessonStyleOf(gentleSk, 0, 1, 1) === 'classic', 'Tempo gentle bleibt immer bei classic');
   const miniSk = { ...sk, mini: true };
-  ok(S.lessonStyleOf(miniSk, 0, 0, 0) === 'discovery' && S.lessonStyleOf(miniSk, 0, 1, 1) === 'classic' && S.lessonStyleOf(miniSk, 0, 2, 2) === 'sprint', 'Mini-Skill: discovery → classic → sprint');
+  ok(S.lessonStyleOf(miniSk, 0, 0, 0) === 'classic' && S.lessonStyleOf(miniSk, 0, 1, 1) === 'classic' && S.lessonStyleOf(miniSk, 0, 2, 2) === 'sprint', 'Mini-Skill: classic → classic → sprint (nie discovery)');
   const v3 = S.lessonVariety(sk, 0, 2, 2);
-  ok(!v3.preferredOpeners.includes('classify'), 'classify wird nie als Einstieg vorgeschlagen');
+  ok(!v3.preferredOpeners.includes('classify') && !v3.preferredOpeners.includes('estimate'), 'classify und blindes Schätzen werden nie als Einstieg vorgeschlagen');
   ok(!v3.preferredOpeners.includes('order') && !v3.preferredOpeners.includes('calc'), 'kürzliche Einstiege werden rotiert');
   ok(v3.avoidClassify && v3.overused.includes('calc'), 'Verlauf erkennt classify und häufige Typen');
   const lp3 = S.lessonPrompt(sk, sk.stages[0], sk.stages[0].lessons[2]);
-  ok(lp3.system.includes('"style": "sprint"') && lp3.system.includes('Starte Aufgabe 1 NICHT mit "classify"') && lp3.system.includes('höchstens 1× "choice"'), 'lessonPrompt übernimmt Stil, Häppchen-Mix und Aufgaben-Regie');
+  ok(lp3.system.includes('"style": "sprint"') && lp3.system.includes('KEIN "hook"') && lp3.system.includes('Starte Aufgabe 1 NICHT mit "classify"') && lp3.system.includes('höchstens 1× "choice"'), 'lessonPrompt übernimmt Stil, Häppchen-Mix und Aufgaben-Regie');
+  ok(lp3.system.indexOf('"bites" (die vollständige Erklärung)') > 0 && lp3.system.indexOf('"bites" (die vollständige Erklärung)') < lp3.system.indexOf('ERST DANACH "problems"'), 'lessonPrompt verlangt bites vor problems im JSON');
   ok(P.DOMAIN_TASKS.general[P.DOMAIN_TASKS.general.length - 1] === 'classify' && P.DOMAIN_TASKS.math.includes('label'), 'classify am Ende der Domain-Listen, math hat label');
 }
 
@@ -2492,7 +2493,63 @@ console.log('Bildhafte Erklärgrafiken (forces, scene, callout, illustration)');
   ok(illSvg.includes(D.PALETTES.dark.tones[0].line) && illSvg.includes(D.PALETTES.dark.tones[2].line), 'illustration setzt Merkora-Farbplatzhalter um');
   ok(D.sanitizeSvg('<script>alert(1)</script>') === null && D.sanitizeSvg('<rect x="0" y="0" width="10" height="10"/>') === null, 'sanitizeSvg lehnt leere oder zu kleine SVGs ab');
   ok(I.resolveIllustration('flugzeug')?.key === 'flugzeug' && I.resolveIllustration(undefined, 'Pflanzenzelle')?.key === 'zelle' && I.resolveIllustration('reise')?.key === 'flugzeug', 'resolveIllustration findet Motive per Name, Alias und Teilwort');
-  ok(P.FIGURE_RULE.includes('"forces"') && P.FIGURE_RULE.includes('"scene"') && P.FIGURE_RULE.includes('"callout"') && P.FIGURE_RULE.includes('"illustration"'), 'FIGURE_RULE beschreibt alle 4 neuen bildhaften Formen');
+  ok(I.ILLUSTRATION_NAMES.length >= 65, `Studyflix-Bibliothek hat ${I.ILLUSTRATION_NAMES.length} Bildmotive (mind. 65)`);
+  ok(
+    I.matchIllustration('Paketvermittlung') === 'paket' &&
+      I.matchIllustration('Leitungsvermittlung') === 'kabel' &&
+      I.matchIllustration('Kaufvertrag') === 'vertrag' &&
+      I.matchIllustration('DNA-Replikation') === 'dna' &&
+      I.matchIllustration('Führung') === null &&
+      I.matchIllustration('automatisch') === null,
+    'matchIllustration erkennt deutsche Zusammensetzungen ohne Fehlzuordnungen',
+  );
+
+  const layers = D.parseDiagram({
+    type: 'schichten',
+    title: 'TCP/IP-Schichtenmodell',
+    layers: [
+      { label: 'Anwendung', note: 'HTTP, DNS, E-Mail', icon: 'browser' },
+      { label: 'Transport', note: 'Pakete nummerieren & sichern', icon: 'paket' },
+      { label: 'Internet', note: 'Routing durch das Netz', icon: 'router' },
+      { label: 'Netzzugang', note: 'Kabel & WLAN', icon: 'kabel' },
+    ],
+  })!;
+  ok(layers?.type === 'layers' && layers.layers.length === 4 && D.diagramLabels(layers).length === 4, 'layers: Schichtenmodell & 4 Quiz-Labels');
+  const layersL = D.layoutDiagram(layers);
+  checkClean(layersL, 'layers 4 Schichten');
+  ok((layersL.art?.length ?? 0) === 4, 'layers: jede Schicht hat ein Studyflix-Motiv');
+
+  const flowArt = D.parseDiagram({
+    type: 'flow',
+    title: 'Vom Brief zum Paket',
+    steps: ['Nachricht in Pakete zerlegen', 'Jedes Paket einzeln senden', 'Pakete nehmen unterschiedliche Wege', 'Empfänger setzt Pakete zusammen'],
+  })!;
+  const flowL = D.layoutDiagram(flowArt);
+  checkClean(flowL, 'Studyflix-Flow Brief zum Paket');
+  ok((flowL.art?.length ?? 0) === 4, 'flow: Schritte bekommen automatisch Studyflix-Motive/Badges');
+
+  const cmpArt = D.parseDiagram({
+    type: 'compare',
+    title: 'Leitung gegen Paket',
+    columns: [
+      { title: 'Leitungsvermittlung', items: ['Feste Leitung', 'Blockiert bei Stille'] },
+      { title: 'Paketvermittlung', items: ['Daten in Pakete zerlegt', 'Jedes Paket sucht seinen Weg'] },
+    ],
+  })!;
+  const cmpL = D.layoutDiagram(cmpArt);
+  checkClean(cmpL, 'Studyflix-Compare Leitung vs Paket');
+  ok((cmpL.art?.length ?? 0) === 3 && cmpL.art!.some((a) => a.badge === 'VS'), 'compare: Spalten bekommen Studyflix-Motive und VS-Badge');
+
+  const cycArt = D.parseDiagram({
+    type: 'cycle',
+    title: 'Wasserkreislauf',
+    steps: ['Verdunstung', 'Wolkenbildung', 'Niederschlag', 'Abfluss'],
+  })!;
+  const cycL = D.layoutDiagram(cycArt);
+  checkClean(cycL, 'Studyflix-Cycle Wasserkreislauf');
+  ok((cycL.art?.length ?? 0) === 1, 'cycle: passendes Studyflix-Motiv im Zentrum');
+
+  ok(P.FIGURE_RULE.includes('"forces"') && P.FIGURE_RULE.includes('"scene"') && P.FIGURE_RULE.includes('"callout"') && P.FIGURE_RULE.includes('"layers"') && P.FIGURE_RULE.includes('"illustration"'), 'FIGURE_RULE beschreibt alle 5 bildhaften Formen');
 }
 
 console.log(failures ? `\n${failures} Test(s) fehlgeschlagen` : '\nAlle SRS-Tests bestanden');
