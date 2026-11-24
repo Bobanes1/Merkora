@@ -1,7 +1,17 @@
 ﻿import { Fragment, type ReactNode } from 'react';
+import { repairMath, splitMath } from '../lib/emphasis';
+import { MathSpan } from './CardContent';
 
-/** Tiny, safe Markdown renderer (headings, lists, bold, italics, code) – no HTML injection. */
+/** Tiny, safe Markdown renderer (headings, lists, bold, italics, code, formulas) – no HTML injection. */
 function inline(text: string, key: string): ReactNode[] {
+  // formulas first – the formatting below must never touch them (x_i would turn into italics)
+  const pieces = splitMath(text);
+  if (pieces.length > 1 || pieces[0]?.math)
+    return pieces.flatMap<ReactNode>((p, j) => (p.math ? [<MathSpan key={`${key}-m${j}`} tex={p.text} display={p.display} />] : plain(p.text, `${key}-t${j}`)));
+  return plain(text, key);
+}
+
+function plain(text: string, key: string): ReactNode[] {
   const out: ReactNode[] = [];
   const re = /(\*\*[^*]+\*\*|`[^`]+`|\*[^*\s][^*]*\*|_[^_\s][^_]*_)/g;
   let last = 0;
@@ -21,7 +31,7 @@ function inline(text: string, key: string): ReactNode[] {
 }
 
 export function Markdown({ text }: { text: string }) {
-  const lines = text.replace(/\r/g, '').split('\n');
+  const lines = repairMath(text).replace(/\r/g, '').split('\n');
   const blocks: ReactNode[] = [];
   const st: { list: { ordered: boolean; items: string[] } | null } = { list: null };
   let para: string[] = [];

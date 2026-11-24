@@ -1743,7 +1743,7 @@ console.log('Skills: Bilder, Fehler erklären, Projekt, Zeitplan, Abschluss');
 {
   const P = await import('../src/lib/practice');
   const figs = P.parseFigures([{ caption: 'Ablauf', diagram: { type: 'flow', title: 'Kompilieren', steps: ['Code', 'javac', 'java'] } }, { type: 'compare', title: 'X', columns: [{ title: 'A', items: ['1'] }, { title: 'B', items: ['2'] }] }, { type: 'flow', title: 'zu viel', steps: ['a', 'b'] }, 'Unsinn']);
-  ok(figs.length === 2 && figs[0].caption === 'Ablauf' && figs[0].diagram.type === 'flow' && P.parseFigures('x').length === 0, 'Bilder in Lektionen: höchstens 2, Unsinn fällt weg');
+  ok(figs.length === 3 && figs[0].caption === 'Ablauf' && figs[0].diagram.type === 'flow' && P.parseFigures('x').length === 0, 'Bilder in Lektionen: höchstens 3, Unsinn fällt weg');
   const set = { id: 's', createdAt: 1, kind: 'math', topic: 'T', intro: '', labs: [], tasks: [{ type: 'calc', problem: 'p1', answer: { type: 'number', value: '1' }, hints: [], steps: [] }, { type: 'calc', problem: 'p2', answer: { type: 'number', value: '2' }, hints: [], steps: [] }], progress: [{ tries: 1, hints: 0, last: '5' }, { tries: 0, hints: 0 }] } as any;
   const m = P.parseMistake({ explain: 'Du hast addiert statt multipliziert.', similar: { type: 'calc', problem: '2·3?', answer: { type: 'number', value: '6' }, hints: ['h'], steps: ['s'] } });
   ok(!!m && m.explain.startsWith('Du hast') && m.similar?.type === 'calc' && P.parseMistake({}) === null, '„Warum falsch?“: Erklärung und ähnliche Aufgabe');
@@ -2199,6 +2199,24 @@ console.log('Erklär es mir, Zuordnen, Mini-Projekt im Weiter');
   ok(st?.kind === 'project' && st.stage.id === 'a', 'Weiter schlägt nach bestandener Stufe das Mini-Projekt vor');
   sk.stages[0].projectSkipped = true;
   ok(S.nextStep(sk)?.kind === 'lesson', 'übersprungenes Projekt wird nicht mehr vorgeschlagen');
+}
+console.log('Formeln in Erklärungen, mehr Grafiken');
+{
+  const E = await import('../src/lib/emphasis');
+  const P = await import('../src/lib/practice');
+  const S = await import('../src/lib/skills');
+  const a = E.splitMath('Faktor \\( 1 + p/100 \\) teurer');
+  ok(a.length === 3 && !a[0].math && a[1].math && !(a[1] as any).display && a[1].text === '\\( 1 + p/100 \\)' && a[2].text === ' teurer', 'Formel im Text wird als eigener Teil erkannt');
+  const b = E.splitMath('Es gilt $$K_n = K_0 (1+p)^n$$ und \\[x_i\\]');
+  ok(b.filter((x) => x.math).length === 2 && b.filter((x) => x.math).every((x: any) => x.display) && b[1].text.includes('K_n'), 'Block-Formeln $$…$$ und \\[…\\]');
+  ok(E.splitMath('ganz ohne _Formel_').length === 1 && !E.splitMath('ganz ohne _Formel_')[0].math && E.splitMath('').length === 1, 'Text ohne Formel bleibt ein Stück');
+  const set = P.parsePractice({ kind: 'general', topic: 'Zins', intro: 'x', bites: [{ title: 'T', text: 'Mit \\( \x0crac{1}{2} \\) rechnen' }], problems: [{ type: 'calc', problem: 'Was ist \\( \x0crac{1}{2} \\)?', answer: { type: 'number', value: '0,5' } }] }, 'id', 1);
+  ok(!!set && !!set.bites?.[0].text.includes('\\frac{1}{2}') && (set.tasks?.[0] as any).problem.includes('\\frac'), 'kaputter Backslash (Seitenvorschub statt \\f) wird beim Einlesen repariert');
+  const sk = { id: 'k', topic: 'Inflation', title: 'Inflation und Kaufkraft', domain: 'general', levels: ['a'], targetLevel: 0, level: '', status: 'active', plan: {}, stages: [{ id: 'st', name: 'S', goal: '', lessons: [{ id: 'l', title: 'L', goal: '' }] }], createdAt: 1, updatedAt: 1 } as any;
+  const sys = S.lessonPrompt(sk, sk.stages[0], sk.stages[0].lessons[0]).system;
+  ok(sys.includes('Mindestens ein Häppchen') && sys.includes('"plot" mit der Formel') && sys.includes('1–3 Grafiken'), 'Lektion: mindestens eine Grafik, Formeln als Kurve');
+  const figs = P.parsePractice({ kind: 'general', topic: 't', intro: 'x', figures: [1, 2, 3, 4].map((k) => ({ diagram: { type: 'flow', steps: ['a' + k, 'b', 'c'] } })), problems: [{ type: 'calc', problem: 'p', answer: { type: 'number', value: '1' } }] }, 'i', 1);
+  ok(figs?.figures?.length === 3, 'bis zu 3 Grafiken pro Lektion');
 }
 console.log('Kurze Decknamen');
 {

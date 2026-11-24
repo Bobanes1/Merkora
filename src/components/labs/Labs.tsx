@@ -21,6 +21,7 @@ import {
   type Mat,
 } from '../../lib/labs';
 import { compileExpr } from '../../lib/plotExpr';
+import { niceTicks } from '../../lib/diagram';
 import { withParams, type LabSpec } from '../../lib/practice';
 import { formulaCurve, formulaValue, type FormulaLab as FormulaSpec } from '../../lib/visuals';
 
@@ -503,9 +504,13 @@ function FormulaLab({ spec }: { spec: FormulaSpec }) {
   const pv = spec.vars.find((v) => v.name === spec.plot);
   const pts = (curve ?? []).filter((q): q is { x: number; y: number } => !!q);
   const ys = pts.map((q) => q.y);
-  const lo = Math.min(0, ...ys), hi = Math.max(1e-9, ...ys);
-  const sx = (x: number) => PAD + ((x - (pv?.min ?? 0)) / ((pv?.max ?? 1) - (pv?.min ?? 0))) * (W - 2 * PAD);
+  // the y-axis gets ticks with values and the result's name – a nice range from 0 (or below) to the top
+  const yTicks = niceTicks(Math.min(0, ...ys), Math.max(1e-9, ...ys), 4);
+  const lo = Math.min(0, ...ys, yTicks[0]), hi = Math.max(1e-9, ...ys, yTicks[yTicks.length - 1]);
+  const LEFT = PAD + 46;
+  const sx = (x: number) => LEFT + ((x - (pv?.min ?? 0)) / ((pv?.max ?? 1) - (pv?.min ?? 0))) * (W - LEFT - PAD);
   const sy = (y: number) => H - PAD - ((y - lo) / (hi - lo || 1)) * (H - 2 * PAD);
+  const yTitle = spec.result.label + (spec.result.unit ? ` in ${spec.result.unit}` : '');
   const d = pts.map((q, k) => `${k ? 'L' : 'M'}${sx(q.x).toFixed(1)} ${sy(q.y).toFixed(1)}`).join(' ');
   return (
     <>
@@ -532,17 +537,29 @@ function FormulaLab({ spec }: { spec: FormulaSpec }) {
       </div>
       {pv && d && (
         <svg className="lab-svg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${spec.result.label} abhängig von ${pv.label}`}>
-          <line x1={PAD} y1={sy(0)} x2={W - PAD} y2={sy(0)} className="lab-axis" />
+          {yTicks.map((t) => (
+            <g key={t}>
+              <line x1={LEFT - 4} y1={sy(t)} x2={W - PAD} y2={sy(t)} className="lab-grid" />
+              <text x={LEFT - 8} y={sy(t) + 4} className="lab-tick" textAnchor="end">
+                {fmt(t, 4)}
+              </text>
+            </g>
+          ))}
+          <line x1={LEFT} y1={sy(0)} x2={W - PAD} y2={sy(0)} className="lab-axis" />
+          <line x1={LEFT} y1={PAD - 6} x2={LEFT} y2={H - PAD} className="lab-axis" />
+          <text x={LEFT + 8} y={PAD - 12} className="lab-tick lab-axis-title">
+            ↑ {yTitle}
+          </text>
           <path d={d} className="lab-line" />
           {value !== null && <circle cx={sx(vals[pv.name])} cy={sy(value)} r={6} className="lab-dot" />}
-          <text x={PAD} y={H - 8} className="lab-tick">
+          <text x={LEFT} y={H - 8} className="lab-tick">
             {fmt(pv.min, 2)}
           </text>
           <text x={W - PAD} y={H - 8} className="lab-tick" textAnchor="end">
             {fmt(pv.max, 2)} {pv.unit}
           </text>
-          <text x={W / 2} y={H - 8} className="lab-tick" textAnchor="middle">
-            {pv.label}
+          <text x={(LEFT + W - PAD) / 2} y={H - 8} className="lab-tick lab-axis-title" textAnchor="middle">
+            {pv.label} →
           </text>
         </svg>
       )}

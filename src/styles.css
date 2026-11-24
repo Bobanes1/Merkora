@@ -11829,3 +11829,8 @@ html.phone .goal-ring.in-hero .gr-legend { display: none; }
 .project-teaser svg { color: var(--primary); flex: none; }
 .project-teaser .grow { display: grid; gap: 2px; }
 .project-teaser small { color: var(--muted); }
+
+/* formula lab: y-axis with grid and titles; formulas in explanations */
+.lab-grid { stroke: var(--line); stroke-width: 1; stroke-dasharray: 3 4; opacity: 0.7; }
+.lab-axis-title { font-weight: 700; fill: var(--text, var(--ink)); }
+.math-block { display: block; margin: 8px 0; overflow-x: auto; }

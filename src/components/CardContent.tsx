@@ -248,6 +248,17 @@ export function CardContent({ text, html, className = '', look }: { text: string
   return <div ref={ref} className={`card-content rich ${styled ? 'anki-look' : ''} ${className}`} />;
 }
 
+/** One formula inside other text (e.g. Markdown explanations): the delimited LaTeX, typeset by KaTeX. */
+export function MathSpan({ tex, display }: { tex: string; display?: boolean }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!ref.current) return;
+    ref.current.textContent = tex;
+    void renderMath(ref.current).catch(() => undefined);
+  }, [tex]);
+  return <span ref={ref} className={display ? 'math-block' : 'math-inline'} />;
+}
+
 function MathText({ text, className }: { text: string; className: string }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {

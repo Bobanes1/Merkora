@@ -337,6 +337,7 @@ export const BITE_RULE = `ERKLÄRUNG IN HÄPPCHEN – keine Textwand. Feld "bite
   • Kurz überlegen & aufdecken: {"type":"reveal","q":"kurze Denkfrage zum Häppchen","answer":"knappe Antwort in 1–2 Sätzen","why":"optionaler Zusatz"}
   • Kurz schätzen: {"type":"estimate","q":"Schätzfrage","min":0,"max":100,"answer":37,"tolerance":5,"unit":"%","why":"ein Satz"}
   • Auswahl (höchstens 1×): {"type":"choice","q":"leichte Frage","options":["…","…","…"],"correct":1,"why":"ein Satz"}
+- Mindestens ein Häppchen – am besten das mit dem Kernzusammenhang oder der Formel – zeigt eine Grafik ("figure": Index in "figures"); sein Text bezieht sich darauf („Im Diagramm siehst du …“).
 - Häppchen mit einer Grafik ("figure") dürfen "check" auch weglassen, wenn die Grafik für sich spricht.
 - Jeder Check prüft nur, was in diesem Häppchen steht – kein Wissen von später.
 - "intro" ist dann nur EIN Satz Zusammenfassung; "theory" lässt du weg.`;

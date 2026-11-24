@@ -9,6 +9,7 @@ import { ACTIVE_TYPES, gapRight, niceStep, parseActive, type ActiveTask } from '
 import { LANG_RULE, type Prompt } from './ai';
 import { parseFormulaLab, parseProgram, parseScore, parseSketch, parseSyntax, parseTables, type FormulaLab, type Program, type Score, type Sentence, type Sketch, type Table } from './visuals';
 import { FORMULA_RULE } from './ai';
+import { repairMath } from './emphasis';
 
 export type AnswerSpec = { type: 'number' | 'fraction' | 'expr' | 'choice' | 'text'; value: string; tolerance?: number; options?: string[] };
 export type MathProblem = { problem: string; answer: AnswerSpec; hints: string[]; steps: string[] };
@@ -256,9 +257,17 @@ function parseTaskOnly(raw: unknown): Task | null {
   return problem && answer ? { type: 'calc', problem, answer, hints: arr(o.hints, 5), steps: arr(o.steps, 12) } : null;
 }
 
+/** Every text in the AI's JSON with LaTeX backslashes repaired (\frac arrives as form feed + "rac"). */
+function repairTexts(v: unknown, depth = 0): unknown {
+  if (typeof v === 'string') return repairMath(v);
+  if (depth > 8 || !v || typeof v !== 'object') return v;
+  if (Array.isArray(v)) return v.map((x) => repairTexts(x, depth + 1));
+  return Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, repairTexts(x, depth + 1)]));
+}
+
 /** Reads a practice set. Tasks that are not usable are left out. */
 export function parsePractice(json: unknown, id: string, now: number): PracticeSet | null {
-  const r = (json ?? {}) as Record<string, unknown>;
+  const r = (repairTexts(json) ?? {}) as Record<string, unknown>;
   const kind = toDomain(r.kind ?? r.domain);
   const ex = (r.example ?? null) as Record<string, unknown> | null;
   const example = ex ? { problem: s(ex.problem), steps: arr(ex.steps ?? ex.explain, 10), answer: s(ex.answer) || undefined, code: s(ex.code, 6000) || undefined } : undefined;
@@ -544,7 +553,7 @@ export const VISUAL_RULES: Record<Domain, string> = {
   math: `Formel-Spielwiese: Wo eine Formel mehrere Größen verbindet, gib in "labs" {"type":"formula","title":"…","expr":"K*(1+p/100)^n","vars":[{"name":"K","label":"Startkapital","min":100,"max":10000,"step":100,"value":1000,"unit":"€"},{"name":"p","label":"Zins","min":0,"max":10,"step":0.5,"value":3,"unit":"%"},{"name":"n","label":"Jahre","min":0,"max":30,"step":1,"value":10}],"result":{"label":"Endkapital","unit":"€"},"plot":"n","ask":"Frage zum Ausprobieren"} (Namen 1–3 Buchstaben; Rechenzeichen + - * / ^, sqrt, exp, ln).`,
   general: '',
 };
-VISUAL_RULES.general = VISUAL_RULES.math.replace('Wo eine Formel', 'Nur wo eine Formel (Physik, Wirtschaft, Alltag)');
+VISUAL_RULES.general = VISUAL_RULES.math.replace('Wo eine Formel', 'Wo eine Formel (Physik, Wirtschaft, Alltag)');
 
 export function setFrame(kind: PracticeKind, exclude: string[] = []) {
   return `${PLAIN_RULE}
@@ -606,13 +615,13 @@ export function parseFigures(raw: unknown): { diagram: Diagram; caption?: string
     const caption = s(o.caption ?? (o.diagram as Record<string, unknown> | undefined)?.caption, 200);
     const narration = arr(o.narration, 10).map((x) => x.slice(0, 200));
     out.push({ diagram: d, ...(caption ? { caption } : {}), ...(narration.length ? { narration } : {}) });
-    if (out.length === 2) break;
+    if (out.length === 3) break;
   }
   return out;
 }
 
 /** Pictures for lessons: when and how (the shapes are the same as for card graphics). */
-export const FIGURE_RULE = `Bilder: Gib der Erklärung ein Feld "figures" mit 0–2 Grafiken – wo Abläufe, Modelle, Gliederungen, Vergleiche, Zahlen oder Zusammenhänge erklärt werden (bei reinen Begriffen keine). Format: "figures":[{"caption":"ein Satz, was die Grafik zeigt","diagram":{"type":"flow","title":"…","steps":["…","…"]},"narration":["Satz zum 1. Kasten","Satz zum 2. Kasten"]}] – "narration" (bei Abläufen, Modellen, Zeitstrahlen, Hierarchien): je Kasten in Zeichenreihenfolge ein kurzer Satz, die Grafik baut sich damit Schritt für Schritt auf. Nur eine Beschreibung (kein SVG), Merkora zeichnet. Beschriftungen: Stichworte, höchstens 6 Wörter. ${DIAGRAM_RULE.slice(DIAGRAM_RULE.indexOf('Formen:'))}`;
+export const FIGURE_RULE = `Bilder: Gib der Erklärung ein Feld "figures" mit 1–3 Grafiken – zu JEDER Lektion mindestens eine, sobald sich etwas zeigen lässt (nur reine Vokabel-Lektionen ohne Zusammenhang dürfen ohne). Wähle die Form nach dem Inhalt: Formel, Wachstum oder Abnahme → "plot" mit der Formel als "expr" in x (z. B. Kaufkraft "100/(1+3/100)^x", beide Achsen mit "label" UND Einheit beschriftet); Trend ohne Formel → "axes"; Ablauf → "flow"; Kreislauf → "cycle"; Vergleich → "compare" oder "venn"; Aufbau/Gliederung → "hierarchy" oder "mindmap"; Anteile → "pie"; Zahlen aus dem Material → "bars"; Zeitliches → "timeline". Format: "figures":[{"caption":"ein Satz, was die Grafik zeigt","diagram":{"type":"flow","title":"…","steps":["…","…"]},"narration":["Satz zum 1. Kasten","Satz zum 2. Kasten"]}] – "narration" (bei Abläufen, Modellen, Zeitstrahlen, Hierarchien): je Kasten in Zeichenreihenfolge ein kurzer Satz, die Grafik baut sich damit Schritt für Schritt auf. Nur eine Beschreibung (kein SVG), Merkora zeichnet. Beschriftungen: Stichworte, höchstens 6 Wörter. ${DIAGRAM_RULE.slice(DIAGRAM_RULE.indexOf('Formen:'))}`;
 
 // ---------- „Warum falsch?“ ----------
 /** Pip explains a wrong answer simply and makes a similar, slightly easier task. */
