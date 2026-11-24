@@ -373,8 +373,68 @@ export function parseGapCheck(raw: unknown): { ok: boolean; note: string } {
   const r = (raw ?? {}) as { ok?: unknown; note?: unknown };
   return { ok: r.ok === true, note: s(r.note, 300) };
 }
+const SYMMETRIC_SEP = /^\s*(?:,|und|oder|sowie|bzw\.?|als auch|&|\+)\s*$/i;
+
+/**
+ * Finds groups of adjacent cloze gaps separated only by symmetric enumeration connectors
+ * (e.g. „{{2}}, {{3}} und Blau“ or „{{1}} oder {{2}}“), excluding parenthesized lists like „f({{1}}, {{2}})“.
+ */
+function clozeGroups(text: string, count: number): number[][] {
+  const parts = clozeParts(text);
+  const runs: { gaps: number[]; before: string; after: string }[] = [];
+  let cur: { gaps: number[]; before: string; after: string } | null = null;
+  for (let p = 1; p < parts.length; p += 2) {
+    const g = parts[p] as number;
+    const before = String(parts[p - 1] ?? '');
+    const after = String(parts[p + 1] ?? '');
+    if (cur && SYMMETRIC_SEP.test(before) && !cur.gaps.includes(g)) {
+      cur.gaps.push(g);
+      cur.after = after;
+    } else {
+      if (cur) runs.push(cur);
+      cur = { gaps: [g], before, after };
+    }
+  }
+  if (cur) runs.push(cur);
+  const seen = new Set<number>();
+  const groups: number[][] = [];
+  for (const r of runs) {
+    if (r.gaps.length < 2) continue;
+    // Keep ordered when wrapped in parentheses/brackets (function calls, coordinates like „(x, y)“)
+    if (/[(\[]\s*$/.test(r.before) && /^\s*[)\]]/.test(r.after)) continue;
+    const valid = r.gaps.filter((g) => g >= 0 && g < count && !seen.has(g));
+    if (valid.length >= 2) {
+      valid.forEach((g) => seen.add(g));
+      groups.push(valid);
+    }
+  }
+  return groups;
+}
+
 export function checkCloze(task: ClozeTask, given: string[]) {
   const gaps = task.gaps.map((allowed, i) => gapRight(allowed, given[i] ?? ''));
+  for (const group of clozeGroups(task.text, task.gaps.length)) {
+    // 1-to-1 bipartite matching so „Grün, Rot“ counts like „Rot, Grün“, while „Rot, Rot“ only counts once
+    const slotOwner = new Map<number, number>();
+    const aug = (g: number, seen: Set<number>): boolean => {
+      const val = given[g] ?? '';
+      if (!val) return false;
+      const order = [g, ...group.filter((t) => t !== g)];
+      for (const t of order) {
+        if (seen.has(t) || !gapRight(task.gaps[t], val)) continue;
+        seen.add(t);
+        const prev = slotOwner.get(t);
+        if (prev === undefined || aug(prev, seen)) {
+          slotOwner.set(t, g);
+          return true;
+        }
+      }
+      return false;
+    };
+    for (const g of group) aug(g, new Set());
+    const matched = new Set(slotOwner.values());
+    for (const g of group) gaps[g] = matched.has(g);
+  }
   return { right: gaps.every(Boolean), gaps };
 }
 

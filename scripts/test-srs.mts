@@ -1462,6 +1462,27 @@ console.log('Skills: aktive Aufgaben und Musik');
   ok(cl && cl.items.length === 3 && cl.items[1].group === 1 && T.checkClassify(cl, [0, 1, 0]).right && !T.checkClassify(cl, [0, 0, 0]).right, 'Zuordnen: Gruppen auch per Name, ungültige weg');
   const cz = T.parseActive({ type: 'cloze', text: 'Ein {{1}} ist ein {{2}} Vertrag.', gaps: [['Kaufvertrag'], ['gegenseitiger', 'synallagmatischer']] }) as any;
   ok(cz && T.checkCloze(cz, ['kaufvertrag', 'Synallagmatischer']).right && T.checkCloze(cz, ['Kaufvertag', 'gegenseitiger']).right && !T.checkCloze(cz, ['Miete', 'gegenseitiger']).right, 'Lückentext tolerant (Groß/klein, Synonym, ein Tippfehler)');
+  const czList = T.parseActive({
+    type: 'cloze',
+    text: 'Der kleinste Teil eines Bildes heißt {{1}}. Seine Farbe speichert er als Werte für die Kanäle {{2}}, {{3}} und Blau.',
+    gaps: [['Pixel'], ['Rot'], ['Grün']],
+  }) as any;
+  ok(
+    czList &&
+      T.checkCloze(czList, ['Pixel', 'Grün', 'Rot']).right &&
+      !T.checkCloze(czList, ['Pixel', 'Rot', 'Rot']).right &&
+      T.checkCloze(czList, ['Pixel', 'Grün', 'Gelb']).gaps.join(',') === 'true,true,false',
+    'Lückentext: austauschbare Aufzählungen in beliebiger Reihenfolge richtig, Doppelte abgelehnt',
+  );
+  const czTriple = T.parseActive({ type: 'cloze', text: 'Die drei Kanäle sind {{1}}, {{2}} und {{3}}.', gaps: [['Rot'], ['Grün'], ['Blau']] }) as any;
+  const czCoord = T.parseActive({ type: 'cloze', text: 'Der Punkt lautet ({{1}}, {{2}}).', gaps: [['x'], ['y']] }) as any;
+  const czSeq = T.parseActive({ type: 'cloze', text: 'Zuerst {{1}}, dann {{2}}.', gaps: [['prüfen'], ['senden']] }) as any;
+  ok(
+    T.checkCloze(czTriple, ['Blau', 'Rot', 'Grün']).right &&
+      !T.checkCloze(czCoord, ['y', 'x']).right &&
+      !T.checkCloze(czSeq, ['senden', 'prüfen']).right,
+    'Lückentext: 3er-Aufzählung frei, Koordinaten und Reihenfolgen bleiben streng',
+  );
   ok(T.parseActive({ type: 'cloze', text: 'Nur {{1}} Lücke', gaps: [['a'], ['b']] }) === null && T.clozeParts('A {{1}} B {{2}}').join('|') === 'A |0| B |1|', 'Lückentext: Lücken passen zum Text');
   const mu = T.parseActive({ type: 'multi', prompt: 'p', options: ['a', 'b', 'c', 'd'], correct: [2, 0, 9] }) as any;
   ok(mu.correct.join() === '0,2' && T.checkMulti(mu, [2, 0]).right && !T.checkMulti(mu, [0]).right, 'mehrere richtige Antworten');
