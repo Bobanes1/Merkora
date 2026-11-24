@@ -5,7 +5,7 @@ import { highlightCode } from '../../lib/javaHighlight';
 import { playNote } from '../../lib/musicAudio';
 import { runJs, runPython, runSql } from '../../lib/codeRun';
 import { runJavaLocal } from '../../lib/javaRun';
-import { diagramBoxCount, PALETTES, renderDiagram, type Diagram } from '../../lib/diagram';
+import { PALETTES, renderDiagram, type Diagram } from '../../lib/diagram';
 import { useResolvedTheme } from '../../lib/theme';
 import { CODE_LANG_LABEL } from '../../lib/practice';
 import {
@@ -381,51 +381,16 @@ export function TablesView({ tables }: { tables: Table[] }) {
   );
 }
 
-// ---------- a picture that builds up ----------
-/** A graphic of the explanation – shown at once, or built up box by box with a sentence for each step. */
-export function BuildFigure({ diagram, caption, narration }: { diagram: Diagram; caption?: string; narration?: string[] }) {
+// ---------- a picture of the explanation ----------
+/** A graphic of the explanation, shown whole with its caption. (narration is still accepted from older lessons, not shown) */
+export function BuildFigure({ diagram, caption }: { diagram: Diagram; caption?: string; narration?: string[] }) {
   const theme = useResolvedTheme();
-  const total = useMemo(() => diagramBoxCount(diagram), [diagram]);
-  const base = diagram.title ? 1 : 0;
-  const [k, setK] = useState<number | null>(null);
-  const svg = useMemo(() => renderDiagram(diagram, PALETTES[theme], k === null ? undefined : { upto: base + k }), [diagram, theme, k, base]);
-  const steps = total - base;
+  const svg = useMemo(() => renderDiagram(diagram, PALETTES[theme]), [diagram, theme]);
   return (
     <figure className="practice-figure build-figure">
       {/* our own SVG with escaped labels – safe to insert */}
       <div className="diagram" dangerouslySetInnerHTML={{ __html: svg }} />
-      {k !== null && k > 0 && narration?.[k - 1] && (
-        <p className="build-note">
-          <span>{k}</span>
-          <CardContent text={narration[k - 1]} className="inline" />
-        </p>
-      )}
       {caption && <figcaption>{caption}</figcaption>}
-      {steps > 1 && (
-        <div className="row-gap">
-          {k === null ? (
-            <button type="button" className="btn ghost sm" onClick={() => setK(1)}>
-              Schritt für Schritt aufbauen
-            </button>
-          ) : k < steps ? (
-            <>
-              <button type="button" className="btn primary sm" onClick={() => setK(k + 1)}>
-                Weiter <IconChevron size={13} />
-              </button>
-              <span className="muted small">
-                {k} von {steps}
-              </span>
-              <button type="button" className="btn ghost sm" onClick={() => setK(null)}>
-                Ganz zeigen
-              </button>
-            </>
-          ) : (
-            <button type="button" className="btn ghost sm" onClick={() => setK(1)}>
-              Nochmal von vorn
-            </button>
-          )}
-        </div>
-      )}
     </figure>
   );
 }
