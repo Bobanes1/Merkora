@@ -392,8 +392,8 @@ export function ClozeTaskView({ ctx, task }: { ctx: TaskCtx; task: ClozeTask }) 
   const [over, setOver] = useState<number | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
   const justDragged = useRef(false);
-  const right = !!marks?.every(Boolean) || (!!prog.solved && placed.every((w, k) => w >= 0 && task.gaps[k].includes(bank[w])));
   const given = placed.map((w) => (w >= 0 ? bank[w] : ''));
+  const right = !!marks?.every(Boolean) || (!!prog.solved && checkCloze(task, given).right);
   const used = new Set(placed.filter((w) => w >= 0));
 
   const put = (w: number, gap: number) => {
