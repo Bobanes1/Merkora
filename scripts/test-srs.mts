@@ -2409,6 +2409,92 @@ console.log('Abwechslung in Skills: Häppchen-Checks, Lektions-Stile, Aufgaben-R
   ok(P.DOMAIN_TASKS.general[P.DOMAIN_TASKS.general.length - 1] === 'classify' && P.DOMAIN_TASKS.math.includes('label'), 'classify am Ende der Domain-Listen, math hat label');
 }
 
+console.log('Bildhafte Erklärgrafiken (forces, scene, callout, illustration)');
+{
+  const D = await import('../src/lib/diagram');
+  const I = await import('../src/lib/illustrations');
+  const P = await import('../src/lib/practice');
+
+  const checkClean = (L: ReturnType<typeof D.layoutDiagram>, name: string) => {
+    const tbs = L.boxes.filter((b) => b.lines.length);
+    const inBounds = tbs.every((b) => b.x >= 0 && b.y >= 0 && b.x + b.w <= L.width + 1 && b.y + b.h <= L.height + 1);
+    let overlap = false;
+    for (let i = 0; i < tbs.length; i++)
+      for (let j = i + 1; j < tbs.length; j++) {
+        const a = tbs[i], b = tbs[j];
+        if (a.x < b.x + b.w - 1 && a.x + a.w > b.x + 1 && a.y < b.y + b.h - 1 && a.y + a.h > b.y + 1) overlap = true;
+      }
+    ok(inBounds && !overlap, `${name}: innerhalb des Rahmens, keine Text-Überlappungen`);
+  };
+
+  const forces = D.parseDiagram({
+    type: 'kräfte',
+    title: 'Kräfte am Flugzeug',
+    subject: 'Flugzeug',
+    icon: 'flugzeug',
+    vectors: [
+      { dir: 'oben', label: 'Auftrieb', note: 'trägt nach oben' },
+      { dir: 'unten', label: 'Gewicht', note: 'zieht nach unten' },
+      { dir: 'vorn', label: 'Schub', note: 'treibt nach vorn' },
+      { dir: 'hinten', label: 'Widerstand', note: 'bremst ab' },
+    ],
+    states: [
+      { name: 'Reiseflug', sizes: { oben: 'm', unten: 'm', vorn: 'm', hinten: 'm' }, note: 'Gleichgewicht' },
+      { name: 'Steigflug', sizes: { oben: 'l', vorn: 'l', unten: 'm', hinten: 's' }, tilt: -7, note: 'Steigt' },
+    ],
+  })!;
+  ok(forces?.type === 'forces' && forces.vectors.length === 4 && forces.states?.length === 2, 'forces: deutsche Richtungen & Zustände geparst');
+  checkClean(D.layoutDiagram(forces, 0), 'forces Reiseflug');
+  checkClean(D.layoutDiagram(forces, 1), 'forces Steigflug');
+  const fSvg = D.renderDiagram(forces, D.PALETTES.dark, { state: 1 });
+  ok(fSvg.includes('rotate(-7') && fSvg.includes('Auftrieb') && D.diagramLabels(forces).length === 4, 'forces: geneigtes Flugzeug-Motiv, Pfeile und 4 Quiz-Labels');
+
+  const scene = D.parseDiagram({
+    type: 'szene',
+    title: 'Kaufvertrag',
+    actors: [
+      { id: 'k', label: 'Käufer', icon: 'person', sub: 'will die Ware' },
+      { id: 'v', label: 'Verkäufer', icon: 'fabrik', sub: 'will das Geld' },
+    ],
+    arrows: [
+      { from: 'k', to: 'v', label: 'Zahlung' },
+      { from: 'v', to: 'k', label: 'Übergabe der Ware' },
+    ],
+  })!;
+  ok(scene?.type === 'scene' && scene.actors.length === 2 && scene.arrows.length === 2, 'scene: Akteure & Gegenpfeile geparst');
+  checkClean(D.layoutDiagram(scene), 'scene 2 Akteure');
+  ok(D.renderDiagram(scene, D.PALETTES.light).includes('<path class="dg-vec"'), 'scene: Gegenpfeile werden sauber gebogen');
+
+  const callout = D.parseDiagram({
+    type: 'aufbau',
+    title: 'Aufbau einer Zelle',
+    subject: 'Tierzelle',
+    icon: 'zelle',
+    parts: [
+      { side: 'left', label: 'Zellkern', note: 'Steuerzentrale' },
+      { side: 'left', label: 'Mitochondrien', note: 'Kraftwerke' },
+      { side: 'right', label: 'Zellmembran', note: 'Schutzhülle' },
+      { side: 'right', label: 'Zytoplasma', note: 'Zellflüssigkeit' },
+    ],
+  })!;
+  ok(callout?.type === 'callout' && callout.parts.length === 4 && D.diagramLabels(callout).length === 4, 'callout: Teile & 4 Quiz-Labels');
+  checkClean(D.layoutDiagram(callout), 'callout 4 Teile');
+
+  const ill = D.parseDiagram({
+    type: 'svg',
+    title: 'Tragfläche',
+    width: 600,
+    height: 300,
+    svg: '<svg viewBox="0 0 600 300"><script>alert(1)</script><path d="M20 150 Q300 50 580 150" stroke="{{teal}}" onclick="evil()"/><circle cx="100" cy="150" r="20" fill="{{amber}}"/><image href="https://evil.com/x.png"/></svg>',
+  })!;
+  ok(ill?.type === 'illustration' && !ill.svg.includes('script') && !ill.svg.includes('onclick') && !ill.svg.includes('evil.com') && !ill.svg.includes('<image'), 'sanitizeSvg entfernt Skripte, Event-Handler und externe Bilder');
+  const illSvg = D.renderDiagram(ill, D.PALETTES.dark);
+  ok(illSvg.includes(D.PALETTES.dark.tones[0].line) && illSvg.includes(D.PALETTES.dark.tones[2].line), 'illustration setzt Merkora-Farbplatzhalter um');
+  ok(D.sanitizeSvg('<script>alert(1)</script>') === null && D.sanitizeSvg('<rect x="0" y="0" width="10" height="10"/>') === null, 'sanitizeSvg lehnt leere oder zu kleine SVGs ab');
+  ok(I.resolveIllustration('flugzeug')?.key === 'flugzeug' && I.resolveIllustration(undefined, 'Pflanzenzelle')?.key === 'zelle' && I.resolveIllustration('reise')?.key === 'flugzeug', 'resolveIllustration findet Motive per Name, Alias und Teilwort');
+  ok(P.FIGURE_RULE.includes('"forces"') && P.FIGURE_RULE.includes('"scene"') && P.FIGURE_RULE.includes('"callout"') && P.FIGURE_RULE.includes('"illustration"'), 'FIGURE_RULE beschreibt alle 4 neuen bildhaften Formen');
+}
+
 console.log(failures ? `\n${failures} Test(s) fehlgeschlagen` : '\nAlle SRS-Tests bestanden');
 process.exit(failures ? 1 : 0);
 

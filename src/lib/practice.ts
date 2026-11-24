@@ -5,6 +5,7 @@
  */
 import { compileExpr } from './plotExpr';
 import { DIAGRAM_RULE, parseDiagram, type Diagram } from './diagram';
+import { ILLUSTRATION_NAMES } from './illustrations';
 import { ACTIVE_TYPES, gapRight, niceStep, parseActive, type ActiveTask } from './tasks';
 import { LANG_RULE, type Prompt } from './ai';
 import { parseFormulaLab, parseProgram, parseScore, parseSketch, parseSyntax, parseTables, type FormulaLab, type Program, type Score, type Sentence, type Sketch, type Table } from './visuals';
@@ -622,8 +623,15 @@ export function parseFigures(raw: unknown): { diagram: Diagram; caption?: string
   return out;
 }
 
-/** Pictures for lessons: when and how (the shapes are the same as for card graphics). */
-export const FIGURE_RULE = `Bilder: Gib der Erklärung ein Feld "figures" mit 1–3 Grafiken – zu JEDER Lektion mindestens eine, sobald sich etwas zeigen lässt (nur reine Vokabel-Lektionen ohne Zusammenhang dürfen ohne). Wähle die Form nach dem Inhalt: Formel, Wachstum oder Abnahme → "plot" mit der Formel als "expr" in x (z. B. Kaufkraft "100/(1+3/100)^x", beide Achsen mit "label" UND Einheit beschriftet); Trend ohne Formel → "axes"; Ablauf → "flow"; Kreislauf → "cycle"; Vergleich → "compare" oder "venn"; Aufbau/Gliederung → "hierarchy" oder "mindmap"; Anteile → "pie"; Zahlen aus dem Material → "bars"; Zeitliches → "timeline". Format: "figures":[{"caption":"ein Satz, was die Grafik zeigt","diagram":{"type":"flow","title":"…","steps":["…","…"]}}]. Nur eine Beschreibung (kein SVG), Merkora zeichnet. Beschriftungen: Stichworte, höchstens 6 Wörter. ${DIAGRAM_RULE.slice(DIAGRAM_RULE.indexOf('Formen:'))}`;
+/** Pictures for lessons: when and how (Studyflix-style visual templates first, plus optional custom SVG sketch). */
+export const FIGURE_RULE = `Bilder: Gib der Erklärung ein Feld "figures" mit 1–3 Grafiken im Erklärvideo-Stil – zu JEDER Lektion mindestens eine, sobald sich etwas zeigen lässt (nur reine Vokabel-Lektionen ohne Zusammenhang dürfen ohne). Wähle die Form passend zum Inhalt:
+- Kräfte, Einflüsse oder Richtungen an einem Objekt (z. B. Flugzeug, Auto, Schiff, Waage, Körper) → IMMER "forces" (NIE "concept"!) mit Bildmotiv ("icon"), echten Richtungen (up|down|left|right|up-left|up-right|down-left|down-right) und optional 2–3 umschaltbaren "states": [{"name":"Reiseflug","sizes":{"up":"m","down":"m","right":"m","left":"m"},"note":"…"},{"name":"Steigflug","sizes":{"up":"l","right":"l","down":"m","left":"s"},"tilt":-7,"note":"…"}].
+- Akteure & Wechselwirkung (z. B. Käufer ↔ Verkäufer, Sender → Empfänger, Sonne → Pflanze → Tier) → "scene" mit großen Bildmotiven.
+- Aufbau / Teile eines Objekts (z. B. Zelle, Herz, Tragfläche, Atom, Haus) → "callout" (mit optionalem "note" je Teil).
+- Bildmotive ("icon") für forces/scene/callout: ${ILLUSTRATION_NAMES.join(',')}.
+- Formel, Wachstum oder Abnahme → "plot" mit der Formel als "expr" in x (z. B. "100/(1+3/100)^x", beide Achsen mit "label" UND Einheit); Trend ohne Formel → "axes"; Ablauf → "flow"; Kreislauf → "cycle"; Vergleich → "compare" oder "venn"; Gliederung → "hierarchy" oder "mindmap"; Anteile → "pie"; Zahlen → "bars"; Zeitliches → "timeline".
+- Nur für spezielle bildhafte Skizzen, die in keine Vorlage passen (z. B. Tragflächen-Querschnitt mit Luftstrom, Mondphasen, Stromkreis, Hebelgesetz): "illustration" {"title":"…","width":600,"height":320,"svg":"…nur innere SVG-Formen (path,circle,ellipse,rect,line,polygon,text) auf 600×320 mit Merkora-Farbplatzhaltern {{teal}},{{berry}},{{amber}},{{blue}},{{violet}},{{text}},{{muted}},{{soft}},{{node}} – sauber lesbar, keine Überlappungen…"}.
+Format: "figures":[{"caption":"ein Satz, was die Grafik zeigt","diagram":{"type":"…","title":"…",…}}]. Beschriftungen: Stichworte, höchstens 6 Wörter. ${DIAGRAM_RULE.slice(DIAGRAM_RULE.indexOf('Formen:'))}`;
 
 // ---------- „Warum falsch?“ ----------
 /** Pip explains a wrong answer simply and makes a similar, slightly easier task. */
