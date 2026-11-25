@@ -1524,6 +1524,18 @@ console.log('Skills: Lernpfad planen und lernen');
   const pr = S.skillProgress(skill);
   ok(pr.done === 1 && pr.skipped === 1 && pr.total === 4, 'Fortschritt des Skills: übersprungene Lektionen zählen weder als geschafft noch als offen');
   ok(!S.stageReady(skill.stages[0]) && !S.canReview(skill), 'Stufentest erst nach allen Lektionen, Wiederholung erst nach 2 geübten');
+  // Skipping a task („Weiß nicht“) still lets Pip advance to the next level once all tasks of the lesson are through
+  const withSkip = set(3, 4);
+  withSkip.progress[3] = { tries: 0, hints: 0, dunno: true, shown: true };
+  const halfSkipped = set(1, 4);
+  halfSkipped.progress[1] = { tries: 0, hints: 0, dunno: true, shown: true };
+  skill.stages[0].lessons[2].set = halfSkipped;
+  ok(!S.lessonDone(skill.stages[0].lessons[2]) && S.nextLesson(skill)!.lesson.id === 'l3', 'übersprungene Aufgabe mitten in der Lektion schließt noch nicht ab');
+  skill.stages[0].lessons[2].set = withSkip;
+  ok(
+    !S.mastered(withSkip) && S.setFinished(withSkip) && S.lessonDone(skill.stages[0].lessons[2]) && S.nextLesson(skill)!.lesson.id === 'l4' && S.stageReady(skill.stages[0]),
+    'Lektion mit übersprungener Aufgabe zählt nach Abschluss als erledigt – Pip zieht weiter zum nächsten Level',
+  );
   skill.stages[0].lessons[2].set = set(5, 5);
   ok(S.stageReady(skill.stages[0]) && S.canReview(skill) && S.reachedStage(skill) === -1, 'Stufe bereit für den Test');
   skill.stages[0].passed = true;
@@ -1941,7 +1953,12 @@ console.log('Themenvorschläge, Mini-Skills, nächster Skill');
   ok(mp.user.includes('Morsecode') && mp.system.includes('genau 3 Lektionen'), 'Mini-Skill: ein Aufruf, 3 Lektionen');
   const mini = { id: 'm', topic: 'Morsecode', title: 'Morsecode', domain: 'general', levels: ['Mini-Skill'], targetLevel: 0, level: '', mini: true, status: 'active', plan: {}, createdAt: 1, updatedAt: 1,
     stages: [{ id: 's', name: 'Mini', goal: '', lessons: [{ id: 'l1', title: 'A', goal: '' }, { id: 'l2', title: 'B', goal: '', known: true }] }] } as any;
-  ok(!S.skillComplete(mini) && S.lessonPrompt(mini, mini.stages[0], mini.stages[0].lessons[0]).system.includes('MINI-SKILL') && S.lessonPrompt(mini, mini.stages[0], mini.stages[0].lessons[0]).system.includes('dann 4 Aufgaben'), 'Mini-Skill: kurze Lektionen, noch nicht fertig');
+  const miniP1 = S.lessonPrompt(mini, mini.stages[0], mini.stages[0].lessons[0]).system;
+  ok(!S.skillComplete(mini) && miniP1.includes('MINI-SKILL') && miniP1.includes('dann 4 Aufgaben'), 'Mini-Skill: kurze Lektionen, noch nicht fertig');
+  ok(miniP1.includes('Genau 4 tiefere') && miniP1.includes('typische Falle') && miniP1.includes('2 → 2 → 3 → 3') && miniP1.includes('NICHT mit einer bloßen Wissens-Auswahl'), 'Mini-Skill Lektion 1: tieferer Theorie-Input (4 Häppchen + Falle) & direkter Start auf level 2');
+  const mini3 = { ...mini, stages: [{ ...mini.stages[0], lessons: [...mini.stages[0].lessons, { id: 'l3', title: 'C', goal: '' }] }] };
+  const miniP3 = S.lessonPrompt(mini3, mini3.stages[0], mini3.stages[0].lessons[2]).system;
+  ok(miniP3.includes('"style": "sprint"') && miniP3.includes('90–120 Wörter') && miniP3.includes('2 → 3 → 3 → 3'), 'Mini-Skill Lektion 3: gehaltvoller Sprint-Überblick & anspruchsvoller Transfer');
   const solved = { id: 'x', createdAt: 1, kind: 'general', topic: 'A', intro: '', labs: [], tasks: [{ type: 'calc', problem: '1', answer: { type: 'number', value: '1' } }], progress: [{ tries: 1, hints: 0, solved: true }] };
   mini.stages[0].lessons[0].set = solved;
   ok(S.skillComplete(mini) && S.wantsNextIdeas(mini), 'Mini-Skill fertig ohne Stufentest → „Wie geht\'s weiter?“');

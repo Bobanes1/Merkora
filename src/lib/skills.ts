@@ -5,7 +5,7 @@
  * Pure – tested in scripts/test-srs.mts. Running the AI requests: lib/skillRun.ts.
  */
 import { FORMULA_RULE, LANG_RULE, type Prompt } from './ai';
-import { cleanSolve, FIGURE_RULE, problemCount, setFrame, solvedCount, taskList, toDomain, type Domain, type LessonStyle, type PracticeSet, type ProblemProgress } from './practice';
+import { cleanSolve, FIGURE_RULE, problemCount, setFrame, settledCount, solvedCount, taskList, toDomain, type Domain, type LessonStyle, type PracticeSet, type ProblemProgress } from './practice';
 import { DAY, dayKey, startOfDay } from './util';
 import { spreadClip } from './sample';
 import type { DeckFile } from './store';
@@ -434,15 +434,21 @@ export function lessonVariety(skill: Skill, stageIndex: number, lessonIndex: num
 
   const styleRule =
     style === 'sprint'
-      ? `LEKTIONS-STIL: "style": "sprint" (Kompakt-Theorie auf einen Blick → direkt üben, kein Frage-Einstieg).
+      ? skill.mini
+        ? `LEKTIONS-STIL: "style": "sprint" (Praxis-Höhepunkt: gehaltvoller Überblick auf einen Blick → anspruchsvoll üben, kein Frage-Einstieg).
+- Gib "style": "sprint" an (KEIN "hook").
+- Feld "bites": genau 3 gehaltvolle, vollständige Theorie-Abschnitte OHNE "check" (je ~90–120 Wörter, mit 2 verschiedenen Studyflix-Grafiken), die das neue Thema tief genug erklären, eine typische Falle beleuchten und den Bogen zu Lektion 1–2 schlagen. Ein konkretes "example" rundet die Theorie ab.`
+        : `LEKTIONS-STIL: "style": "sprint" (Kompakt-Theorie auf einen Blick → direkt üben, kein Frage-Einstieg).
 - Gib "style": "sprint" an (KEIN "hook").
 - Feld "bites": genau 3 klare, vollständige Theorie-Abschnitte OHNE "check" (je ~60–90 Wörter, mit mindestens einer Studyflix-Grafik), die JEDEN neuen Begriff und Zusammenhang der Lektion sauber erklären, bevor die Aufgaben beginnen. Ein konkretes "example" rundet die Theorie ab.`
-      : `LEKTIONS-STIL: "style": "classic" (3–4 gut merkbare Theorie-Häppchen → anschauliches Beispiel → gestuftes Üben, immer erst Theorie). Gib "style": "classic" an (KEIN "hook").`;
+      : skill.mini
+        ? `LEKTIONS-STIL: "style": "classic" (4 fundierte, bildhafte Theorie-Häppchen → anschauliches Beispiel → direkt anspruchsvolles Anwenden, immer erst Theorie). Gib "style": "classic" an (KEIN "hook").`
+        : `LEKTIONS-STIL: "style": "classic" (3–4 gut merkbare Theorie-Häppchen → anschauliches Beispiel → gestuftes Üben, immer erst Theorie). Gib "style": "classic" an (KEIN "hook").`;
 
   const parts = [
     `ABWECHSLUNG BEI DEN AUFGABEN (${skill.domain}):`,
     `- ${TOPIC_FIT_HINT[skill.domain]}`,
-    `- Starte Aufgabe 1 NICHT mit "classify" und NICHT mit einer blinden Schätzfrage ("estimate"). Gute Einstiegs-Typen für Aufgabe 1 diesmal: ${preferredOpeners.map((t) => `"${t}"`).join(', ')} – wähle den, der inhaltlich am besten zum Erklärten passt.`,
+    `- Starte Aufgabe 1 NICHT mit "classify"${skill.mini ? ', NICHT mit einer bloßen Wissens-Auswahl ("choice")' : ''} und NICHT mit einer blinden Schätzfrage ("estimate"). Gute Einstiegs-Typen für Aufgabe 1 diesmal: ${preferredOpeners.map((t) => `"${t}"`).join(', ')} – wähle den, der inhaltlich am besten zum Erklärten passt.`,
     avoidClassify
       ? `- "classify" kam gerade erst vor: lass "classify" in dieser Lektion ganz weg.`
       : `- Wenn du "classify" überhaupt nutzt, dann erst später in der Lektion und mit 3–4 Kategorien statt nur 2.`,
@@ -453,6 +459,31 @@ export function lessonVariety(skill: Skill, stageIndex: number, lessonIndex: num
   return { style, preferredOpeners, overused, avoidClassify, styleRule, taskRule: parts.join('\n') };
 }
 
+/** Richer theory input + stronger task start (level 2 → 3 instead of trivial warm-up) for mini skills. */
+function miniLessonRule(style: LessonStyle): string {
+  if (style === 'sprint') {
+    return `${MINI_RULE}
+MINI-SKILL-THEORIE (Lektion 3 – Höhepunkt):
+- Genau 3 gehaltvolle Theorie-Abschnitte OHNE "check" (je ~90–120 Wörter, gesamt ~300–360 Wörter) mit 2 verschiedenen Studyflix-Grafiken ("figures") – erkläre Mechanismus, eine typische Falle („Viele denken X – tatsächlich gilt Y, weil …“) und verknüpfe mit den vorherigen Lektionen.
+MINI-SKILL-AUFGABEN (anspruchsvoll statt Aufwärmen):
+- Keine triviale level-1-Wiedererkennungsfrage! Starte direkt auf "level": 2 und steigere auf "level": 3 (Bogen: 2 → 3 → 3 → 3): praxisnahe Transfer- und Kombinationsaufgaben, die das Gelernte aus allen Lektionen verbinden.`;
+  }
+  return `${MINI_RULE}
+MINI-SKILL-THEORIE (mehr Substanz vor dem Üben):
+- Genau 4 tiefere, gut merkbare Erklär-Häppchen (je ~90–130 Wörter, gesamt ~380–500 Wörter) mit 2 verschiedenen Studyflix-Grafiken ("figures") und höchstens 1 kurzen Check (erst in Häppchen 2 oder 3, damit der Lesefluss bleibt):
+  1. Alltagsbild & Grundidee (ohne Check): warum das Thema spannend ist, wozu es dient und der Kernbegriff klar erklärt.
+  2. Kernmechanismus im Detail (mit Grafik "figure": 0): wie es wirklich funktioniert, Ursachen und Zusammenhänge statt nur Oberfläche.
+  3. Zusammenhänge, Ausnahmen & typische Falle (mit Grafik "figure": 1): ausdrücklich eine typische Fehlannahme oder ein überraschender Grenzfall („Viele denken X – tatsächlich passiert aber Y, weil …“).
+  4. Praxis-Regel / „So wendest du es an“ (ohne Check): kompakte Denk- oder Entscheidungsregel direkt vor dem Beispiel.
+- Das "example" zeigt eine realistische Anwendung mit kurzer „warum“-Begründung je Schritt.
+MINI-SKILL-AUFGABEN (direkt anspruchsvoller starten):
+- Keine triviale level-1-Aufwärmfrage („Welcher Begriff stand im Text?“)! Da die Theorie ausführlich war, starte direkt mit echter Anwendung (Bogen: "level": 2 → 2 → 3 → 3):
+  • Aufgabe 1 ("level": 2): direkte Anwendung des Erklärten auf einen neuen konkreten Mini-Fall.
+  • Aufgabe 2 ("level": 2): Verknüpfung, Ursache-Wirkung oder die typische Falle aus Häppchen 3.
+  • Aufgabe 3 ("level": 3): Transfer auf eine ungewohnte Situation oder knifflige Abwägung.
+  • Aufgabe 4 ("level": 3): kleiner Höhepunkt / Synthese (z. B. "explain" in eigenen Worten, realistischer Fall, "scenario" oder "roleplay").`;
+}
+
 export function lessonPrompt(skill: Skill, stage: Stage, lesson: Lesson, count = skill.mini ? 4 : 5): Prompt {
   const all = skill.stages.flatMap((st) => st.lessons);
   const i = all.findIndex((l) => l.id === lesson.id);
@@ -460,19 +491,22 @@ export function lessonPrompt(skill: Skill, stage: Stage, lesson: Lesson, count =
   const inStageIndex = Math.max(0, stage.lessons.findIndex((l) => l.id === lesson.id));
   const before = all.slice(0, Math.max(0, i)).map((l) => l.title);
   const variety = lessonVariety(skill, stageIndex, Math.max(0, i), inStageIndex);
+  const taskArc = skill.mini
+    ? 'starte nach der ausführlichen Theorie direkt mit echter Anwendung auf level 2 statt einer leichten Aufwärmfrage, danach weiter anwenden und Transfer auf level 3'
+    : 'gestuft: Aufgabe 1 = sicherer Einstieg direkt zum Erklärten, danach anwenden, am Ende Transfer';
   return {
-    system: `Du bist ein geduldiger Tutor. Du erstellst eine Lektion mit idealer Balance aus klarer Theorie und eigenem Tun: zuerst eine gut merkbare, bildhafte Erklärung (genug Substanz zum echten Verstehen, aber nie überladen), dann ein konkretes durchgespieltes Beispiel, dann ${count} Aufgaben, die man selbst löst (gestuft: Aufgabe 1 = sicherer Einstieg direkt zum Erklärten, danach anwenden, am Ende Transfer). ${kindRule(skill)}
+    system: `Du bist ein geduldiger Tutor. Du erstellst eine Lektion mit idealer Balance aus klarer Theorie und eigenem Tun: zuerst eine gut merkbare, bildhafte Erklärung (genug Substanz zum echten Verstehen, aber nie überladen), dann ein konkretes durchgespieltes Beispiel, dann ${count} Aufgaben, die man selbst löst (${taskArc}). ${kindRule(skill)}
 ${BITE_RULE}
 ${BITE_DOMAIN_HINT[skill.domain]}
 ${variety.styleRule}
 ${variety.taskRule}
-${skill.mini ? MINI_RULE + ' Genau 3 klare, vollständige Erklär-Häppchen (je ~65–100 Wörter, 1–2 Grafiken, höchstens 1 Check ab Häppchen 2).' : paceOf(skill) === 'fast' ? FAST_RULE : paceOf(skill) === 'gentle' ? GENTLE_RULE + '\n' + beginnerRule(skill, stageIndex, i) : beginnerRule(skill, stageIndex, i)}
+${skill.mini ? miniLessonRule(variety.style) : paceOf(skill) === 'fast' ? FAST_RULE : paceOf(skill) === 'gentle' ? GENTLE_RULE + '\n' + beginnerRule(skill, stageIndex, i) : beginnerRule(skill, stageIndex, i)}
 ${FIGURE_RULE}
 NUR ERKLÄRTES ABFRAGEN (streng!): Jede einzelne Aufgabe darf AUSSCHLIESSLICH Begriffe, Abkürzungen (z. B. IPv4, DNS, Fachkürzel), Zahlen, Regeln und Zusammenhänge abfragen, die vorher ausdrücklich in deinen "bites" oder im "example" erklärt wurden (oder nachweislich aus einer früheren Lektion bekannt sind). Keine Fakten- oder Schätzfragen zu Zahlen oder Begriffen, die nicht im Text standen – die Person soll Gelerntes anwenden, niemals blind raten!
 REIHENFOLGE IM JSON: zuerst "kind", "topic", "style", "intro", "bites" (die vollständige Erklärung), "example", "figures" (und ggf. Fach-Visuals/"labs"), und ERST DANACH "problems" – schreibe die Aufgaben erst, wenn deine gesamte Erklärung feststeht, und prüfe bei jeder Aufgabe, ob wirklich jeder abgefragte Begriff vorher in "bites" erklärt wurde. Halte Texte knapp und klar.
 ${JSON_ONLY}`,
     user: `${context(skill)}\n\nSTUFE: ${stage.name} – ${stage.goal}\nLEKTION ${i + 1} von ${all.length}: ${lesson.title} – Ziel: ${lesson.goal}${before.length ? `\nVorher gelernt: ${before.slice(-8).join('; ')}` : ''}`,
-    maxTokens: Math.min(16000, 8500 + count * (skill.domain === 'java' || skill.domain === 'law' ? 900 : 700)),
+    maxTokens: Math.min(16000, (skill.mini ? 9500 : 8500) + count * (skill.domain === 'java' || skill.domain === 'law' ? 900 : 700)),
     json: true,
   };
 }
@@ -508,9 +542,11 @@ Kein "example". ${count ?? 8} Aufgaben. ${JSON_ONLY}`,
   };
 }
 
-/** A set counts as mastered at 80 % solved. */
+/** A set counts as mastered at 80 % solved (used for stage tests and star ratings). */
 export const mastered = (set?: PracticeSet) => !!set && problemCount(set) > 0 && solvedCount(set) / problemCount(set) >= 0.8;
-export const lessonDone = (l: Lesson) => !!l.known || mastered(l.set);
+/** Every core task of the set has been worked through (solved or skipped with „Weiß nicht“). */
+export const setFinished = (set?: PracticeSet) => !!set && problemCount(set) > 0 && settledCount(set) >= problemCount(set);
+export const lessonDone = (l: Lesson) => !!l.known || mastered(l.set) || setFinished(l.set);
 /** Stars for a finished lesson on the path: 3 = all solved (or „kannst du schon“), 2 = from 90 %, 1 = done (80 %). */
 /** A lesson you said you already know: skipped – it does not count as learned. */
 export const lessonSkipped = (l: Lesson) => !!l.known;
@@ -542,7 +578,7 @@ export function skillProgress(skill: Skill) {
 /** A level test is open when every lesson of the level is done. */
 export const stageReady = (st: Stage) => st.lessons.every(lessonDone);
 /** Mixed review after at least two finished lessons (that were really practised). */
-export const canReview = (skill: Skill) => skill.stages.flatMap((st) => st.lessons).filter((l) => mastered(l.set)).length >= 2;
+export const canReview = (skill: Skill) => skill.stages.flatMap((st) => st.lessons).filter((l) => !l.known && lessonDone(l)).length >= 2;
 /** The level reached so far (index in levels; −1 = none yet). */
 export function reachedStage(skill: Skill): number {
   let n = -1;
@@ -789,8 +825,8 @@ export function pageTopics(pool: readonly string[], n: number, seed: number, pag
   return out.length < n ? [...out, ...order.slice(0, n - out.length)] : out;
 }
 
-/** Mini skills: light, curious, one aha after the other – short lessons with 4 tasks. */
-export const MINI_RULE = 'MINI-SKILL: Ein kleines Thema zum Spaß und Horizont-Erweitern. Locker, neugierig machend, mit Aha-Momenten und einem überraschenden Fakt. Kein Vorwissen nötig, nichts Trockenes.';
+/** Mini skills: engaging, curious, with real depth and aha moments – 3 lessons with 4 tasks. */
+export const MINI_RULE = 'MINI-SKILL: Ein kompaktes Thema zum Horizont-Erweitern. Locker und neugierig machend, aber mit echter inhaltlicher Tiefe, Aha-Momenten und einem überraschenden Fakt. Kein Vorwissen nötig, nichts Trockenes, aber auch nichts Oberflächliches.';
 
 /** One call: a mini skill with one stage of 3 short lessons – no questions, no placement test. */
 export function miniPrompt(topic: string, level = ''): Prompt {
@@ -845,12 +881,12 @@ export type NextStep =
 export function nextStep(skill: Skill, now = Date.now()): NextStep | null {
   const DAY = 86_400_000;
   const all = skill.stages.flatMap((st) => st.lessons);
-  const learned = all.filter((l) => !l.known && mastered(l.set));
+  const learned = all.filter((l) => !l.known && lessonDone(l));
   const fresh = learned.filter((l) => (l.doneAt ?? 0) > (skill.lastReviewAt ?? 0)).length;
   if (!skill.mini && learned.length >= 2 && fresh >= 2 && now - (skill.lastReviewAt ?? 0) > DAY) return { kind: 'review', reason: 'damit nichts vergessen wird' };
   const weak = competenceMap(skill)
     .flatMap((g) => g.rows)
-    .filter((r) => r.state === 'weak' && r.share < 0.5 && mastered(r.lesson.set))
+    .filter((r) => r.state === 'weak' && r.share < 0.5 && lessonDone(r.lesson))
     .sort((a, b) => a.share - b.share)[0];
   if (weak && now - (skill.lastWeakAt ?? 0) > 2 * DAY) return { kind: 'weak', lesson: weak.lesson, reason: 'da bist du noch unsicher' };
   // a passed stage: apply it once in the mini project (suggested once, can be skipped)
