@@ -4,12 +4,13 @@ import { playUi } from '../lib/uiSound';
 import { Mascot } from '../components/Mascot';
 import { Confetti } from '../components/Mascot';
 import { Link, useSearchParams } from 'react-router-dom';
-import { IconArrowDown, IconArrowUp, IconCalendar, IconCheck, IconChecklist, IconClock, IconClose, IconFlag, IconHash, IconNote, IconPlay, IconPlus, IconRepeat, IconSearch, IconSparkle, IconTarget, IconTimer, IconTrash } from '../components/Icons';
+import { IconArrowDown, IconArrowUp, IconCalendar, IconCheck, IconChecklist, IconClock, IconClose, IconFlag, IconHash, IconPlay, IconPlus, IconPopout, IconPractice, IconRepeat, IconSearch, IconSparkle, IconTarget, IconTimer, IconTrash } from '../components/Icons';
 import { isLeech } from '../lib/cardLinks';
 import { pomodoro, usePomodoro, usePomodoroMeta } from '../lib/pomodoro';
-import { addTodo, deckUrl, deleteTodo, toggleTodo, updateTodo, useData } from '../lib/store';
+import { addTodo, deckUrl, deleteTodo, reorderTodos, toggleTodo, updateTodo, useData } from '../lib/store';
 import {
   dueText,
+  groupMinutes,
   parseQuickTodo,
   plannedDays,
   PRIORITY_LABEL,
@@ -103,6 +104,8 @@ export default function Todos({ embedded = false }: { embedded?: boolean }) {
   const [party, setParty] = useState(0);
   // a checked to-do stays a moment with its tick before it leaves the list
   const [leaving, setLeaving] = useState<Set<string>>(new Set());
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
 
   const offerUndo = (text: string, run: () => void) => {
     clearTimeout(undoTimer.current);
@@ -185,7 +188,19 @@ export default function Todos({ embedded = false }: { embedded?: boolean }) {
     if (j < 0 || j >= list.length) return;
     const next = [...list];
     [next[i], next[j]] = [next[j], next[i]];
-    next.forEach((x, k) => x.order !== k && updateTodo(x.id, { order: k }));
+    reorderTodos(next.map((x) => x.id));
+  };
+  const dropOn = (targetId: string, list: Todo[]) => {
+    if (!dragId || dragId === targetId) return;
+    const ids = list.map((x) => x.id);
+    const from = ids.indexOf(dragId);
+    const to = ids.indexOf(targetId);
+    if (from < 0 || to < 0) return;
+    ids.splice(from, 1);
+    ids.splice(to, 0, dragId);
+    reorderTodos(ids);
+    setDragId(null);
+    setOverId(null);
   };
   const startTimer = (t: Todo) => {
     pomodoro.startForTodo(t.id, t.minutes);
@@ -235,6 +250,9 @@ export default function Todos({ embedded = false }: { embedded?: boolean }) {
         <div className="td-tools">
           <button type="button" className={'icon-btn' + (filters || filterOn ? ' on' : '')} aria-label="Suchen und filtern" title="Suchen und filtern" aria-expanded={filters} onClick={() => setFilters(!filters)}>
             <IconSearch size={16} />
+          </button>
+          <button type="button" className="btn ghost sm" title="To-dos als schwebendes Popup öffnen" onClick={() => toolWindows.open('todos')}>
+            <IconPopout size={14} /> Popup
           </button>
           {counts.all > 0 && (
             <Link to="/tools?tab=plan&from=today" className="btn ghost sm" title="Die To-dos von heute in der Arbeitsplanung zu einem Ablauf mit Pausen ordnen">
@@ -327,47 +345,57 @@ export default function Todos({ embedded = false }: { embedded?: boolean }) {
         </div>
       )}
 
-      {sections.map((sec) => (
-        <section key={sec.id} className={'td-section' + (sec.tone ? ' t-' + sec.tone : '')}>
-          <h2 className="td-section-head">
-            <span>{sec.label}</span>
-            <span className="td-count">{sec.items.length}</span>
-            <span className="grow" />
-            {sec.id === 'overdue' && sec.items.length > 0 && (
-              <button type="button" className="link-btn small" onClick={rescheduleOverdue} title="Alle überfälligen To-dos auf heute legen">
-                Auf heute verschieben
-              </button>
+      {sections.map((sec) => {
+        const mins = view !== 'done' ? groupMinutes(sec.items) : 0;
+        return (
+          <section key={sec.id} className={'td-section' + (sec.tone ? ' t-' + sec.tone : '')}>
+            <h2 className="td-section-head">
+              <span>{sec.label}</span>
+              <span className="td-count">{sec.items.length}</span>
+              {mins > 0 && <span className="td-mins">· {mins} Min.</span>}
+              <span className="grow" />
+              {sec.id === 'overdue' && sec.items.length > 0 && (
+                <button type="button" className="link-btn small" onClick={rescheduleOverdue} title="Alle überfälligen To-dos auf heute legen">
+                  Auf heute verschieben
+                </button>
+              )}
+              {view === 'done' && (
+                <button type="button" className="link-btn small" onClick={() => remove(sec.items.map((t) => t.id))}>
+                  Erledigte aufräumen
+                </button>
+              )}
+            </h2>
+            <ul className="td-list">
+              {sec.items.map((t) => (
+                <TodoRow
+                  key={t.id}
+                  t={t}
+                  today={today}
+                  tomorrow={tomorrow}
+                  leaving={leaving.has(t.id)}
+                  focused={flat[focus]?.id === t.id}
+                  selecting={selected.size > 0}
+                  selected={selected.has(t.id)}
+                  dragOver={overId === t.id}
+                  onDragStart={() => setDragId(t.id)}
+                  onDragOver={() => dragId && dragId !== t.id && setOverId(t.id)}
+                  onDragLeave={() => overId === t.id && setOverId(null)}
+                  onDrop={() => dropOn(t.id, sec.items)}
+                  onDragEnd={() => (setDragId(null), setOverId(null))}
+                  onSelect={(v) => setSelected((s) => { const n = new Set(s); if (v) n.add(t.id); else n.delete(t.id); return n; })}
+                  onOpen={() => (setOpen(t.id), setFocus(flat.findIndex((x) => x.id === t.id)))}
+                  onCheck={() => check(t)}
+                  onMove={(by) => move(t, by, sec.items)}
+                  onTimer={() => startTimer(t)}
+                />
+              ))}
+            </ul>
+            {view !== 'done' && sec.id !== 'overdue' && (
+              <AddRow active={adding === sec.id} onOpen={() => setAdding(sec.id)} onClose={() => setAdding(null)} due={sec.addDue} deckId={deckFilter} />
             )}
-            {view === 'done' && (
-              <button type="button" className="link-btn small" onClick={() => remove(sec.items.map((t) => t.id))}>
-                Erledigte aufräumen
-              </button>
-            )}
-          </h2>
-          <ul className="td-list">
-            {sec.items.map((t) => (
-              <TodoRow
-                key={t.id}
-                t={t}
-                today={today}
-                tomorrow={tomorrow}
-                leaving={leaving.has(t.id)}
-                focused={flat[focus]?.id === t.id}
-                selecting={selected.size > 0}
-                selected={selected.has(t.id)}
-                onSelect={(v) => setSelected((s) => { const n = new Set(s); if (v) n.add(t.id); else n.delete(t.id); return n; })}
-                onOpen={() => (setOpen(t.id), setFocus(flat.findIndex((x) => x.id === t.id)))}
-                onCheck={() => check(t)}
-                onMove={(by) => move(t, by, sec.items)}
-                onTimer={() => startTimer(t)}
-              />
-            ))}
-          </ul>
-          {view !== 'done' && sec.id !== 'overdue' && (
-            <AddRow active={adding === sec.id} onOpen={() => setAdding(sec.id)} onClose={() => setAdding(null)} due={sec.addDue} deckId={deckFilter} />
-          )}
-        </section>
-      ))}
+          </section>
+        );
+      })}
 
       {view !== 'done' && sections.length > 0 && !sections.some((s) => s.id !== 'overdue') && (
         <AddRow active={adding === 'top'} onOpen={() => setAdding('top')} onClose={() => setAdding(null)} due={view === 'today' ? today : undefined} deckId={deckFilter} />
@@ -386,7 +414,7 @@ export default function Todos({ embedded = false }: { embedded?: boolean }) {
 
       <p className="td-keys muted small">
         <kbd>Q</kbd> neues To-do · <kbd>↑</kbd>
-        <kbd>↓</kbd> wählen · <kbd>Leertaste</kbd> erledigt · <kbd>Enter</kbd> öffnen
+        <kbd>↓</kbd> wählen · <kbd>Leertaste</kbd> erledigt · <kbd>Enter</kbd> öffnen · per Drag &amp; Drop sortierbar
       </p>
 
       {openTodo &&
@@ -425,10 +453,11 @@ export default function Todos({ embedded = false }: { embedded?: boolean }) {
  */
 function AddRow({ active, onOpen, onClose, due, deckId }: { active: boolean; onOpen: () => void; onClose: () => void; due?: string; deckId: string }) {
   const data = useData();
+  const skills = data.skills ?? [];
   const [text, setText] = useState('');
   const [note, setNote] = useState('');
-  const [extra, setExtra] = useState<{ due?: string; time?: string; priority?: TodoPriority; repeat?: TodoRepeat; minutes?: number; deckId?: string }>({});
-  const [field, setField] = useState<'' | 'date' | 'prio' | 'deck' | 'more'>('');
+  const [extra, setExtra] = useState<{ due?: string; time?: string; priority?: TodoPriority; repeat?: TodoRepeat; minutes?: number; deckId?: string; skillId?: string }>({});
+  const [field, setField] = useState<'' | 'date' | 'prio' | 'deck' | 'skill' | 'more'>('');
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (active) inputRef.current?.focus();
@@ -443,9 +472,10 @@ function AddRow({ active, onOpen, onClose, due, deckId }: { active: boolean; onO
       </button>
     );
   const parsed = parseQuickTodo(text, data.decks, Date.now());
-  const final = { ...parsed, ...Object.fromEntries(Object.entries(extra).filter(([, v]) => v !== undefined && v !== '')) } as typeof parsed;
+  const final = { ...parsed, ...Object.fromEntries(Object.entries(extra).filter(([, v]) => v !== undefined && v !== '')) } as typeof parsed & { skillId?: string };
   const when = final.due ?? due;
   const deck = data.decks.find((d) => d.id === (final.deckId || deckId));
+  const skill = skills.find((s) => s.id === final.skillId);
   const reset = () => (setText(''), setNote(''), setExtra({}), setField(''));
   const add = () => {
     if (!final.text.trim()) return;
@@ -458,6 +488,7 @@ function AddRow({ active, onOpen, onClose, due, deckId }: { active: boolean; onO
       ...(final.repeat ? { repeat: final.repeat } : {}),
       ...(final.minutes ? { minutes: final.minutes } : {}),
       ...(deck ? { deckId: deck.id } : {}),
+      ...(skill ? { skillId: skill.id } : {}),
     });
     reset();
     inputRef.current?.focus();
@@ -484,6 +515,11 @@ function AddRow({ active, onOpen, onClose, due, deckId }: { active: boolean; onO
         {data.decks.length > 0 && (
           <button type="button" className={'chip' + (deck ? ' on' : '')} onClick={() => setField(field === 'deck' ? '' : 'deck')}>
             <IconHash size={13} /> {deck ? deck.name : 'Deck'}
+          </button>
+        )}
+        {skills.length > 0 && (
+          <button type="button" className={'chip' + (skill ? ' on' : '')} onClick={() => setField(field === 'skill' ? '' : 'skill')}>
+            <IconPractice size={13} /> {skill ? skill.title : 'Skill'}
           </button>
         )}
         <button type="button" className={'chip' + (final.minutes || final.repeat ? ' on' : '')} onClick={() => setField(field === 'more' ? '' : 'more')}>
@@ -524,6 +560,18 @@ function AddRow({ active, onOpen, onClose, due, deckId }: { active: boolean; onO
           </select>
         </div>
       )}
+      {field === 'skill' && (
+        <div className="td-composer-field">
+          <select className="input sm" value={extra.skillId ?? ''} onChange={(e) => (setExtra({ ...extra, skillId: e.target.value || undefined }), setField(''))} aria-label="Skill">
+            <option value="">Kein Skill</option>
+            {skills.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.title}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       {field === 'more' && (
         <div className="td-composer-field">
           <label>
@@ -559,6 +607,12 @@ function TodoRow(p: {
   focused: boolean;
   selecting: boolean;
   selected: boolean;
+  dragOver: boolean;
+  onDragStart: () => void;
+  onDragOver: () => void;
+  onDragLeave: () => void;
+  onDrop: () => void;
+  onDragEnd: () => void;
   onSelect: (v: boolean) => void;
   onOpen: () => void;
   onCheck: () => void;
@@ -569,13 +623,40 @@ function TodoRow(p: {
   const data = useData();
   const { activeTodoId } = usePomodoroMeta();
   const deck = t.deckId ? data.decks.find((d) => d.id === t.deckId) : undefined;
+  const skill = t.skillId ? (data.skills ?? []).find((s) => s.id === t.skillId) : undefined;
   const exam = t.examId ? data.exams.find((e) => e.id === t.examId) : undefined;
   const sub = subtaskProgress(t);
   const done = !!t.doneAt || p.leaving;
   const tone = t.due && !t.doneAt ? dueTone(t.due, p.today, p.tomorrow) : '';
-  const hasMeta = !!(t.due || t.repeat || sub || t.minutes || exam || t.note || deck);
+  const hasMeta = !!(t.due || t.repeat || sub || t.minutes || exam || t.note || deck || skill);
   return (
-    <li className={'td-row' + (done ? ' done' : '') + (p.leaving ? ' leaving' : '') + (p.focused ? ' focused' : '') + (p.selected ? ' selected' : '') + (p.selecting ? ' selecting' : '')}>
+    <li
+      draggable={!t.doneAt}
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = 'move';
+        p.onDragStart();
+      }}
+      onDragOver={(e) => {
+        if (t.doneAt) return;
+        e.preventDefault();
+        p.onDragOver();
+      }}
+      onDragLeave={p.onDragLeave}
+      onDrop={(e) => {
+        e.preventDefault();
+        p.onDrop();
+      }}
+      onDragEnd={p.onDragEnd}
+      className={
+        'td-row' +
+        (done ? ' done' : '') +
+        (p.leaving ? ' leaving' : '') +
+        (p.focused ? ' focused' : '') +
+        (p.selected ? ' selected' : '') +
+        (p.selecting ? ' selecting' : '') +
+        (p.dragOver ? ' drag-over' : '')
+      }
+    >
       <input type="checkbox" className="td-select" checked={p.selected} onChange={(e) => p.onSelect(e.target.checked)} aria-label="Auswählen" />
       <button
         type="button"
@@ -629,6 +710,11 @@ function TodoRow(p: {
                 <IconHash size={12} /> {deck.name}
               </span>
             )}
+            {skill && (
+              <span className="td-deck">
+                <IconPractice size={12} /> {skill.title}
+              </span>
+            )}
           </span>
         )}
       </button>
@@ -652,6 +738,7 @@ function TodoRow(p: {
 /** One to-do in the side panel: title and description, the details as rows, sub-tasks, actions. */
 function TodoDetails({ t, today, tomorrow, deckLink, onCheck, onDelete, onClose }: { t: Todo; today: string; tomorrow: string; deckLink?: string; onCheck: () => void; onDelete: () => void; onClose: () => void }) {
   const data = useData();
+  const skills = data.skills ?? [];
   const [newSub, setNewSub] = useState('');
   const set = (patch: Partial<Todo>) => updateTodo(t.id, patch);
   const subs = t.subtasks ?? [];
@@ -716,6 +803,28 @@ function TodoDetails({ t, today, tomorrow, deckLink, onCheck, onDelete, onClose 
             )}
           </span>
         </label>
+        {skills.length > 0 && (
+          <label className="td-prop">
+            <span>
+              <IconPractice size={14} /> Skill
+            </span>
+            <span className="td-prop-value">
+              <select className="input sm" value={t.skillId ?? ''} onChange={(e) => set({ skillId: e.target.value || undefined })}>
+                <option value="">Kein Skill</option>
+                {skills.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.title}
+                  </option>
+                ))}
+              </select>
+              {t.skillId && skills.some((s) => s.id === t.skillId) && (
+                <Link to={`/skills/${t.skillId}`} className="link-btn small">
+                  öffnen
+                </Link>
+              )}
+            </span>
+          </label>
+        )}
         <label className="td-prop">
           <span>
             <IconTimer size={14} /> Dauer

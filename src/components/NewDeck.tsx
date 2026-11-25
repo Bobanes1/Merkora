@@ -1,16 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { addCourse, addDeck, addWorkspace, deckUrl, getState, moveDeck, useData, type Course } from '../lib/store';
+import { addCards, addCourse, addDeck, addWorkspace, deckUrl, getState, moveDeck, useData, type Course } from '../lib/store';
 import { AnkiDropzone, ProgressQuestion, storeImport } from './AnkiImport';
 import type { AnkiResult } from '../lib/anki';
-import { IconCards, IconHeart, IconSparkle, IconUpload } from './Icons';
+import { IconCards, IconDoc, IconHeart, IconSparkle, IconUpload } from './Icons';
 import { importShare } from './ShareDialog';
+import { TextImportModal } from './TextImportModal';
 import { parseShare, SHARE_EXT } from '../lib/share';
 import { Modal } from './Modal';
 
-type Start = 'empty' | 'ai' | 'anki' | 'share';
+type Start = 'empty' | 'ai' | 'text' | 'anki' | 'share';
 
-/** New deck: start empty, let the AI create cards, or take the cards from an Anki package. */
+/** New deck: start empty, let the AI create cards, import CSV/Text/Quizlet, or take cards from an Anki package. */
 export function NewDeckModal({
   course: presetCourse,
   folderId: presetFolder,
@@ -43,6 +44,7 @@ export function NewDeckModal({
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [ask, setAsk] = useState<AnkiResult | null>(null);
+  const [textStep, setTextStep] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -61,6 +63,11 @@ export function NewDeckModal({
     if (start === 'ai') {
       onClose();
       onAi(ensureCourse().id);
+      return;
+    }
+    if (start === 'text') {
+      if (!name.trim()) return;
+      setTextStep(true);
       return;
     }
     if (start === 'empty') {
@@ -98,6 +105,19 @@ export function NewDeckModal({
     }
   };
 
+  if (textStep) {
+    return (
+      <TextImportModal
+        onClose={() => setTextStep(false)}
+        onImport={(cards) => {
+          const d = addDeck(ensureCourse().id, name.trim() || 'Importiertes Deck', folderId ? { folderId } : {});
+          addCards(d.id, cards);
+          go(d.id);
+        }}
+      />
+    );
+  }
+
   if (ask && file)
     return (
       <ProgressQuestion
@@ -111,10 +131,11 @@ export function NewDeckModal({
       />
     );
 
-  const can = start === 'ai' || (start === 'empty' ? !!name.trim() : !!file);
+  const can = start === 'ai' || (start === 'empty' || start === 'text' ? !!name.trim() : !!file);
   const options: { id: Start; icon: JSX.Element; title: string; text: string }[] = [
     { id: 'empty', icon: <IconCards size={18} />, title: 'Leer starten', text: 'Karten selbst schreiben.' },
     { id: 'ai', icon: <IconSparkle size={18} />, title: 'Mit KI erstellen', text: 'Aus PDF, Word, PowerPoint oder Notizen.' },
+    { id: 'text', icon: <IconDoc size={18} />, title: 'CSV / Quizlet / Text', text: 'Aus Excel, Quizlet oder Listen kopieren.' },
     { id: 'anki', icon: <IconUpload size={18} />, title: 'Aus Anki-Stapel', text: '.apkg mit Bildern und Aussehen.' },
     { id: 'share', icon: <IconHeart size={18} />, title: 'Von Freunden', text: `Geteilte ${SHARE_EXT}-Datei, oft mit Probeprüfung.` },
   ];
@@ -129,7 +150,7 @@ export function NewDeckModal({
             Abbrechen
           </button>
           <button type="button" className="btn primary" onClick={submit} disabled={!can || !!busy}>
-            {busy || (start === 'anki' || start === 'share' ? 'Importieren' : start === 'ai' ? 'Weiter' : 'Erstellen')}
+            {busy || (start === 'anki' || start === 'share' ? 'Importieren' : start === 'ai' || start === 'text' ? 'Weiter' : 'Erstellen')}
           </button>
         </>
       }

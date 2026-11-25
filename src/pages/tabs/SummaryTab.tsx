@@ -1,12 +1,12 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { CostHint } from '../../components/CostHint';
 import { estimate } from '../../lib/costs';
-import { materialFrom } from '../../lib/ai';
-import { IconCheck, IconCopy, IconEdit, IconRefresh, IconSparkle } from '../../components/Icons';
+import { materialFrom, aiReady } from '../../lib/ai';
+import { buildSummaryPrintHtml, extractMarkdownHeadings } from '../../lib/appExtras';
+import { IconCheck, IconCopy, IconDownload, IconEdit, IconRefresh, IconSparkle } from '../../components/Icons';
 import { isActive, JobBanner, JobError, useJob } from '../../components/Jobs';
 import { Markdown } from '../../components/Markdown';
 import { NoKeyNotice } from '../../components/NoKey';
-import { aiReady } from '../../lib/ai';
 import { startJob } from '../../lib/jobs';
 import { updateDeck, useStore, type Deck } from '../../lib/store';
 import { SpeakButton } from '../../components/SpeakButton';
@@ -25,6 +25,9 @@ export default function SummaryTab({ deck }: { deck: Deck }) {
   // "Kopieren": formatted (headings, bold, lists) for Word / notes apps, plain text everywhere else
   const textRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
+
+  const headings = useMemo(() => (deck.summary ? extractMarkdownHeadings(deck.summary) : []), [deck.summary]);
+
   const copySummary = async () => {
     const el = textRef.current;
     const plain = el?.innerText ?? deck.summary ?? '';
@@ -40,6 +43,25 @@ export default function SummaryTab({ deck }: { deck: Deck }) {
     setCopied(true);
     setTimeout(() => setCopied(false), 1600);
   };
+
+  const printSummary = () => {
+    const html = textRef.current?.innerHTML;
+    if (!html) return;
+    const doc = buildSummaryPrintHtml(deck.name, html);
+    const win = window.open('', '_blank', 'width=860,height=920');
+    if (!win) return;
+    win.document.open();
+    win.document.write(doc);
+    win.document.close();
+    win.focus();
+    window.setTimeout(() => win.print(), 250);
+  };
+
+  const jumpToHeading = (idx: number) => {
+    const els = textRef.current?.querySelectorAll('h2, h3');
+    els?.[idx]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   const hasMaterial = deck.source.trim() || deck.cards.length;
 
   const run = () => {
@@ -93,6 +115,9 @@ export default function SummaryTab({ deck }: { deck: Deck }) {
           <div className="toolbar">
             <SpeakButton text={markdownSpeech(deck.summary)} label="Vorlesen" className="btn outline sm" withText />
             <span className="grow" />
+            <button type="button" className="btn ghost sm" onClick={printSummary} title="Zusammenfassung drucken oder als PDF speichern">
+              <IconDownload size={14} /> Drucken / PDF
+            </button>
             <button type="button" className="btn ghost sm" onClick={() => void copySummary()}>
               {copied ? <IconCheck size={14} /> : <IconCopy size={14} />} {copied ? 'Kopiert' : 'Kopieren'}
             </button>
@@ -112,6 +137,21 @@ export default function SummaryTab({ deck }: { deck: Deck }) {
               </button>
             )}
           </div>
+          {headings.length >= 2 && (
+            <nav className="summary-toc" aria-label="Inhaltsverzeichnis">
+              <small className="muted">Inhalt:</small>
+              {headings.map((h) => (
+                <button
+                  key={h.index}
+                  type="button"
+                  className={`toc-chip${h.level === 3 ? ' sub' : ''}`}
+                  onClick={() => jumpToHeading(h.index)}
+                >
+                  {h.text}
+                </button>
+              ))}
+            </nav>
+          )}
           <div ref={textRef}>
             <Markdown text={deck.summary} />
           </div>

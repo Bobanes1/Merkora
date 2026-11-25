@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { undoable } from '../../lib/undo';
 import { isLeech } from '../../lib/cardLinks';
+import { ImproveCardDialog } from '../../components/ImproveCardDialog';
 import { IconCards, IconCheck, IconFlame, IconPlay, IconRefresh } from '../../components/Icons';
 import { ConfirmModal } from '../../components/Modal';
 import { cardFrontText } from '../../lib/content';
+import { estimateStudyMinutes, formatEstMinutes, hardestCards, upcomingDueByDay } from '../../lib/deckTools';
 import { LEVELS, levelOf, type Level } from '../../lib/srs';
-import { resetProgress, dueCards, type Deck, type Review } from '../../lib/store';
+import { resetProgress, dueCards, type Card, type Deck, type Review } from '../../lib/store';
 import { levelCounts, masteryPercent, perDay, streak } from '../../lib/stats';
 import { formatDue } from '../../lib/util';
 
@@ -36,16 +38,33 @@ function Ring({ pct }: { pct: number }) {
   );
 }
 
-export default function MasteryTab({ deck, reviews, onLearn, onProblems }: { deck: Deck; reviews: Review[]; onLearn: () => void; onProblems?: () => void }) {
+export default function MasteryTab({
+  deck,
+  reviews,
+  onLearn,
+  onProblems,
+  onPracticeIds,
+}: {
+  deck: Deck;
+  reviews: Review[];
+  onLearn: () => void;
+  onProblems?: () => void;
+  onPracticeIds?: (ids: string[], label: string) => void;
+}) {
   const leeches = deck.cards.filter(isLeech).length;
   const [filter, setFilter] = useState<Level | 'all'>('all');
   const [confirm, setConfirm] = useState(false);
+  const [improving, setImproving] = useState<Card | null>(null);
   const counts = levelCounts(deck.cards);
   const total = deck.cards.length;
   const pct = masteryPercent(deck.cards);
   const due = dueCards(deck).length;
+  const est = formatEstMinutes(estimateStudyMinutes(due, reviews));
   const days = perDay(reviews, 14);
   const max = Math.max(1, ...days.map((d) => d.count));
+  const forecast = upcomingDueByDay(deck.cards, 14);
+  const maxFc = Math.max(1, ...forecast.map((d) => d.count));
+  const hardest = hardestCards(deck.cards, 5);
   const correct = reviews.length ? Math.round((reviews.filter((r) => r.rating >= 3).length / reviews.length) * 100) : 0;
   const shown = filter === 'all' ? deck.cards : deck.cards.filter((c) => levelOf(c.srs) === filter);
 
@@ -66,7 +85,7 @@ export default function MasteryTab({ deck, reviews, onLearn, onProblems }: { dec
                     : 'Jeder Durchgang bringt dich weiter.'}
             </p>
             <button type="button" className="btn primary" onClick={onLearn} disabled={!total}>
-              <IconPlay size={12} /> {due ? `${due} fällige Karten lernen` : 'Weiter üben'}
+              <IconPlay size={12} /> {due ? `${due} fällige Karten lernen${est ? ` (${est})` : ''}` : 'Weiter üben'}
             </button>
             {leeches > 0 && onProblems && (
               <p className="leech-note">
@@ -134,17 +153,58 @@ export default function MasteryTab({ deck, reviews, onLearn, onProblems }: { dec
         </div>
       </section>
 
-      <section className="panel">
-        <h3>Aktivität der letzten 14 Tage</h3>
-        <div className="activity">
-          {days.map((d) => (
-            <div key={d.day} className="act-col" title={`${new Date(d.day).toLocaleDateString('de-DE')}: ${d.count}`}>
-              <span className="act-bar" style={{ height: `${(d.count / max) * 100}%` }} />
-              <small>{new Date(d.day).getDate()}.</small>
+      <div className="mastery-charts">
+        <section className="panel">
+          <h3>Aktivität der letzten 14 Tage</h3>
+          <div className="activity">
+            {days.map((d) => (
+              <div key={d.day} className="act-col" title={`${new Date(d.day).toLocaleDateString('de-DE')}: ${d.count}`}>
+                <span className="act-bar" style={{ height: `${(d.count / max) * 100}%` }} />
+                <small>{new Date(d.day).getDate()}.</small>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="panel">
+          <h3>Kommende Fälligkeiten (14 Tage)</h3>
+          <div className="activity forecast">
+            {forecast.map((d, i) => (
+              <div key={d.day} className="act-col" title={`${i === 0 ? 'Heute' : new Date(d.day).toLocaleDateString('de-DE')}: ${d.count} fällig`}>
+                <span className={`act-bar forecast-bar${i === 0 ? ' today' : ''}`} style={{ height: `${(d.count / maxFc) * 100}%` }} />
+                <small>{i === 0 ? 'Heute' : `${new Date(d.day).getDate()}.`}</small>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+
+      {hardest.length > 0 && (
+        <section className="panel">
+          <div className="panel-head">
+            <div>
+              <h3>Schwierigste Karten ({hardest.length})</h3>
+              <p className="muted small">Diese Karten wurden am häufigsten vergessen – gezielt verbessern oder direkt üben.</p>
             </div>
-          ))}
-        </div>
-      </section>
+            {onPracticeIds && (
+              <button type="button" className="btn outline sm" onClick={() => onPracticeIds(hardest.map((c) => c.id), 'Schwierigste Karten')}>
+                <IconPlay size={12} /> Alle {hardest.length} üben
+              </button>
+            )}
+          </div>
+          <div className="mastery-list">
+            {hardest.map((c) => (
+              <div key={c.id} className="mastery-row">
+                <span className="badge warn">{c.srs.lapses}× vergessen</span>
+                <span className="m-front">{cardFrontText(c) || '[Bild]'}</span>
+                <button type="button" className="btn ghost sm" onClick={() => setImproving(c)}>
+                  Verbessern
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="panel">
         <div className="panel-head">
@@ -165,7 +225,7 @@ export default function MasteryTab({ deck, reviews, onLearn, onProblems }: { dec
                 <span className="level-badge" style={{ ['--c' as string]: l.color }}>
                   {l.label}
                 </span>
-                <small className="m-due">{c.srs.last ? formatDue(c.srs.due) : '–'}</small>
+                <small className="m-due">{c.suspended ? 'Pausiert' : c.srs.last ? formatDue(c.srs.due) : '–'}</small>
               </div>
             );
           })}
@@ -173,6 +233,7 @@ export default function MasteryTab({ deck, reviews, onLearn, onProblems }: { dec
           {shown.length > 300 && <p className="muted small">… und {shown.length - 300} weitere Karten.</p>}
         </div>
       </section>
+      {improving && <ImproveCardDialog deck={deck} card={deck.cards.find((x) => x.id === improving.id) ?? improving} onClose={() => setImproving(null)} />}
       {confirm && (
         <ConfirmModal
           title="Fortschritt zurücksetzen?"

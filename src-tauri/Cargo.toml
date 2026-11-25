@@ -1,6 +1,6 @@
 [package]
 name = "merkora"
-version = "0.10.2"
+version = "0.11.0"
 description = "Merkora – Lernen mit Karteikarten, Lernpfad und KI"
 authors = ["Merkora"]
 edition = "2021"

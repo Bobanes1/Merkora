@@ -9,11 +9,13 @@ import { toolWindows } from '../../lib/toolWindows';
 import { DAY, dayKey } from '../../lib/util';
 import {
   buildWorkPlan,
+  ENERGY_LABEL,
   examSoonDecks,
   MOTIVATION_LABEL,
   nextStartTime,
   PHASE_LABEL,
   SIZE_LABEL,
+  type EnergyMode,
   type Motivation,
   type PlanInputTask,
   type PlanTaskStep,
@@ -33,7 +35,9 @@ type AiTips = { tips?: { n?: number; title?: string; reason: string }[]; summary
 
 /** The draft survives switching tabs and reloading (only on this device). */
 const DRAFT_KEY = 'merkora.workplan.draft';
-type Draft = { totalMin: number; withBreaks: boolean; tasks: PlanInputTask[]; overrides: Record<string, number>; start: string; startDay: string };
+const TEMPLATES_KEY = 'merkora.workplan.templates';
+type Draft = { totalMin: number; withBreaks: boolean; energy: EnergyMode; tasks: PlanInputTask[]; overrides: Record<string, number>; start: string; startDay: string };
+type PlanTemplate = { id: string; name: string; totalMin: number; withBreaks: boolean; energy: EnergyMode; tasks: PlanInputTask[] };
 function loadDraft(): Partial<Draft> {
   try {
     const d = JSON.parse(localStorage.getItem(DRAFT_KEY) ?? 'null') as Partial<Draft> | null;
@@ -51,16 +55,31 @@ function saveDraft(d: Draft) {
     /* private mode – the draft just isn't kept */
   }
 }
+function loadTemplates(): PlanTemplate[] {
+  try {
+    const raw = JSON.parse(localStorage.getItem(TEMPLATES_KEY) ?? 'null') as PlanTemplate[] | null;
+    return Array.isArray(raw) ? raw : [];
+  } catch {
+    return [];
+  }
+}
+function saveTemplates(list: PlanTemplate[]) {
+  try {
+    localStorage.setItem(TEMPLATES_KEY, JSON.stringify(list));
+  } catch {
+    /* ignore */
+  }
+}
 
 const newId = () => 'pt_' + Math.random().toString(36).slice(2, 9);
 const sizeFor = (minutes?: number): TaskSize => (!minutes ? 'm' : minutes <= 20 ? 's' : minutes <= 45 ? 'm' : 'l');
 
 /**
  * Arbeitsplanung:
- * 1) Enter available time, start time & breaks preference
- * 2) Enter tasks + motivation (and optional size/priority), or take them from the to-do list, decks and skills
+ * 1) Enter available time, start time, energy mode & breaks preference
+ * 2) Enter tasks + motivation (and optional size/priority), or take them from the to-do list, decks, skills or templates
  * 3) Merkora builds a structured plan (Einstieg → Hauptteil → Abschluss) with clock times; long tasks are split with breaks
- * 4) Hand it over to the to-do list (to-dos taken from there are updated, not duplicated) and optionally start the timer.
+ * 4) Hand it over to the to-do list or launch the step-by-step Session-Runner right away.
  */
 export function WorkPlanner() {
   const navigate = useNavigate();
@@ -70,9 +89,13 @@ export function WorkPlanner() {
 
   const [totalMin, setTotalMin] = useState(draft.totalMin ?? 90);
   const [withBreaks, setWithBreaks] = useState(draft.withBreaks ?? true);
+  const [energy, setEnergy] = useState<EnergyMode>(draft.energy ?? 'balanced');
   const [tasks, setTasks] = useState<PlanInputTask[]>(draft.tasks ?? []);
   const [overrides, setOverrides] = useState<Record<string, number>>(draft.overrides ?? {});
   const [start, setStart] = useState(draft.start ?? nextStartTime());
+  const [templates, setTemplates] = useState<PlanTemplate[]>(loadTemplates);
+  const [tplName, setTplName] = useState('');
+  const [sessionIdx, setSessionIdx] = useState<number | null>(null);
 
   const [title, setTitle] = useState('');
   const [motivation, setMotivation] = useState<Motivation>(2);
@@ -85,8 +108,8 @@ export function WorkPlanner() {
   const [aiErr, setAiErr] = useState('');
 
   useEffect(() => {
-    saveDraft({ totalMin, withBreaks, tasks, overrides, start, startDay: dayKey(Date.now()) });
-  }, [totalMin, withBreaks, tasks, overrides, start]);
+    saveDraft({ totalMin, withBreaks, energy, tasks, overrides, start, startDay: dayKey(Date.now()) });
+  }, [totalMin, withBreaks, energy, tasks, overrides, start]);
 
   const changed = () => (setAiTips({}), setAiSummary(null));
   const addTask = (item?: Partial<PlanInputTask>) => {
@@ -194,10 +217,53 @@ export function WorkPlanner() {
     return out.slice(0, 6);
   }, [data.decks, data.skills, tasks, examSoon]);
 
-  const plan = useMemo(() => buildWorkPlan(effTasks, totalMin, withBreaks, { overrides, start }), [effTasks, totalMin, withBreaks, overrides, start]);
+  const plan = useMemo(() => buildWorkPlan(effTasks, totalMin, withBreaks, { overrides, start, energy }), [effTasks, totalMin, withBreaks, overrides, start, energy]);
   const taskSteps = plan.steps.filter((s): s is PlanTaskStep => s.kind === 'task');
   // one entry per task (parts of a split task belong together)
   const planned = taskSteps.filter((s) => !s.part || s.part === 1);
+
+  const saveCurrentTemplate = () => {
+    const clean = tplName.trim();
+    if (!clean || !tasks.length) return;
+    const tpl: PlanTemplate = {
+      id: newId(),
+      name: clean,
+      totalMin,
+      withBreaks,
+      energy,
+      tasks: tasks.map(({ todoId: _tid, ...rest }) => (void _tid, rest)),
+    };
+    const next = [tpl, ...templates.filter((t) => t.name !== clean)].slice(0, 12);
+    setTemplates(next);
+    saveTemplates(next);
+    setTplName('');
+  };
+  const loadTemplate = (tpl: PlanTemplate) => {
+    setTotalMin(tpl.totalMin);
+    setWithBreaks(tpl.withBreaks);
+    setEnergy(tpl.energy);
+    setTasks(tpl.tasks.map((t) => ({ ...t, id: newId() })));
+    setOverrides({});
+    setSessionIdx(null);
+    changed();
+  };
+  const deleteTemplate = (id: string) => {
+    const next = templates.filter((t) => t.id !== id);
+    setTemplates(next);
+    saveTemplates(next);
+  };
+
+  const launchSessionStep = (idx: number) => {
+    const step = taskSteps[idx];
+    if (!step) {
+      setSessionIdx(null);
+      return;
+    }
+    const src = tasks.find((t) => t.id === step.taskId);
+    setSessionIdx(idx);
+    pomodoro.startForTodo(src?.todoId ?? null, step.minutes);
+    toolWindows.open('pomodoro');
+  };
 
   const refineWithAI = async () => {
     if (!canAi || planned.length === 0) return;
@@ -250,7 +316,7 @@ export function WorkPlanner() {
     // the plan now lives in the to-do list; a fresh start next time
     clearAll();
     // saved right away: the page is left before the draft effect would run
-    saveDraft({ totalMin, withBreaks, tasks: [], overrides: {}, start, startDay: dayKey(Date.now()) });
+    saveDraft({ totalMin, withBreaks, energy, tasks: [], overrides: {}, start, startDay: dayKey(Date.now()) });
     if (startFirstTimer && ids[0]) {
       // a split task starts with its first part
       pomodoro.startForTodo(ids[0].id, Math.min(ids[0].minutes, taskSteps[0]?.minutes ?? ids[0].minutes));
@@ -258,6 +324,8 @@ export function WorkPlanner() {
     }
     navigate(`/tools?tab=todos&plan=${ids.length}`);
   };
+
+  const activeStep = sessionIdx !== null ? taskSteps[sessionIdx] : undefined;
 
   return (
     <div className="wp">
@@ -285,7 +353,7 @@ export function WorkPlanner() {
       )}
       <div className="wp-grid">
         <section className="panel wp-setup">
-          <h2>1. Zeit & Aufgaben</h2>
+          <h2>1. Zeit &amp; Aufgaben</h2>
           <p className="muted small">
             Sag Merkora, wie viel Zeit du hast und wie motiviert du für jede Aufgabe bist – daraus entsteht dein Ablauf mit Einstieg, Fokus-Phase und Abschluss. Lange Aufgaben werden automatisch mit Pausen
             aufgeteilt.
@@ -326,11 +394,39 @@ export function WorkPlanner() {
                 Jetzt
               </button>
             </div>
+            <div className="wp-energy-row">
+              <small className="muted">Energie-Profil:</small>
+              <div className="seg sm" role="group" aria-label="Energie-Profil">
+                {(['balanced', 'fresh', 'tired'] as EnergyMode[]).map((mode) => (
+                  <button key={mode} type="button" className={energy === mode ? 'on' : ''} onClick={() => setEnergy(mode)}>
+                    {ENERGY_LABEL[mode]}
+                  </button>
+                ))}
+              </div>
+            </div>
             <label className="check-row small">
               <input type="checkbox" checked={withBreaks} onChange={(e) => setWithBreaks(e.target.checked)} />
               Kurze Pausen automatisch mit einplanen
             </label>
           </div>
+
+          {templates.length > 0 && (
+            <div className="wp-templates">
+              <small className="muted">Gespeicherte Vorlagen:</small>
+              <div className="chips">
+                {templates.map((tpl) => (
+                  <span key={tpl.id} className="wp-tpl-chip">
+                    <button type="button" className="chip" onClick={() => loadTemplate(tpl)} title={`${tpl.tasks.length} Aufgaben · ${tpl.totalMin} Min.`}>
+                      {tpl.name} ({tpl.tasks.length})
+                    </button>
+                    <button type="button" className="icon-btn sm" aria-label={`Vorlage ${tpl.name} löschen`} onClick={() => deleteTemplate(tpl.id)}>
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           {candidates.today.length + candidates.later.length > 0 && (
             <div className="wp-todos">
@@ -344,7 +440,7 @@ export function WorkPlanner() {
                   </button>
                 )}
               </div>
-              {candidates.today.length > 0 && <small className="muted">Heute & überfällig</small>}
+              {candidates.today.length > 0 && <small className="muted">Heute &amp; überfällig</small>}
               <ul className="wp-todo-list">
                 {[...candidates.today, ...(showLater ? candidates.later : [])].map((t, k) => (
                   <li key={t.id} className={k === candidates.today.length ? 'wp-later-start' : ''}>
@@ -479,9 +575,21 @@ export function WorkPlanner() {
                   </li>
                 ))}
               </ul>
-              <button type="button" className="btn ghost sm" onClick={clearAll}>
-                Alle Aufgaben entfernen
-              </button>
+              <div className="wp-tpl-save">
+                <input
+                  className="input sm"
+                  placeholder="Als Vorlage speichern (z. B. Abend-Routine) …"
+                  value={tplName}
+                  onChange={(e) => setTplName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && saveCurrentTemplate()}
+                />
+                <button type="button" className="btn outline sm" disabled={!tplName.trim()} onClick={saveCurrentTemplate}>
+                  Vorlage sichern
+                </button>
+                <button type="button" className="btn ghost sm" onClick={clearAll}>
+                  Alle entfernen
+                </button>
+              </div>
             </>
           )}
         </section>
@@ -500,6 +608,32 @@ export function WorkPlanner() {
           </div>
 
           {aiErr && <p className="err-msg small">{aiErr}</p>}
+
+          {activeStep && sessionIdx !== null && (
+            <div className="work-session-banner" role="status">
+              <div className="grow">
+                <small>
+                  Session läuft · Block {sessionIdx + 1} von {taskSteps.length} ({activeStep.minutes} Min.)
+                </small>
+                <b>
+                  {activeStep.title}
+                  {activeStep.parts ? ` · Teil ${activeStep.part}/${activeStep.parts}` : ''}
+                </b>
+              </div>
+              {sessionIdx + 1 < taskSteps.length ? (
+                <button type="button" className="btn primary sm" onClick={() => launchSessionStep(sessionIdx + 1)}>
+                  Nächster Block →
+                </button>
+              ) : (
+                <button type="button" className="btn primary sm" onClick={() => setSessionIdx(null)}>
+                  <IconCheck size={14} /> Fertig!
+                </button>
+              )}
+              <button type="button" className="btn ghost sm" onClick={() => setSessionIdx(null)}>
+                Beenden
+              </button>
+            </div>
+          )}
 
           {plan.steps.length === 0 ? (
             <div className="wp-empty">
@@ -539,8 +673,10 @@ export function WorkPlanner() {
               )}
 
               <ol className="wp-timeline">
-                {plan.steps.map((step, i) =>
-                  step.kind === 'break' ? (
+                {plan.steps.map((step, i) => {
+                  const taskIdx = step.kind === 'task' ? taskSteps.indexOf(step) : -1;
+                  const isRunningBlock = sessionIdx !== null && taskIdx === sessionIdx;
+                  return step.kind === 'break' ? (
                     <li key={`brk_${i}`} className="wp-step wp-break">
                       <span className="wp-step-badge">
                         {step.from && <span className="wp-clock">{step.from}</span>} Pause · {step.minutes} Min.
@@ -548,7 +684,7 @@ export function WorkPlanner() {
                       <small className="muted">{step.reason}</small>
                     </li>
                   ) : (
-                    <li key={`${step.taskId}_${step.part ?? 1}`} className={`wp-step p-${step.phase}`}>
+                    <li key={`${step.taskId}_${step.part ?? 1}`} className={`wp-step p-${step.phase}${isRunningBlock ? ' running-block' : ''}`}>
                       <div className="wp-step-top">
                         {step.from && (
                           <span className="wp-clock" title={`${step.from}–${step.to}`}>
@@ -582,8 +718,8 @@ export function WorkPlanner() {
                       </div>
                       <p className="wp-step-reason">{(!step.part || step.part === 1) && aiTips[step.taskId] ? aiTips[step.taskId] : step.reason}</p>
                     </li>
-                  ),
-                )}
+                  );
+                })}
               </ol>
 
               {plan.parked.length > 0 && (
@@ -602,11 +738,14 @@ export function WorkPlanner() {
               )}
 
               <div className="wp-actions">
-                <button type="button" className="btn primary" onClick={() => applyToTodos(false)}>
-                  <IconCheck size={15} /> Als To-dos für heute übernehmen
+                <button type="button" className="btn primary" onClick={() => launchSessionStep(0)}>
+                  <IconPlay size={14} /> Plan jetzt starten
                 </button>
-                <button type="button" className="btn outline" onClick={() => applyToTodos(true)}>
-                  <IconPlay size={14} /> Übernehmen & Timer starten
+                <button type="button" className="btn outline" onClick={() => applyToTodos(false)}>
+                  <IconCheck size={15} /> Als To-dos übernehmen
+                </button>
+                <button type="button" className="btn ghost" onClick={() => applyToTodos(true)}>
+                  Übernehmen &amp; Timer starten
                 </button>
               </div>
               <p className="muted small">To-dos, die du aus der Liste übernommen hast, werden aktualisiert – nicht doppelt angelegt.</p>

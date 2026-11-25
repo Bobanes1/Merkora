@@ -74,6 +74,8 @@ export type Skill = {
   jurisdiction?: Jurisdiction;
   /** A mini skill: a few short lessons just for fun – no planning, no stage test. */
   mini?: boolean;
+  /** Pinned to the top of the Skills overview. */
+  pinned?: boolean;
   /** Suggestions for what to learn next (made once, near the end of the skill). */
   nextIdeas?: NextIdea[];
   plan: {

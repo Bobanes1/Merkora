@@ -1,20 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CoverDialog, DeckCoverTile } from '../components/DeckCover';
+import { DeckSettingsModal } from '../components/DeckSettingsModal';
 import { Plant } from '../components/Plant';
 import { coverOf } from '../lib/look';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ChatPanel } from '../components/ChatPanel';
 import { ExamDialog } from '../components/ExamDialog';
 import { countdownText, nextExamForDeck } from '../lib/exams';
-import { IconCalendar, IconCards, IconChart, IconChat, IconCheck, IconDoc, IconMatch, IconMindmap, IconNote, IconPath, IconPlay, IconPractice, IconQuiz, IconTarget } from '../components/Icons';
-import { PromptModal } from '../components/Modal';
+import { estimateStudyMinutes, formatEstMinutes } from '../lib/deckTools';
+import { IconCalendar, IconCards, IconChart, IconChat, IconDoc, IconMatch, IconMindmap, IconNote, IconPath, IconPlay, IconPractice, IconQuiz, IconSettings, IconTarget } from '../components/Icons';
 import MatchTab from './tabs/MatchTab';
 import PathTab from './tabs/PathTab';
-import { addTodo, dueCards, findPath, useData } from '../lib/store';
+import { dueCards, findPath, setSettings, useData } from '../lib/store';
 import { shortName } from '../lib/deckNames';
 import { masteryPercent } from '../lib/stats';
-import { Mastery } from '../components/Mastery';
-import { setSettings } from '../lib/store';
 import { usePhone } from '../lib/phone';
 import { Sheet } from '../components/Sheet';
 import { Mascot } from '../components/Mascot';
@@ -65,10 +64,11 @@ export default function DeckPage() {
   const barTab = tab === 'mastery' ? 'learn' : tab;
   const setTab = (t: TabId) => setParams({ tab: t });
   const [examDialog, setExamDialog] = useState(false);
-  const navigate = useNavigate();
   const [moreTabs, setMoreTabs] = useState(false);
   const [menu, setMenu] = useState(false);
   const [coverDialog, setCoverDialog] = useState(false);
+  const [deckSettings, setDeckSettings] = useState(false);
+  const [customRound, setCustomRound] = useState<{ ids: string[]; label: string } | null>(null);
   // the tab bar scrolls sideways when it does not fit: a soft fade on the right shows there is more
   const tabsRef = useRef<HTMLDivElement>(null);
   const [tabsOverflow, setTabsOverflow] = useState(false);
@@ -101,7 +101,14 @@ export default function DeckPage() {
     );
 
   const due = dueCards(deck).length;
+  const deckReviews = data.reviews.filter((r) => r.deckId === deck.id);
+  const est = due > 0 ? formatEstMinutes(estimateStudyMinutes(due, deckReviews)) : '';
   const exam = nextExamForDeck(data, deck.id);
+
+  const launchCustom = (ids: string[], label: string) => {
+    setCustomRound({ ids, label });
+    setTab('learn');
+  };
 
   return (
     <div className={`deck-layout ${chat ? 'with-chat' : ''}`} data-mode={tab === 'overview' ? undefined : tab}>
@@ -130,6 +137,7 @@ export default function DeckPage() {
             <span className="crumb-current" title={deck.name}>
               {shortName(deck, data.decks.filter((d) => d.courseId === deck.courseId))}
             </span>
+            {deck.archived && <span className="badge">Archiviert</span>}
           </nav>
           <div className="deck-actions">
             <button type="button" className="mastery-chip" onClick={() => setTab('mastery')} title="Fortschritt ansehen">
@@ -149,11 +157,14 @@ export default function DeckPage() {
                 <IconCalendar size={14} /> <span className="act-label">Prüfung</span>
               </button>
             )}
+            <button type="button" className="icon-btn" aria-label="Deck-Einstellungen" title="Deck-Einstellungen (Limits, Duplizieren, Zusammenführen, Archiv)" onClick={() => setDeckSettings(true)}>
+              <IconSettings size={16} />
+            </button>
             <button type="button" className={`btn ${chat ? 'soft' : 'ghost'} sm`} aria-pressed={chat} aria-label="Tutor" title="Tutor Pip" onClick={() => setChat(!chat)}>
               <IconChat size={15} /> <span className="act-label">Tutor</span>
             </button>
-            <button type="button" className="btn primary sm" onClick={() => setTab('learn')}>
-              <IconPlay size={12} /> Lernen{due > 0 ? ` (${due})` : ''}
+            <button type="button" className="btn primary sm" onClick={() => (setCustomRound(null), setTab('learn'))} title={est ? `Geschätzte Lernzeit: ${est}` : undefined}>
+              <IconPlay size={12} /> Lernen{due > 0 ? ` (${due}${est ? ` · ${est}` : ''})` : ''}
             </button>
           </div>
         </div>
@@ -225,11 +236,19 @@ export default function DeckPage() {
         )}
         <div className="tab-body">
           {tab === 'overview' && <OverviewTab deck={deck} onOpen={(t) => setTab(t as TabId)} />}
-          {tab === 'cards' && <CardsTab deck={deck} onLearn={() => setTab('learn')} />}
-          {tab === 'learn' && <LearnTab deck={deck} onDone={() => setTab('mastery')} />}
+          {tab === 'cards' && <CardsTab deck={deck} onLearn={() => (setCustomRound(null), setTab('learn'))} onPracticeIds={launchCustom} />}
+          {tab === 'learn' && <LearnTab deck={deck} onDone={() => setTab('mastery')} customRound={customRound} onClearCustom={() => setCustomRound(null)} />}
           {tab === 'path' && <PathTab key={deck.id} deck={deck} />}
           {tab === 'match' && <MatchTab key={deck.id} deck={deck} />}
-          {tab === 'mastery' && <MasteryTab deck={deck} reviews={data.reviews.filter((r) => r.deckId === deck.id)} onLearn={() => setTab('learn')} onProblems={() => setParams({ tab: 'cards', filter: 'leech' })} />}
+          {tab === 'mastery' && (
+            <MasteryTab
+              deck={deck}
+              reviews={deckReviews}
+              onLearn={() => (setCustomRound(null), setTab('learn'))}
+              onProblems={() => setParams({ tab: 'cards', filter: 'leech' })}
+              onPracticeIds={launchCustom}
+            />
+          )}
           {tab === 'summary' && <SummaryTab deck={deck} />}
           {tab === 'mindmap' && <MindmapTab deck={deck} onCards={(term) => setParams({ tab: 'cards', q: term })} />}
           {tab === 'quiz' && <QuizTab deck={deck} />}
@@ -239,7 +258,7 @@ export default function DeckPage() {
         </div>
       </div>
       {phone && tab !== 'learn' && tab !== 'overview' && (
-        <button type="button" className="btn primary phone-learn" onClick={() => setTab('learn')}>
+        <button type="button" className="btn primary phone-learn" onClick={() => (setCustomRound(null), setTab('learn'))}>
           <IconPlay size={14} /> Lernen{due > 0 ? ` (${due})` : ''}
         </button>
       )}
@@ -260,6 +279,9 @@ export default function DeckPage() {
             <button type="button" onClick={() => (setMenu(false), setChat(true))}>
               <IconChat size={20} /> Tutor Pip fragen
             </button>
+            <button type="button" onClick={() => (setMenu(false), setDeckSettings(true))}>
+              <IconSettings size={20} /> Deck-Einstellungen
+            </button>
             <button type="button" onClick={() => (setMenu(false), setCoverDialog(true))}>
               <DeckCoverTile cover={coverOf(deck)} size={22} /> Cover ändern
             </button>
@@ -278,6 +300,7 @@ export default function DeckPage() {
       {chat && <ChatPanel deck={deck} onClose={() => setChat(false)} />}
       {examDialog && <ExamDialog presetDeckId={deck.id} onClose={() => setExamDialog(false)} />}
       {coverDialog && <CoverDialog deck={deck} onClose={() => setCoverDialog(false)} />}
+      {deckSettings && <DeckSettingsModal deck={deck} onClose={() => setDeckSettings(false)} />}
     </div>
   );
 }

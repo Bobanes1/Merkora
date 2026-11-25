@@ -153,11 +153,21 @@ function enderReason(t: PlanInputTask): string {
 /** Longest block without a break; longer tasks are split into parts. */
 export const MAX_BLOCK = 50;
 
+export type EnergyMode = 'balanced' | 'fresh' | 'tired';
+
+export const ENERGY_LABEL: Record<EnergyMode, string> = {
+  balanced: 'Ausgeglichen',
+  fresh: 'Frisch: Schweres zuerst',
+  tired: 'Müde: Leichter Einstieg',
+};
+
 export type PlanOptions = {
   /** Fixed minutes per task (edited by hand); the rest of the time is shared by the other tasks. */
   overrides?: Record<string, number>;
   /** Start time HH:MM – then every step gets from/to clock times. */
   start?: string;
+  /** Energy profile controlling task ordering (default: balanced). */
+  energy?: EnergyMode;
 };
 
 /** Splits `m` minutes into the fewest parts of at most MAX_BLOCK, as even as possible (multiples of 5 where it fits). */
@@ -243,6 +253,11 @@ export function buildWorkPlan(rawTasks: PlanInputTask[], rawMinutes: number, wit
     active = active.filter((t) => keepIds.has(t.id));
   }
 
+  const energy = opts.energy ?? 'balanced';
+  const freshScore = (t: PlanInputTask) => (t.important ? 20 : 0) + (4 - t.motivation) * 6 + SIZE_WEIGHT[t.size] * 4;
+  const tiredScore = (t: PlanInputTask) => t.motivation * 14 + (t.size === 's' ? 8 : t.size === 'm' ? 3 : 0);
+  const startRank = (t: PlanInputTask) => (energy === 'fresh' ? freshScore(t) : energy === 'tired' ? tiredScore(t) : starterScore(t));
+
   // Order tasks into Einstieg -> Hauptteil -> Abschluss.
   let starter: PlanInputTask | null = null;
   let ender: PlanInputTask | null = null;
@@ -250,12 +265,12 @@ export function buildWorkPlan(rawTasks: PlanInputTask[], rawMinutes: number, wit
   if (active.length === 1) {
     starter = active[0];
   } else if (active.length === 2) {
-    const sorted = [...active].sort((a, b) => starterScore(b) - starterScore(a));
+    const sorted = [...active].sort((a, b) => startRank(b) - startRank(a));
     starter = sorted[0];
     ender = sorted[1];
   } else {
     const pool = [...active];
-    pool.sort((a, b) => starterScore(b) - starterScore(a));
+    pool.sort((a, b) => startRank(b) - startRank(a));
     starter = pool.shift()!;
     pool.sort((a, b) => enderScore(b) - enderScore(a));
     ender = pool.shift()!;

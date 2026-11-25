@@ -3,10 +3,11 @@ import { Mascot } from '../components/Mascot';
 import { undoable } from '../lib/undo';
 import { Link } from 'react-router-dom';
 import { ExamDialog } from '../components/ExamDialog';
-import { IconCalendar, IconChevron, IconDownload, IconEdit, IconPlay, IconPlus, IconTrash } from '../components/Icons';
+import { IconChevron, IconClose, IconDownload, IconEdit, IconPlay, IconPlus, IconTarget, IconTrash } from '../components/Icons';
 import { ConfirmModal } from '../components/Modal';
 import { StudySession, weakestFirst, type SessionItem } from '../components/StudySession';
 import { countdownText, dailyPlan, examAt, examCards, examDecks, pastExams, readiness, toIcs, upcomingExams, examForecast, forecastText } from '../lib/exams';
+import { dueCountsByDay } from '../lib/appExtras';
 import { levelOf } from '../lib/srs';
 import { deckUrl, deleteExam, useData, type Exam } from '../lib/store';
 import { dayKey, download } from '../lib/util';
@@ -19,7 +20,7 @@ function ExamCard({ exam, onEdit, onDelete, onPractice }: { exam: Exam; onEdit: 
   const r = readiness(data, exam);
   const plan = dailyPlan(data, exam);
   const forecast = examForecast(examCards(data, exam), data.reviews, examAt(exam));
-  const decks = examDecks(data, exam);
+  const decks = examDecks(data, exam).filter((d) => !d.archived);
   const when = new Date(examAt(exam)).toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const whole = (exam.courseIds?.length ?? 0) + (exam.folderIds?.length ?? 0) > 0;
   return (
@@ -75,7 +76,12 @@ function ExamCard({ exam, onEdit, onDelete, onPractice }: { exam: Exam; onEdit: 
             ) : (
               <p className="muted small">Noch keine Decks verknüpft.</p>
             )}
-            <div className="row-gap">
+            <div className="row-gap" style={{ flexWrap: 'wrap' }}>
+              {decks[0] && (
+                <Link to={deckUrl(data, decks[0], 'exam')} className="btn outline sm">
+                  <IconTarget size={14} /> Probeprüfung
+                </Link>
+              )}
               <button type="button" className="btn ghost sm" onClick={onEdit}>
                 <IconEdit size={14} /> Bearbeiten
               </button>
@@ -103,6 +109,7 @@ export default function CalendarPage({ embedded = false }: { embedded?: boolean 
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
   });
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [edit, setEdit] = useState<{ exam?: Exam; date?: string } | null>(null);
   const [del, setDel] = useState<Exam | null>(null);
   const [practice, setPractice] = useState<{ title: string; items: SessionItem[] } | null>(null);
@@ -124,6 +131,8 @@ export default function CalendarPage({ embedded = false }: { embedded?: boolean 
     for (const t of data.todos ?? []) if (t.due && !t.doneAt) m.set(t.due, [...(m.get(t.due) ?? []), t.text]);
     return m;
   }, [data.todos]);
+  // due active cards per calendar day (for workload visibility before exams)
+  const dueByDay = useMemo(() => dueCountsByDay(data.decks), [data.decks]);
 
   // Month grid starting on Monday
   const first = (month.getDay() + 6) % 7;
@@ -133,16 +142,35 @@ export default function CalendarPage({ embedded = false }: { embedded?: boolean 
     return day >= 1 && day <= daysInMonth ? new Date(month.getFullYear(), month.getMonth(), day) : null;
   });
   const today = dayKey(Date.now());
+  const nowDate = new Date();
+  const isCurrentMonth = month.getFullYear() === nowDate.getFullYear() && month.getMonth() === nowDate.getMonth();
+
+  const jumpToday = () => {
+    const d = new Date();
+    setMonth(new Date(d.getFullYear(), d.getMonth(), 1));
+    setSelectedDay(today);
+  };
 
   const startPractice = (e: Exam) => {
     const now = Date.now();
-    const items = examDecks(data, e).flatMap((d) =>
-      d.cards.map((c) => ({ deckId: d.id, cardId: c.id, due: c.srs.due, ease: c.srs.ease, learned: levelOf(c.srs) === 'mastered' })),
-    );
+    const items = examDecks(data, e)
+      .filter((d) => !d.archived)
+      .flatMap((d) =>
+        d.cards
+          .filter((c) => !c.suspended)
+          .map((c) => ({ deckId: d.id, cardId: c.id, due: c.srs.due, ease: c.srs.ease, learned: levelOf(c.srs) === 'mastered' })),
+      );
     setPractice({ title: `Üben für „${e.title}“`, items: weakestFirst(items, now).slice(0, Math.max(20, dailyPlan(data, e).left)) });
   };
 
   if (practice) return <div className="page">{<StudySession title={practice.title} items={practice.items} onExit={() => setPractice(null)} />}</div>;
+
+  const selExams = selectedDay ? byDay.get(selectedDay) ?? [] : [];
+  const selTodos = selectedDay ? todosByDay.get(selectedDay) ?? [] : [];
+  const selDue = selectedDay ? dueByDay.get(selectedDay) ?? 0 : 0;
+  const selLabel = selectedDay
+    ? new Date(`${selectedDay}T12:00:00`).toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+    : '';
 
   return (
     <div className={embedded ? 'calendar-embedded' : 'page'}>
@@ -187,6 +215,11 @@ export default function CalendarPage({ embedded = false }: { embedded?: boolean 
             >
               <IconChevron size={16} />
             </button>
+            {!isCurrentMonth && (
+              <button type="button" className="btn ghost sm" onClick={jumpToday} style={{ marginLeft: 'auto' }}>
+                Heute
+              </button>
+            )}
           </div>
           <div className="month-grid">
             {WEEK.map((w) => (
@@ -199,15 +232,20 @@ export default function CalendarPage({ embedded = false }: { embedded?: boolean 
               const k = dayKey(d.getTime());
               const exams = byDay.get(k) ?? [];
               const todos = todosByDay.get(k) ?? [];
+              const dueN = k >= today ? dueByDay.get(k) ?? 0 : 0;
+              const isSel = selectedDay === k;
               return (
                 <button
                   type="button"
                   key={i}
-                  className={`day ${k === today ? 'today' : ''} ${exams.length ? 'has-exam' : ''} ${k < today ? 'past' : ''}`}
-                  title={[...exams.map((e) => e.title), ...todos.map((t) => 'To-do: ' + t)].join(', ') || 'Prüfung an diesem Tag eintragen'}
-                  onClick={() => (exams.length ? setEdit({ exam: exams[0] }) : setEdit({ date: k }))}
+                  className={`day ${k === today ? 'today' : ''} ${exams.length ? 'has-exam' : ''} ${k < today ? 'past' : ''} ${isSel ? 'selected' : ''}`}
+                  title={[...exams.map((e) => e.title), ...todos.map((t) => 'To-do: ' + t), ...(dueN ? [`${dueN} Karten fällig`] : [])].join(', ') || 'Tag anzeigen / Prüfung eintragen'}
+                  onClick={() => setSelectedDay(k)}
                 >
-                  <span>{d.getDate()}</span>
+                  <span className="day-num-row">
+                    <span>{d.getDate()}</span>
+                    {dueN > 0 && <small className="day-due-badge" title={`${dueN} fällige Karten`}>{dueN}</small>}
+                  </span>
                   {exams.slice(0, 2).map((e) => (
                     <i key={e.id}>{e.title}</i>
                   ))}
@@ -220,6 +258,65 @@ export default function CalendarPage({ embedded = false }: { embedded?: boolean 
               );
             })}
           </div>
+
+          {selectedDay && (
+            <div className="cal-day-detail">
+              <div className="cal-day-head">
+                <b>{selLabel}</b>
+                <div className="row-gap">
+                  <button type="button" className="btn primary sm" onClick={() => setEdit({ date: selectedDay })}>
+                    <IconPlus size={13} /> Prüfung
+                  </button>
+                  <button type="button" className="icon-btn sm" aria-label="Tagesansicht schließen" onClick={() => setSelectedDay(null)}>
+                    <IconClose size={14} />
+                  </button>
+                </div>
+              </div>
+              {selDue > 0 && (
+                <p className="small muted" style={{ margin: '4px 0 8px' }}>
+                  <b>{selDue}</b> {selDue === 1 ? 'Karte' : 'Karten'} an diesem Tag fällig
+                </p>
+              )}
+              {selExams.length > 0 && (
+                <div className="cal-day-list">
+                  {selExams.map((e) => {
+                    const linked = examDecks(data, e).filter((d) => !d.archived);
+                    return (
+                      <div key={e.id} className="cal-day-item">
+                        <span className="grow">
+                          <b>{e.title}</b>
+                          {e.time && <small className="muted"> · {e.time} Uhr</small>}
+                        </span>
+                        {linked[0] && (
+                          <Link to={deckUrl(data, linked[0], 'exam')} className="btn ghost sm">
+                            <IconTarget size={13} /> Probeprüfung
+                          </Link>
+                        )}
+                        <button type="button" className="btn ghost sm" onClick={() => setEdit({ exam: e })}>
+                          <IconEdit size={13} /> Bearbeiten
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {selTodos.length > 0 && (
+                <div className="cal-day-todos">
+                  <small className="muted">Offene To-dos:</small>
+                  <ul>
+                    {selTodos.map((t, idx) => (
+                      <li key={idx}>{t}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {!selExams.length && !selTodos.length && !selDue && (
+                <p className="muted small" style={{ margin: '4px 0 0' }}>
+                  Keine Einträge an diesem Tag.
+                </p>
+              )}
+            </div>
+          )}
         </section>
 
         <section className="exam-list">

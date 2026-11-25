@@ -56,7 +56,7 @@ function useKeyLabels() {
  * A two-octave piano: tap, click or play with the computer keyboard (bottom letter row = lower octave,
  * top letter row = upper octave). Only the keys held right now light up; the played notes are passed on.
  */
-export function Piano({ onPlay, from = 60 }: { onPlay?: (midi: number) => void; from?: number }) {
+export function Piano({ onPlay, from = 60, highlight }: { onPlay?: (midi: number) => void; from?: number; highlight?: number[] }) {
   const [held, setHeld] = useState<number[]>([]);
   const [now, setNow] = useState<number | null>(null);
   const [help, setHelp] = useState(() => {
@@ -128,6 +128,7 @@ export function Piano({ onPlay, from = 60 }: { onPlay?: (midi: number) => void; 
   for (let m = from; m < from + 24; m++) if (![1, 3, 6, 8, 10].includes(m % 12)) whites.push(m);
   const W = 100 / whites.length;
   const name = (m: number) => PC_NAMES[m % 12] + Math.floor(m / 12 - 1);
+  const hlSet = highlight?.length ? new Set(highlight) : null;
   const keyProps = (m: number) => ({
     onPointerDown: (e: ReactPointerEvent) => (e.preventDefault(), (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId), down(m)),
     onPointerUp: () => up(m),
@@ -147,14 +148,26 @@ export function Piano({ onPlay, from = 60 }: { onPlay?: (midi: number) => void; 
       </div>
       <div className="piano" role="group" aria-label="Klavier">
         {whites.map((m, k) => (
-          <button key={m} type="button" className={'pkey white' + (held.includes(m) ? ' held' : '')} style={{ left: `${k * W}%`, width: `${W}%` }} {...keyProps(m)}>
+          <button
+            key={m}
+            type="button"
+            className={'pkey white' + (held.includes(m) ? ' held' : '') + (hlSet?.has(m) ? ' hl' : '')}
+            style={{ left: `${k * W}%`, width: `${W}%` }}
+            {...keyProps(m)}
+          >
             {kb(m)}
             {m % 12 === 0 && <span>C{Math.floor(m / 12 - 1)}</span>}
           </button>
         ))}
         {whites.map((m, k) =>
           [0, 2, 5, 7, 9].includes(m % 12) && m + 1 < from + 24 ? (
-            <button key={m + 1} type="button" className={'pkey black' + (held.includes(m + 1) ? ' held' : '')} style={{ left: `${(k + 1) * W - W * 0.3}%`, width: `${W * 0.6}%` }} {...keyProps(m + 1)}>
+            <button
+              key={m + 1}
+              type="button"
+              className={'pkey black' + (held.includes(m + 1) ? ' held' : '') + (hlSet?.has(m + 1) ? ' hl' : '')}
+              style={{ left: `${(k + 1) * W - W * 0.3}%`, width: `${W * 0.6}%` }}
+              {...keyProps(m + 1)}
+            >
               {kb(m + 1)}
             </button>
           ) : null,

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { attachSkillFiles } from '../lib/deckFiles';
 import { Link, useNavigate } from 'react-router-dom';
-import { IconClose, IconFlame, IconNote, IconShuffle, IconSparkle, IconTrash, IconUpload } from '../components/Icons';
+import { IconClose, IconEdit, IconFlame, IconNote, IconSearch, IconShuffle, IconSparkle, IconStar, IconStarLine, IconTrash, IconUpload } from '../components/Icons';
+import { PromptModal } from '../components/Modal';
 import { undoable } from '../lib/undo';
 import { NoKeyNotice } from '../components/NoKey';
 import { hasKey } from '../lib/ai';
@@ -10,11 +11,12 @@ import { DOMAIN_LABEL } from '../lib/practice';
 import { startMiniSkill, startSkill } from '../lib/skillRun';
 import { levelLabel } from '../lib/mockExamCore';
 import { nextLesson, pageTopics, skillProgress, skillStreak, skillToday } from '../lib/skills';
-import { deleteSkill, setSettings, useData } from '../lib/store';
+import { deleteSkill, setSettings, updateSkill, useData } from '../lib/store';
 import type { Skill } from '../lib/skills';
 import { CAT_LABEL, MINI_IDEAS, SKILL_IDEAS, TOPIC_CATS, type TopicCat, type TopicIdea } from '../lib/topicPool';
 
 const today = () => Math.floor(Date.now() / 86_400_000);
+type SkillStatusFilter = 'all' | 'active' | 'done';
 
 /** The level for skills: what was typed here, else the one from the mock exam – as its name, not its key („bachelor“). */
 function defaultLevel(st: { skillLevel?: string; eduLevel?: string; eduDetail?: string }) {
@@ -30,6 +32,9 @@ export default function Skills() {
   const skills = data.skills ?? [];
   const [topic, setTopic] = useState('');
   const [level, setLevel] = useState(() => defaultLevel(data.settings));
+  const [myQuery, setMyQuery] = useState('');
+  const [myStatus, setMyStatus] = useState<SkillStatusFilter>('all');
+  const [renaming, setRenaming] = useState<Skill | null>(null);
   const st = data.settings;
   const [onboard, setOnboard] = useState(() => !st.skillOnboarded && skills.length === 0);
   // suggestions: a fixed order per day; each „Andere“ shows the next block of its own section only
@@ -56,8 +61,25 @@ export default function Skills() {
     if (!t.trim()) return;
     navigate(`/skills/${startMiniSkill(t, level)}`);
   };
-  const big = skills.filter((s) => !s.mini);
-  const small = skills.filter((s) => s.mini);
+
+  const filterAndSort = (list: Skill[]) => {
+    const q = myQuery.trim().toLocaleLowerCase('de');
+    return list
+      .filter((s) => {
+        if (q && !`${s.title} ${s.topic} ${DOMAIN_LABEL[s.domain]}`.toLocaleLowerCase('de').includes(q)) return false;
+        if (myStatus === 'all') return true;
+        const p = skillProgress(s);
+        const isDone = s.status === 'active' && p.total > 0 && p.done >= p.total;
+        return myStatus === 'done' ? isDone : !isDone;
+      })
+      .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || b.updatedAt - a.updatedAt);
+  };
+
+  const allBig = skills.filter((s) => !s.mini);
+  const allSmall = skills.filter((s) => s.mini);
+  const big = filterAndSort(allBig);
+  const small = filterAndSort(allSmall);
+
   const [material, setMaterial] = useState('');
   const [fileNote, setFileNote] = useState('');
   // the documents themselves are kept too (not only their text), so they stay visible in the skill
@@ -206,46 +228,120 @@ export default function Skills() {
         </section>
       )}
 
-      {big.length > 0 && (
-        <section className="panel">
-          <h2>Deine Skills</h2>
-          <div className="skill-grid">
-            {big.map((s) => (
-              <SkillTile key={s.id} skill={s} />
+      {skills.length > 0 && (
+        <div className="lib-filterbar" style={{ marginTop: 6 }}>
+          <div className="lib-search">
+            <IconSearch size={15} />
+            <input
+              value={myQuery}
+              onChange={(e) => setMyQuery(e.target.value)}
+              placeholder="Meine Skills durchsuchen …"
+              aria-label="Meine Skills durchsuchen"
+            />
+            {myQuery && (
+              <button type="button" className="icon-btn sm" aria-label="Suche leeren" onClick={() => setMyQuery('')}>
+                <IconClose size={13} />
+              </button>
+            )}
+          </div>
+          <div className="row-gap">
+            {([
+              ['all', 'Alle'],
+              ['active', 'Aktiv'],
+              ['done', 'Abgeschlossen'],
+            ] as [SkillStatusFilter, string][]).map(([id, label]) => (
+              <button key={id} type="button" className={`tag${myStatus === id ? ' on' : ''}`} onClick={() => setMyStatus(id)}>
+                {label}
+              </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {allBig.length > 0 && (
+        <section className="panel">
+          <h2>Deine Skills {big.length !== allBig.length && <small className="muted">({big.length}/{allBig.length})</small>}</h2>
+          {big.length > 0 ? (
+            <div className="skill-grid">
+              {big.map((s) => (
+                <SkillTile key={s.id} skill={s} onRename={() => setRenaming(s)} />
+              ))}
+            </div>
+          ) : (
+            <p className="muted small">Keine passenden Skills gefunden.</p>
+          )}
         </section>
       )}
-      {small.length > 0 && (
+      {allSmall.length > 0 && (
         <section className="panel">
-          <h2>Mini-Skills</h2>
-          <div className="skill-grid">
-            {small.map((s) => (
-              <SkillTile key={s.id} skill={s} />
-            ))}
-          </div>
+          <h2>Mini-Skills {small.length !== allSmall.length && <small className="muted">({small.length}/{allSmall.length})</small>}</h2>
+          {small.length > 0 ? (
+            <div className="skill-grid">
+              {small.map((s) => (
+                <SkillTile key={s.id} skill={s} onRename={() => setRenaming(s)} />
+              ))}
+            </div>
+          ) : (
+            <p className="muted small">Keine passenden Mini-Skills gefunden.</p>
+          )}
         </section>
+      )}
+
+      {renaming && (
+        <PromptModal
+          title="Skill umbenennen"
+          label="Neuer Titel"
+          initial={renaming.title}
+          onClose={() => setRenaming(null)}
+          onSubmit={(v) => {
+            if (v.trim()) updateSkill(renaming.id, { title: v.trim() });
+          }}
+        />
       )}
     </div>
   );
 }
 
-function SkillTile({ skill }: { skill: Skill }) {
+function SkillTile({ skill, onRename }: { skill: Skill; onRename: () => void }) {
   const p = skillProgress(skill);
   const next = nextLesson(skill);
   return (
-    <Link to={`/skills/${skill.id}`} className="skill-tile" data-domain={skill.domain}>
-      <span className="tile-badges">
-        <span className={'badge ' + skill.domain} data-domain={skill.domain}>{DOMAIN_LABEL[skill.domain]}</span>
-        {skill.mini && <span className="badge mini-badge">Mini</span>}
-      </span>
-      <b>{skill.title}</b>
-      {skill.status === 'planning' ? (
-        <>
-          <small className="muted">{skill.mini ? 'Mini-Skill wird gebaut …' : 'Lernpfad wird geplant …'}</small>
+    <Link to={`/skills/${skill.id}`} className={`skill-tile${skill.pinned ? ' pinned' : ''}`} data-domain={skill.domain}>
+      <div className="skill-tile-top">
+        <span className="tile-badges">
+          <span className={'badge ' + skill.domain} data-domain={skill.domain}>{DOMAIN_LABEL[skill.domain]}</span>
+          {skill.mini && <span className="badge mini-badge">Mini</span>}
+        </span>
+        <span className="skill-tile-tools">
           <button
             type="button"
-            className="icon-btn skill-tile-del"
+            className={`icon-btn sm${skill.pinned ? ' pin-star' : ''}`}
+            aria-label={skill.pinned ? 'Nicht mehr anheften' : 'Skill anheften'}
+            title={skill.pinned ? 'Lösen' : 'Anheften'}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              updateSkill(skill.id, { pinned: skill.pinned ? undefined : true });
+            }}
+          >
+            {skill.pinned ? <IconStar size={14} /> : <IconStarLine size={14} />}
+          </button>
+          <button
+            type="button"
+            className="icon-btn sm"
+            aria-label={`Skill „${skill.title}“ umbenennen`}
+            title="Umbenennen"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onRename();
+            }}
+          >
+            <IconEdit size={13} />
+          </button>
+          <button
+            type="button"
+            className="icon-btn sm"
             aria-label={`Skill „${skill.title}“ löschen`}
             title="Löschen"
             onClick={(e) => {
@@ -254,9 +350,13 @@ function SkillTile({ skill }: { skill: Skill }) {
               undoable(`Skill „${skill.title}“ gelöscht`, () => deleteSkill(skill.id));
             }}
           >
-            <IconTrash size={15} />
+            <IconTrash size={13} />
           </button>
-        </>
+        </span>
+      </div>
+      <b>{skill.title}</b>
+      {skill.status === 'planning' ? (
+        <small className="muted">{skill.mini ? 'Mini-Skill wird gebaut …' : 'Lernpfad wird geplant …'}</small>
       ) : (
         <>
           <small className="muted">
@@ -272,7 +372,6 @@ function SkillTile({ skill }: { skill: Skill }) {
     </Link>
   );
 }
-
 
 /** Today's goal and the streak on a skill tile. */
 function SkillTileGoal({ skill }: { skill: Skill }) {

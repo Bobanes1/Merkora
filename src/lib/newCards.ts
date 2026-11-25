@@ -6,7 +6,7 @@
 import type { Srs } from './srs';
 import { dayKey } from './util';
 
-type WithSrs = { srs: Srs };
+type WithSrs = { srs: Srs; suspended?: boolean };
 
 export const DEFAULT_NEW_PER_DAY = 20;
 
@@ -21,15 +21,16 @@ export function newLeft(cards: WithSrs[], now: number, perDay: number, boost = 0
   return Math.max(0, perDay + boost - introducedToday(cards, now));
 }
 
-/** Due cards: all learned cards whose time has come, plus at most `left` new cards (in deck order). */
+/** Due cards: all active learned cards whose time has come, plus at most `left` active new cards (in deck order). */
 export function pickDue<T extends WithSrs>(cards: T[], now: number, left: number): T[] {
-  const learned = cards.filter((c) => c.srs.last !== undefined && c.srs.due <= now);
-  const fresh = left > 0 ? cards.filter((c) => c.srs.last === undefined).slice(0, left) : [];
+  const active = cards.filter((c) => !c.suspended);
+  const learned = active.filter((c) => c.srs.last !== undefined && c.srs.due <= now);
+  const fresh = left > 0 ? active.filter((c) => c.srs.last === undefined).slice(0, left) : [];
   return [...learned, ...fresh];
 }
 
-/** New cards that have never been studied. */
-export const unseenCount = (cards: WithSrs[]) => cards.filter((c) => c.srs.last === undefined).length;
+/** Active new cards that have never been studied. */
+export const unseenCount = (cards: WithSrs[]) => cards.filter((c) => !c.suspended && c.srs.last === undefined).length;
 
 /**
  * Daily new cards for a whole course (like the parent deck limit in Anki): the course gets `perDay`

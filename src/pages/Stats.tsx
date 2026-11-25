@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Aquarium } from '../components/Aquarium';
 import { Link } from 'react-router-dom';
 import { groupTotals, levelCounts, masteryPercent, statsTree, streak, type DeckStat, type StatTotals } from '../lib/stats';
+import { bestStreak, ratingBreakdown, statsToCsv, timeOfDayStats, weekdayStats } from '../lib/appExtras';
 import { deckUrl, dueCards, setSettings, useData } from '../lib/store';
-import { IconCards, IconChevronDown, IconFlame, IconFolder } from '../components/Icons';
+import { IconCards, IconChevronDown, IconDownload, IconFlame, IconFolder } from '../components/Icons';
 import { bestStreakAll, skillDays } from '../lib/skills';
-import { DAY, dayKey, startOfDay } from '../lib/util';
+import { DAY, dayKey, download, startOfDay } from '../lib/util';
 import { WeekReview } from '../components/WeekReview';
 
 /** Small hover tooltip shared by the charts. */
@@ -28,6 +29,7 @@ const fmtDay = (t: number) => new Date(t).toLocaleDateString('de-DE', { weekday:
 
 export default function Stats() {
   const data = useData();
+  const [showArchived, setShowArchived] = useState(false);
   // /stats#aquarium (from the start page or a „new inhabitant“ message) jumps to the aquarium
   useEffect(() => {
     if (window.location.hash === '#aquarium') window.setTimeout(() => document.getElementById('aquarium')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
@@ -39,11 +41,23 @@ export default function Stats() {
   const today = startOfDay(now);
   const tip = useTip();
 
-  // ---- summary
-  const cards = data.decks.flatMap((d) => d.cards);
+  // ---- summary (only active decks & active non-suspended cards)
+  const activeDecks = useMemo(() => data.decks.filter((d) => !d.archived), [data.decks]);
+  const archivedCount = data.decks.length - activeDecks.length;
+  const cards = useMemo(() => activeDecks.flatMap((d) => d.cards.filter((c) => !c.suspended)), [activeDecks]);
   const counts = levelCounts(cards);
-  const last30 = data.reviews.filter((r) => r.at >= today - 29 * DAY);
+  const last30 = useMemo(() => data.reviews.filter((r) => r.at >= today - 29 * DAY), [data.reviews, today]);
   const correct30 = last30.length ? Math.round((last30.filter((r) => r.rating >= 3).length / last30.length) * 100) : null;
+  const curStreak = streak(data.reviews);
+  const longestStreak = useMemo(() => bestStreak(data.reviews), [data.reviews]);
+  const ratings30 = useMemo(() => ratingBreakdown(last30), [last30]);
+  const todStats = useMemo(() => timeOfDayStats(data.reviews), [data.reviews]);
+  const wdStats = useMemo(() => weekdayStats(data.reviews), [data.reviews]);
+  const bestTod = useMemo(() => {
+    const valid = todStats.filter((x) => x.total >= 5 && x.percent !== null);
+    if (!valid.length) return null;
+    return [...valid].sort((a, b) => (b.percent ?? 0) - (a.percent ?? 0))[0];
+  }, [todStats]);
 
   // ---- year heatmap (53 weeks, Monday first)
   const perDay = useMemo(() => {
@@ -58,10 +72,10 @@ export default function Stats() {
   const level = (n: number) => (n === 0 ? 0 : Math.min(4, Math.ceil((n / maxDay) * 4)));
   const activeDays = days.filter((d) => (perDay.get(dayKey(d)) ?? 0) > 0).length;
 
-  // ---- forecast: cards due per day, next 30 days (overdue counts today)
+  // ---- forecast: active cards due per day, next 30 days (overdue counts today)
   const forecast = Array.from({ length: 30 }, (_, i) => {
     const from = today + i * DAY;
-    const n = cards.filter((c) => c.srs.last && (i === 0 ? c.srs.due < from + DAY : c.srs.due >= from && c.srs.due < from + DAY)).length;
+    const n = cards.filter((c) => c.srs.last !== undefined && (i === 0 ? c.srs.due < from + DAY : c.srs.due >= from && c.srs.due < from + DAY)).length;
     return { day: from, n };
   });
   const maxF = Math.max(1, ...forecast.map((f) => f.n));
@@ -75,25 +89,38 @@ export default function Stats() {
   const maxW = Math.max(1, ...week.map((w) => w.min));
 
   // ---- per deck, grouped like the library (workspace → course → folder → deck)
-  const rows: DeckStat[] = data.decks.map((d) => {
+  const visibleDecks = showArchived ? data.decks : activeDecks;
+  const rows: DeckStat[] = visibleDecks.map((d) => {
     const rv = last30.filter((r) => r.deckId === d.id);
+    const activeCards = d.cards.filter((c) => !c.suspended);
     return {
       deckId: d.id,
       name: d.name,
-      cards: d.cards.length,
-      mastery: masteryPercent(d.cards),
+      cards: activeCards.length,
+      mastery: masteryPercent(activeCards),
       due: dueCards(d, now).length,
       reviews: rv.length,
       known: rv.filter((r) => r.rating >= 3).length,
     };
   });
-  const tree = statsTree(data, rows);
+  const tree = statsTree({ ...data, decks: visibleDecks }, rows);
   const allTotals = groupTotals(rows);
   const openIds = new Set(data.settings.statsOpen?.groups ?? []);
   const sectionOpen = data.settings.statsOpen?.section !== false;
   const groupIds = tree.flatMap((w) => w.courses.flatMap((c) => [c.id, ...c.folders.map((f) => f.id)]));
   const setOpen = (groups: string[], section = sectionOpen) => setSettings({ statsOpen: { section, groups } });
   const toggle = (id: string) => setOpen(openIds.has(id) ? [...openIds].filter((x) => x !== id) : [...openIds, id]);
+
+  const exportCsv = () => {
+    const courseById = new Map(data.courses.map((c) => [c.id, c.name]));
+    const deckById = new Map(data.decks.map((d) => [d.id, d]));
+    const enriched = rows.map((r) => {
+      const d = deckById.get(r.deckId);
+      return { ...r, course: d ? courseById.get(d.courseId) ?? '' : '' };
+    });
+    download(`merkora-statistik-${dayKey(now)}.csv`, statsToCsv(enriched), 'text/csv;charset=utf-8');
+  };
+
   const cells = (t: StatTotals) => (
     <>
       <td>{t.cards}</td>
@@ -118,6 +145,7 @@ export default function Stats() {
             <Link to={deckUrl(data, deck)} title={r.name}>
               {r.name}
             </Link>
+            {deck.archived && <small className="muted"> (Archiv)</small>}
           </span>
         </td>
         {cells(groupTotals([r]))}
@@ -149,8 +177,10 @@ export default function Stats() {
       <div className="stat-tiles">
         <div className="stat-tile">
           <small>Lernserie</small>
-          <b>{streak(data.reviews)}</b>
-          <span>Tage in Folge</span>
+          <b>{curStreak}</b>
+          <span>
+            Tage in Folge{longestStreak > curStreak ? ` · Rekord: ${longestStreak}` : longestStreak > 0 ? ' · Rekord!' : ''}
+          </span>
         </div>
         <div className="stat-tile">
           <small>Wiederholungen</small>
@@ -170,7 +200,7 @@ export default function Stats() {
         <div className="stat-tile">
           <small>Gemeistert</small>
           <b>{counts.mastered}</b>
-          <span>von {cards.length} Karten</span>
+          <span>von {cards.length} aktiven Karten</span>
         </div>
       </div>
 
@@ -214,6 +244,71 @@ export default function Stats() {
         </div>
       </section>
 
+      {data.reviews.length > 0 && (
+        <section className="panel">
+          <div className="panel-head">
+            <h2>Wann lernst du am besten?</h2>
+            <small className="muted">
+              {bestTod ? `Beste Zeit: ${bestTod.label} (${bestTod.percent}% gewusst)` : 'Trefferquote nach Tageszeit & Wochentag'}
+            </small>
+          </div>
+          <div className="stats-insights-grid">
+            <div className="insight-card">
+              <h3>Nach Tageszeit</h3>
+              <div className="insight-bars">
+                {todStats.map((b) => (
+                  <div key={b.id} className="insight-row">
+                    <span>{b.label}</span>
+                    <span className="bar mini">
+                      <i style={{ width: `${b.percent ?? 0}%` }} />
+                    </span>
+                    <small className="muted">{b.percent === null ? '–' : `${b.percent}%`} ({b.total})</small>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="insight-card">
+              <h3>Nach Wochentag</h3>
+              <div className="forecast week" style={{ height: 90 }}>
+                {wdStats.map((w) => (
+                  <div
+                    key={w.id}
+                    className="fc-col"
+                    onMouseEnter={(e) => tip.show(e, <><b>{w.percent === null ? 'Keine Daten' : `${w.percent}% gewusst`}</b><br />{w.label} · {w.total} Antworten</>)}
+                    onMouseLeave={tip.hide}
+                  >
+                    <i style={{ height: `${w.percent ?? 0}%` }} className={w.total ? '' : 'zero'} />
+                  </div>
+                ))}
+              </div>
+              <div className="fc-axis">
+                {wdStats.map((w) => (
+                  <small key={w.id}>{w.label}</small>
+                ))}
+              </div>
+            </div>
+          </div>
+          {ratings30.total > 0 && (
+            <div className="rating-dist">
+              <div className="rating-dist-head">
+                <small className="muted">Bewertungen (letzte 30 Tage · {ratings30.total} Antworten)</small>
+                <div className="rating-legend">
+                  <span><i className="rd-dot r1" /> Nochmal {Math.round((ratings30[1] / ratings30.total) * 100)}%</span>
+                  <span><i className="rd-dot r2" /> Schwer {Math.round((ratings30[2] / ratings30.total) * 100)}%</span>
+                  <span><i className="rd-dot r3" /> Gut {Math.round((ratings30[3] / ratings30.total) * 100)}%</span>
+                  <span><i className="rd-dot r4" /> Einfach {Math.round((ratings30[4] / ratings30.total) * 100)}%</span>
+                </div>
+              </div>
+              <div className="rating-bar" aria-label="Verteilung der Bewertungen">
+                {([1, 2, 3, 4] as const).map((r) =>
+                  ratings30[r] > 0 ? <i key={r} className={`r${r}`} style={{ width: `${(ratings30[r] / ratings30.total) * 100}%` }} /> : null,
+                )}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
       <SkillWeek />
 
       <section className="panel">
@@ -243,7 +338,7 @@ export default function Stats() {
       <section className="panel">
         <div className="panel-head">
           <h2>Fällige Karten in den nächsten 30 Tagen</h2>
-          <small className="muted">{total30} insgesamt</small>
+          <small className="muted">{total30} insgesamt (ohne pausierte & archivierte)</small>
         </div>
         <div className="forecast" role="img" aria-label="Fällige Karten pro Tag, nächste 30 Tage">
           {forecast.map((f, i) => (
@@ -288,14 +383,28 @@ export default function Stats() {
               {rows.length} {rows.length === 1 ? 'Deck' : 'Decks'} · {allTotals.cards} Karten
             </small>
           </button>
-          {sectionOpen && groupIds.length > 0 && (
-            <span className="row-gap">
-              <button type="button" className="link-btn" onClick={() => setOpen(groupIds)}>
-                Alle aufklappen
-              </button>
-              <button type="button" className="link-btn" onClick={() => setOpen([])}>
-                Alle zuklappen
-              </button>
+          {sectionOpen && (
+            <span className="row-gap" style={{ flexWrap: 'wrap' }}>
+              {archivedCount > 0 && (
+                <button type="button" className="link-btn" onClick={() => setShowArchived((v) => !v)}>
+                  {showArchived ? 'Archiv ausblenden' : `Archiv anzeigen (${archivedCount})`}
+                </button>
+              )}
+              {groupIds.length > 0 && (
+                <>
+                  <button type="button" className="link-btn" onClick={() => setOpen(groupIds)}>
+                    Alle aufklappen
+                  </button>
+                  <button type="button" className="link-btn" onClick={() => setOpen([])}>
+                    Alle zuklappen
+                  </button>
+                </>
+              )}
+              {rows.length > 0 && (
+                <button type="button" className="btn ghost sm" onClick={exportCsv} title="Deck-Statistiken als CSV-Tabelle herunterladen">
+                  <IconDownload size={14} /> CSV
+                </button>
+              )}
             </span>
           )}
         </div>

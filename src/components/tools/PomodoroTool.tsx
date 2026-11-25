@@ -2,12 +2,20 @@ import { useState } from 'react';
 import { fmtClock, pomodoro, usePomodoro, usePomodoroMeta } from '../../lib/pomodoro';
 import { MIN, remaining } from '../../lib/pomodoroRule';
 import { toggleTodo, useStore } from '../../lib/store';
-import { IconCheck, IconMore, IconPause, IconPlay, IconRefresh, IconSkip, IconSpeaker, IconSpeakerOff } from '../Icons';
+import { IconCheck, IconHeadphones, IconMore, IconPause, IconPlay, IconRefresh, IconSkip, IconSpeaker, IconSpeakerOff } from '../Icons';
+import { BreathingTool } from './BreathingTool';
 
 const PRESETS = [
   { label: '15 / 3', work: 15, brk: 3 },
   { label: '25 / 5', work: 25, brk: 5 },
   { label: '50 / 10', work: 50, brk: 10 },
+];
+
+const BREAK_TIPS = [
+  'Blick für 20 Sekunden aus dem Fenster in die Ferne – entspannt die Augen.',
+  'Kurz aufstehen, Schultern kreisen lassen und ein großes Glas Wasser trinken.',
+  'Kein Handy-Scrollen – dein Gehirn festigt gerade still das Gelernte.',
+  '3 tiefe Atemzüge bis in den Bauch – bringt sofort neue Energie.',
 ];
 
 /**
@@ -23,12 +31,16 @@ export function PomodoroTool({ compact = false, skip = true }: { compact?: boole
   const [editDur, setEditDur] = useState(false);
   // compact (pop-up window): only ring and buttons; tasks and durations folded away
   const [more, setMore] = useState(false);
+  const [showBreath, setShowBreath] = useState(false);
   const showExtras = !compact || more;
   const [workIn, setWorkIn] = useState(String(meta.workMin));
   const [brkIn, setBrkIn] = useState(String(meta.breakMin));
+  const [longIn, setLongIn] = useState(String(meta.longBreakMin));
+  const [goalIn, setGoalIn] = useState(String(meta.goal));
 
   const left = remaining(p, Date.now());
-  const totalMs = (p.phase === 'work' ? meta.workMin : meta.breakMin) * MIN;
+  const breakDur = p.longBreak ? meta.longBreakMin : meta.breakMin;
+  const totalMs = (p.phase === 'work' ? meta.workMin : breakDur) * MIN;
   const pct = totalMs > 0 ? Math.max(0, Math.min(1, 1 - left / totalMs)) : 0;
 
   const size = compact ? 112 : 196;
@@ -38,9 +50,15 @@ export function PomodoroTool({ compact = false, skip = true }: { compact?: boole
   const applyCustom = () => {
     const w = Number(workIn);
     const b = Number(brkIn);
-    if (w >= 1 && b >= 1) pomodoro.setDurations(w, b);
+    const lb = Number(longIn);
+    const g = Number(goalIn);
+    if (w >= 1 && b >= 1) pomodoro.setDurations(w, b, lb >= b ? lb : undefined);
+    if (g >= 1) pomodoro.setGoal(g);
     setEditDur(false);
   };
+
+  const goalPct = Math.min(100, Math.round((p.rounds / Math.max(1, meta.goal)) * 100));
+  const breakTip = BREAK_TIPS[p.rounds % BREAK_TIPS.length];
 
   return (
     <div className={`pomo-tool ${p.phase} ${p.running ? 'running' : ''} ${compact ? 'compact' : ''}`}>
@@ -62,9 +80,23 @@ export function PomodoroTool({ compact = false, skip = true }: { compact?: boole
           className={p.phase === 'break' ? 'on' : ''}
           onClick={() => pomodoro.setPhase('break')}
         >
-          Pause
+          {p.longBreak ? 'Lange Pause' : 'Pause'}
         </button>
       </div>
+      )}
+
+      {!compact && (
+        <div className="pomo-goal" title={`Tagesziel: ${meta.goal} Fokus-Runden (jede 4. Runde löst eine lange Pause aus)`}>
+          <div className="pomo-goal-head">
+            <small className="muted">Tagesziel heute</small>
+            <small>
+              <b>{p.rounds} / {meta.goal}</b> Runden {p.rounds >= meta.goal ? '· Erreicht!' : ''}
+            </small>
+          </div>
+          <div className="pomo-goal-bar" aria-hidden="true">
+            <i style={{ width: `${goalPct}%` }} />
+          </div>
+        </div>
       )}
 
       <div className="pomo-ring-wrap">
@@ -86,7 +118,7 @@ export function PomodoroTool({ compact = false, skip = true }: { compact?: boole
         <div className="pomo-ring-center">
           <b className="pomo-big-clock">{fmtClock(left)}</b>
           <small className="muted">
-            {p.phase === 'work' ? 'Fokus' : 'Kurze Pause'}
+            {p.phase === 'work' ? 'Fokus' : p.longBreak ? 'Lange Pause' : 'Kurze Pause'}
             {p.rounds > 0 ? ` · ${p.rounds}×` : ''}
           </small>
         </div>
@@ -127,6 +159,18 @@ export function PomodoroTool({ compact = false, skip = true }: { compact?: boole
           </button>
         )}
       </div>
+
+      {!compact && p.phase === 'break' && (
+        <div className="pomo-break-tip">
+          <div className="pomo-break-tip-head">
+            <small><b>Pausen-Impuls:</b> {breakTip}</small>
+            <button type="button" className={'chip' + (showBreath ? ' on' : '')} onClick={() => setShowBreath((v) => !v)}>
+              {showBreath ? 'Atemübung ausblenden' : '60-Sek.-Atemübung'}
+            </button>
+          </div>
+          {showBreath && <BreathingTool compact />}
+        </div>
+      )}
 
       {showExtras && (activeTodo && !activeTodo.doneAt ? (
         <div className="pomo-active-task">
@@ -192,12 +236,37 @@ export function PomodoroTool({ compact = false, skip = true }: { compact?: boole
           onClick={() => {
             setWorkIn(String(meta.workMin));
             setBrkIn(String(meta.breakMin));
+            setLongIn(String(meta.longBreakMin));
+            setGoalIn(String(meta.goal));
             setEditDur((v) => !v);
           }}
         >
           Eigene
         </button>
       </div>
+      )}
+
+      {showExtras && (
+        <div className="pomo-toggles">
+          <button
+            type="button"
+            className={`chip ${meta.autoSound ? 'on' : ''}`}
+            aria-pressed={meta.autoSound}
+            title="Startet Hintergrundklänge automatisch in der Fokus-Phase und pausiert sie in der Pause"
+            onClick={() => pomodoro.setAutoSound(!meta.autoSound)}
+          >
+            <IconHeadphones size={12} /> Klänge koppeln {meta.autoSound ? 'an' : 'aus'}
+          </button>
+          <button
+            type="button"
+            className={`chip ${meta.autoStart ? 'on' : ''}`}
+            aria-pressed={meta.autoStart}
+            title="Startet nach Ende der Pause automatisch die nächste Lernrunde"
+            onClick={() => pomodoro.setAutoStart(!meta.autoStart)}
+          >
+            Auto-Start {meta.autoStart ? 'an' : 'aus'}
+          </button>
+        </div>
       )}
 
       {showExtras && editDur && (
@@ -209,6 +278,14 @@ export function PomodoroTool({ compact = false, skip = true }: { compact?: boole
           <label>
             <span>Pause</span>
             <input type="number" min={1} max={60} className="input" value={brkIn} onChange={(e) => setBrkIn(e.target.value)} />
+          </label>
+          <label>
+            <span>Lange Pause (4×)</span>
+            <input type="number" min={1} max={60} className="input" value={longIn} onChange={(e) => setLongIn(e.target.value)} />
+          </label>
+          <label>
+            <span>Tagesziel</span>
+            <input type="number" min={1} max={16} className="input" value={goalIn} onChange={(e) => setGoalIn(e.target.value)} />
           </label>
           <button type="button" className="btn primary sm" onClick={applyCustom}>
             Übernehmen
