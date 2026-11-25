@@ -2356,7 +2356,7 @@ export function renderDiagram(d: Diagram, p: Palette = PALETTES.light, view?: Di
       animated: anim,
       uid: id,
     });
-    out.push(`<g class="dg-preset" transform="translate(${PAD} ${r1(py)}) scale(${scale.toFixed(4)})">${body}</g>`);
+    out.push(`<g transform="translate(${PAD} ${r1(py)}) scale(${scale.toFixed(4)})"><g class="dg-preset">${body}</g></g>`);
   }
   if (L.orbitSlot) {
     const { cx, cy, coreR, rings } = L.orbitSlot;
@@ -2535,7 +2535,7 @@ export function renderDiagram(d: Diagram, p: Palette = PALETTES.light, view?: Di
       if (/\bclass="/.test(attrs)) return `<${tag}${attrs.replace(/\bclass="([^"]*)"/, `class="$1 ${extra}"`)}>`;
       return `<${tag} class="${extra}"${attrs}>`;
     });
-    out.push(`<g${anim ? ' class="dg-anim-raw"' : ''} transform="translate(${PAD} ${r1(L.rawSvg.y)}) scale(${scale.toFixed(4)})">${interactive}</g>`);
+    out.push(`<g transform="translate(${PAD} ${r1(L.rawSvg.y)}) scale(${scale.toFixed(4)})"><g${anim ? ' class="dg-anim-raw"' : ''}>${interactive}</g></g>`);
   }
   let lineIdx = 0;
   let curveIdx = 0;

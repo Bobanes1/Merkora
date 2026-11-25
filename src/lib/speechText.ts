@@ -40,3 +40,14 @@ export function markdownSpeech(md: string): string[] {
     )
     .filter(Boolean);
 }
+
+/** A skill explanation bite (title, text, analogy, takeaway, pitfall) → clean paragraphs to read aloud. */
+export function biteSpeechParts(bite: { title?: string; text: string; analogy?: string; takeaway?: string; pitfall?: string }): string[] {
+  const out: string[] = [];
+  if (bite.title?.trim()) out.push(bite.title.trim().replace(/[.!?]+$/, '') + '.');
+  out.push(...markdownSpeech(bite.text));
+  if (bite.analogy?.trim()) out.push(...markdownSpeech(`Alltagsbild: ${bite.analogy}`));
+  if (bite.takeaway?.trim()) out.push(...markdownSpeech(`Merksatz: ${bite.takeaway}`));
+  if (bite.pitfall?.trim()) out.push(...markdownSpeech(`Typische Falle: ${bite.pitfall}`));
+  return out;
+}

@@ -2618,9 +2618,10 @@ console.log('Bildhafte Erklärgrafiken (forces, scene, callout, illustration)');
     const svgD = D.renderDiagram(d1, D.PALETTES.dark, { animate: true });
     const gOpen = (svgL.match(/<g\b/g) ?? []).length;
     const gClose = (svgL.match(/<\/g>/g) ?? []).length;
-    if (!svgL.startsWith('<svg') || !svgL.endsWith('</svg>') || !svgL.includes('dg-preset') || !svgL.includes('data-part=') || !svgL.includes('ps-focus') || !svgD.includes('dg-preset') || gOpen !== gClose) {
+    const animTransformClash = /<[^>]*\bclass="[^"]*\b(dg-preset|dg-anim-raw|ps-pulse|ps-float|ps-breathe|ps-heartbeat|ps-orbit|ps-glow)\b[^"]*"[^>]*\btransform=|<[^>]*\btransform="[^"]*"[^>]*\bclass="[^"]*\b(dg-preset|dg-anim-raw|ps-pulse|ps-float|ps-breathe|ps-heartbeat|ps-orbit|ps-glow)\b/.test(svgL);
+    if (!svgL.startsWith('<svg') || !svgL.endsWith('</svg>') || !svgL.includes('dg-preset') || !svgL.includes('data-part=') || !svgL.includes('ps-focus') || !svgD.includes('dg-preset') || gOpen !== gClose || animTransformClash) {
       allPresetsOk = false;
-      badPresets.push(`${pr.id}:svg(g=${gOpen}/${gClose})`);
+      badPresets.push(`${pr.id}:svg(g=${gOpen}/${gClose}${animTransformClash ? ',clash' : ''})`);
     }
   }
   ok(allPresetsOk, `Alle ${VP.VISUAL_PRESETS.length} Presets parsen (explizit & per Typ-Alias) und rendern sauberes animiertes Light/Dark-SVG` + (badPresets.length ? ` [${badPresets.join(', ')}]` : ''));
@@ -2740,6 +2741,55 @@ console.log('Bildhafte Erklärgrafiken (forces, scene, callout, illustration)');
       P.FIGURE_RULE.includes('data-part') &&
       P.FIGURE_RULE.includes('narration'),
     'FIGURE_RULE dokumentiert Preset-Engine, alle 4 Baukästen, interaktive Illustrationen & narration',
+  );
+
+  // Structured bite callouts (analogy, takeaway, pitfall), per-bite simpler explanation & read-aloud
+  const ST = await import('../src/lib/speechText');
+  const SK = await import('../src/lib/skills');
+  const parsedBites = P.parseBites(
+    [
+      {
+        title: 'Spannung verstehen',
+        text: 'Elektrische **Spannung** treibt Ladungen durch einen Leiter.',
+        analogy: 'Wie Wasserdruck in einem Gartenschlauch.',
+        takeaway: 'Ohne Spannung fließt kein Strom.',
+        pitfall: 'Spannung (Volt) nicht mit Stromstärke (Ampere) verwechseln!',
+      },
+      {
+        title: 'Deutsche Aliase',
+        text: 'Zweiter Abschnitt.',
+        alltagsbild: 'Wie Autos auf einer Autobahn.',
+        merksatz: 'Widerstand bremst den Strom.',
+        falle: 'Größerer Widerstand bedeutet weniger Strom, nicht mehr.',
+      },
+    ],
+    0,
+  );
+  ok(
+    parsedBites.length === 2 &&
+      parsedBites[0].analogy?.includes('Wasserdruck') &&
+      parsedBites[0].takeaway?.includes('Ohne Spannung') &&
+      parsedBites[0].pitfall?.includes('verwechseln') &&
+      parsedBites[1].analogy?.includes('Autobahn') &&
+      parsedBites[1].takeaway?.includes('Widerstand') &&
+      parsedBites[1].pitfall?.includes('weniger Strom'),
+    'parseBites liest analogy, takeaway & pitfall (inkl. deutscher Aliase)',
+  );
+  const spBite = P.simplerBitePrompt('Stromkreis', parsedBites[0], 'Schule');
+  ok(spBite.user.includes('Spannung verstehen') && spBite.system.includes('"simple"'), 'simplerBitePrompt baut gezielten Prompt für ein einzelnes Häppchen');
+  ok(P.parseSimplerBite({ simple: 'Stell dir vor …' }) === 'Stell dir vor …' && P.parseSimplerBite({}) === null, 'parseSimplerBite parst gültige Antworten und lehnt leere ab');
+  const speech = ST.biteSpeechParts(parsedBites[0]);
+  ok(
+    speech.some((x) => x.includes('Spannung verstehen')) &&
+      speech.some((x) => x.includes('Alltagsbild:') && x.includes('Wasserdruck')) &&
+      speech.some((x) => x.includes('Merksatz:') && x.includes('Ohne Spannung')) &&
+      speech.some((x) => x.includes('Typische Falle:')) &&
+      !speech.join(' ').includes('**'),
+    'biteSpeechParts bereitet Häppchen + Callouts sauber ohne Markdown fürs Vorlesen auf',
+  );
+  ok(
+    SK.BITE_RULE.includes('"analogy"') && SK.BITE_RULE.includes('"takeaway"') && SK.BITE_RULE.includes('"pitfall"'),
+    'BITE_RULE weist die KI auf Alltagsbild, Merksatz & Typische Falle hin',
   );
 }
 

@@ -8,14 +8,16 @@ import { CodeEditor } from '../CodeEditor';
 import { Confetti } from '../Mascot';
 import { Markdown } from '../Markdown';
 import { JavaSetup } from '../JavaSetup';
-import { IconBulb, IconCheck, IconChevron, IconClose, IconDoc, IconHelp, IconPlay, IconPlus, IconSparkle, IconStar, IconTarget } from '../Icons';
+import { IconBulb, IconCheck, IconChevron, IconClose, IconHelp, IconPlay, IconPlus, IconSparkle, IconSpeaker, IconSpeakerOff, IconStar, IconTarget } from '../Icons';
 import { useLearnFocus } from '../../lib/learnFocus';
 import { Lab } from '../labs/Labs';
 import { completeJson, gradeAnswer, hasKey } from '../../lib/ai';
+import { speak, stopSpeaking, useCanSpeak } from '../../lib/speech';
+import { biteSpeechParts } from '../../lib/speechText';
 import { gapCheckPrompt, parseGapCheck } from '../../lib/tasks';
 import { openExternal } from '../../lib/desktop';
 import { buildHarness, harnessOffset, localJava, mapErrors, parseResults, runJavaLocal, runJavaOnline, type RunResult, type TestResult } from '../../lib/javaRun';
-import { bitesFrom, checkAnswer, checkBiteGap, cleanSolve, goingWell, harderPrompt, insertTaskAfter, insertTaskLater, nextOpen, parseHarder, pickNext, settledCount, mistakePrompt, parseMistake, parseSimpler, simplerPrompt, DOMAIN_LABEL, problemCount, solvedCount, taskList, type Bite, type BiteCheck, type JavaProblem, type MathProblem, type PracticeSet, type ProblemProgress } from '../../lib/practice';
+import { bitesFrom, checkAnswer, checkBiteGap, cleanSolve, goingWell, harderPrompt, insertTaskAfter, insertTaskLater, nextOpen, parseHarder, pickNext, settledCount, mistakePrompt, parseMistake, parseSimpler, parseSimplerBite, simplerBitePrompt, simplerPrompt, DOMAIN_LABEL, problemCount, solvedCount, taskList, type Bite, type BiteCheck, type JavaProblem, type MathProblem, type PracticeSet, type ProblemProgress } from '../../lib/practice';
 import { setSettings, useStore } from '../../lib/store';
 import { CaseTaskView, ClassifyTaskView, ClozeTaskView, MultiTaskView, OrderTaskView } from './ActiveTasks';
 import { MusicTaskView } from './MusicTask';
@@ -132,9 +134,9 @@ export function PracticeSetView({ set, host, head, onDone, guided, focus }: { se
 
   const focusTools = (
     <div className="focus-tools">
-      {g && (
-        <button type="button" className="btn ghost sm" onClick={() => setSheet(true)}>
-          <IconDoc size={14} /> Spickzettel
+      {(g || bites.length > 0 || (set.figures?.length ?? 0) > 0) && (
+        <button type="button" className="btn outline sm" onClick={() => setSheet(true)} title="Merksätze & Grafiken dieser Lektion kurz nachschauen">
+          <IconBulb size={14} /> Theorie spicken
         </button>
       )}
       <button type="button" className="btn ghost sm" onClick={() => setFocus(!focusOn)} title={focusOn ? 'Seitenleiste wieder zeigen (Esc)' : 'Nur die Aufgabe zeigen'}>
@@ -286,17 +288,39 @@ export function PracticeSetView({ set, host, head, onDone, guided, focus }: { se
         <div className="cheat-backdrop" onClick={() => setSheet(false)}>
           <aside className="cheat-sheet" role="dialog" aria-label="Spickzettel" onClick={(e) => e.stopPropagation()}>
             <header>
-              <b>Spickzettel</b>
+              <b>Spickzettel · Theorie auf einen Blick</b>
               <button type="button" className="icon-btn" aria-label="Spickzettel schließen" onClick={() => setSheet(false)}>
                 <IconClose size={18} />
               </button>
             </header>
+            {bites.some((b) => b.takeaway || b.pitfall) && (
+              <div className="cheat-summary">
+                <span className="bite-callout-head">Auf einen Blick</span>
+                <ul>
+                  {bites.map((b, k) =>
+                    b.takeaway ? (
+                      <li key={`t-${k}`}>
+                        <CardContent text={b.takeaway} className="inline" />
+                      </li>
+                    ) : null,
+                  )}
+                  {bites.map((b, k) =>
+                    b.pitfall ? (
+                      <li key={`p-${k}`} className="cheat-pitfall">
+                        <strong>Falle:</strong> <CardContent text={b.pitfall} className="inline" />
+                      </li>
+                    ) : null,
+                  )}
+                </ul>
+              </div>
+            )}
             {bites.map((b, k) => (
               <div key={k} className="cheat-bite">
                 {b.title && <h4>{b.title}</h4>}
                 <div className="md">
                   <Markdown text={b.text} />
                 </div>
+                <BiteCallouts bite={b} />
               </div>
             ))}
             <Explanation set={set} host={host} hideText />
@@ -637,13 +661,60 @@ function BiteCheckView({ check, done, onDone, hookMode, actions, onAccept }: { c
   );
 }
 
+/** Visual highlight boxes inside a theory bite: everyday analogy, key takeaway, and typical pitfall. */
+function BiteCallouts({ bite }: { bite: Bite }) {
+  if (!bite.analogy && !bite.takeaway && !bite.pitfall) return null;
+  return (
+    <div className="bite-callouts">
+      {bite.analogy && (
+        <div className="bite-callout analogy">
+          <span className="bite-callout-head">Alltagsbild</span>
+          <CardContent text={bite.analogy} />
+        </div>
+      )}
+      {bite.takeaway && (
+        <div className="bite-callout takeaway">
+          <span className="bite-callout-head">Merksatz</span>
+          <CardContent text={bite.takeaway} />
+        </div>
+      )}
+      {bite.pitfall && (
+        <div className="bite-callout pitfall">
+          <span className="bite-callout-head">Typische Falle</span>
+          <CardContent text={bite.pitfall} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Compact overview card for `sprint` lessons: full explanation without intermediate checks + optional example, then straight to tasks. */
 function SprintOverview({ set, bites, host, hasExample, labs, onDone }: { set: PracticeSet; bites: Bite[]; host: SetHost; hasExample: boolean; labs: ReactNode; onDone: () => void }) {
+  const canSpeak = useCanSpeak();
+  const [speaking, setSpeaking] = useState(false);
+  useEffect(() => () => stopSpeaking(), []);
+  const toggleSpeak = () => {
+    if (speaking) {
+      stopSpeaking();
+      setSpeaking(false);
+      return;
+    }
+    setSpeaking(true);
+    speak(
+      bites.flatMap((b) => biteSpeechParts(b)),
+      () => setSpeaking(false),
+    );
+  };
   return (
     <>
       <section className="panel bite-card">
         <div className="bite-dots">
           <span className="muted small">Kompakt-Theorie · danach direkt üben</span>
+          {canSpeak && (
+            <button type="button" className={'btn sm bite-skip ' + (speaking ? 'primary' : 'ghost')} onClick={toggleSpeak}>
+              {speaking ? <IconSpeakerOff size={14} /> : <IconSpeaker size={14} />} {speaking ? 'Stopp' : 'Anhören'}
+            </button>
+          )}
         </div>
         {bites.map((b, k) => (
           <div key={k} className="sprint-bite" style={{ animationDelay: `${Math.min(0.45, k * 0.09).toFixed(2)}s` }}>
@@ -651,6 +722,7 @@ function SprintOverview({ set, bites, host, hasExample, labs, onDone }: { set: P
             <div className="md bite-text">
               <Markdown text={b.text} />
             </div>
+            <BiteCallouts bite={b} />
             {b.figure !== undefined && set.figures?.[b.figure] && <Figures figures={[set.figures[b.figure]]} />}
           </div>
         ))}
@@ -666,15 +738,26 @@ function SprintOverview({ set, bites, host, hasExample, labs, onDone }: { set: P
   );
 }
 
-/** The explanation in bites: read a little, interact with a varied quick check, go on. */
+/** The explanation in bites: read a little, listen or simplify on demand, interact with a varied quick check, go on. */
 function BitesView({ set, bites, host, hasExample, onDone, onSkip }: { set: PracticeSet; bites: Bite[]; host: SetHost; hasExample: boolean; onDone: () => void; onSkip: () => void }) {
+  const canSpeak = useCanSpeak();
   const [k, setK] = useState(() => Math.max(0, Math.min(set.bite ?? 0, bites.length - 1)));
   const [dir, setDir] = useState<'init' | 'next' | 'prev'>('init');
   const [done, setDone] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  const [busySimple, setBusySimple] = useState(false);
+  const [simpleErr, setSimpleErr] = useState('');
+  const [localSimpler, setLocalSimpler] = useState<Record<number, string>>({});
+  const [hideSimpler, setHideSimpler] = useState(false);
   const actions = useRef<CheckActions>({});
   const b = bites[k];
   const answered = !b?.check || done;
+  useEffect(() => () => stopSpeaking(), []);
   const go = (to: number) => {
+    stopSpeaking();
+    setSpeaking(false);
+    setSimpleErr('');
+    setHideSimpler(false);
     setDir(to >= k ? 'next' : 'prev');
     setK(to);
     setDone(false);
@@ -682,7 +765,7 @@ function BitesView({ set, bites, host, hasExample, onDone, onSkip }: { set: Prac
     host.updateSet?.({ bite: to });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-  const next = () => (k < bites.length - 1 ? go(k + 1) : onDone());
+  const next = () => (k < bites.length - 1 ? go(k + 1) : (stopSpeaking(), setSpeaking(false), onDone()));
   // keys: 1–4 answer choice/tf checks, Enter reveals/submits or goes on
   const keys = useRef({ next, answered });
   keys.current = { next, answered };
@@ -702,6 +785,34 @@ function BitesView({ set, bites, host, hasExample, onDone, onSkip }: { set: Prac
   }, []);
   if (!b) return null;
   const fig = b.figure !== undefined ? set.figures?.[b.figure] : undefined;
+  const simplerText = b.simpler ?? localSimpler[k];
+  const toggleSpeak = () => {
+    if (speaking) {
+      stopSpeaking();
+      setSpeaking(false);
+      return;
+    }
+    setSpeaking(true);
+    speak(biteSpeechParts(b), () => setSpeaking(false));
+  };
+  const simplifyBite = async () => {
+    setBusySimple(true);
+    setSimpleErr('');
+    try {
+      const p = simplerBitePrompt(set.topic, b, host.level);
+      const txt = parseSimplerBite(await completeJson(p.system, p.user, p.maxTokens));
+      if (!txt) throw new Error('Die KI hat keine einfachere Erklärung geliefert. Bitte nochmal versuchen.');
+      setLocalSimpler((cur) => ({ ...cur, [k]: txt }));
+      setHideSimpler(false);
+      if (set.bites?.[k] && host.updateSet) {
+        host.updateSet({ bites: set.bites.map((x, j) => (j === k ? { ...x, simpler: txt } : x)) });
+      }
+    } catch (e) {
+      setSimpleErr((e as Error).message);
+    } finally {
+      setBusySimple(false);
+    }
+  };
   return (
     <section className={`panel bite-card bite-anim${dir !== 'init' ? ` anim-${dir}` : ''}`} key={k}>
       <div className="bite-dots">
@@ -711,7 +822,7 @@ function BitesView({ set, bites, host, hasExample, onDone, onSkip }: { set: Prac
         <span className="muted small">
           Theorie {k + 1} von {bites.length}
         </span>
-        <button type="button" className="link-btn small bite-skip" onClick={onSkip} title="Erklärung überspringen – direkt zu den Aufgaben">
+        <button type="button" className="link-btn small bite-skip" onClick={() => (stopSpeaking(), onSkip())} title="Erklärung überspringen – direkt zu den Aufgaben">
           Kenn ich schon – direkt üben ›
         </button>
       </div>
@@ -719,6 +830,36 @@ function BitesView({ set, bites, host, hasExample, onDone, onSkip }: { set: Prac
       <div className="md bite-text">
         <Markdown text={b.text} />
       </div>
+      <BiteCallouts bite={b} />
+      {(canSpeak || hasKey() || simplerText) && (
+        <div className="bite-tools">
+          {canSpeak && (
+            <button type="button" className={'btn sm ' + (speaking ? 'primary' : 'ghost')} onClick={toggleSpeak} title="Dieses Häppchen vorlesen lassen">
+              {speaking ? <IconSpeakerOff size={14} /> : <IconSpeaker size={14} />} {speaking ? 'Stopp' : 'Anhören'}
+            </button>
+          )}
+          {simplerText ? (
+            <button type="button" className="btn ghost sm" onClick={() => setHideSimpler((h) => !h)}>
+              <IconSparkle size={14} /> {hideSimpler ? 'Einfache Version zeigen' : 'Einfache Version ausblenden'}
+            </button>
+          ) : (
+            hasKey() && (
+              <button type="button" className="btn ghost sm" onClick={() => void simplifyBite()} disabled={busySimple} title="Genau diesen Abschnitt noch einfacher erklären lassen">
+                <IconSparkle size={14} /> {busySimple ? 'Pip erklärt es einfacher …' : 'Noch einfacher'}
+              </button>
+            )
+          )}
+          {simpleErr && <span className="form-error small">{simpleErr}</span>}
+        </div>
+      )}
+      {simplerText && !hideSimpler && (
+        <div className="bite-callout simpler">
+          <span className="bite-callout-head">Noch einfacher erklärt</span>
+          <div className="md">
+            <Markdown text={simplerText} />
+          </div>
+        </div>
+      )}
       {fig && <Figures figures={[fig]} />}
       {b.check && (
         <BiteCheckView
