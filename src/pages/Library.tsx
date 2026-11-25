@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { DeckCoverOf } from '../components/DeckCover';
 import { DeckSettingsModal } from '../components/DeckSettingsModal';
 import { Plant } from '../components/Plant';
@@ -108,20 +108,6 @@ export default function Library() {
   const phone = usePhone();
   const view = phone ? 'list' : (data.settings.libraryView ?? 'tiles');
 
-  const activeCourseIds = useMemo(() => new Set(data.courses.filter((c) => !c.archived).map((c) => c.id)), [data.courses]);
-  const activeDecks = useMemo(() => data.decks.filter((d) => !d.archived && activeCourseIds.has(d.courseId)), [data.decks, activeCourseIds]);
-  const allDueItems = useMemo(() => dueAcross(activeDecks, (d) => newCardsLeft(d as Deck)), [activeDecks]);
-  const allDueEst = formatEstMinutes(estimateStudyMinutes(allDueItems.length, data.reviews));
-
-  const recentDecks = useMemo(() => {
-    const lastAt = new Map<string, number>();
-    for (const r of data.reviews) lastAt.set(r.deckId, Math.max(lastAt.get(r.deckId) ?? 0, r.at));
-    return [...activeDecks]
-      .filter((d) => lastAt.has(d.id) || d.updatedAt)
-      .sort((a, b) => (lastAt.get(b.id) ?? b.updatedAt ?? 0) - (lastAt.get(a.id) ?? a.updatedAt ?? 0))
-      .slice(0, 4);
-  }, [activeDecks, data.reviews]);
-
   const archivedCourseCount = data.courses.filter((c) => c.archived).length;
   const exams = upcomingExams(data);
 
@@ -222,35 +208,6 @@ export default function Library() {
               )}
             </div>
           </header>
-
-          {(allDueItems.length > 0 || recentDecks.length > 0) && (
-            <section className="lib-quickbar">
-              {allDueItems.length > 0 && (
-                <button
-                  type="button"
-                  className="btn primary"
-                  onClick={() => setSession({ title: 'Alle fälligen Karten heute', items: allDueItems })}
-                >
-                  <IconPlay size={13} /> Alle fälligen heute lernen ({allDueItems.length}{allDueEst ? ` · ${allDueEst}` : ''})
-                </button>
-              )}
-              {recentDecks.length > 0 && (
-                <div className="lib-recent">
-                  <small className="muted">Zuletzt:</small>
-                  {recentDecks.map((d) => {
-                    const n = dueCards(d).length;
-                    return (
-                      <Link key={d.id} to={deckUrl(data, d)} className="chip lib-recent-chip">
-                        <DeckCoverOf deck={d} size={16} />
-                        <span>{d.name}</span>
-                        {n > 0 && <span className="tab-badge">{n}</span>}
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-          )}
 
           <div className="lib-filterbar">
             <div className="search lib-search">

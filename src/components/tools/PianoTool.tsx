@@ -1,21 +1,38 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { playNote } from '../../lib/musicAudio';
+import { getPianoVoice, getSustain, playClick, playNote, setPianoVoice, setSustain, type PianoVoice } from '../../lib/musicAudio';
 import { MUSIC_PATTERNS, patternMidis, PIANO_ROOTS } from '../../lib/pianoTheory';
 import { Piano } from '../practice/MusicTask';
 import { IconPause, IconPlay } from '../Icons';
 
 const BEATS_PER_BAR = [2, 3, 4, 6];
+const VOICES: { id: PianoVoice; label: string }[] = [
+  { id: 'grand', label: 'Konzertflügel' },
+  { id: 'rhodes', label: 'E-Piano' },
+  { id: 'warm', label: 'Warm Synth' },
+];
 
-/** Enhanced Piano & Metronome tool with scale/chord key highlighting, arpeggio playback, and Web Audio metronome with tap tempo. */
+/** Studio Piano & Metronome tool with Grand/Rhodes/Synth voices, sustain pedal, scale/chord highlighting & woodblock metronome. */
 export function PianoTool() {
   const [rootPc, setRootPc] = useState(0); // C
   const [patternId, setPatternId] = useState<string>('');
+  const [voice, setVoiceState] = useState<PianoVoice>(getPianoVoice);
+  const [sustain, setSustainState] = useState<boolean>(getSustain);
   const [bpm, setBpm] = useState(100);
   const [beats, setBeats] = useState(4);
   const [metroOn, setMetroOn] = useState(false);
   const [beatIdx, setBeatIdx] = useState(0);
   const tapsRef = useRef<number[]>([]);
-  const audioRef = useRef<AudioContext | null>(null);
+
+  const chooseVoice = (v: PianoVoice) => {
+    setPianoVoice(v);
+    setVoiceState(v);
+    playNote(60, 0, 1.1, 0.2, v);
+  };
+
+  const toggleSustain = (on: boolean) => {
+    setSustain(on);
+    setSustainState(on);
+  };
 
   const pat = MUSIC_PATTERNS.find((p) => p.id === patternId);
   const highlighted = useMemo(() => (patternId ? patternMidis(rootPc, patternId, 60) : []), [rootPc, patternId]);
@@ -23,43 +40,24 @@ export function PianoTool() {
   const playPattern = () => {
     if (!highlighted.length || !pat) return;
     if (pat.kind === 'chord') {
-      highlighted.forEach((m) => playNote(m, 0, 1.4, 0.16));
+      highlighted.forEach((m) => playNote(m, 0, 1.7, 0.16, voice));
     } else {
-      highlighted.forEach((m, idx) => playNote(m, idx * 0.28, 0.32, 0.2));
+      highlighted.forEach((m, idx) => playNote(m, idx * 0.28, 0.45, 0.21, voice));
     }
   };
 
   useEffect(() => {
     if (!metroOn) return;
-    const AC = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (AC && !audioRef.current) audioRef.current = new AC();
-    if (audioRef.current?.state === 'suspended') void audioRef.current.resume();
-
     let count = 0;
-    const click = () => {
+    const tick = () => {
       const accent = count % beats === 0;
       setBeatIdx(count % beats);
       count++;
-      try {
-        const ctx = audioRef.current;
-        if (!ctx) return;
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(accent ? 1046 : 740, ctx.currentTime);
-        gain.gain.setValueAtTime(accent ? 0.18 : 0.1, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.06);
-      } catch {
-        /* ignore audio error */
-      }
+      playClick(0, accent);
     };
-    click();
+    tick();
     const ms = Math.round(60000 / Math.max(40, Math.min(220, bpm)));
-    const id = window.setInterval(click, ms);
+    const id = window.setInterval(tick, ms);
     return () => window.clearInterval(id);
   }, [metroOn, bpm, beats]);
 
@@ -79,7 +77,25 @@ export function PianoTool() {
       <div className="panel-head">
         <div>
           <h2>Klavier &amp; Metronom</h2>
-          <p className="muted small">Tonleitern &amp; Akkorde direkt auf den Tasten markieren, mit PC-Tastatur spielen und im Takt üben.</p>
+          <p className="muted small">Konzertflügel, E-Piano &amp; Haltepedal – Tonleitern &amp; Akkorde markieren, spielen und im Takt üben.</p>
+        </div>
+        <div className="row-gap" style={{ flexWrap: 'wrap' }}>
+          <div className="seg compact" role="radiogroup" aria-label="Klangfarbe">
+            {VOICES.map((v) => (
+              <button key={v.id} type="button" role="radio" aria-checked={voice === v.id} className={voice === v.id ? 'on' : ''} onClick={() => chooseVoice(v.id)}>
+                {v.label}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            className={'chip' + (sustain ? ' on' : '')}
+            aria-pressed={sustain}
+            title="Haltepedal: Töne klingen länger aus"
+            onClick={() => toggleSustain(!sustain)}
+          >
+            Haltepedal {sustain ? 'An' : 'Aus'}
+          </button>
         </div>
       </div>
 

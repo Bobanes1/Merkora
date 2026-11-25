@@ -4,6 +4,7 @@ import { mediaPutMany } from '../lib/db';
 import { uid } from '../lib/util';
 import { hydrateMedia } from './CardContent';
 import { DrawPad } from './DrawPad';
+import { FormulaEditorModal } from './FormulaEditorModal';
 
 const MAX_SIDE = 1600;
 
@@ -63,7 +64,7 @@ export function RichField({
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [dialog, setDialog] = useState<'draw' | null>(null);
+  const [dialog, setDialog] = useState<'draw' | 'formula' | null>(null);
 
   useEffect(() => {
     const el = ref.current!;
@@ -142,6 +143,9 @@ export function RichField({
           <button type="button" className="tool-btn img" onMouseDown={(e) => e.preventDefault()} onClick={() => setDialog('draw')} disabled={busy}>
             ✎ Zeichnen
           </button>
+          <button type="button" className="tool-btn img" title="Visueller Mathe- & Chemie-Formeleditor" onMouseDown={(e) => e.preventDefault()} onClick={() => setDialog('formula')} disabled={busy}>
+            ∑ Formel
+          </button>
           <input
             ref={fileRef}
             type="file"
@@ -189,7 +193,7 @@ export function RichField({
           }
         }}
       />
-      <small className="muted rich-hint">Bilder einfügen: „+ Bild“, Strg+V oder hineinziehen – oder mit „Zeichnen“ selbst eine Skizze machen.</small>
+      <small className="muted rich-hint">Bilder einfügen: „+ Bild“, Strg+V oder hineinziehen – oder mit „Zeichnen“ &amp; „∑ Formel“ ergänzen.</small>
       {error && <div className="form-error">{error}</div>}
       {dialog === 'draw' && (
         <DrawPad
@@ -197,6 +201,20 @@ export function RichField({
           onSave={(b) => {
             setDialog(null);
             void insertImages([new File([b], 'zeichnung.png', { type: 'image/png' })]);
+          }}
+        />
+      )}
+      {dialog === 'formula' && (
+        <FormulaEditorModal
+          onClose={() => setDialog(null)}
+          onInsert={(latex) => {
+            const el = ref.current;
+            if (!el) return;
+            el.focus();
+            if (!document.execCommand?.('insertText', false, latex)) {
+              el.appendChild(document.createTextNode(latex));
+            }
+            emit();
           }}
         />
       )}

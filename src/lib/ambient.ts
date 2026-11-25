@@ -4,7 +4,23 @@
  */
 import { useSyncExternalStore } from 'react';
 
-export type SoundId = 'rain' | 'storm' | 'ocean' | 'stream' | 'fire' | 'wind' | 'birds' | 'brown' | 'pink' | 'white' | 'pad' | 'piano' | 'bowls';
+export type SoundId =
+  | 'rain'
+  | 'storm'
+  | 'ocean'
+  | 'stream'
+  | 'fire'
+  | 'wind'
+  | 'birds'
+  | 'night'
+  | 'cafe'
+  | 'brown'
+  | 'pink'
+  | 'white'
+  | 'pad'
+  | 'piano'
+  | 'lofi'
+  | 'bowls';
 export type SoundGroup = 'natur' | 'rauschen' | 'musik';
 export const SOUNDS: { id: SoundId; label: string; group: SoundGroup; hint: string }[] = [
   { id: 'rain', label: 'Regen', group: 'natur', hint: 'gleichmäßiger Landregen' },
@@ -14,9 +30,12 @@ export const SOUNDS: { id: SoundId; label: string; group: SoundGroup; hint: stri
   { id: 'fire', label: 'Kaminfeuer', group: 'natur', hint: 'Knistern und Glut' },
   { id: 'wind', label: 'Wind', group: 'natur', hint: 'sanfte Böen' },
   { id: 'birds', label: 'Vogelgezwitscher', group: 'natur', hint: 'Morgen im Wald' },
+  { id: 'night', label: 'Sommernacht', group: 'natur', hint: 'sanftes Zirpen & Abendbrise' },
+  { id: 'cafe', label: 'Bibliothek & Café', group: 'rauschen', hint: 'ruhiges Raumambiente, sanftes Blättern' },
   { id: 'brown', label: 'Braunes Rauschen', group: 'rauschen', hint: 'tief und weich – gut gegen Ablenkung' },
   { id: 'pink', label: 'Rosa Rauschen', group: 'rauschen', hint: 'ausgewogen, wie ein Wasserfall' },
   { id: 'white', label: 'Weißes Rauschen', group: 'rauschen', hint: 'hell, überdeckt Geräusche' },
+  { id: 'lofi', label: 'Lo-Fi Beats', group: 'musik', hint: 'warme Rhodes-Akkorde & ruhiger 72-BPM-Groove' },
   { id: 'pad', label: 'Ruhige Klänge', group: 'musik', hint: 'langsame, warme Akkorde' },
   { id: 'piano', label: 'Sanftes Klavier', group: 'musik', hint: 'leise Töne, nie zweimal gleich' },
   { id: 'bowls', label: 'Klangschalen', group: 'musik', hint: 'lang ausklingende Töne' },
@@ -174,8 +193,8 @@ function lfo(c: AudioContext, rate: number, depth: number, target: AudioParam) {
   return o;
 }
 /** Runs `tick` every 100 ms (for sounds made of single events: crackling, birds, notes …). */
-function every(tick: () => void) {
-  const t = window.setInterval(tick, 100);
+function every(tick: () => void, ms = 100) {
+  const t = window.setInterval(tick, ms);
   return () => window.clearInterval(t);
 }
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
@@ -589,12 +608,184 @@ function build(id: SoundId, c: AudioContext, out: GainNode): () => void {
       );
       break;
     }
+    case 'lofi': {
+      // Warm 72 BPM Lo-Fi Study Beats: Rhodes maj7/min7 chord loop + muted kick/snare + gentle vinyl warmth
+      const chords = [
+        [53, 57, 60, 64, 67], // Fmaj9
+        [52, 55, 59, 62, 64], // Em7
+        [50, 53, 57, 60, 64], // Dm9
+        [48, 52, 55, 59, 62], // Cmaj9
+      ];
+      const lp = filter(c, 'lowpass', 2200, 0.7);
+      lp.connect(out);
+      lp.connect(reverbIn!);
+
+      // Subtle dusty vinyl floor
+      const vnLp = filter(c, 'bandpass', 2800, 0.8);
+      const vnGain = c.createGain();
+      vnGain.gain.value = 0.028;
+      vnLp.connect(vnGain).connect(out);
+      const vnSrc = loopNoise(c, 'pink', vnLp);
+      stops.push(() => vnSrc.stop());
+
+      const beat = 60 / 72; // ~0.833s per quarter
+      let step = 0;
+      let next = c.currentTime + 0.1;
+      stops.push(
+        every(() => {
+          while (next < c.currentTime + 0.25) {
+            const bar = Math.floor(step / 8) % chords.length;
+            const sub = step % 8; // eighth notes
+            // Warm Rhodes chord on beat 1 of each bar
+            if (sub === 0) {
+              const ch = chords[bar];
+              ch.forEach((n, idx) => {
+                tone(c, lp, next + idx * 0.025, midi(n), 0.055, beat * 3.6, [
+                  [1, 1],
+                  [2, 0.24],
+                  [3, 0.06],
+                ]);
+              });
+            }
+            // Soft muted kick on 1 and 3.5
+            if (sub === 0 || sub === 5) {
+              const ko = c.createOscillator();
+              const kg = c.createGain();
+              ko.type = 'sine';
+              ko.frequency.setValueAtTime(115, next);
+              ko.frequency.exponentialRampToValueAtTime(44, next + 0.12);
+              kg.gain.setValueAtTime(0.24, next);
+              kg.gain.exponentialRampToValueAtTime(0.001, next + 0.19);
+              ko.connect(kg).connect(out);
+              ko.start(next);
+              ko.stop(next + 0.21);
+            }
+            // Soft brushed snare on beats 2 & 4 (sub 2 & 6)
+            if (sub === 2 || sub === 6) {
+              const sSrc = c.createBufferSource();
+              sSrc.buffer = noise('pink');
+              const sBp = filter(c, 'bandpass', 1450, 1.1);
+              const sg = c.createGain();
+              sg.gain.setValueAtTime(0.11, next);
+              sg.gain.exponentialRampToValueAtTime(0.001, next + 0.11);
+              sSrc.connect(sBp).connect(sg).connect(out);
+              sSrc.start(next);
+              sSrc.stop(next + 0.13);
+            }
+            // Soft closed hi-hat on every eighth (subtle swing)
+            const hSrc = c.createBufferSource();
+            hSrc.buffer = noise('white');
+            const hHp = filter(c, 'highpass', 6200, 0.7);
+            const hg = c.createGain();
+            const swung = sub % 2 === 1 ? next + 0.025 : next;
+            hg.gain.setValueAtTime(sub % 2 === 0 ? 0.032 : 0.018, swung);
+            hg.gain.exponentialRampToValueAtTime(0.001, swung + 0.045);
+            hSrc.connect(hHp).connect(hg).connect(out);
+            hSrc.start(swung);
+            hSrc.stop(swung + 0.05);
+
+            next += beat / 2;
+            step++;
+          }
+        }, 60),
+      );
+      break;
+    }
+    case 'cafe': {
+      // Cozy library & café room warmth + subtle porcelain clinks & soft page turns
+      const roomLp = filter(c, 'lowpass', 680, 0.7);
+      const roomHp = filter(c, 'highpass', 110, 0.6);
+      const roomG = c.createGain();
+      roomG.gain.value = 0.42;
+      roomHp.connect(roomLp).connect(roomG).connect(out);
+      const roomSrc = loopNoise(c, 'pink', roomHp);
+      stops.push(() => roomSrc.stop());
+
+      let next = c.currentTime + 1.2;
+      stops.push(
+        every(() => {
+          if (c.currentTime < next) return;
+          if (Math.random() < 0.45) {
+            // Soft porcelain cup clink
+            const f = rnd(1900, 2900);
+            tone(c, out, next, f, 0.022, 0.22, [
+              [1, 1],
+              [2.32, 0.35],
+            ]);
+          } else {
+            // Quiet page turn rustle
+            const pSrc = c.createBufferSource();
+            pSrc.buffer = noise('pink');
+            const pBp = filter(c, 'bandpass', rnd(1500, 2400), 1.4);
+            const pg = c.createGain();
+            pg.gain.setValueAtTime(0.001, next);
+            pg.gain.linearRampToValueAtTime(0.055, next + 0.06);
+            pg.gain.exponentialRampToValueAtTime(0.001, next + 0.24);
+            pSrc.connect(pBp).connect(pg).connect(out);
+            pSrc.start(next);
+            pSrc.stop(next + 0.26);
+          }
+          next += rnd(1.8, 4.6);
+        }),
+      );
+      break;
+    }
+    case 'night': {
+      // Warm evening breeze + gentle rhythmic summer crickets
+      const breezeLp = filter(c, 'lowpass', 360, 0.6);
+      const breezeG = c.createGain();
+      breezeG.gain.value = 0.28;
+      breezeLp.connect(breezeG).connect(out);
+      const breezeSrc = loopNoise(c, 'brown', breezeLp);
+      stops.push(() => breezeSrc.stop());
+
+      let next = c.currentTime + 0.5;
+      stops.push(
+        every(() => {
+          if (c.currentTime < next) return;
+          const baseF = rnd(3900, 4400);
+          const pulses = Math.random() < 0.5 ? 3 : 4;
+          for (let p = 0; p < pulses; p++) {
+            const pt = next + p * 0.068;
+            const o = c.createOscillator();
+            const g = c.createGain();
+            o.type = 'sine';
+            o.frequency.value = baseF + (p % 2) * 35;
+            g.gain.setValueAtTime(0.0001, pt);
+            g.gain.linearRampToValueAtTime(0.026, pt + 0.012);
+            g.gain.exponentialRampToValueAtTime(0.0001, pt + 0.052);
+            o.connect(g).connect(out);
+            o.start(pt);
+            o.stop(pt + 0.058);
+          }
+          next += rnd(0.85, 2.3);
+        }),
+      );
+      break;
+    }
   }
   return () => stops.forEach((s) => s());
 }
 
 /** Loudness of each sound at volume 1 (so the mix stays balanced). */
-const LEVEL: Record<SoundId, number> = { rain: 0.9, storm: 0.9, ocean: 0.9, stream: 2.4, fire: 0.9, wind: 0.8, birds: 1, brown: 0.6, pink: 0.45, white: 0.25, pad: 1, piano: 1, bowls: 1 };
+const LEVEL: Record<SoundId, number> = {
+  rain: 0.9,
+  storm: 0.9,
+  ocean: 0.9,
+  stream: 2.4,
+  fire: 0.9,
+  wind: 0.8,
+  birds: 1,
+  night: 0.85,
+  cafe: 0.95,
+  brown: 0.6,
+  pink: 0.45,
+  white: 0.25,
+  lofi: 0.9,
+  pad: 1,
+  piano: 1,
+  bowls: 1,
+};
 
 function startVoice(id: SoundId, vol: number) {
   const c = audioContext();
@@ -697,6 +888,8 @@ export function saveFavourites(list: Favourite[]) {
 }
 /** Ready-made mixes. */
 export const PRESETS: Favourite[] = [
+  { name: 'Lo-Fi Session', mix: { lofi: 0.78, rain: 0.3 } },
+  { name: 'Bibliothek', mix: { cafe: 0.72, brown: 0.25 } },
   { name: 'Regen am Fenster', mix: { rain: 0.8, piano: 0.4 } },
   { name: 'Hütte im Wald', mix: { fire: 0.7, wind: 0.35, birds: 0.25 } },
   { name: 'Am Meer', mix: { ocean: 0.8, bowls: 0.3 } },

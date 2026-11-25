@@ -3130,6 +3130,53 @@ console.log('App-weite Upgrades: Offline-Quiz, Statistik-Analyse, Zusammenfassun
   const todoHits = SR.searchAll(searchData, 'Mathe').filter((h) => h.kind === 'todo');
   ok(todoHits.length === 1 && todoHits[0].id === 't1', 'Globale Suche: findet offene To-dos (erledigte ignoriert)');
   ok(SR.searchAll(searchData, 'Periodensystem').some((h) => h.kind === 'tool' && h.id === 'ptable'), 'Globale Suche: findet Merkora-Werkzeuge');
+
+  // 6. Animation regression checks: orbit wrapper & seamless dashed flow loops
+  const DG = await import('../src/lib/diagram');
+  const VP = await import('../src/lib/visualPresets');
+  const PT = await import('../src/lib/periodicTable');
+  const beSvg = DG.renderDiagram(PT.elementOrbitDiagram(PT.ELEMENTS[3]), DG.PALETTES.dark, { animate: true });
+  ok(beSvg.includes('class="dg-orbit-wrap"') && !beSvg.includes('class="dg-orbit"') && beSvg.includes('class="dg-orbit-rot"'), 'Schalenmodell: äußere Atom-Gruppe dreht sich nicht mit (nur dg-orbit-rot)');
+  const badDash: string[] = [];
+  for (const pr of VP.VISUAL_PRESETS) {
+    const svg = DG.renderDiagram({ type: 'preset', preset: pr.id }, DG.PALETTES.dark, { animate: true });
+    for (const m of svg.matchAll(/<path[^>]*class="[^"]*ps-flow[^"]*"[^>]*stroke-dasharray="([^"]+)"[^>]*>/g)) {
+      const period = m[1].trim().split(/\s+/).map(Number).reduce((a, b) => a + b, 0);
+      if (!period || 24 % period !== 0) badDash.push(`${pr.id}(${m[1]})`);
+    }
+  }
+  ok(badDash.length === 0, `Animierte gestrichelte Linien: alle 30 Presets loopen nahtlos ohne Zucken${badDash.length ? ' [' + badDash.join(', ') + ']' : ''}`);
+
+  // 7. 3D Models Studio, Visual Formula Editor, Studio Piano & Lo-Fi Sounds
+  const M3 = await import('../src/lib/models3d');
+  const FT = await import('../src/lib/formulaTemplates');
+  const MA = await import('../src/lib/musicAudio');
+  const AM = await import('../src/lib/ambient');
+
+  ok(M3.MODELS_3D.length === 8, '3D-Studio: alle 8 interaktiven 3D-Modelle vorhanden');
+  const all3dValid = M3.MODELS_3D.every((m) => {
+    const vars = m.variants?.length ? m.variants.map((v) => v.id) : [undefined];
+    return vars.every((vid) => {
+      const sc = m.build(1.25, vid);
+      return sc.primitives.length >= 4 && sc.hotspots.length >= 1;
+    });
+  });
+  ok(all3dValid, '3D-Studio: alle 8 Modelle inkl. Sub-Varianten (H2O, CH4, CO2, Benzol, NaCl, Diamant, Vektoren) bauen gültige 3D-Szenen & Hotspots');
+  const rot = M3.rotate3D([1, 0, 0], 0, Math.PI / 2);
+  const proj = M3.project3D(rot, 200, 150);
+  ok(Math.abs(rot[0]) < 1e-6 && Math.abs(rot[2] + 1) < 1e-6 && Number.isFinite(proj.x) && proj.scale > 0, '3D-Mathe: Rotation & Perspektiv-Projektion exakt');
+
+  ok(FT.FORMULA_CATEGORIES.length === 6 && FT.wrapFormula('\\frac{1}{2}', false) === '$\\frac{1}{2}$' && FT.wrapFormula('$$x^2$$', true) === '$$x^2$$', 'Formeleditor: 6 Kategorien & sauberes Inline/Display-Wrapping');
+
+  MA.setPianoVoice('rhodes');
+  MA.setSustain(true);
+  ok(MA.getPianoVoice() === 'rhodes' && MA.getSustain() === true, 'Studio-Klavier: Klangfarbe (Grand/Rhodes/Warm) & Haltepedal schaltbar');
+  MA.setPianoVoice('grand');
+  MA.setSustain(false);
+
+  const sndIds = new Set(AM.SOUNDS.map((s) => s.id));
+  ok(sndIds.has('lofi') && sndIds.has('cafe') && sndIds.has('night') && AM.PRESETS.some((p) => p.name.includes('Lo-Fi')), 'Klänge: neue Soundscapes (Lo-Fi Beats, Bibliothek & Café, Sommernacht) + Presets');
+  ok(SR.searchAll(searchData, 'DNA').some((h) => h.kind === 'tool' && h.id === 'models3d'), 'Globale Suche: findet 3D-Modelle (z. B. DNA)');
 }
 
 console.log(failures ? `\n${failures} Test(s) fehlgeschlagen` : '\nAlle SRS-Tests bestanden');

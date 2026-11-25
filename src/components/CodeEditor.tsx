@@ -2,12 +2,25 @@ import { useLayoutEffect, useRef } from 'react';
 import { highlightCode } from '../lib/javaHighlight';
 import { usePhone } from '../lib/phone';
 
+const PAIRS: Record<string, string> = { '(': ')', '[': ']', '{': '}', '"': '"', "'": "'" };
+
 /**
- * A small code editor: a text field over a highlighted copy (Java colours), line numbers,
- * Tab = 4 spaces, Enter keeps the indentation (one more after "{"). On the phone a row of keys
- * that are hard to reach on a phone keyboard.
+ * Syntax-highlighted code editor with line numbers, Tab/Shift+Tab indent, smart Enter,
+ * bracket/quote auto-closing, Ctrl+Enter run shortcut, and phone quick-keys.
  */
-export function CodeEditor({ value, onChange, label = 'Code', lang = 'java' }: { value: string; onChange: (v: string) => void; label?: string; lang?: string }) {
+export function CodeEditor({
+  value,
+  onChange,
+  onRun,
+  label = 'Code',
+  lang = 'java',
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onRun?: () => void;
+  label?: string;
+  lang?: string;
+}) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const hl = useRef<HTMLPreElement>(null);
   const phone = usePhone();
@@ -28,23 +41,42 @@ export function CodeEditor({ value, onChange, label = 'Code', lang = 'java' }: {
   }, [value]);
 
   /** Replaces the selection with `text` (keeps undo working where the browser allows it). */
-  const insert = (text: string) => {
+  const insert = (text: string, cursorBack = 0) => {
     const el = ref.current;
     if (!el) return;
     el.focus();
     const { selectionStart: a, selectionEnd: b } = el;
+    const endPos = a + text.length - cursorBack;
     if (!document.execCommand?.('insertText', false, text)) {
       const next = value.slice(0, a) + text + value.slice(b);
       onChange(next);
-      requestAnimationFrame(() => el.setSelectionRange(a + text.length, a + text.length));
+      requestAnimationFrame(() => el.setSelectionRange(endPos, endPos));
+    } else if (cursorBack > 0) {
+      requestAnimationFrame(() => el.setSelectionRange(endPos, endPos));
     }
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const el = e.currentTarget;
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && onRun) {
+      e.preventDefault();
+      onRun();
+      return;
+    }
     if (e.key === 'Tab' && !e.shiftKey) {
       e.preventDefault();
       insert('    ');
+    } else if (e.key === 'Tab' && e.shiftKey) {
+      // Shift+Tab: unindent current line by up to 4 spaces
+      e.preventDefault();
+      const lineStart = value.lastIndexOf('\n', el.selectionStart - 1) + 1;
+      const spaces = /^ {1,4}/.exec(value.slice(lineStart))?.[0].length ?? 0;
+      if (spaces > 0) {
+        const next = value.slice(0, lineStart) + value.slice(lineStart + spaces);
+        const pos = Math.max(lineStart, el.selectionStart - spaces);
+        onChange(next);
+        requestAnimationFrame(() => el.setSelectionRange(pos, pos));
+      }
     } else if (e.key === 'Enter') {
       const before = value.slice(0, el.selectionStart);
       const line = before.slice(before.lastIndexOf('\n') + 1);
@@ -59,6 +91,21 @@ export function CodeEditor({ value, onChange, label = 'Code', lang = 'java' }: {
         e.preventDefault();
         el.setSelectionRange(el.selectionStart - 4, el.selectionStart);
         insert('}');
+      }
+    } else if (!e.ctrlKey && !e.metaKey && !e.altKey && PAIRS[e.key]) {
+      const close = PAIRS[e.key];
+      const { selectionStart: a, selectionEnd: b } = el;
+      const nextCh = value[b] ?? '';
+      // Skip over existing closing quote/bracket if user types it
+      if (a === b && (e.key === '"' || e.key === "'") && nextCh === e.key) {
+        e.preventDefault();
+        el.setSelectionRange(a + 1, a + 1);
+      } else if (a !== b) {
+        e.preventDefault();
+        insert(e.key + value.slice(a, b) + close, 1);
+      } else if (!nextCh || /[\s)\]}:,;]/.test(nextCh)) {
+        e.preventDefault();
+        insert(e.key + close, 1);
       }
     }
   };
