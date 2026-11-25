@@ -1,5 +1,13 @@
 import { useEffect, useState } from 'react';
-import { speak, useVoices } from '../lib/speech';
+import {
+  installNeuralVoice,
+  removeNeuralVoice,
+  sortSystemVoices,
+  speak,
+  uninstallAllNeuralTts,
+  useNeuralTtsStatus,
+  useVoices,
+} from '../lib/speech';
 import {
   autostartEnabled,
   backupNow,
@@ -13,8 +21,11 @@ import {
   setAutostart,
   setBackupDir,
   type BackupInfo,
+  type TtsProgress,
+  type TtsVoiceInfo,
 } from '../lib/desktop';
 import { flush, replaceAll, setDailyGoal, setSettings, useStore } from '../lib/store';
+import { IconCheck, IconDownload, IconSpeaker, IconTrash } from './Icons';
 import { ConfirmModal } from './Modal';
 
 /** Daily reminder, tray, autostart and the Pomodoro lengths. */
@@ -374,20 +385,233 @@ export function SlideFigureSettings() {
   );
 }
 
-/** Reading aloud: voice, speed, and reading every card automatically. */
+const VOICE_SAMPLES: Record<TtsVoiceInfo['lang'], string> = {
+  de: 'So klingt Merkora mit deiner lokalen Neural-Stimme – klar, natürlich und komplett offline.',
+  en: 'This is how Merkora sounds with your local neural voice – clear, natural, and completely offline.',
+  fr: 'Voici comment Merkora lit tes cartes avec ta voix neurale locale, entièrement hors ligne.',
+  es: 'Así suena Merkora leyendo tus tarjetas con tu voz neuronal local, completamente sin conexión.',
+  it: 'Ecco come suona Merkora leggendo le tue carte con la voce neurale locale, completamente offline.',
+};
+
+/** Reading aloud: Offline Neural-TTS (Piper on desktop), automatic language detection, system voice fallback & speed. */
 function SpeechSettings() {
   const voices = useVoices();
+  const neural = useNeuralTtsStatus();
   const voice = useStore((x) => x.data.settings.speechVoice ?? '');
   const rate = useStore((x) => x.data.settings.speechRate ?? 1);
   const auto = useStore((x) => !!x.data.settings.speechAuto);
-  const sorted = [...voices].sort((a, b) => Number(b.lang.toLowerCase().startsWith('de')) - Number(a.lang.toLowerCase().startsWith('de')) || a.name.localeCompare(b.name));
+  const autoLang = useStore((x) => x.data.settings.speechAutoLang !== false);
+  const engine = useStore((x) => x.data.settings.speechEngine ?? 'neural');
+  const neuralVoice = useStore((x) => x.data.settings.speechNeuralVoice ?? '');
+
+  const [busy, setBusy] = useState<TtsProgress | null>(null);
+  const [err, setErr] = useState('');
+  const [testingId, setTestingId] = useState<string | null>(null);
+
+  const sorted = sortSystemVoices(voices);
+  const installedSet = new Set(neural?.installedVoices ?? []);
+  const hasNeural = Boolean(neural?.engineInstalled && installedSet.size > 0);
+  const activeNeuralId = installedSet.has(neuralVoice) ? neuralVoice : neural?.installedVoices[0] ?? '';
+
+  const doInstall = async (v: TtsVoiceInfo) => {
+    setErr('');
+    setBusy({ voiceId: v.id, progress: 0, stage: neural?.engineInstalled ? 'voice' : 'engine' });
+    try {
+      await installNeuralVoice(v.id, (p) => setBusy(p));
+      if (!activeNeuralId || v.lang === 'de') {
+        setSettings({ speechEngine: 'neural', speechNeuralVoice: v.id });
+      }
+    } catch (e) {
+      setErr(String((e as Error)?.message ?? e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const doRemove = async (id: string) => {
+    setErr('');
+    try {
+      const next = await removeNeuralVoice(id);
+      if (neuralVoice === id) {
+        setSettings({ speechNeuralVoice: next.installedVoices[0] || undefined });
+      }
+    } catch (e) {
+      setErr(String((e as Error)?.message ?? e));
+    }
+  };
+
+  const doUninstallAll = async () => {
+    setErr('');
+    try {
+      await uninstallAllNeuralTts();
+      setSettings({ speechNeuralVoice: undefined });
+    } catch (e) {
+      setErr(String((e as Error)?.message ?? e));
+    }
+  };
+
+  const previewNeural = (v: TtsVoiceInfo) => {
+    setTestingId(v.id);
+    speak(VOICE_SAMPLES[v.lang], () => setTestingId((cur) => (cur === v.id ? null : cur)), {
+      neuralVoiceId: v.id,
+      lang: v.lang,
+    });
+  };
+
   return (
     <>
-      <h3 className="settings-sub">Vorlesen</h3>
-      {!voices.length ? (
-        <p className="muted small">Auf diesem Gerät ist keine Vorlese-Stimme installiert. Unter Windows kommen Stimmen über Einstellungen › Zeit und Sprache › Sprachausgabe dazu.</p>
+      <h3 className="settings-sub">Vorlesen &amp; Neural-TTS</h3>
+
+      {neural?.supported && (
+        <div className="tts-box">
+          <div className="tts-head">
+            <div>
+              <b>Offline Neural-Stimmen (Piper)</b>
+              <p className="muted small" style={{ margin: '2px 0 0' }}>
+                Natürliche KI-Stimmen direkt auf deinem PC – einmalig geladen, danach 100 % offline, kostenlos &amp; ohne Cloud.
+              </p>
+            </div>
+            {hasNeural && (
+              <div className="seg compact" role="radiogroup" aria-label="Vorlese-Engine">
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={engine !== 'system'}
+                  className={engine !== 'system' ? 'on' : ''}
+                  onClick={() => setSettings({ speechEngine: 'neural' })}
+                >
+                  Neural-TTS
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={engine === 'system'}
+                  className={engine === 'system' ? 'on' : ''}
+                  onClick={() => setSettings({ speechEngine: 'system' })}
+                >
+                  Systemstimme
+                </button>
+              </div>
+            )}
+          </div>
+
+          {busy && (
+            <div className="java-setup busy" role="status">
+              <b>
+                {busy.stage === 'engine'
+                  ? `Piper-Engine wird geladen … ${Math.round(busy.progress * 100)} %`
+                  : busy.stage === 'unpack'
+                    ? 'Piper-Engine wird eingerichtet …'
+                    : `Stimme wird geladen … ${Math.round(busy.progress * 100)} %`}
+              </b>
+              <span className="java-bar" aria-hidden="true">
+                <i style={{ width: `${Math.max(4, Math.round(busy.progress * 100))}%` }} />
+              </span>
+              <small className="muted">Du kannst währenddessen weiterlernen.</small>
+            </div>
+          )}
+
+          {err && <div className="form-error">{err}</div>}
+
+          <div className="tts-grid">
+            {neural.catalog.map((v) => {
+              const installed = installedSet.has(v.id);
+              const isActive = installed && engine !== 'system' && activeNeuralId === v.id;
+              const isBusy = busy?.voiceId === v.id;
+              return (
+                <div key={v.id} className={`tts-voice${installed ? ' installed' : ''}${isActive ? ' active' : ''}`}>
+                  <div className="tts-voice-meta">
+                    <span className="tts-lang-tag">{v.lang.toUpperCase()}</span>
+                    <div className="tts-voice-text">
+                      <b>
+                        {v.name}
+                        {v.recommended && <span className="tts-pill">Empfohlen</span>}
+                        {v.quality === 'high' && <span className="tts-pill hd">HD</span>}
+                      </b>
+                      <small className="muted">
+                        {v.label.split('·')[0].trim()} · ~{v.sizeMb} MB
+                      </small>
+                    </div>
+                  </div>
+                  <div className="tts-voice-actions">
+                    {installed ? (
+                      <>
+                        <button
+                          type="button"
+                          className={'btn sm ' + (isActive ? 'primary' : 'outline')}
+                          onClick={() => setSettings({ speechEngine: 'neural', speechNeuralVoice: v.id })}
+                        >
+                          {isActive ? (
+                            <>
+                              <IconCheck size={13} /> Aktiv
+                            </>
+                          ) : (
+                            'Wählen'
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          className="icon-btn"
+                          title="Probe hören"
+                          aria-label={`${v.name} probehören`}
+                          disabled={testingId === v.id}
+                          onClick={() => previewNeural(v)}
+                        >
+                          <IconSpeaker size={15} />
+                        </button>
+                        <button
+                          type="button"
+                          className="icon-btn"
+                          title="Stimme entfernen"
+                          aria-label={`${v.name} entfernen`}
+                          disabled={Boolean(busy)}
+                          onClick={() => void doRemove(v.id)}
+                        >
+                          <IconTrash size={14} />
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn outline sm"
+                        disabled={Boolean(busy)}
+                        onClick={() => void doInstall(v)}
+                      >
+                        <IconDownload size={13} /> {isBusy ? 'Lädt …' : 'Laden'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {neural.engineInstalled && (
+            <div className="tts-foot">
+              <small className="muted">
+                {installedSet.size} {installedSet.size === 1 ? 'Stimme' : 'Stimmen'} lokal gespeichert – mehrere Sprachen werden beim Lernen automatisch gewechselt.
+              </small>
+              <button type="button" className="btn ghost sm" disabled={Boolean(busy)} onClick={() => void doUninstallAll()}>
+                <IconTrash size={13} /> Alle Sprachdaten entfernen
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {!voices.length && !hasNeural ? (
+        <p className="muted small">
+          Auf diesem Gerät ist keine Vorlese-Stimme installiert.
+          {neural?.supported ? ' Lade oben eine lokale Neural-Stimme herunter – dann funktioniert Vorlesen sofort offline.' : ' Unter Windows kommen Stimmen über Einstellungen › Zeit und Sprache › Sprachausgabe dazu.'}
+        </p>
       ) : (
         <>
+          <label className="check-row">
+            <input type="checkbox" checked={autoLang} onChange={(e) => setSettings({ speechAutoLang: e.target.checked })} />
+            <span>
+              <b>Sprache pro Karte automatisch erkennen</b> – wechselt bei Englisch, Französisch, Spanisch &amp; Italienisch automatisch zur passenden Stimme.
+            </span>
+          </label>
           <label className="check-row">
             <input type="checkbox" checked={auto} onChange={(e) => setSettings({ speechAuto: e.target.checked })} />
             <span>
@@ -395,27 +619,40 @@ function SpeechSettings() {
               jederzeit mit dem Lautsprecher-Knopf.
             </span>
           </label>
-          <label className="field-label" htmlFor="speech-voice">
-            Stimme
-          </label>
-          <div className="input-row">
-            <select id="speech-voice" className="input" value={voice} onChange={(e) => setSettings({ speechVoice: e.target.value || undefined })}>
-              <option value="">Automatisch (Deutsch, falls vorhanden)</option>
-              {sorted.map((v) => (
-                <option key={v.voiceURI} value={v.voiceURI}>
-                  {v.name} ({v.lang})
-                </option>
-              ))}
-            </select>
-            <button type="button" className="btn outline sm" onClick={() => speak('So klingt Merkora beim Vorlesen deiner Karteikarten.')}>
-              Probe hören
-            </button>
-          </div>
           <label className="field-label" htmlFor="speech-rate">
             Tempo: {rate.toLocaleString('de-DE')}×
           </label>
           <input id="speech-rate" type="range" min={0.6} max={1.6} step={0.1} value={rate} onChange={(e) => setSettings({ speechRate: Number(e.target.value) })} />
-          <p className="muted small">Vorgelesen wird mit den Stimmen deines Geräts – offline, ohne KI und ohne Kosten.</p>
+
+          {voices.length > 0 && (
+            <>
+              <label className="field-label" htmlFor="speech-voice">
+                {hasNeural && engine !== 'system' ? 'Systemstimme (Fallback für weitere Sprachen)' : 'Systemstimme'}
+              </label>
+              <div className="input-row">
+                <select id="speech-voice" className="input" value={voice} onChange={(e) => setSettings({ speechVoice: e.target.value || undefined })}>
+                  <option value="">Automatisch (beste Natural-/Systemstimme)</option>
+                  {sorted.map((v) => (
+                    <option key={v.voiceURI} value={v.voiceURI}>
+                      {v.name} ({v.lang})
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="btn outline sm"
+                  onClick={() => speak('So klingt Merkora beim Vorlesen deiner Karteikarten.', undefined, { forceSystem: true, lang: 'de' })}
+                >
+                  Probe hören
+                </button>
+              </div>
+            </>
+          )}
+          <p className="muted small">
+            {hasNeural && engine !== 'system'
+              ? 'Vorgelesen wird lokal über Piper Neural-TTS (mit automatischem Audio-Cache). Für Sprachen ohne geladene Neural-Stimme springt automatisch die beste Systemstimme ein.'
+              : 'Vorgelesen wird mit den Stimmen deines Geräts – hochwertige Natural-Stimmen werden automatisch bevorzugt.'}
+          </p>
         </>
       )}
     </>

@@ -3177,10 +3177,41 @@ console.log('App-weite Upgrades: Offline-Quiz, Statistik-Analyse, Zusammenfassun
   const sndIds = new Set(AM.SOUNDS.map((s) => s.id));
   ok(sndIds.has('lofi') && sndIds.has('cafe') && sndIds.has('night') && AM.PRESETS.some((p) => p.name.includes('Lo-Fi')), 'Klänge: neue Soundscapes (Lo-Fi Beats, Bibliothek & Café, Sommernacht) + Presets');
   ok(SR.searchAll(searchData, 'DNA').some((h) => h.kind === 'tool' && h.id === 'models3d'), 'Globale Suche: findet 3D-Modelle (z. B. DNA)');
+
+  // 8. Neural-TTS: automatic language detection, Natural OS voice ranking & Piper voice matching
+  const SL = await import('../src/lib/speechLang');
+  ok(
+    SL.detectSpeechLang('Was ist der Unterschied zwischen Mitose und Meiose?') === 'de' &&
+      SL.detectSpeechLang('What is the difference between mitosis and meiosis?') === 'en' &&
+      SL.detectSpeechLang("Quelle est la différence entre la mitose et la méiose ?") === 'fr' &&
+      SL.detectSpeechLang('¿Cuál es la diferencia entre la mitosis y la meiosis?') === 'es' &&
+      SL.detectSpeechLang('Qual è la differenza tra la mitosi e la meiosi?') === 'it',
+    'TTS-Spracherkennung: erkennt DE, EN, FR, ES und IT zuverlässig',
+  );
+  ok(SL.detectSpeechLang('ATP', 'de') === 'de', 'TTS-Spracherkennung: kurze/neutrale Begriffe bleiben bei Fallback-Sprache');
+
+  const sampleVoices = [
+    { name: 'Microsoft Hedda Desktop - German', lang: 'de-DE', voiceURI: 'hedda' },
+    { name: 'Microsoft Katja Online (Natural) - German (Germany)', lang: 'de-DE', voiceURI: 'katja' },
+    { name: 'eSpeak English', lang: 'en-US', voiceURI: 'espeak-en' },
+    { name: 'Samantha (Enhanced)', lang: 'en-US', voiceURI: 'samantha' },
+  ];
+  ok(
+    SL.pickBestSystemVoice(sampleVoices, 'de')?.voiceURI === 'katja' &&
+      SL.pickBestSystemVoice(sampleVoices, 'en')?.voiceURI === 'samantha',
+    'TTS-Stimmenauswahl: bevorzugt Natural-/Enhanced-Stimmen vor Roboter-Stimmen',
+  );
+  ok(
+    SL.pickPiperVoiceForLang(['de_DE-thorsten-medium', 'de_DE-thorsten-high', 'en_US-amy-medium'], 'de') === 'de_DE-thorsten-high' &&
+      SL.pickPiperVoiceForLang(['de_DE-thorsten-medium', 'en_US-amy-medium'], 'en', 'de_DE-thorsten-medium', true) === 'en_US-amy-medium' &&
+      SL.pickPiperVoiceForLang(['de_DE-thorsten-medium'], 'fr', 'de_DE-thorsten-medium', true) === undefined,
+    'Piper-Stimmenwahl: wählt beste Qualität je Sprache und fällt sauber auf Systemstimme zurück, wenn Sprache fehlt',
+  );
 }
 
 console.log(failures ? `\n${failures} Test(s) fehlgeschlagen` : '\nAlle SRS-Tests bestanden');
 process.exit(failures ? 1 : 0);
+
 
 
 

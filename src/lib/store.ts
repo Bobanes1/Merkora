@@ -254,10 +254,13 @@ export type Settings = {
   noKeyHintClosed?: boolean;
   /** Show the estimated AI tokens and costs before a task (on by default). */
   showCosts?: boolean;
-  /** Reading aloud: voice (voiceURI), speed, and reading every card automatically while learning. */
+  /** Reading aloud: voice (voiceURI), speed, auto-read, offline Piper Neural-TTS, and auto language detection. */
   speechVoice?: string;
   speechRate?: number;
   speechAuto?: boolean;
+  speechEngine?: 'neural' | 'system';
+  speechNeuralVoice?: string;
+  speechAutoLang?: boolean;
   /** Key words on AI cards in bold (on by default). */
   boldKeywords?: boolean;
   /** Start page: "Heute fällig" folded; statistics: what is open; library: tiles or list. */
