@@ -2720,14 +2720,14 @@ console.log('Bildhafte Erklärgrafiken (forces, scene, callout, illustration)');
     highlight: 'kolben',
   })!;
   ok(illInteractive?.type === 'illustration' && illInteractive.parts?.length === 2 && illInteractive.highlight === 'kolben', 'Stage 3 illustration: parst interaktive parts & highlight');
-  const illSvg = D.renderDiagram(illInteractive, D.PALETTES.light, { animate: true, focus: 'kuehler' });
+  const illIntSvg = D.renderDiagram(illInteractive, D.PALETTES.light, { animate: true, focus: 'kuehler' });
   ok(
-    illSvg.includes('dg-breathe') &&
-      illSvg.includes('dg-flow-fast') &&
-      !illSvg.includes('bad-cls') &&
-      illSvg.includes('data-part="kolben"') &&
-      illSvg.includes('ps-dim') &&
-      illSvg.includes('ps-focus'),
+    illIntSvg.includes('dg-breathe') &&
+      illIntSvg.includes('dg-flow-fast') &&
+      !illIntSvg.includes('bad-cls') &&
+      illIntSvg.includes('data-part="kolben"') &&
+      illIntSvg.includes('ps-dim') &&
+      illIntSvg.includes('ps-focus'),
     'Stage 3 illustration: behält sichere Animationsklassen & setzt ps-focus/ps-dim auf data-part',
   );
 

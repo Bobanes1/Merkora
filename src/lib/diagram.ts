@@ -244,12 +244,18 @@ export function normalizeDiagram(raw: unknown): unknown {
     if (!o.type && o.diagram && typeof o.diagram === 'object') return normalizeDiagram(o.diagram);
     if (!o.type && typeof o.preset === 'string') return { ...o, type: 'preset' };
     const t = String(o.type ?? '').toLowerCase().trim().replace(/[\s_]+/g, '-');
-    // If the AI passed a preset id directly as "type" (e.g. {"type":"sonnensystem"} or {"type":"anatomie"} without callout parts)
-    const directPreset = resolveVisualPreset(t);
-    if (directPreset && !Array.isArray(o.parts ?? o.labels ?? o.items) && !Array.isArray(o.vectors) && !Array.isArray(o.actors)) {
-      return { ...o, type: 'preset', preset: directPreset.id };
+    const alias = TYPE_ALIASES[t] ?? TYPE_ALIASES[t.replace(/-/g, '')];
+    const hasStructuredData =
+      Array.isArray(o.parts ?? o.labels ?? o.items ?? o.layers ?? o.vectors ?? o.actors ?? o.rings ?? o.waves ?? o.levels ?? o.steps ?? o.columns) ||
+      !!(o.left && o.right);
+    if (!hasStructuredData) {
+      // If the AI passed a preset id directly as "type" (e.g. {"type":"sonnensystem"} or {"type":"anatomie"} without structured fields)
+      const directPreset = resolveVisualPreset(t);
+      if (directPreset && (!alias || alias === 'preset' || t === 'anatomie' || t === 'hebel')) {
+        return { ...o, type: 'preset', preset: directPreset.id };
+      }
     }
-    let type = TYPE_ALIASES[t] ?? TYPE_ALIASES[t.replace(/-/g, '')] ?? t;
+    let type = alias ?? t;
     if (type === 'plot' && !Array.isArray(o.functions)) type = 'axes';
     if (type !== o.type) return { ...o, type };
   }
