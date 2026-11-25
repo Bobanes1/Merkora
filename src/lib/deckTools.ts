@@ -9,7 +9,7 @@
  *
  * Pure – tested in scripts/test-srs.mts.
  */
-import { cardBackText, cardFrontText, escapeHtml } from './content';
+import { cardBackText, cardFrontText, escapeHtml, sideText } from './content';
 import { levelOf } from './srs';
 import type { Card, Deck, Review } from './store';
 import { parseTags } from './tags';
@@ -143,7 +143,7 @@ export function renderClozeAnswer(text: string, html?: boolean): string {
 
 /** Normalised key for comparing card fronts regardless of punctuation/case/whitespace. */
 export function duplicateKey(card: Pick<Card, 'front' | 'html'>): string {
-  return cardFrontText(card)
+  return sideText(card, card.front)
     .toLowerCase()
     .replace(/\{\{|\}\}/g, '')
     .replace(/[^\p{L}\p{N}\s]/gu, ' ')
