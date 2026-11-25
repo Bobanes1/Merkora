@@ -36,6 +36,11 @@ const COMMANDS: &[&str] = &[
     "list_backups",
     "read_backup",
     "backup_now",
+    "tts_status",
+    "tts_install_voice",
+    "tts_remove_voice",
+    "tts_uninstall_all",
+    "tts_speak",
 ];
 
 fn main() {

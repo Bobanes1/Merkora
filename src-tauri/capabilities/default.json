@@ -57,7 +57,12 @@
     "allow-java-offer",
     "allow-java-builtin",
     "allow-java-install",
-    "allow-java-uninstall"
+    "allow-java-uninstall",
+    "allow-tts-status",
+    "allow-tts-install-voice",
+    "allow-tts-remove-voice",
+    "allow-tts-uninstall-all",
+    "allow-tts-speak"
   ],
   "platforms": [
     "windows",
