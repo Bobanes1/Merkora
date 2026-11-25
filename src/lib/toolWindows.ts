@@ -4,7 +4,7 @@
  */
 import { useSyncExternalStore } from 'react';
 
-export type ToolWindowId = 'pomodoro' | 'todos';
+export type ToolWindowId = 'pomodoro' | 'todos' | 'sounds' | 'notes' | 'calc';
 
 export type ToolWindowState = {
   open: boolean;
@@ -16,10 +16,13 @@ export type ToolWindowState = {
 
 type WindowsMap = Record<ToolWindowId, ToolWindowState>;
 
-let zCounter = 40;
+let zCounter = 45;
 let state: WindowsMap = {
   pomodoro: { open: false, minimized: false, z: 40 },
   todos: { open: false, minimized: false, z: 41 },
+  sounds: { open: false, minimized: false, z: 42 },
+  notes: { open: false, minimized: false, z: 43 },
+  calc: { open: false, minimized: false, z: 44 },
 };
 
 const listeners = new Set<() => void>();
@@ -57,6 +60,9 @@ export const toolWindows = {
   move(id: ToolWindowId, x: number, y: number) {
     state = { ...state, [id]: { ...state[id], x, y } };
     emit();
+  },
+  get(): WindowsMap {
+    return state;
   },
 };
 

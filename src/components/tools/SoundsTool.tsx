@@ -21,7 +21,8 @@ import {
 } from '../../lib/ambient';
 import { remaining } from '../../lib/pomodoroRule';
 import { usePomodoro } from '../../lib/pomodoro';
-import { IconClose, IconPause, IconPlay, IconPlus, IconStop } from '../Icons';
+import { toolWindows } from '../../lib/toolWindows';
+import { IconClose, IconPause, IconPlay, IconPlus, IconPopout, IconStop } from '../Icons';
 
 /** Thin line pictures for the sounds. */
 const SOUND_ICON: Record<SoundId, string> = {
@@ -48,7 +49,7 @@ const SoundIcon = ({ id, size = 26 }: { id: SoundId; size?: number }) => (
 const TIMERS = [15, 30, 60, 90];
 
 /** Merkora Tools › Klänge: calm sounds and music to learn with – mix several, timer, favourites. */
-export function SoundsTool() {
+export function SoundsTool({ compact = false }: { compact?: boolean }) {
   const a = useAmbient();
   const pomo = usePomodoro();
   const [favs, setFavs] = useState<Favourite[]>(loadFavourites);
@@ -69,6 +70,50 @@ export function SoundsTool() {
     setFavs(list);
     saveFavourites(list);
   };
+
+  if (compact) {
+    return (
+      <div className="sounds compact">
+        <div className="sounds-now-main">
+          <span className="grow">
+            <b>{active ? mixLabel(a.playing) : 'Kein Klang aktiv'}</b>
+            <small className="muted">{active ? (a.paused ? 'pausiert' : 'läuft') : 'Mischung wählen'}</small>
+          </span>
+          {active && (
+            <>
+              <button type="button" className="btn primary sm" onClick={a.paused ? resumeAll : pauseAll} aria-label={a.paused ? 'Weiter' : 'Pause'}>
+                {a.paused ? <IconPlay size={13} /> : <IconPause size={13} />}
+              </button>
+              <button type="button" className="btn ghost sm" onClick={stopAll} aria-label="Stopp">
+                <IconStop size={13} />
+              </button>
+            </>
+          )}
+        </div>
+        <label className="sounds-master">
+          <span className="muted small">Lautstärke</span>
+          <input type="range" min={0} max={1} step={0.01} value={a.master} onChange={(e) => setMasterVolume(Number(e.target.value))} />
+        </label>
+        <div className="sounds-presets">
+          {[...favs, ...PRESETS].map((f, k) => (
+            <button key={f.name + k} type="button" className="chip" onClick={() => playMix(f.mix)}>
+              <IconPlay size={11} /> {f.name}
+            </button>
+          ))}
+        </div>
+        <div className="sound-grid compact">
+          {SOUNDS.map((s) => {
+            const on = a.playing[s.id] !== undefined;
+            return (
+              <button key={s.id} type="button" className={`chip ${on ? 'on' : ''}`} aria-pressed={on} onClick={() => toggleSound(s.id)}>
+                {s.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="sounds">
@@ -97,6 +142,9 @@ export function SoundsTool() {
               </button>
             </>
           )}
+          <button type="button" className="btn outline sm" onClick={() => toolWindows.open('sounds')}>
+            <IconPopout size={14} /> Als Popup
+          </button>
         </div>
         <label className="sounds-master">
           <span className="muted small">Gesamtlautstärke</span>
@@ -164,7 +212,7 @@ export function SoundsTool() {
                       <b>{s.label}</b>
                       <small>{s.hint}</small>
                     </span>
-                    <span className="sound-state">{on ? (a.paused ? <IconPause size={14} /> : <IconPause size={14} />) : <IconPlay size={14} />}</span>
+                    <span className="sound-state">{on ? (a.paused ? <IconPlay size={14} /> : <IconPause size={14} />) : <IconPlay size={14} />}</span>
                   </button>
                   {on && (
                     <input

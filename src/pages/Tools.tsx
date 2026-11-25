@@ -1,36 +1,100 @@
 import { useState } from 'react';
-import { SoundsTool } from '../components/tools/SoundsTool';
-import { JavaSetup } from '../components/JavaSetup';
 import { useSearchParams } from 'react-router-dom';
-import { CodeEditor } from '../components/CodeEditor';
-import { IconCalendar, IconChart, IconHeadphones, IconChecklist, IconChevronDown, IconCode, IconMusic, IconPlay, IconPopout, IconSparkle, IconTimer } from '../components/Icons';
+import {
+  IconCalendar,
+  IconChart,
+  IconChecklist,
+  IconChevronDown,
+  IconCode,
+  IconGrid,
+  IconHeadphones,
+  IconHeart,
+  IconImage,
+  IconMusic,
+  IconNote,
+  IconPopout,
+  IconSparkle,
+  IconTarget,
+  IconTimer,
+} from '../components/Icons';
 import { Sheet } from '../components/Sheet';
-import { usePhone } from '../lib/phone';
-import CalendarPage from './Calendar';
 import { Lab, LAB_DEFAULTS, LAB_TITLES } from '../components/labs/Labs';
-import { Piano } from '../components/practice/MusicTask';
+import { BreathingTool } from '../components/tools/BreathingTool';
+import { CalculatorTool } from '../components/tools/CalculatorTool';
+import { CodePlaygroundTool } from '../components/tools/CodePlaygroundTool';
+import { PeriodicTableTool } from '../components/tools/PeriodicTableTool';
+import { PianoTool } from '../components/tools/PianoTool';
 import { PomodoroTool } from '../components/tools/PomodoroTool';
+import { ScratchpadTool } from '../components/tools/ScratchpadTool';
+import { SoundsTool } from '../components/tools/SoundsTool';
+import { VisualLibraryTool } from '../components/tools/VisualLibraryTool';
 import { WorkPlanner } from '../components/tools/WorkPlanner';
+import { useAmbient } from '../lib/ambient';
+import { VISUAL_PRESETS } from '../lib/visualPresets';
+import { usePhone } from '../lib/phone';
+import { fmtClock, usePomodoro } from '../lib/pomodoro';
+import { remaining } from '../lib/pomodoroRule';
+import { useStore } from '../lib/store';
+import { toolWindows, type ToolWindowId } from '../lib/toolWindows';
+import { DAY, dayKey } from '../lib/util';
+import CalendarPage from './Calendar';
 import Todos from './Todos';
-import { buildHarness, localJava, runJavaLocal, runJavaOnline } from '../lib/javaRun';
-import { setSettings } from '../lib/store';
-import { toolWindows } from '../lib/toolWindows';
 
-type Tab = 'plan' | 'todos' | 'exams' | 'pomodoro' | 'sounds' | 'labs' | 'piano' | 'java';
+type Tab =
+  | 'todos'
+  | 'plan'
+  | 'exams'
+  | 'pomodoro'
+  | 'sounds'
+  | 'notes'
+  | 'breath'
+  | 'visuals'
+  | 'code'
+  | 'calc'
+  | 'labs'
+  | 'periodic'
+  | 'piano';
 
-const TABS: { id: Tab; label: string; icon: (p: { size?: number }) => JSX.Element }[] = [
-  { id: 'todos', label: 'To-do-Liste', icon: IconChecklist },
-  { id: 'plan', label: 'Arbeitsplanung', icon: IconSparkle },
-  { id: 'exams', label: 'Prüfungen', icon: IconCalendar },
-  { id: 'pomodoro', label: 'Pomodoro-Timer', icon: IconTimer },
-  { id: 'sounds', label: 'Klänge', icon: IconHeadphones },
-  { id: 'labs', label: 'Mathe-Labore', icon: IconChart },
-  { id: 'piano', label: 'Klavier', icon: IconMusic },
-  { id: 'java', label: 'Java-Spielwiese', icon: IconCode },
+type TabGroup = 'focus' | 'subject';
+
+type TabDef = {
+  id: Tab;
+  group: TabGroup;
+  label: string;
+  icon: (p: { size?: number }) => JSX.Element;
+};
+
+const TABS: TabDef[] = [
+  { id: 'todos', group: 'focus', label: 'To-do-Liste', icon: IconChecklist },
+  { id: 'plan', group: 'focus', label: 'Arbeitsplanung', icon: IconSparkle },
+  { id: 'exams', group: 'focus', label: 'Prüfungen', icon: IconCalendar },
+  { id: 'pomodoro', group: 'focus', label: 'Pomodoro-Timer', icon: IconTimer },
+  { id: 'sounds', group: 'focus', label: 'Klänge', icon: IconHeadphones },
+  { id: 'notes', group: 'focus', label: 'Notizblock', icon: IconNote },
+  { id: 'breath', group: 'focus', label: 'Atem-Reset', icon: IconHeart },
+  { id: 'visuals', group: 'subject', label: 'Grafiken', icon: IconImage },
+  { id: 'code', group: 'subject', label: 'Code-Spielwiese', icon: IconCode },
+  { id: 'calc', group: 'subject', label: 'Rechner', icon: IconTarget },
+  { id: 'labs', group: 'subject', label: 'Mathe-Labore', icon: IconChart },
+  { id: 'periodic', group: 'subject', label: 'Periodensystem', icon: IconGrid },
+  { id: 'piano', group: 'subject', label: 'Klavier', icon: IconMusic },
 ];
 
-/** Phone: the areas as a dropdown (a button with the current area; the list opens as a sheet). */
-function ToolPicker({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
+const GROUPS: { id: TabGroup; label: string }[] = [
+  { id: 'focus', label: 'Planen & Fokus' },
+  { id: 'subject', label: 'Fach-Werkzeuge' },
+];
+
+const QUICK_POPUPS: { id: ToolWindowId; label: string; icon: (p: { size?: number }) => JSX.Element }[] = [
+  { id: 'pomodoro', label: 'Pomodoro', icon: IconTimer },
+  { id: 'todos', label: 'To-dos', icon: IconChecklist },
+  { id: 'sounds', label: 'Klänge', icon: IconHeadphones },
+  { id: 'notes', label: 'Notizen', icon: IconNote },
+  { id: 'calc', label: 'Rechner', icon: IconTarget },
+];
+
+/** Phone: grouped area picker sheet with live badges. */
+function ToolPicker({ tab, setTab, badges }: { tab: Tab; setTab: (t: Tab) => void; badges: Partial<Record<Tab, string>> }) {
   const [open, setOpen] = useState(false);
   const cur = TABS.find((t) => t.id === tab)!;
   return (
@@ -40,18 +104,25 @@ function ToolPicker({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
           <cur.icon size={18} />
         </span>
         <span className="grow">
-          <small>Bereich</small>
+          <small>{GROUPS.find((g) => g.id === cur.group)?.label}</small>
           <b>{cur.label}</b>
         </span>
+        {badges[cur.id] && <span className="tab-badge">{badges[cur.id]}</span>}
         <IconChevronDown size={18} />
       </button>
       {open && (
         <Sheet title="Merkora Tools" onClose={() => setOpen(false)}>
           <div className="sheet-list" role="listbox" aria-label="Bereich wählen">
-            {TABS.map((t) => (
-              <button key={t.id} type="button" role="option" aria-selected={t.id === tab} className={`mode-${t.id} ${t.id === tab ? 'on' : ''}`} onClick={() => (setTab(t.id), setOpen(false))}>
-                <t.icon size={20} /> {t.label}
-              </button>
+            {GROUPS.map((g) => (
+              <div key={g.id} className="sheet-group">
+                <small className="muted sheet-group-label">{g.label}</small>
+                {TABS.filter((t) => t.group === g.id).map((t) => (
+                  <button key={t.id} type="button" role="option" aria-selected={t.id === tab} className={`mode-${t.id} ${t.id === tab ? 'on' : ''}`} onClick={() => (setTab(t.id), setOpen(false))}>
+                    <t.icon size={19} /> <span className="grow">{t.label}</span>
+                    {badges[t.id] && <span className="tab-badge">{badges[t.id]}</span>}
+                  </button>
+                ))}
+              </div>
             ))}
           </div>
         </Sheet>
@@ -61,51 +132,94 @@ function ToolPicker({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
 }
 
 /**
- * Merkora Tools: central home for Arbeitsplanung, To-do-Liste, Pomodoro-Timer
- * and the interactive learning tools (Mathe-Labore, Klavier, Java-Spielwiese).
+ * Merkora Tools: central hub for planning, focus & subject tools – all working offline.
  */
 export default function Tools() {
   const [params, setParams] = useSearchParams();
-  const raw = params.get('tab') as Tab | null;
-  const tab: Tab = raw && TABS.some((t) => t.id === raw) ? raw : 'todos';
+  const rawParam = params.get('tab');
+  // keep legacy ?tab=java working smoothly
+  const mapped = rawParam === 'java' ? 'code' : rawParam;
+  const tab: Tab = mapped && TABS.some((t) => t.id === mapped) ? (mapped as Tab) : 'todos';
   const setTab = (id: Tab) => setParams({ tab: id }, { replace: true });
   const phone = usePhone();
+
+  const data = useStore((s) => s.data);
+  const pomo = usePomodoro();
+  const amb = useAmbient();
+
+  const now = Date.now();
+  const today = dayKey(now);
+  const openToday = (data.todos ?? []).filter((t) => !t.doneAt && t.due && t.due <= today).length;
+  const openAll = (data.todos ?? []).filter((t) => !t.doneAt).length;
+  const nextExamDays = (() => {
+    const upcoming = (data.exams ?? [])
+      .map((e) => Math.ceil((new Date(e.date + 'T00:00:00').getTime() - new Date(today + 'T00:00:00').getTime()) / DAY))
+      .filter((d) => d >= 0)
+      .sort((a, b) => a - b);
+    return upcoming.length ? upcoming[0] : null;
+  })();
+  const soundCount = Object.keys(amb.playing).length;
+
+  const badges: Partial<Record<Tab, string>> = {
+    ...(openToday > 0 ? { todos: String(openToday) } : openAll > 0 ? { todos: String(openAll) } : {}),
+    ...(pomo.running ? { pomodoro: fmtClock(remaining(pomo, now)) } : {}),
+    ...(soundCount > 0 ? { sounds: amb.paused ? '⏸' : '●' } : {}),
+    ...(nextExamDays !== null ? { exams: nextExamDays === 0 ? 'Heute' : `${nextExamDays} T` } : {}),
+    visuals: String(VISUAL_PRESETS.length),
+  };
 
   return (
     <div className="page tools-page" data-mode={tab}>
       <div className="page-head">
         <div>
           <h1>Merkora Tools</h1>
-          <p className="muted">Arbeitsplanung, To-dos, Prüfungen, Fokus-Timer und Werkzeuge zum freien Ausprobieren – alles an einem Ort.</p>
+          <p className="muted">Planen, fokussieren, rechnen, programmieren, forschen &amp; verstehen – alles direkt offline in Merkora.</p>
         </div>
+        {!phone && (
+          <div className="tools-popups-bar" aria-label="Als schwebendes Popup öffnen">
+            <small className="muted">Popups:</small>
+            {QUICK_POPUPS.map((w) => (
+              <button key={w.id} type="button" className="btn ghost sm" title={`${w.label} als Popup öffnen`} onClick={() => toolWindows.toggle(w.id)}>
+                <w.icon size={13} /> {w.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {phone ? (
-        <ToolPicker tab={tab} setTab={setTab} />
+        <ToolPicker tab={tab} setTab={setTab} badges={badges} />
       ) : (
-        <div className="seg wrap tools-tabs" role="tablist" aria-label="Tools-Bereiche">
-          {TABS.map((t) => (
-            <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} className={`mode-${t.id} ${tab === t.id ? 'on' : ''}`} onClick={() => setTab(t.id)}>
-              {t.label}
-            </button>
+        <div className="tools-groups" role="tablist" aria-label="Tools-Bereiche">
+          {GROUPS.map((g) => (
+            <div key={g.id} className="tools-group">
+              <small className="tools-group-label">{g.label}</small>
+              <div className="seg wrap tools-tabs">
+                {TABS.filter((t) => t.group === g.id).map((t) => (
+                  <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} className={`mode-${t.id} ${tab === t.id ? 'on' : ''}`} onClick={() => setTab(t.id)}>
+                    <t.icon size={14} />
+                    <span>{t.label}</span>
+                    {badges[t.id] && <span className={`tab-badge ${t.id === 'sounds' && !amb.paused ? 'live' : ''}`}>{badges[t.id]}</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
           ))}
         </div>
       )}
 
-      {tab === 'plan' && <WorkPlanner />}
-
       {tab === 'todos' && <Todos embedded />}
 
-      {tab === 'exams' && <CalendarPage embedded />}
+      {tab === 'plan' && <WorkPlanner />}
 
-      {tab === 'sounds' && <SoundsTool />}
+      {tab === 'exams' && <CalendarPage embedded />}
 
       {tab === 'pomodoro' && (
         <section className="panel tools-pomo-panel">
           <div className="panel-head">
             <div>
               <h2>Pomodoro-Timer</h2>
-              <p className="muted small">Abgeschlossene Lernrunden zählen automatisch zu deiner Lernzeit.</p>
+              <p className="muted small">Abgeschlossene Lernrunden zählen automatisch zu deiner Lernzeit – jede 4. Runde startet eine lange Pause.</p>
             </div>
             <button type="button" className="btn outline sm" onClick={() => toolWindows.open('pomodoro')}>
               <IconPopout size={14} /> Als Popup öffnen
@@ -115,29 +229,41 @@ export default function Tools() {
         </section>
       )}
 
+      {tab === 'sounds' && <SoundsTool />}
+
+      {tab === 'notes' && (
+        <section className="panel">
+          <ScratchpadTool />
+        </section>
+      )}
+
+      {tab === 'breath' && (
+        <section className="panel">
+          <BreathingTool />
+        </section>
+      )}
+
+      {tab === 'visuals' && <VisualLibraryTool />}
+
+      {tab === 'code' && <CodePlaygroundTool />}
+
+      {tab === 'calc' && (
+        <section className="panel">
+          <CalculatorTool />
+        </section>
+      )}
+
       {tab === 'labs' && (
         <section className="panel">
           <h2>Mathe-Labore</h2>
-          <p className="muted small">Interaktive Simulationen mit Schiebereglern – ohne KI.</p>
+          <p className="muted small">Interaktive Simulationen mit Schiebereglern &amp; Vergleichsfunktion – ohne KI.</p>
           <LabPicker />
         </section>
       )}
 
-      {tab === 'piano' && (
-        <section className="panel">
-          <h2>Klavier</h2>
-          <p className="muted small">Freies Ausprobieren mit eigenem Synthesizer – ohne KI.</p>
-          <FreePiano />
-        </section>
-      )}
+      {tab === 'periodic' && <PeriodicTableTool />}
 
-      {tab === 'java' && (
-        <section className="panel">
-          <h2>Java-Spielwiese</h2>
-          <p className="muted small">Schreibe kleinen Java-Code und führe ihn lokal oder online aus.</p>
-          <JavaPlayground />
-        </section>
-      )}
+      {tab === 'piano' && <PianoTool />}
     </div>
   );
 }
@@ -154,65 +280,6 @@ function LabPicker() {
         ))}
       </div>
       <Lab key={i} spec={LAB_DEFAULTS[i]} />
-    </div>
-  );
-}
-
-function FreePiano() {
-  return (
-    <div className="tool">
-      <Piano />
-    </div>
-  );
-}
-
-const STARTER = `class Solution {
-    public static void main(String[] args) {
-        System.out.println("Hallo Merkora!");
-    }
-}`;
-function JavaPlayground() {
-  const [code, setCode] = useState(STARTER);
-  const [out, setOut] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [online, setOnline] = useState(false);
-  const run = async () => {
-    setBusy(true);
-    setOut('');
-    try {
-      const src = buildHarness(code, []);
-      let r = (await localJava()) ? await runJavaLocal(src) : 'no-java';
-      if (r === 'no-java') {
-        if (!online) {
-          setOut('Auf diesem Gerät gibt es noch kein Java. Installiere es oben mit einem Klick – oder nutze „Online ausführen“ (dann schickt Merkora nur den Code an wandbox.org).');
-          return;
-        }
-        r = await runJavaOnline(src);
-      }
-      setOut((r.stdout + (r.stderr ? '\n' + r.stderr : '')).trim() || '(keine Ausgabe)');
-    } catch (e) {
-      setOut((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <div className="tool">
-      <JavaSetup />
-      <CodeEditor value={code} onChange={setCode} />
-      <div className="row-gap">
-        <button type="button" className="btn primary" onClick={() => void run()} disabled={busy}>
-          <IconPlay size={14} /> {busy ? 'Läuft …' : 'Ausführen'}
-        </button>
-        <label className="check-row">
-          <input type="checkbox" checked={online} onChange={(e) => (setOnline(e.target.checked), e.target.checked && setSettings({ onlineCodeOk: true }))} /> Online ausführen (wandbox.org), wenn kein Java da ist
-        </label>
-      </div>
-      {out && (
-        <div className="code-output">
-          <pre>{out}</pre>
-        </div>
-      )}
     </div>
   );
 }

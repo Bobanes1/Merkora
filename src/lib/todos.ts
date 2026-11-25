@@ -12,6 +12,7 @@ export type Todo = {
   /** YYYY-MM-DD (optional) */
   due?: string;
   deckId?: string;
+  skillId?: string;
   examId?: string;
   /** Planned duration in minutes (e.g. from Arbeitsplanung). */
   minutes?: number;
@@ -32,6 +33,9 @@ export type Todo = {
   createdAt: number;
   updatedAt?: number;
 };
+
+/** Total planned minutes across a list of open todos. */
+export const groupMinutes = (items: Todo[]) => items.reduce((sum, t) => sum + (t.doneAt ? 0 : t.minutes ?? 0), 0);
 
 export type TodoGroupId = 'overdue' | 'today' | 'soon' | 'nodate' | 'done';
 export type TodoGroup = { id: TodoGroupId; label: string; items: Todo[] };

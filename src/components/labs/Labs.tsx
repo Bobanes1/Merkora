@@ -353,6 +353,7 @@ function UrnLab({ spec }: { spec: Extract<LabSpec, { type: 'urn' }> }) {
 
 function FunctionLab({ spec }: { spec: Extract<LabSpec, { type: 'function' }> }) {
   const [expr, setExpr] = useState(spec.expr);
+  const [expr2, setExpr2] = useState('');
   const [params, setParams] = useState(spec.params);
   const [x0, setX0] = useState((spec.min + spec.max) / 4);
   const [showTangent, setShowTangent] = useState(true);
@@ -360,12 +361,15 @@ function FunctionLab({ spec }: { spec: Extract<LabSpec, { type: 'function' }> })
   const [a, setA] = useState(spec.min / 2);
   const [b, setB] = useState(spec.max / 2);
   const f = compileExpr(withParams(expr, params));
+  const g = expr2.trim() ? compileExpr(withParams(expr2, params)) : null;
   const { min, max } = spec;
   const pts: [number, number][] = f ? Array.from({ length: 241 }, (_, i) => [min + ((max - min) * i) / 240, f(min + ((max - min) * i) / 240)]) : [];
-  const ys = pts.map(([, y]) => y).filter(Number.isFinite);
+  const pts2: [number, number][] = g ? Array.from({ length: 241 }, (_, i) => [min + ((max - min) * i) / 240, g(min + ((max - min) * i) / 240)]) : [];
+  const ys = [...pts, ...pts2].map(([, y]) => y).filter(Number.isFinite);
   const yMin = Math.min(...ys, 0), yMax = Math.max(...ys, 0.1);
   const pad = (yMax - yMin) * 0.1 || 1;
   const box = lineFor(pts, min, max, yMin - pad, yMax + pad);
+  const box2 = g ? lineFor(pts2, min, max, yMin - pad, yMax + pad) : null;
   const slope = f ? derivative(f, x0) : NaN;
   const tangent = f ? lineFor([[min, f(x0) + slope * (min - x0)], [max, f(x0) + slope * (max - x0)]], min, max, yMin - pad, yMax + pad) : null;
   const lo = Math.min(a, b), hi = Math.max(a, b);
@@ -379,6 +383,10 @@ function FunctionLab({ spec }: { spec: Extract<LabSpec, { type: 'function' }> })
         <label className="lab-num wide">
           f(x) =
           <input className="input mono" value={expr} onChange={(e) => setExpr(e.target.value)} spellCheck={false} />
+        </label>
+        <label className="lab-num wide">
+          g(x) =
+          <input className="input mono" value={expr2} onChange={(e) => setExpr2(e.target.value)} placeholder="optional, z. B. 2*x" spellCheck={false} />
         </label>
         {Object.keys(params).map((k) => (
           <Slider key={k} label={k} value={params[k]} min={-5} max={5} step={0.1} onChange={(v) => setParams({ ...params, [k]: v })} />
@@ -398,12 +406,14 @@ function FunctionLab({ spec }: { spec: Extract<LabSpec, { type: 'function' }> })
         )}
       </div>
       {!f && <p className="form-error">Diese Formel kann Merkora nicht lesen (erlaubt: x, a, b, c, + − * / ^, sqrt, exp, ln, sin, cos …).</p>}
+      {expr2.trim() && !g && <p className="form-error">Vergleichsfunktion g(x) konnte nicht gelesen werden.</p>}
       {f && (
         <svg className="lab-svg" viewBox={`0 0 ${W} ${H}`} role="img">
           <line x1={PAD} y1={box.sy(0)} x2={W - PAD} y2={box.sy(0)} className="lab-axis" />
           {min < 0 && max > 0 && <line x1={box.sx(0)} y1={PAD} x2={box.sx(0)} y2={H - PAD} className="lab-axis" />}
           {fill && <path d={fill} className="lab-area" />}
           <path d={box.d} className="lab-line" />
+          {box2 && <path d={box2.d} className="lab-line-2" />}
           {showTangent && tangent && <path d={tangent.d} className="lab-ref" />}
           {showTangent && Number.isFinite(f(x0)) && <circle cx={box.sx(x0)} cy={box.sy(f(x0))} r={5} className="lab-dot" />}
           {zs.map((z) => (
@@ -424,7 +434,8 @@ function FunctionLab({ spec }: { spec: Extract<LabSpec, { type: 'function' }> })
         <Out>
           {showTangent && (
             <>
-              Steigung bei x₀ = {fmt(x0, 2)}: f′(x₀) ≈ <b>{fmt(slope, 3)}</b>.{' '}
+              Steigung bei x₀ = {fmt(x0, 2)}: f′(x₀) ≈ <b>{fmt(slope, 3)}</b>
+              {g && Number.isFinite(g(x0)) && <> · g(x₀) = <b>{fmt(g(x0), 3)}</b></>}.{' '}
             </>
           )}
           {showArea && (

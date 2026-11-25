@@ -2,32 +2,36 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { isLeech } from '../../lib/cardLinks';
 import { pomodoro, usePomodoroMeta } from '../../lib/pomodoro';
-import { addTodo, deckUrl, deleteTodo, toggleTodo, updateTodo, useStore } from '../../lib/store';
-import { dueText, todoGroups, todoSuggestions, type Todo } from '../../lib/todos';
+import { addTodo, deckUrl, deleteTodo, reorderTodos, toggleTodo, updateTodo, useStore } from '../../lib/store';
+import { dueText, groupMinutes, PRIORITY_LABEL, REPEAT_LABEL, subtaskProgress, todoGroups, todoSuggestions, type Todo } from '../../lib/todos';
 import { toolWindows } from '../../lib/toolWindows';
 import { DAY, dayKey } from '../../lib/util';
 import { PHASE_LABEL } from '../../lib/workPlan';
-import { IconCheck, IconPlay, IconPlus, IconSparkle } from '../Icons';
+import { IconCheck, IconChecklist, IconPlay, IconPlus, IconPractice, IconRepeat, IconSparkle } from '../Icons';
 
 /**
  * Redesigned To-do List for Merkora Tools & floating popup window.
  * Supports planned durations, Arbeitsplanung phase badges (Einstieg/Hauptteil/Abschluss),
- * and one-click Pomodoro start per task.
+ * Skill & Deck links, group minute totals, drag & drop reordering, and one-click Pomodoro start per task.
  */
 export function TodoTool({ compact = false }: { compact?: boolean }) {
   const data = useStore((s) => s.data);
   const todos = data.todos ?? [];
+  const skills = data.skills ?? [];
   const { activeTodoId } = usePomodoroMeta();
 
   const [text, setText] = useState('');
   const [due, setDue] = useState('');
   const [minutes, setMinutes] = useState('');
   const [deckId, setDeckId] = useState('');
+  const [skillId, setSkillId] = useState('');
   const [showOpts, setShowOpts] = useState(!compact);
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [showDone, setShowDone] = useState(false);
   const [popped, setPopped] = useState<string | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
 
   const now = Date.now();
   const today = dayKey(now);
@@ -47,12 +51,14 @@ export function TodoTool({ compact = false }: { compact?: boolean }) {
       text: text.trim(),
       due: due || undefined,
       deckId: deckId || undefined,
+      skillId: skillId || undefined,
       minutes: mins >= 1 ? Math.min(480, Math.round(mins)) : undefined,
     });
     setText('');
     setDue('');
     setMinutes('');
     setDeckId('');
+    setSkillId('');
   };
 
   const check = (t: Todo) => {
@@ -79,21 +85,53 @@ export function TodoTool({ compact = false }: { compact?: boolean }) {
     for (const t of doneItems) deleteTodo(t.id);
   };
 
-  const row = (t: Todo, group: string) => {
+  const dropOn = (targetId: string, list: Todo[]) => {
+    if (!dragId || dragId === targetId) return;
+    const ids = list.map((x) => x.id);
+    const from = ids.indexOf(dragId);
+    const to = ids.indexOf(targetId);
+    if (from < 0 || to < 0) return;
+    ids.splice(from, 1);
+    ids.splice(to, 0, dragId);
+    reorderTodos(ids);
+    setDragId(null);
+    setOverId(null);
+  };
+
+  const row = (t: Todo, group: string, list: Todo[]) => {
     const deck = t.deckId ? data.decks.find((d) => d.id === t.deckId) : undefined;
+    const skill = t.skillId ? skills.find((s) => s.id === t.skillId) : undefined;
     const exam = t.examId ? data.exams.find((e) => e.id === t.examId) : undefined;
+    const sub = subtaskProgress(t);
     const isActive = activeTodoId === t.id && !t.doneAt;
     return (
       <li
         key={t.id}
-        className={`todo tool-todo ${t.doneAt ? 'done' : ''} ${group === 'overdue' ? 'overdue' : ''} ${isActive ? 'active-timer' : ''} ${popped === t.id ? 'pop' : ''}`}
+        draggable={!t.doneAt && editing !== t.id}
+        onDragStart={(e) => {
+          setDragId(t.id);
+          e.dataTransfer.effectAllowed = 'move';
+        }}
+        onDragOver={(e) => {
+          if (!dragId || dragId === t.id || t.doneAt) return;
+          e.preventDefault();
+          setOverId(t.id);
+        }}
+        onDragLeave={() => overId === t.id && setOverId(null)}
+        onDrop={(e) => {
+          e.preventDefault();
+          dropOn(t.id, list);
+        }}
+        onDragEnd={() => (setDragId(null), setOverId(null))}
+        className={`todo tool-todo ${t.doneAt ? 'done' : ''} ${group === 'overdue' ? 'overdue' : ''} ${isActive ? 'active-timer' : ''} ${popped === t.id ? 'pop' : ''} ${overId === t.id ? 'drag-over' : ''}`}
       >
         <button
           type="button"
-          className="todo-check"
+          className={`todo-check ${t.priority ? 'prio-' + t.priority : ''}`}
           role="checkbox"
           aria-checked={!!t.doneAt}
           aria-label={t.doneAt ? 'Wieder öffnen' : 'Erledigt'}
+          title={t.priority ? `Priorität: ${PRIORITY_LABEL[t.priority]}` : undefined}
           onClick={() => check(t)}
         >
           {(t.doneAt || popped === t.id) && <IconCheck size={13} />}
@@ -124,13 +162,28 @@ export function TodoTool({ compact = false }: { compact?: boolean }) {
               {t.text}
             </span>
           )}
-          {(t.phase || t.minutes || t.note || deck || exam || (t.due && !t.doneAt)) && (
+          {(t.phase || t.minutes || t.note || t.repeat || sub || deck || skill || exam || (t.due && !t.doneAt)) && (
             <div className="tool-todo-meta">
               {t.phase && !t.doneAt && <span className={`phase-pill p-${t.phase}`}>{PHASE_LABEL[t.phase]}</span>}
               {t.minutes && <span className="min-pill">{t.minutes} Min.</span>}
+              {t.repeat && (
+                <span className="min-pill" title={REPEAT_LABEL[t.repeat]}>
+                  <IconRepeat size={11} />
+                </span>
+              )}
+              {sub && (
+                <span className="min-pill" title="Unteraufgaben">
+                  <IconChecklist size={11} /> {sub.done}/{sub.total}
+                </span>
+              )}
               {deck && (
                 <Link to={deckUrl(data, deck)} className="todo-tag" title="Deck öffnen">
                   {deck.name}
+                </Link>
+              )}
+              {skill && (
+                <Link to={`/skills/${skill.id}`} className="todo-tag todo-skill-tag" title="Skill öffnen">
+                  <IconPractice size={11} /> {skill.title}
                 </Link>
               )}
               {exam && !deck && (
@@ -192,7 +245,7 @@ export function TodoTool({ compact = false }: { compact?: boolean }) {
         </div>
         {compact && (
           <button type="button" className="link-btn small muted" onClick={() => setShowOpts((v) => !v)}>
-            {showOpts ? 'Optionen ausblenden' : 'Datum, Dauer oder Deck …'}
+            {showOpts ? 'Optionen ausblenden' : 'Datum, Dauer, Deck oder Skill …'}
           </button>
         )}
         {showOpts && (
@@ -224,6 +277,16 @@ export function TodoTool({ compact = false }: { compact?: boolean }) {
                 ))}
               </select>
             )}
+            {skills.length > 0 && (
+              <select className="input todo-deck" aria-label="Skill" value={skillId} onChange={(e) => setSkillId(e.target.value)}>
+                <option value="">Kein Skill</option>
+                {skills.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.title}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
         )}
       </div>
@@ -239,12 +302,18 @@ export function TodoTool({ compact = false }: { compact?: boolean }) {
 
       {groups
         .filter((g) => g.id !== 'done')
-        .map((g) => (
-          <div key={g.id} className={`todo-group g-${g.id}`}>
-            <small className="todo-group-label">{g.label}</small>
-            <ul className="todo-list">{g.items.map((t) => row(t, g.id))}</ul>
-          </div>
-        ))}
+        .map((g) => {
+          const mins = groupMinutes(g.items);
+          return (
+            <div key={g.id} className={`todo-group g-${g.id}`}>
+              <small className="todo-group-label">
+                {g.label}
+                {mins > 0 && <span className="todo-group-mins"> · {mins} Min.</span>}
+              </small>
+              <ul className="todo-list">{g.items.map((t) => row(t, g.id, g.items))}</ul>
+            </div>
+          );
+        })}
 
       {doneItems.length > 0 && (
         <div className="todo-group g-done">
@@ -262,7 +331,7 @@ export function TodoTool({ compact = false }: { compact?: boolean }) {
             <ul className="todo-list">
               {groups
                 .find((g) => g.id === 'done')
-                ?.items.map((t) => row(t, 'done'))}
+                ?.items.map((t) => row(t, 'done', doneItems))}
             </ul>
           )}
         </div>
