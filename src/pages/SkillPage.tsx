@@ -708,8 +708,8 @@ function LessonView({ skill, lessonId, onBack, onPath, onOpen }: { skill: Skill;
         lessons: st.lessons.map((l) => {
           if (l.id !== lessonId || !l.set) return l;
           const set = patchSet(l.set, i, patch);
-          // when it is mastered for the first time (the smart „Weiter“ counts new lessons since the last review)
-          return { ...l, set, ...(!l.doneAt && mastered(set) ? { doneAt: Date.now() } : {}) };
+          // when it is finished for the first time (the smart „Weiter“ counts new lessons since the last review)
+          return { ...l, set, ...(!l.doneAt && lessonDone({ ...l, set }) ? { doneAt: Date.now() } : {}) };
         }),
       })),
     }))),
@@ -756,23 +756,22 @@ function LessonEnd({ lesson, after, onPath, onNext }: { lesson: Lesson; after?: 
   const progress = lesson.set?.progress ?? [];
   const clean = progress.filter((p) => p.solved && !p.hints && !p.shown && !p.dunno && p.tries <= 1).length;
   const skipped = progress.filter((p) => p.dunno && !p.solved).length;
-  // with „Weiß nicht“ you get through the lesson; it counts as done from 80 % solved
-  const ok = mastered(lesson.set);
-  const missing = lesson.set ? Math.max(0, Math.ceil(problemCount(lesson.set) * 0.8) - solvedCount(lesson.set)) : 0;
+  // with „Weiß nicht“ you still finish the lesson and Pip moves on to the next level
+  const full = mastered(lesson.set);
   return (
-    <div className={'lesson-end-card' + (ok ? '' : ' not-yet')}>
-      <Mascot mood={ok ? 'cheer' : 'happy'} size={76} />
+    <div className="lesson-end-card">
+      <Mascot mood={full ? 'cheer' : 'happy'} size={76} />
       <div className="grow">
-        <b className="lesson-end-title">{ok ? 'Lektion geschafft!' : 'Lektion durchgearbeitet'}</b>
+        <b className="lesson-end-title">{full ? 'Lektion geschafft!' : 'Lektion durchgearbeitet!'}</b>
         <p className="lesson-end-clean">
           <IconCheck size={15} /> {clean} von {progress.length} ohne Hilfe gelöst{skipped ? ` · ${skipped} übersprungen` : ''}
         </p>
-        {!ok && (
+        {!full && skipped > 0 && (
           <p className="muted small">
-            Für „geschafft“ {missing === 1 ? 'fehlt noch 1 gelöste Aufgabe' : `fehlen noch ${missing} gelöste Aufgaben`} – probier die übersprungenen (mit „?“ in der Leiste) später nochmal.
+            Weiter geht’s zum nächsten Level – die übersprungenen Aufgaben (mit „?“ in der Leiste) kannst du jederzeit nochmal probieren.
           </p>
         )}
-        {ok && lesson.goal && (
+        {lesson.goal && (
           <p className="lesson-end-goal">
             <b>Das kannst du jetzt:</b> {lesson.goal}
           </p>
