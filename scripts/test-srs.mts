@@ -2793,6 +2793,348 @@ console.log('Bildhafte Erklärgrafiken (forces, scene, callout, illustration)');
   );
 }
 
+console.log('Merkora Tools Upgrade: Rechner, Periodensystem, Klavier, Pomodoro, Arbeitsplanung, Popups');
+{
+  // 1. Scientific calculator & unit converter
+  const C = await import('../src/lib/calc');
+  ok(Math.abs(C.evalCalcExpr('2 + 3 * 4') - 14) < 1e-9, 'Rechner: Punkt vor Strich');
+  ok(Math.abs(C.evalCalcExpr('sin(30)', 'deg') - 0.5) < 1e-9 && Math.abs(C.evalCalcExpr('cos(pi)', 'rad') + 1) < 1e-9, 'Rechner: DEG & RAD Winkelmaße');
+  ok(Math.abs(C.evalCalcExpr('sqrt(16) + 5! - 1,5 * 2') - 121) < 1e-9, 'Rechner: Wurzeln, Fakultät und deutsches Komma');
+  ok(Math.abs(C.evalCalcExpr('200 * 15%') - 30) < 1e-9 && C.evalCalcExpr('10 % 3') === 1 && Number.isNaN(C.evalCalcExpr('alert(1)')), 'Rechner: Prozent, Modulo & sichere Ablehnung ungültiger Ausdrücke');
+  ok(C.toFraction(0.75) === '3/4' && C.toFraction(1 / 3) === '1/3' && C.toFraction(4) === null, 'Rechner: exakte Bruch-Umwandlung');
+  ok(C.UNIT_CATEGORIES.length === 8, 'Einheiten-Umrechner: alle 8 Kategorien vorhanden');
+  ok(Math.abs(C.convertUnit(100, 'temp', 'c', 'f') - 212) < 1e-6 && Math.abs(C.convertUnit(0, 'temp', 'c', 'k') - 273.15) < 1e-6, 'Einheiten: Temperatur °C ↔ °F ↔ K');
+  ok(Math.abs(C.convertUnit(36, 'speed', 'kmh', 'ms') - 10) < 1e-6 && Math.abs(C.convertUnit(2, 'length', 'km', 'm') - 2000) < 1e-6, 'Einheiten: Geschwindigkeit & Länge');
+
+  // 2. 118-element Periodic Table + animated Bohr orbit diagram
+  const PT = await import('../src/lib/periodicTable');
+  const DG = await import('../src/lib/diagram');
+  ok(PT.ELEMENTS.length === 118 && new Set(PT.ELEMENTS.map((e) => e.z)).size === 118, 'Periodensystem: alle 118 Elemente eindeutig');
+  const carbon = PT.ELEMENTS.find((e) => e.sym === 'C')!;
+  const gold = PT.ELEMENTS.find((e) => e.sym === 'Au')!;
+  const cOrbit = PT.elementOrbitDiagram(carbon);
+  const cSvg = DG.renderDiagram(cOrbit, DG.PALETTES.light);
+  ok(carbon.z === 6 && gold.z === 79 && cOrbit.type === 'orbit' && cSvg.includes('<svg') && cSvg.includes('K-Schale'), 'Periodensystem: Element-Metadaten & animiertes Bohr-Schalenmodell');
+
+  // 3. Piano scale & chord theory
+  const PN = await import('../src/lib/pianoTheory');
+  ok(PN.PIANO_ROOTS.length === 12 && PN.MUSIC_PATTERNS.length >= 10, 'Klavier-Theorie: 12 Grundtöne und ≥10 Tonleitern/Akkorde');
+  ok(JSON.stringify(PN.patternMidis(0, 'dur', 60)) === '[60,62,64,65,67,69,71,72]', 'Klavier: C-Dur-Tonleiter ab C4 (MIDI 60)');
+  const aMin = PN.patternMidis(9, 'min', 60);
+  ok(aMin.length === 3 && aMin.every((m) => m >= 60 && m < 84), 'Klavier: Akkord-Markierung bleibt innerhalb der 2 Oktaven');
+
+  // 4. Pomodoro long break (every 4th round) & auto-start
+  const PR = await import('../src/lib/pomodoroRule');
+  const p3 = { phase: 'work' as const, running: true, endsAt: 1000, left: 1000, rounds: 3 };
+  const tLong = PR.tick(p3, 1500, 25, 5, 15, false);
+  ok(tLong.ended === 'work' && tLong.pomo.phase === 'break' && tLong.pomo.rounds === 4 && tLong.pomo.longBreak === true && tLong.pomo.left === 15 * PR.MIN, 'Pomodoro: 4. Runde startet lange Pause (15 Min.)');
+  const tAuto = PR.tick({ phase: 'break', running: true, endsAt: 2000, left: 1000, rounds: 4, longBreak: true }, 2500, 25, 5, 15, true);
+  ok(tAuto.ended === 'break' && tAuto.pomo.phase === 'work' && tAuto.pomo.running === true && !tAuto.pomo.longBreak, 'Pomodoro: Auto-Start wechselt nach Pause automatisch in die nächste Lernrunde');
+
+  // 5. Todos groupMinutes & skillId
+  const TD = await import('../src/lib/todos');
+  ok(TD.groupMinutes([{ minutes: 25 }, { minutes: 15 }, {}]) === 40, 'To-dos: groupMinutes summiert geplante Minuten pro Gruppe');
+
+  // 6. WorkPlan energy profiles
+  const WP = await import('../src/lib/workPlan');
+  const mixTasks = [
+    { id: 'easy', title: 'Leicht', motivation: 3 as const, size: 's' as const },
+    { id: 'hard', title: 'Schwer', motivation: 1 as const, size: 'l' as const, important: true },
+    { id: 'mid', title: 'Mittel', motivation: 2 as const, size: 'm' as const },
+  ];
+  const freshPlan = WP.buildWorkPlan(mixTasks, 90, false, { energy: 'fresh' });
+  const tiredPlan = WP.buildWorkPlan(mixTasks, 90, false, { energy: 'tired' });
+  const firstFresh = freshPlan.steps.find((s) => s.kind === 'task');
+  const firstTired = tiredPlan.steps.find((s) => s.kind === 'task');
+  ok(firstFresh?.kind === 'task' && firstFresh.taskId === 'hard' && firstTired?.kind === 'task' && firstTired.taskId === 'easy', 'Arbeitsplanung: Energie-Profil „Frisch“ startet schwer, „Müde“ startet leicht');
+
+  // 7. ToolWindows supports all 5 floating popup IDs
+  const TW = await import('../src/lib/toolWindows');
+  TW.toolWindows.open('notes');
+  TW.toolWindows.open('calc');
+  TW.toolWindows.open('sounds');
+  const snap = TW.toolWindows.get();
+  ok(snap.notes.open && snap.calc.open && snap.sounds.open && 'todos' in snap && 'pomodoro' in snap, 'ToolWindows: alle 5 schwebenden Popups (Pomodoro, To-dos, Klänge, Notizen, Rechner)');
+  TW.toolWindows.close('notes');
+  TW.toolWindows.close('calc');
+  TW.toolWindows.close('sounds');
+}
+
+console.log('Bibliothek & Decks Upgrade: Text-Import, Lückentext, Duplikate, Prognose, Druckbogen, Store-Aktionen');
+{
+  const DT = await import('../src/lib/deckTools');
+  const NC = await import('../src/lib/newCards');
+  const ST = await import('../src/lib/store');
+  const DAY = 86_400_000;
+  const now = new Date(2026, 10, 20, 12, 0, 0).getTime();
+
+  // 1. Delimiter detection & CSV / Quizlet / Markdown text import
+  ok(DT.detectDelimiter('A\tB\nC\tD') === 'tab', 'Text-Import: Tabulator (Quizlet/Excel) erkannt');
+  ok(DT.detectDelimiter('Frage;Antwort\nH2O;Wasser') === 'semicolon', 'Text-Import: Semikolon-CSV erkannt');
+  ok(DT.detectDelimiter('- **Mitose** :: Kernteilung\n- **Meiose** :: Reifeteilung') === 'colon', 'Text-Import: Markdown :: erkannt');
+
+  const csvCards = DT.parseTextImport('Begriff;Definition;Tags\n"Zelle; Grundbaustein";"Kleinste Einheit";Biologie, Kapitel 1\nMitose;Kernteilung;Biologie', {
+    extraTags: ['Import'],
+  });
+  ok(
+    csvCards.length === 2 &&
+      csvCards[0].front === 'Zelle; Grundbaustein' &&
+      csvCards[0].back === 'Kleinste Einheit' &&
+      csvCards[0].tags?.includes('Biologie') &&
+      csvCards[0].tags?.includes('Import'),
+    'Text-Import: Kopfzeile übersprungen, Anführungszeichen & Tags aus 3. Spalte geparst',
+  );
+  const mdCards = DT.parseTextImport('1. **Osmose** - Diffusion durch Membran\n2. **ATP** - Energieträger');
+  ok(mdCards.length === 2 && mdCards[0].front === 'Osmose' && mdCards[1].back === 'Energieträger', 'Text-Import: Markdown-Aufzählung mit „ - “ und **Fett** sauber erkannt');
+
+  // 2. Cloze syntax ({{Lücke}} / {{Lücke::Hinweis}})
+  ok(DT.hasCloze('Die {{Mitochondrien}} sind Kraftwerke') && !DT.hasCloze('Normaler Text'), 'Lückentext: hasCloze erkennt {{…}}');
+  ok(
+    DT.renderClozeQuestion('Die {{Mitochondrien::Organell}} liefern {{ATP}}.', false) === 'Die [ Organell ] liefern [ … ].',
+    'Lückentext (Plain): Frage zeigt Hinweis bzw. [ … ]',
+  );
+  ok(
+    DT.renderClozeAnswer('Die {{Mitochondrien::Organell}} liefern {{ATP}}.', false) === 'Die **Mitochondrien** liefern **ATP**.',
+    'Lückentext (Plain): Antwort hebt Lösung fett hervor',
+  );
+  const clozeQHtml = DT.renderClozeQuestion('Formel: {{H2O::<Wasser>}}', true);
+  const clozeAHtml = DT.renderClozeAnswer('Formel: {{H2O::<Wasser>}}', true);
+  ok(
+    clozeQHtml.includes('class="cloze-blank"') && clozeQHtml.includes('&lt;Wasser&gt;') && clozeAHtml.includes('class="cloze-filled"') && clozeAHtml.includes('H2O'),
+    'Lückentext (HTML): cloze-blank / cloze-filled Spans & HTML-Escaping beim Hinweis',
+  );
+
+  // 3. Duplicate detection (best progress kept first)
+  const mkCard = (id: string, front: string, back: string, extra: Partial<any> = {}): any => ({
+    id,
+    front,
+    back,
+    createdAt: extra.createdAt ?? 100,
+    srs: { ...newSrs(0), ...(extra.srs ?? {}) },
+    ...extra,
+  });
+  const dupGroups = DT.findDuplicateGroups([
+    mkCard('c1', 'Was ist Osmose?', 'A1', { createdAt: 200, srs: { reps: 1 } }),
+    mkCard('c2', '  was ist {{osmose}} ', 'A2', { createdAt: 300, srs: { reps: 5 } }),
+    mkCard('c3', 'Mitose', 'Kernteilung'),
+  ]);
+  ok(dupGroups.length === 1 && dupGroups[0].length === 2 && dupGroups[0][0].id === 'c2', 'Duplikate: erkennt gleiche Vorderseite unabhängig von Großschreibung/Satzzeichen und behält höchsten Lernstand zuerst');
+
+  // 4. Card status filter & sorting
+  const cNew = mkCard('n', 'Zebra', 'Tier', { createdAt: 10 });
+  const cDue = mkCard('d', 'Affe', 'Tier', { createdAt: 30, srs: { last: now - 2 * DAY, due: now - DAY, reps: 2, interval: 1, lapses: 4, ease: 1.7 } });
+  const cMaster = mkCard('m', 'Bär', 'Tier', { createdAt: 20, srs: { last: now - DAY, due: now + 40 * DAY, reps: 8, interval: 40, lapses: 0, ease: 2.6 } });
+  const cSusp = mkCard('s', 'Pausiert', 'X', { createdAt: 40, suspended: true, srs: { last: now - DAY, due: now - DAY, reps: 1, interval: 1 } });
+  ok(
+    DT.matchesCardStatus(cNew, 'new', now) &&
+      DT.matchesCardStatus(cDue, 'due', now) &&
+      DT.matchesCardStatus(cDue, 'learning', now) &&
+      DT.matchesCardStatus(cMaster, 'mastered', now) &&
+      DT.matchesCardStatus(cSusp, 'suspended', now) &&
+      !DT.matchesCardStatus(cSusp, 'due', now),
+    'Karten-Statusfilter: Neu, Fällig, Lernend, Gemeistert und Pausiert sauber getrennt',
+  );
+  ok(DT.sortCardList([cNew, cDue, cMaster], 'newest')[0].id === 'd', 'Sortierung: Neueste zuerst');
+  ok(DT.sortCardList([cNew, cDue, cMaster], 'hardest')[0].id === 'd', 'Sortierung: Schwierigste (meiste Fehlversuche) zuerst');
+  ok(DT.sortCardList([cNew, cDue, cMaster], 'due')[0].id === 'd', 'Sortierung: Fälligkeit zuerst');
+  ok(DT.sortCardList([cNew, cDue, cMaster], 'alpha').map((x) => x.id).join(',') === 'd,m,n', 'Sortierung: Alphabetisch A–Z');
+
+  // 5. 14-day forecast, study time estimation & hardest cards
+  const fc = DT.upcomingDueByDay([cNew, cDue, cMaster, cSusp, mkCard('f3', 'In 3 Tagen', 'X', { srs: { last: now - DAY, due: now + 3 * DAY, reps: 2, interval: 3 } })], 14, now);
+  ok(fc.length === 14 && fc[0].count === 1 && fc[3].count === 1 && fc.reduce((a, b) => a + b.count, 0) === 2, '14-Tage-Prognose: überfällige heute, zukünftige am Zieltag, pausierte/neue ignoriert');
+  const estDefault = DT.estimateStudyMinutes(30, []);
+  const estFast = DT.estimateStudyMinutes(30, [0, 5000, 10000, 15000, 20000].map((at) => ({ at })));
+  ok(estDefault === 5 && estFast === 3 && DT.formatEstMinutes(estDefault) === '≈ 5 Min.' && DT.formatEstMinutes(75) === '≈ 1 Std. 15 Min.', 'Lernzeit-Schätzung passt sich Tempo an und formatiert lesbar');
+  const hard = DT.hardestCards([cNew, cDue, cMaster, cSusp], 5);
+  ok(hard.length === 1 && hard[0].id === 'd', 'Schwierigste Karten: nur aktive Karten mit Fehlversuchen/niedriger Ease');
+
+  // 6. Print HTML sheet builder
+  const printDeck: any = { id: 'p1', name: 'Bio <Test>', cards: [mkCard('p', 'Was ist {{ATP}}?', 'Energieträger', { hint: 'Adenosin...' }), cSusp] };
+  const htmlTable = DT.buildPrintHtml(printDeck, 'table');
+  const htmlFold = DT.buildPrintHtml(printDeck, 'fold');
+  const htmlCards = DT.buildPrintHtml(printDeck, 'cards');
+  ok(
+    htmlTable.includes('Bio &lt;Test&gt;') &&
+      htmlTable.includes('ATP') &&
+      htmlTable.includes('Adenosin...') &&
+      !htmlTable.includes('Pausiert') &&
+      htmlFold.includes('fold-list') &&
+      htmlCards.includes('cut-grid'),
+    'Druckbogen-Export: alle 3 Layouts (Tabelle, Falt-Zettel, Ausschneide-Karten), Escaping & Ausschluss pausierter Karten',
+  );
+
+  // 7. Suspended cards skipped in newCards.ts (pickDue & unseenCount)
+  const pool = [
+    { id: 'u1', srs: newSrs(0) },
+    { id: 'u2', suspended: true, srs: newSrs(0) },
+    { id: 'r1', srs: { ...newSrs(0), last: 1, due: now - 100 } },
+    { id: 'r2', suspended: true, srs: { ...newSrs(0), last: 1, due: now - 100 } },
+  ];
+  ok(NC.unseenCount(pool) === 1 && NC.pickDue(pool, now, 10).map((x) => x.id).join(',') === 'r1,u1', 'newCards: pausierte Karten zählen weder als neu noch als fällig');
+
+  // 8. Store actions: pin/archive, per-deck limits, suspend, bulk ops, duplicate, merge, reorder
+  const ws = ST.addWorkspace('Test-WS');
+  const course = ST.addCourse(ws.id, 'Test-Kurs');
+  ST.togglePinCourse(course.id);
+  ST.toggleArchiveCourse(course.id);
+  const cState = ST.getState().data.courses.find((c) => c.id === course.id)!;
+  ok(cState.pinned === true && cState.archived === true, 'Store: Kurs anheften & archivieren');
+  ST.toggleArchiveCourse(course.id);
+
+  const dA = ST.addDeck(course.id, 'Deck A', { newPerDay: 1, maxReviewsPerDay: 1 });
+  const dB = ST.addDeck(course.id, 'Deck B');
+  ST.addCards(dA.id, [
+    { front: 'F1', back: 'B1', hint: 'Tipp 1' },
+    { front: 'F2', back: 'B2' },
+    { front: 'F3', back: 'B3', srs: { ...newSrs(0), last: now - 2 * DAY, due: now - DAY, reps: 2, interval: 1 } },
+    { front: 'F4', back: 'B4', srs: { ...newSrs(0), last: now - 2 * DAY, due: now - DAY + 10, reps: 2, interval: 1 } },
+  ]);
+  let deckA = ST.getState().data.decks.find((x) => x.id === dA.id)!;
+  ok(deckA.cards[0].hint === 'Tipp 1', 'Store: Karten-Hinweis wird gespeichert');
+  // Per-deck limits: 1 review + 1 new = 2 due
+  const dueLimited = ST.dueCards(deckA);
+  ok(dueLimited.length === 2, `Store: Deck-Tageslimits (maxReviewsPerDay=1 + newPerDay=1 → 2 fällig, war ${dueLimited.length})`);
+
+  // Archive deck -> 0 due cards
+  ST.togglePinDeck(dA.id);
+  ST.toggleArchiveDeck(dA.id);
+  deckA = ST.getState().data.decks.find((x) => x.id === dA.id)!;
+  ok(deckA.pinned === true && deckA.archived === true && ST.dueCards(deckA).length === 0, 'Store: archiviertes Deck hat 0 fällige Karten');
+  ST.toggleArchiveDeck(dA.id);
+
+  // Suspend & bulk operations
+  const ids = ST.getState().data.decks.find((x) => x.id === dA.id)!.cards.map((c) => c.id);
+  ST.toggleSuspendCard(dA.id, ids[0]);
+  ok(ST.getState().data.decks.find((x) => x.id === dA.id)!.cards[0].suspended === true, 'Store: Karte pausieren');
+  ST.bulkUpdateCards(dA.id, [ids[0], ids[1]], (c) => ({ marked: true, tags: [...(c.tags ?? []), 'Klausur'] }));
+  ST.bulkResetCards(dA.id, [ids[2]]);
+  deckA = ST.getState().data.decks.find((x) => x.id === dA.id)!;
+  ok(deckA.cards[0].marked && deckA.cards[1].tags?.includes('Klausur') && deckA.cards[2].srs.reps === 0, 'Store: Bulk-Update (Markieren/Taggen) & Bulk-Reset');
+  ST.bulkDeleteCards(dA.id, [ids[3]]);
+  ok(ST.getState().data.decks.find((x) => x.id === dA.id)!.cards.length === 3, 'Store: Bulk-Löschen');
+
+  // Duplicate deck (without & with progress)
+  const copyFresh = ST.duplicateDeck(dA.id, false)!;
+  const copyKeep = ST.duplicateDeck(dA.id, true)!;
+  ok(copyFresh && copyFresh.cards.length === 3 && copyFresh.cards.every((c) => c.srs.reps === 0) && copyKeep.cards.length === 3, 'Store: Deck duplizieren (mit & ohne Lernstand)');
+
+  // Reorder decks
+  ST.reorderDecks([dB.id, dA.id]);
+  const rA = ST.getState().data.decks.find((x) => x.id === dA.id)!;
+  const rB = ST.getState().data.decks.find((x) => x.id === dB.id)!;
+  ok(rB.order === 0 && rA.order === 1, 'Store: Deck-Reihenfolge per Drag & Drop gespeichert');
+
+  // Merge decks
+  const merged = ST.mergeDecks(copyFresh.id, dB.id);
+  ok(
+    merged === 3 &&
+      !ST.getState().data.decks.some((x) => x.id === copyFresh.id) &&
+      ST.getState().data.decks.find((x) => x.id === dB.id)!.cards.length === 3,
+    'Store: Decks zusammenführen verschiebt alle Karten und entfernt das Quelldeck',
+  );
+}
+
+console.log('App-weite Upgrades: Offline-Quiz, Statistik-Analyse, Zusammenfassung, Kalender-Fälligkeiten, Befehlspalette');
+{
+  const AX = await import('../src/lib/appExtras');
+  const SR = await import('../src/lib/search');
+  const DAY = 86_400_000;
+  const baseDay = new Date(2026, 10, 16, 9, 0, 0).getTime(); // Monday 09:00
+
+  // 1. Offline Quiz builder
+  const qCards: any[] = [
+    { id: 'q1', front: 'Was ist {{Osmose}}?', back: 'Diffusion durch eine Membran', hint: 'Wasser wandert', createdAt: 1, srs: newSrs(0) },
+    { id: 'q2', front: 'Was ist Mitose?', back: 'Kernteilung', createdAt: 2, srs: newSrs(0) },
+    { id: 'q3', front: 'Was ist ATP?', back: 'Energieträger der Zelle', createdAt: 3, srs: newSrs(0) },
+    { id: 'q4', front: 'Was sind Ribosomen?', back: 'Orte der Proteinbiosynthese', createdAt: 4, srs: newSrs(0) },
+    { id: 'q5', front: 'Pausiert', back: 'Soll nicht erscheinen', suspended: true, createdAt: 5, srs: newSrs(0) },
+  ];
+  const quiz = AX.buildOfflineQuiz(qCards, 4, 42);
+  ok(
+    quiz.length === 4 &&
+      quiz.every((q) => q.options.length === 4 && new Set(q.options).size === 4 && q.answer >= 0 && q.answer < 4) &&
+      !quiz.some((q) => q.question.includes('Pausiert')) &&
+      quiz.some((q) => q.question.includes('[ … ]') && q.explanation.includes('Wasser wandert')),
+    'Offline-Quiz: 4 eindeutige Optionen je Frage, Lückentext auf Frage-Seite, Hinweise als Erklärung, pausierte Karten ignoriert',
+  );
+  ok(AX.buildOfflineQuiz(qCards.slice(0, 3), 4, 1).length === 0, 'Offline-Quiz: weniger als 4 unterschiedliche Antworten → leer');
+
+  // 2. Stats analytics: bestStreak, ratingBreakdown, timeOfDayStats, weekdayStats, CSV
+  const revs: any[] = [
+    { at: baseDay, rating: 4 }, // Mon 09:00
+    { at: baseDay + DAY, rating: 3 }, // Tue 09:00
+    { at: baseDay + 2 * DAY, rating: 1 }, // Wed 09:00
+    { at: baseDay + 5 * DAY + 10 * 3600_000, rating: 3 }, // Sat 19:00
+    { at: baseDay + 6 * DAY + 10 * 3600_000, rating: 2 }, // Sun 19:00
+  ];
+  ok(AX.bestStreak(revs) === 3, 'Statistik: bestStreak findet längste zusammenhängende Lernserie (3 Tage)');
+  const rb = AX.ratingBreakdown(revs);
+  ok(rb.total === 5 && rb[1] === 1 && rb[2] === 1 && rb[3] === 2 && rb[4] === 1, 'Statistik: ratingBreakdown zählt Bewertungen 1–4 korrekt');
+  const tod = AX.timeOfDayStats(revs);
+  const morning = tod.find((x) => x.id === 'morning')!;
+  const evening = tod.find((x) => x.id === 'evening')!;
+  ok(morning.total === 3 && morning.percent === 67 && evening.total === 2 && evening.percent === 50, 'Statistik: Trefferquote nach Tageszeit (Morgens/Abends)');
+  const wd = AX.weekdayStats(revs);
+  ok(wd.length === 7 && wd[0].label === 'Mo' && wd[0].percent === 100 && wd[2].percent === 0, 'Statistik: Trefferquote nach Wochentag');
+  const csv = AX.statsToCsv([{ deckId: 'd1', course: 'Biologie', name: 'Zelle; Basis', cards: 10, mastery: 80, due: 2, reviews: 5, known: 4 }]);
+  ok(csv.startsWith('\uFEFF') && csv.includes('"Zelle; Basis"') && csv.includes(';80'), 'Statistik: CSV-Export mit UTF-8-BOM und Semikolon-Escaping');
+
+  // 3. Summary TOC & Print HTML
+  const toc = AX.extractMarkdownHeadings('# Titel\n## **Einleitung**\nText\n### Unterpunkt `A`\n## Fazit');
+  ok(toc.length === 3 && toc[0].level === 2 && toc[0].text === 'Einleitung' && toc[1].level === 3 && toc[1].text === 'Unterpunkt A', 'Zusammenfassung: Inhaltsverzeichnis extrahiert ## und ### Überschriften');
+  const pHtml = AX.buildSummaryPrintHtml('Bio <1>', '<h2>Test</h2><p>Inhalt</p>');
+  ok(pHtml.includes('Bio &lt;1&gt;') && pHtml.includes('<h2>Test</h2>'), 'Zusammenfassung: Druck-HTML escaped Titel sauber');
+
+  // 4. Calendar due counts by day (skips archived decks & suspended cards)
+  const calMap = AX.dueCountsByDay(
+    [
+      {
+        archived: false,
+        cards: [
+          { id: 'a', front: '', back: '', createdAt: 0, srs: { ...newSrs(0), last: baseDay - 5 * DAY, due: baseDay - DAY } },
+          { id: 'b', front: '', back: '', createdAt: 0, srs: { ...newSrs(0), last: baseDay - DAY, due: baseDay + 2 * DAY } },
+          { id: 'c', front: '', back: '', createdAt: 0, suspended: true, srs: { ...newSrs(0), last: baseDay - DAY, due: baseDay + 2 * DAY } },
+        ],
+      },
+      {
+        archived: true,
+        cards: [{ id: 'd', front: '', back: '', createdAt: 0, srs: { ...newSrs(0), last: baseDay - DAY, due: baseDay } }],
+      },
+    ],
+    baseDay,
+  );
+  ok(calMap.get('2026-11-16') === 1 && calMap.get('2026-11-18') === 1 && calMap.size === 2, 'Kalender: fällige Karten je Tag (überfällige heute, pausierte & archivierte ignoriert)');
+
+  // 5. Global search across Skills, Exams, Todos, Tools, Tags, Hints & Cloze
+  const searchData = {
+    courses: [{ id: 'c1', name: 'Biologie', workspaceId: 'w1' }],
+    decks: [
+      {
+        id: 'd1',
+        name: 'Zellbiologie',
+        courseId: 'c1',
+        cards: [{ id: 'k1', front: 'Was ist {{Photosynthese}}?', back: 'Lichtenergie in Glukose', hint: 'Chloroplasten', tags: ['Botanik'] }],
+      },
+    ],
+    skills: [{ id: 's1', title: 'Stochastik Grundlagen', topic: 'Wahrscheinlichkeit', mini: false }],
+    exams: [{ id: 'e1', title: 'Bio Klausur', date: '2026-12-01' }],
+    todos: [
+      { id: 't1', text: 'Übungsblatt Mathe abgeben', due: '2026-11-20' },
+      { id: 't2', text: 'Erledigtes Mathe Blatt', doneAt: 1234 },
+    ],
+  };
+  ok(SR.searchAll(searchData, 'Photosynthese').some((h) => h.kind === 'card' && !h.title.includes('{{')), 'Globale Suche: findet Lückentext-Karte ohne {{}}-Klammern');
+  ok(SR.searchAll(searchData, 'Chloroplasten').some((h) => h.kind === 'card') && SR.searchAll(searchData, 'Botanik').some((h) => h.kind === 'card'), 'Globale Suche: durchsucht auch Hinweise und Tags');
+  ok(SR.searchAll(searchData, 'Stochastik').some((h) => h.kind === 'skill' && h.id === 's1'), 'Globale Suche: findet Skills');
+  ok(SR.searchAll(searchData, 'Klausur').some((h) => h.kind === 'exam' && h.id === 'e1'), 'Globale Suche: findet Prüfungen');
+  const todoHits = SR.searchAll(searchData, 'Mathe').filter((h) => h.kind === 'todo');
+  ok(todoHits.length === 1 && todoHits[0].id === 't1', 'Globale Suche: findet offene To-dos (erledigte ignoriert)');
+  ok(SR.searchAll(searchData, 'Periodensystem').some((h) => h.kind === 'tool' && h.id === 'ptable'), 'Globale Suche: findet Merkora-Werkzeuge');
+}
+
 console.log(failures ? `\n${failures} Test(s) fehlgeschlagen` : '\nAlle SRS-Tests bestanden');
 process.exit(failures ? 1 : 0);
+
+
+
 

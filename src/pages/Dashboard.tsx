@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { GoalRing } from '../components/GoalRing';
 import { HeroScene } from '../components/HeroScene';
 import { DeckCoverOf } from '../components/DeckCover';
@@ -8,8 +8,22 @@ import { Link, useNavigate } from 'react-router-dom';
 import { AnkiImport } from '../components/AnkiImport';
 import { CreateWithAI } from '../components/CreateWithAI';
 import { ExamDialog } from '../components/ExamDialog';
-import { IconCalendar, IconCards, IconChevron, IconFlame, IconPlus, IconSparkle, IconStar, IconTarget, IconSearch, IconUpload, IconPractice, IconChecklist } from '../components/Icons';
-import { nextLesson, skillStreak, skillToday } from '../lib/skills';
+import {
+  IconCalendar,
+  IconCards,
+  IconChevron,
+  IconChecklist,
+  IconFlame,
+  IconPlay,
+  IconPlus,
+  IconPractice,
+  IconSearch,
+  IconSparkle,
+  IconStar,
+  IconTarget,
+  IconUpload,
+} from '../components/Icons';
+import { nextLesson, skillProgress, skillStreak, skillToday } from '../lib/skills';
 import { FoldPanel } from '../components/FoldPanel';
 import { Mascot } from '../components/Mascot';
 import { usePhone } from '../lib/phone';
@@ -18,7 +32,10 @@ import { NoKeyHint } from '../components/NoKey';
 import { countdownText, dailyPlan, examAt, examCards, examForecast, forecastText, readiness, upcomingExams } from '../lib/exams';
 import { pathProgress, playerLevel, totalXp, xpStreak, xpToday } from '../lib/path';
 import { masteryPercent, sortDecks, streak, type DeckSort } from '../lib/stats';
-import { deckUrl, dueCards, setSettings, useStore, type Deck } from '../lib/store';
+import { deckUrl, dueCards, newCardsLeft, setSettings, useStore, type Deck } from '../lib/store';
+import { dueAcross } from '../lib/sessions';
+import { estimateStudyMinutes, formatEstMinutes } from '../lib/deckTools';
+import { StudySession, type SessionItem } from '../components/StudySession';
 import { dayKey } from '../lib/util';
 import { shortName } from '../lib/deckNames';
 import { WeekReview } from '../components/WeekReview';
@@ -94,6 +111,7 @@ export default function Dashboard() {
   const [create, setCreate] = useState<{ notes?: string; file?: File } | null>(null);
   const [anki, setAnki] = useState(false);
   const [exam, setExam] = useState(false);
+  const [session, setSession] = useState<{ title: string; items: SessionItem[] } | null>(null);
   useEffect(() => {
     document.title = 'Start – Merkora';
   }, []);
@@ -105,7 +123,9 @@ export default function Dashboard() {
 
   const now = Date.now();
   const today = dayKey(now);
-  const due = data.decks.reduce((a, d) => a + dueCards(d).length, 0);
+  const activeDecks = useMemo(() => data.decks.filter((d) => !d.archived), [data.decks]);
+  const due = activeDecks.reduce((a, d) => a + dueCards(d).length, 0);
+  const estDueMin = estimateStudyMinutes(due, data.reviews);
   const cardsToday = new Set(data.reviews.filter((r) => dayKey(r.at) === today).map((r) => r.cardId)).size;
   const minutesToday = Math.round(data.game.minutesByDay?.[today] ?? 0);
   const hour = new Date().getHours();
@@ -114,10 +134,10 @@ export default function Dashboard() {
   const goalReached = xpToday(data) >= data.game.dailyGoal;
   const serie = Math.max(xpStreak(data), streak(data.reviews));
   const exams = upcomingExams(data);
-  const dueDecks = data.decks.filter((d) => dueCards(d).length > 0).sort((a, b) => dueCards(b).length - dueCards(a).length);
+  const dueDecks = activeDecks.filter((d) => dueCards(d).length > 0).sort((a, b) => dueCards(b).length - dueCards(a).length);
   // the skill used last (active ones only)
   const lastSkill = [...(data.skills ?? [])].filter((s) => s.status === 'active').sort((a, b) => b.updatedAt - a.updatedAt)[0];
-  const skillNext = lastSkill ? { skill: lastSkill, lesson: nextLesson(lastSkill)?.lesson.title } : null;
+  const skillNext = lastSkill ? { skill: lastSkill, lesson: nextLesson(lastSkill)?.lesson.title, prog: skillProgress(lastSkill) } : null;
   // to-dos of today (and overdue ones) for the line on the start page
   const todayKey = dayKey(Date.now());
   const todosToday = (data.todos ?? []).filter((t) => !t.doneAt && t.due && t.due <= todayKey);
@@ -132,12 +152,24 @@ export default function Dashboard() {
     pokeTimer.current = window.setTimeout(() => setPoke((p) => (p && p.n === n ? { ...p, active: false } : p)), move === 'flip' ? 1000 : 1700);
   };
   const restMood = goalReached ? 'cheer' : tod === 'night' ? 'idle' : serie > 0 ? 'happy' : 'wave';
-  const pathDeck = data.decks
+  const pathDeck = activeDecks
     .filter((d) => d.cards.length)
     .map((d) => ({ deck: d, p: pathProgress(d) }))
     .sort((a, b) => Math.max(0, ...Object.values(b.deck.path ?? {}).map((r) => r.at)) - Math.max(0, ...Object.values(a.deck.path ?? {}).map((r) => r.at)))
     .find((x) => x.p.done < x.p.total);
 
+  const startAllDue = () => {
+    const items = dueAcross(activeDecks, (d) => newCardsLeft(d));
+    if (items.length) setSession({ title: 'Alle fälligen Karten heute', items });
+  };
+
+  if (session) {
+    return (
+      <div className="page">
+        <StudySession title={session.title} items={session.items} onExit={() => setSession(null)} />
+      </div>
+    );
+  }
 
   const tabs: { id: Tab; label: string; icon: ReactNode }[] = [
     { id: 'tasks', label: 'Aufgaben', icon: <IconCalendar size={16} /> },
@@ -168,16 +200,22 @@ export default function Dashboard() {
               {goalReached
                 ? 'Tagesziel geschafft – Pip ist stolz auf dich!'
                 : due > 0
-                  ? `Heute ${due === 1 ? 'ist 1 Karte' : `sind ${due} Karten`} fällig. Bereit, wenn du es bist.`
+                  ? `Heute ${due === 1 ? 'ist 1 Karte' : `sind ${due} Karten`} fällig${estDueMin ? ` (${formatEstMinutes(estDueMin)})` : ''}. Bereit, wenn du es bist.`
                   : 'Alles wiederholt. Bereit, wenn du es bist.'}
             </p>
             <HeroStats serie={serie} />
+            {due > 0 && (
+              <div className="hero-cta-row">
+                <button type="button" className="btn hero-btn sm" onClick={startAllDue}>
+                  <IconPlay size={13} /> Alle fälligen lernen ({due})
+                </button>
+              </div>
+            )}
           </div>
-          <button type="button" className="hero-ring" title={dueDecks[0] ? 'Jetzt lernen' : 'Statistik ansehen'} onClick={() => navigate(dueDecks[0] ? deckUrl(data, dueDecks[0], 'learn') : '/stats')}>
+          <button type="button" className="hero-ring" title={dueDecks[0] ? 'Jetzt lernen' : 'Statistik ansehen'} onClick={() => (due > 0 ? startAllDue() : navigate('/stats'))}>
             <GoalRing cards={cardsToday} cardGoal={cardGoal} minutes={minutesToday} minuteGoal={minuteGoal} hero />
           </button>
         </section>
-
 
         {!phone && (
           <button
@@ -185,7 +223,7 @@ export default function Dashboard() {
             className="home-search"
             onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))}
           >
-            <IconSearch size={16} /> <span>Karten, Decks und Dateien suchen …</span> <kbd>Strg K</kbd>
+            <IconSearch size={16} /> <span>Karten, Decks, Skills und Werkzeuge suchen …</span> <kbd>Strg K</kbd>
           </button>
         )}
 
@@ -194,13 +232,13 @@ export default function Dashboard() {
         {!phone && <WeekReview />}
 
         {!phone && (
-        <div className="home-tabs" role="tablist">
-          {tabs.map((t) => (
-            <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} className={`home-tab ${tab === t.id ? 'on' : ''}`} onClick={() => setTab(t.id)}>
-              {t.icon} {t.label}
-            </button>
-          ))}
-        </div>
+          <div className="home-tabs" role="tablist">
+            {tabs.map((t) => (
+              <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} className={`home-tab ${tab === t.id ? 'on' : ''}`} onClick={() => setTab(t.id)}>
+                {t.icon} {t.label}
+              </button>
+            ))}
+          </div>
         )}
 
         {shownTab === 'tasks' && (
@@ -219,14 +257,14 @@ export default function Dashboard() {
                 </Link>
               )}
               {phone && (
-              <Link to="/tools?tab=todos" className="home-tile t-todo">
-                <span className="home-tile-icon">
-                  <IconChecklist size={18} />
-                </span>
-                <b>To-dos</b>
-                <span className="home-tile-text">{todosToday.length ? todosToday.slice(0, 2).map((t) => t.text).join(' · ') : 'Nichts fällig'}</span>
-                <small>{todosToday.length ? `${todosToday.length} für heute` : 'Nächste Schritte planen'}</small>
-              </Link>
+                <Link to="/tools?tab=todos" className="home-tile t-todo">
+                  <span className="home-tile-icon">
+                    <IconChecklist size={18} />
+                  </span>
+                  <b>To-dos</b>
+                  <span className="home-tile-text">{todosToday.length ? todosToday.slice(0, 2).map((t) => t.text).join(' · ') : 'Nichts fällig'}</span>
+                  <small>{todosToday.length ? `${todosToday.length} für heute` : 'Nächste Schritte planen'}</small>
+                </Link>
               )}
               {skillNext && (
                 <Link to={`/skills/${skillNext.skill.id}`} className="home-tile t-skill" title={skillNext.lesson ? `Lektion: ${skillNext.lesson}` : 'Stufentest wartet'}>
@@ -235,8 +273,11 @@ export default function Dashboard() {
                   </span>
                   <b>Weiterüben</b>
                   <span className="home-tile-text">{skillNext.skill.title}</span>
+                  <span className="bar mini" aria-hidden="true" style={{ width: '100%', margin: '2px 0' }}>
+                    <i style={{ width: `${Math.round(skillNext.prog.share * 100)}%` }} />
+                  </span>
                   <small>
-                    heute {skillToday(skillNext.skill).done}/{skillToday(skillNext.skill).goal}
+                    {skillNext.prog.done}/{skillNext.prog.total} Lektionen · heute {skillToday(skillNext.skill).done}/{skillToday(skillNext.skill).goal}
                     {skillStreak(skillNext.skill) > 0 && ` · Serie ${skillStreak(skillNext.skill)}`}
                   </small>
                 </Link>
@@ -256,7 +297,7 @@ export default function Dashboard() {
                       <span className="home-tile-text">{e.title}</span>
                       <small>
                         {r.total > 0 && (f.kind === 'ok' || f.kind === 'late') && <i className={'tile-dot ' + f.kind} />}
-                        {r.total ? (p.left ? `heute ${p.left} ${p.left === 1 ? "Karte" : "Karten"}` : 'Tagesziel erreicht') : 'keine Decks'}
+                        {r.total ? (p.left ? `heute ${p.left} ${p.left === 1 ? 'Karte' : 'Karten'}` : 'Tagesziel erreicht') : 'keine Decks'}
                         {exams.length > 1 ? ` · +${exams.length - 1} weitere` : ''}
                       </small>
                     </Link>
@@ -312,16 +353,17 @@ export default function Dashboard() {
 
         {shownTab === 'decks' && (
           <div className="home-panel">
-            {data.decks.length ? (
+            {activeDecks.length ? (
               <>
                 {dueDecks.length > 0 && (
                   <div className="deck-due-line">
                     <span>
                       <b>{due}</b> {due === 1 ? 'Karte' : 'Karten'} in {dueDecks.length} {dueDecks.length === 1 ? 'Deck' : 'Decks'} fällig
+                      {estDueMin > 0 && <small className="muted"> ({formatEstMinutes(estDueMin)})</small>}
                     </span>
-                    <Link to={deckUrl(data, dueDecks[0], 'learn')} className="btn primary sm">
-                      Fälligste zuerst lernen
-                    </Link>
+                    <button type="button" className="btn primary sm" onClick={startAllDue}>
+                      <IconPlay size={12} /> Alle fälligen lernen
+                    </button>
                   </div>
                 )}
                 <div className="deck-tools">
@@ -332,13 +374,13 @@ export default function Dashboard() {
                       </button>
                     ))}
                   </div>
-                  {data.decks.length > 8 && (
+                  {activeDecks.length > 8 && (
                     <input className="input deck-search" placeholder="Deck suchen …" aria-label="Deck suchen" value={deckQuery} onChange={(e) => setDeckQuery(e.target.value)} />
                   )}
                 </div>
                 <div className="deck-list">
                   {sortDecks(
-                    data.decks.filter((d) => !deckQuery.trim() || d.name.toLowerCase().includes(deckQuery.trim().toLowerCase())),
+                    activeDecks.filter((d) => !deckQuery.trim() || d.name.toLowerCase().includes(deckQuery.trim().toLowerCase())),
                     deckSort,
                     data.reviews,
                     (d) => dueCards(d).length,
@@ -348,7 +390,7 @@ export default function Dashboard() {
                 </div>
               </>
             ) : (
-              <p className="muted">Noch keine Decks.</p>
+              <p className="muted">Noch keine aktiven Decks.</p>
             )}
             <Link to="/library" className="small-link">
               Zur Bibliothek <IconChevron size={12} />
