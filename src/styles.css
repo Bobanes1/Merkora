@@ -11994,8 +11994,66 @@ html.phone .goal-ring.in-hero .gr-legend { display: none; }
 .figure-story-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; margin-top: 8px; }
 .figure-state-note.figure-part-note { border-left: 3px solid var(--primary); text-align: left; }
 
+/* Structured theory callouts (Alltagsbild, Merksatz, Typische Falle, Noch einfacher) & Spickzettel recap */
+.bite-callouts { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+.bite-callout {
+  padding: 10px 14px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  border-left: 3.5px solid var(--primary);
+  background: var(--surface-2);
+  font-size: 14px;
+  line-height: 1.5;
+  animation: dg-note-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.bite-callout-head {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-bottom: 3px;
+  color: var(--primary);
+}
+.bite-callout.takeaway {
+  border-left-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 9%, var(--surface-2));
+}
+.bite-callout.analogy {
+  border-left-color: #2f5fc4;
+  background: color-mix(in srgb, #2f5fc4 9%, var(--surface-2));
+}
+.bite-callout.analogy .bite-callout-head { color: #2f5fc4; }
+:root[data-theme='dark'] .bite-callout.analogy .bite-callout-head { color: #7fa5f0; }
+.bite-callout.pitfall {
+  border-left-color: #c77700;
+  background: color-mix(in srgb, #c77700 10%, var(--surface-2));
+}
+.bite-callout.pitfall .bite-callout-head { color: #b06a00; }
+:root[data-theme='dark'] .bite-callout.pitfall .bite-callout-head { color: #f0b45a; }
+.bite-callout.simpler {
+  margin: 10px 0;
+  border-left-color: #1f9d6b;
+  background: color-mix(in srgb, #1f9d6b 10%, var(--surface-2));
+}
+.bite-callout.simpler .bite-callout-head { color: #1f9d6b; }
+:root[data-theme='dark'] .bite-callout.simpler .bite-callout-head { color: #5cd4a2; }
+.bite-callout p:last-child, .bite-callout .md > :last-child { margin-bottom: 0; }
+.bite-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 6px 0 10px; }
+.cheat-summary {
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  border-radius: var(--r-md);
+  border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--line));
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface-2));
+}
+.cheat-summary ul { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; }
+.cheat-summary .cheat-pitfall strong { color: #b06a00; }
+:root[data-theme='dark'] .cheat-summary .cheat-pitfall strong { color: #f0b45a; }
+
 .diagram .dg-bal-beam { transition: transform 0.55s cubic-bezier(0.34, 1.35, 0.64, 1); }
-.dg-animated .dg-preset { animation: dg-backdrop-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.dg-animated .dg-preset { transform-box: fill-box; transform-origin: center; animation: dg-backdrop-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.dg-animated .dg-anim-raw > [transform] { animation-name: dg-vec-in; }
 .dg-animated .dg-orbit-rot, .dg-animated .ps-orbit, .dg-animated .dg-orbit { animation: ps-spin 14s linear infinite; }
 .dg-animated .dg-wave-run { animation: dg-wave-shift 2.8s linear infinite; }
 .dg-animated .ps-flow { animation: ps-dash 1.6s linear infinite; }
@@ -12033,7 +12091,7 @@ html.phone .goal-ring.in-hero .gr-legend { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .diagram .dg-vec, .diagram .dg-art, .diagram .dg-bal-beam, .diagram-interactive .ps-part,
-  .figure-state-note, .figure-replay, .figure-part-chip,
+  .figure-state-note, .figure-replay, .figure-part-chip, .bite-callout,
   .dg-animated *, .bite-card, .bite-card *, .sprint-bite, .phase-panel,
   .practice-example .practice-step, .practice-example .practice-step > span, .practice-example .example-result,
   .bite-check .form-ok, .bite-check .form-error, .bite-reveal-box, .bite-reveal-note, .bite-est-pin.truth,

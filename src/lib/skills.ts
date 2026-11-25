@@ -330,13 +330,14 @@ function priorPace(skill: Skill): 'fast' | 'normal' {
 }
 
 /** Skill lessons explain in structured, memorable bites (Goldilocks length) with varied mini-checks. */
-export const BITE_RULE = `ERKLÄRUNG IN HÄPPCHEN – fundiert, aber gut merkbar (keine Mini-Stichpunkte und keine endlose Textwand!). Feld "bites": 3–4 klar aufgebaute Häppchen (je etwa 65–110 Wörter, gesamt ~250–380 Wörter):
-[{"title":"kurzer, themenspezifischer Titel","text":"Markdown, ~65–110 Wörter, ein klarer Gedanke mit Alltagsbeispiel","figure":0,"check":{…}}]
+export const BITE_RULE = `ERKLÄRUNG IN HÄPPCHEN – fundiert, bildhaft und sofort erfassbar (keine Mini-Stichpunkte und keine endlose Textwand!). Feld "bites": 3–4 klar aufgebaute Häppchen (je etwa 65–110 Wörter, gesamt ~250–380 Wörter):
+[{"title":"kurzer, themenspezifischer Titel","text":"Markdown, ~65–110 Wörter, ein klarer Gedanke","analogy":"(optional, 1–2 Sätze) anschauliches Alltagsbild („Stell dir vor …“)","takeaway":"(empfohlen, 1 knackiger Satz) der Merksatz zum Behalten","pitfall":"(optional, 1 Satz) typische Falle oder häufige Verwechslung","figure":0,"check":{…}}]
 - Klarer 3–4-Schritte-Bogen:
-  1. Häppchen 1 (Ankommen & Grundidee, OHNE "check"): konkretes Alltagsbild („Stell dir vor …“), wozu man das Thema braucht und der erste Kernbegriff verständlich erklärt.
-  2. Häppchen 2 (So funktioniert es, MIT bildhafter Grafik "figure": 0): der Kernmechanismus Schritt für Schritt, jeder neue Begriff und jede Abkürzung sofort erklärt – hier passt 1 kurzer aktiver "check" zum gerade Gelesenen.
-  3. Häppchen 3 (Vertiefung, Abgrenzung oder typische Stolperfalle, gern mit 2. Grafik "figure": 1): alles Weitere, was die Aufgaben brauchen (Unterschiede, Regeln, Grenzen) – optional mit 2. kurzem "check".
+  1. Häppchen 1 (Ankommen & Grundidee, OHNE "check"): wozu man das Thema braucht und der erste Kernbegriff verständlich erklärt + starkes "analogy" (Alltagsbild) + "takeaway".
+  2. Häppchen 2 (So funktioniert es, MIT bildhafter Grafik "figure": 0): der Kernmechanismus Schritt für Schritt, jeder neue Begriff und jede Abkürzung sofort erklärt + "takeaway" – hier passt 1 kurzer aktiver "check" zum gerade Gelesenen.
+  3. Häppchen 3 (Vertiefung, Abgrenzung oder typische Stolperfalle, gern mit 2. Grafik "figure": 1): Unterschiede, Regeln, Grenzen + "pitfall" (typische Falle) + "takeaway" – optional mit 2. kurzem "check".
   4. Optional Häppchen 4 (Kurz-Merksatz „Auf einen Blick“, OHNE "check"): nur wenn das Thema es braucht, 2–3 knackige Merkpunkte zum Behalten.
+- Keine Doppelung: Was du in "analogy", "takeaway" oder "pitfall" schreibst, wiederholst du nicht nochmal wörtlich im "text" – so bleibt der Fließtext luftig und das Auge erfasst den Kern sofort.
 - Höchstens 2 Häppchen pro Lektion bekommen einen "check" (NIE Häppchen 1!) – die anderen sind reine Erklärung (kein "check"). Erklären geht vor Abfragen.
 - Mische die kurzen "check"-Formate – NICHT jedes Häppchen als Multiple Choice (höchstens 1× "choice" pro Lektion):
   • Wahr oder Irrtum: {"type":"tf","statement":"steile Behauptung oder typischer Irrtum","answer":false,"why":"ein Satz Auflösung"}

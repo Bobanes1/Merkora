@@ -65,7 +65,20 @@ export type BiteEstimate = { type: 'estimate'; q: string; min: number; max: numb
 export type BiteCheck = BiteChoice | BiteTf | BiteGap | BiteReveal | BiteEstimate;
 
 /** One bite of an explanation: a short text, maybe a picture (index in figures) and a quick interactive check. */
-export type Bite = { title: string; text: string; figure?: number; check?: BiteCheck };
+export type Bite = {
+  title: string;
+  text: string;
+  /** Everyday comparison / metaphor („Alltagsbild“). */
+  analogy?: string;
+  /** One crisp takeaway sentence to remember („Merksatz“). */
+  takeaway?: string;
+  /** Typical misconception or trap („Typische Falle“). */
+  pitfall?: string;
+  /** Cached on-demand simpler explanation for this bite. */
+  simpler?: string;
+  figure?: number;
+  check?: BiteCheck;
+};
 
 /** Lesson flow style: classic (bites → example → practice), discovery (try hook first → bites → practice), or sprint (brief overview → practice). */
 export type LessonStyle = 'classic' | 'discovery' | 'sprint';
@@ -382,7 +395,20 @@ export function parseBites(raw: unknown, figures: number): Bite[] {
     if (!text) continue;
     const fig = r.figure === undefined || r.figure === null || r.figure === '' ? NaN : Number(r.figure);
     const check = parseBiteCheck(r.check);
-    out.push({ title: s(r.title, 90), text, ...(Number.isInteger(fig) && fig >= 0 && fig < figures ? { figure: fig } : {}), ...(check ? { check } : {}) });
+    const analogy = s(r.analogy ?? r.alltagsbild ?? r.vergleich, 320);
+    const takeaway = s(r.takeaway ?? r.merksatz ?? r.merkregel, 260);
+    const pitfall = s(r.pitfall ?? r.falle ?? r.achtung, 280);
+    const simpler = s(r.simpler, 1200);
+    out.push({
+      title: s(r.title, 90),
+      text,
+      ...(analogy ? { analogy } : {}),
+      ...(takeaway ? { takeaway } : {}),
+      ...(pitfall ? { pitfall } : {}),
+      ...(simpler ? { simpler } : {}),
+      ...(Number.isInteger(fig) && fig >= 0 && fig < figures ? { figure: fig } : {}),
+      ...(check ? { check } : {}),
+    });
     if (out.length >= 6) break;
   }
   return out;
@@ -586,6 +612,23 @@ export function parseSimpler(raw: unknown): PracticeSet['simple'] | null {
   const ex = (r.example ?? null) as Record<string, unknown> | null;
   const example = ex && s(ex.problem) ? { problem: s(ex.problem), steps: arr(ex.steps, 10), answer: s(ex.answer) || undefined } : undefined;
   return { intro, ...(example ? { example } : {}) };
+}
+
+/** „Noch einfacher“ for one single explanation bite: 3 crystal-clear sentences + fresh everyday analogy. Pure – tested. */
+export function simplerBitePrompt(topic: string, bite: Bite, level = ''): Prompt {
+  return {
+    system: `Du erklärst EIN einzelnes Theorie-Häppchen noch einmal VIEL einfacher – für jemanden, der gerade an diesem Abschnitt hängt${level ? ` (Niveau: ${level})` : ''}. ${LANG_RULE}
+${PLAIN_RULE}
+Schreibe 3–4 kurze, glasklare Sätze (Markdown, ohne Überschrift) mit einem neuen, super anschaulichen Alltagsbild („Stell dir vor …“) und am Ende einem Satz, was man sich merken muss.
+Format: {"simple":"…"} – ausschließlich gültiges JSON.`,
+    user: `THEMA: ${topic}\nABSCHNITT: ${bite.title || 'Erklärung'}\n\nBISHERIGER TEXT:\n${bite.text}${bite.analogy ? `\nBisheriges Alltagsbild: ${bite.analogy}` : ''}${bite.takeaway ? `\nBisheriger Merksatz: ${bite.takeaway}` : ''}`,
+    maxTokens: 900,
+    json: true,
+  };
+}
+export function parseSimplerBite(raw: unknown): string | null {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  return s(r.simple ?? r.text ?? r.intro, 1200) || null;
 }
 
 /** The instruction for a practice set from deck material. */

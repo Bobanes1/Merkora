@@ -577,14 +577,14 @@ export const VISUAL_PRESETS: VisualPreset[] = [
       </g>
       <!-- Mitochondria -->
       <g ${partAttrs('mitochondrien', o.highlight)}>
-        <g class="ps-pulse" transform="rotate(-24 368 128)">
+        <g transform="rotate(-24 368 128)"><g class="ps-pulse">
           <ellipse cx="368" cy="128" rx="28" ry="14" fill="${p.amber}" stroke="${p.onAccent}" stroke-width="1.5"/>
           <path d="M 348 128 Q 354 120 360 128 T 372 128 T 386 128" fill="none" stroke="${p.onAccent}" stroke-width="2"/>
-        </g>
-        <g class="ps-pulse" transform="rotate(18 274 246)">
+        </g></g>
+        <g transform="rotate(18 274 246)"><g class="ps-pulse">
           <ellipse cx="274" cy="246" rx="26" ry="13" fill="${p.amber}" stroke="${p.onAccent}" stroke-width="1.5"/>
           <path d="M 256 246 Q 262 238 268 246 T 280 246 T 292 246" fill="none" stroke="${p.onAccent}" stroke-width="2"/>
-        </g>
+        </g></g>
         <line x1="392" y1="138" x2="448" y2="164" stroke="${p.amber}" stroke-width="1.8"/>
         ${pill(448, 153, 134, 'Mitochondrien', p.amber, p.bg, p.text)}
       </g>
