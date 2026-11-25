@@ -6,6 +6,7 @@
 import { ICON_NAMES, ICONS } from './diagramIcons';
 import { ILLUSTRATION_NAMES, illustrationMotion, matchIllustration, renderIllustration, type IllustrationPalette } from './illustrations';
 import { compileExpr, sampleCurve } from './plotExpr';
+import { resolveVisualPreset, type PresetPalette, type VisualPreset } from './visualPresets';
 
 export type ForceDir = 'up' | 'down' | 'left' | 'right' | 'up-left' | 'up-right' | 'down-left' | 'down-right';
 export type ForceVec = { dir: ForceDir; label: string; note?: string; size?: 's' | 'm' | 'l' };
@@ -14,6 +15,12 @@ export type SceneActor = { id: string; label: string; icon?: string; sub?: strin
 export type SceneArrow = { from: string; to: string; label?: string; both?: boolean; dashed?: boolean };
 export type CalloutPart = { side: 'left' | 'right'; label: string; note?: string };
 export type LayerItem = { label: string; note?: string; icon?: string };
+export type OrbitRing = { label: string; note?: string; count?: number };
+export type WaveCurve = { label: string; freq?: number; amp?: number };
+export type BalanceSide = { label: string; items?: string[]; weight?: number };
+export type BalanceState = { name: string; tilt: number; note?: string };
+export type ZoomLevel = { label: string; note?: string; icon?: string; scale?: string };
+export type IllustrationPart = { id: string; label: string; note?: string };
 
 export type Diagram = DiagramBase & {
   /** Small symbol per box: box label → symbol name (see lib/diagramIcons.ts). */
@@ -43,7 +50,12 @@ type DiagramBase =
   | { type: 'scene'; title?: string; actors: SceneActor[]; arrows: SceneArrow[] }
   | { type: 'callout'; title?: string; subject: string; icon?: string; parts: CalloutPart[] }
   | { type: 'layers'; title?: string; layers: LayerItem[] }
-  | { type: 'illustration'; title?: string; width: number; height: number; svg: string };
+  | { type: 'preset'; title?: string; preset: string; highlight?: string; notes?: Record<string, string> }
+  | { type: 'orbit'; title?: string; center: string; rings: OrbitRing[]; highlight?: string }
+  | { type: 'wave'; title?: string; x?: string; y?: string; waves: WaveCurve[]; showLength?: boolean; showAmp?: boolean }
+  | { type: 'balance'; title?: string; left: BalanceSide; right: BalanceSide; fulcrum?: string; states?: BalanceState[] }
+  | { type: 'zoom'; title?: string; levels: ZoomLevel[] }
+  | { type: 'illustration'; title?: string; width: number; height: number; svg: string; parts?: IllustrationPart[]; highlight?: string };
 
 export type PlotAxis = { label: string; min: number; max: number };
 
@@ -206,6 +218,11 @@ const TYPE_ALIASES: Record<string, string> = {
   szene: 'scene', akteure: 'scene', wechselwirkung: 'scene', interaction: 'scene',
   beschriftung: 'callout', aufbau: 'callout', teile: 'callout', anatomie: 'callout', querschnitt: 'callout', annotated: 'callout',
   schichten: 'layers', schichtenmodell: 'layers', ebenen: 'layers', stack: 'layers', stapel: 'layers',
+  vorlage: 'preset', thema: 'preset', animation: 'preset', visual: 'preset', schaubild: 'preset',
+  umlaufbahn: 'orbit', umlaufbahnen: 'orbit', schalen: 'orbit', schalenmodell: 'orbit', orbits: 'orbit',
+  welle: 'wave', wellen: 'wave', schwingung: 'wave', schwingungen: 'wave', sinus: 'wave', frequenz: 'wave',
+  waage: 'balance', gleichgewicht: 'balance', hebel: 'balance', abwaegung: 'balance', bilanz: 'balance',
+  massstab: 'zoom', maßstab: 'zoom', lupe: 'zoom', skalierung: 'zoom', 'ebenen-zoom': 'zoom',
   svg: 'illustration', skizze: 'illustration', zeichnung: 'illustration', bild: 'illustration', sketch: 'illustration',
 };
 
@@ -225,7 +242,13 @@ export function normalizeDiagram(raw: unknown): unknown {
   if (r && typeof r === 'object' && !Array.isArray(r)) {
     const o = r as Record<string, unknown>;
     if (!o.type && o.diagram && typeof o.diagram === 'object') return normalizeDiagram(o.diagram);
+    if (!o.type && typeof o.preset === 'string') return { ...o, type: 'preset' };
     const t = String(o.type ?? '').toLowerCase().trim().replace(/[\s_]+/g, '-');
+    // If the AI passed a preset id directly as "type" (e.g. {"type":"sonnensystem"} or {"type":"anatomie"} without callout parts)
+    const directPreset = resolveVisualPreset(t);
+    if (directPreset && !Array.isArray(o.parts ?? o.labels ?? o.items) && !Array.isArray(o.vectors) && !Array.isArray(o.actors)) {
+      return { ...o, type: 'preset', preset: directPreset.id };
+    }
     let type = TYPE_ALIASES[t] ?? TYPE_ALIASES[t.replace(/-/g, '')] ?? t;
     if (type === 'plot' && !Array.isArray(o.functions)) type = 'axes';
     if (type !== o.type) return { ...o, type };
@@ -524,10 +547,155 @@ function parseBase(raw: unknown): DiagramBase | null {
       if (layers.length < 2) return null;
       return { type: 'layers', title, layers };
     }
+    case 'preset': {
+      const pr = resolveVisualPreset(str(r.preset ?? r.name ?? r.subject ?? r.id, 60));
+      if (!pr) return null;
+      const hlRaw = str(r.highlight ?? r.focus, 40);
+      const hlPart = hlRaw
+        ? pr.parts.find((pt) => key(pt.id) === key(hlRaw) || key(pt.label) === key(hlRaw) || key(pt.label).includes(key(hlRaw)))
+        : undefined;
+      const notes: Record<string, string> = {};
+      if (r.notes && typeof r.notes === 'object' && !Array.isArray(r.notes)) {
+        for (const [k, v] of Object.entries(r.notes as Record<string, unknown>)) {
+          const val = str(v, 180);
+          if (!val) continue;
+          const pt = pr.parts.find((x) => key(x.id) === key(k) || key(x.label) === key(k));
+          if (pt) notes[pt.id] = val;
+        }
+      }
+      return {
+        type: 'preset',
+        title: title ?? pr.title,
+        preset: pr.id,
+        ...(hlPart ? { highlight: hlPart.id } : {}),
+        ...(Object.keys(notes).length ? { notes } : {}),
+      };
+    }
+    case 'orbit': {
+      const center = str(r.center ?? r.core ?? r.subject, 36);
+      if (!center) return null;
+      const rawRings = Array.isArray(r.rings ?? r.orbits ?? r.shells ?? r.items) ? ((r.rings ?? r.orbits ?? r.shells ?? r.items) as unknown[]) : [];
+      const rings: OrbitRing[] = [];
+      for (const rawR of rawRings) {
+        if (rings.length >= 5) break;
+        const o = (rawR ?? {}) as Record<string, unknown>;
+        const label = typeof rawR === 'string' || typeof rawR === 'number' ? str(rawR, 38) : str(o.label ?? o.name ?? o.title, 38);
+        if (!label) continue;
+        const note = typeof rawR === 'object' && rawR ? str(o.note ?? o.desc ?? o.sub, 56) || undefined : undefined;
+        const cntRaw = typeof rawR === 'object' && rawR ? Number(o.count ?? o.dots) : NaN;
+        const count = Number.isFinite(cntRaw) ? Math.max(1, Math.min(6, Math.round(cntRaw))) : undefined;
+        rings.push({ label, ...(note ? { note } : {}), ...(count ? { count } : {}) });
+      }
+      if (!rings.length) return null;
+      return { type: 'orbit', title, center, rings, ...hl([center, ...rings.map((x) => x.label)]) };
+    }
+    case 'wave': {
+      const rawW = Array.isArray(r.waves ?? r.curves ?? r.signals) ? ((r.waves ?? r.curves ?? r.signals) as unknown[]) : [];
+      const waves: WaveCurve[] = [];
+      for (const item of rawW) {
+        if (waves.length >= 2) break;
+        const o = (item ?? {}) as Record<string, unknown>;
+        const label = typeof item === 'string' ? str(item, 36) : str(o.label ?? o.name, 36);
+        if (!label) continue;
+        const fRaw = o.freq ?? o.frequency;
+        const aRaw = o.amp ?? o.amplitude;
+        const f = fRaw !== undefined && fRaw !== '' ? num(fRaw) : NaN;
+        const a = aRaw !== undefined && aRaw !== '' ? num(aRaw) : NaN;
+        waves.push({
+          label,
+          freq: Number.isFinite(f) ? Math.max(0.5, Math.min(4, f)) : waves.length === 0 ? 1.5 : 3,
+          amp: Number.isFinite(a) ? Math.max(0.25, Math.min(1, a)) : waves.length === 0 ? 0.82 : 0.55,
+        });
+      }
+      if (!waves.length) return null;
+      const x = str(r.x, 32) || undefined;
+      const y = str(r.y, 32) || undefined;
+      return {
+        type: 'wave',
+        title,
+        ...(x ? { x } : {}),
+        ...(y ? { y } : {}),
+        waves,
+        ...(r.showLength === false ? { showLength: false } : { showLength: true }),
+        ...(r.showAmp === false ? { showAmp: false } : { showAmp: true }),
+      };
+    }
+    case 'balance': {
+      const parseSide = (rawS: unknown): BalanceSide | null => {
+        if (typeof rawS === 'string' || typeof rawS === 'number') {
+          const label = str(rawS, 40);
+          return label ? { label } : null;
+        }
+        if (!rawS || typeof rawS !== 'object') return null;
+        const o = rawS as Record<string, unknown>;
+        const label = str(o.label ?? o.title ?? o.name, 40);
+        if (!label) return null;
+        const items = list(o.items ?? o.points, 4);
+        const wRaw = o.weight ?? o.value;
+        const w = wRaw !== undefined && wRaw !== '' ? num(wRaw) : NaN;
+        return { label, ...(items.length ? { items } : {}), ...(Number.isFinite(w) ? { weight: Math.max(1, Math.min(10, w)) } : {}) };
+      };
+      const left = parseSide(r.left ?? r.links ?? r.a);
+      const right = parseSide(r.right ?? r.rechts ?? r.b);
+      if (!left || !right) return null;
+      const fulcrum = str(r.fulcrum ?? r.center ?? r.pivot, 32) || undefined;
+      const states: BalanceState[] = [];
+      for (const rawSt of Array.isArray(r.states) ? (r.states as unknown[]) : []) {
+        if (states.length >= 4) break;
+        const o = (rawSt ?? {}) as Record<string, unknown>;
+        const name = str(o.name ?? o.label, 28);
+        if (!name) continue;
+        const tNum = Number(o.tilt ?? 0);
+        const tilt = Number.isFinite(tNum) ? Math.max(-14, Math.min(14, Math.round(tNum))) : 0;
+        const note = str(o.note ?? o.text, 140) || undefined;
+        states.push({ name, tilt, ...(note ? { note } : {}) });
+      }
+      return { type: 'balance', title, left, right, ...(fulcrum ? { fulcrum } : {}), ...(states.length >= 2 ? { states } : {}) };
+    }
+    case 'zoom': {
+      const rawZ = Array.isArray(r.levels ?? r.steps ?? r.stages ?? r.items) ? ((r.levels ?? r.steps ?? r.stages ?? r.items) as unknown[]) : [];
+      const levels: ZoomLevel[] = [];
+      for (const rawL of rawZ) {
+        if (levels.length >= 5) break;
+        const o = (rawL ?? {}) as Record<string, unknown>;
+        const label = typeof rawL === 'string' || typeof rawL === 'number' ? str(rawL, 32) : str(o.label ?? o.name ?? o.title, 32);
+        if (!label) continue;
+        const note = typeof rawL === 'object' && rawL ? str(o.note ?? o.desc ?? o.sub, 44) || undefined : undefined;
+        const icon = typeof rawL === 'object' && rawL ? str(o.icon ?? o.motif, 30) || undefined : undefined;
+        const scale = typeof rawL === 'object' && rawL ? str(o.scale ?? o.size, 18) || undefined : undefined;
+        levels.push({ label, ...(note ? { note } : {}), ...(icon ? { icon } : {}), ...(scale ? { scale } : {}) });
+      }
+      if (levels.length < 2) return null;
+      return { type: 'zoom', title, levels };
+    }
     case 'illustration': {
       const cleaned = sanitizeSvg(r.svg, r.width, r.height);
       if (!cleaned) return null;
-      return { type: 'illustration', title, width: cleaned.width, height: cleaned.height, svg: cleaned.svg };
+      const parts: IllustrationPart[] = [];
+      for (const rawP of Array.isArray(r.parts) ? (r.parts as unknown[]) : []) {
+        if (parts.length >= 8) break;
+        const o = (rawP ?? {}) as Record<string, unknown>;
+        const id = str(o.id ?? o.part, 32)
+          .toLowerCase()
+          .replace(/[^a-z0-9_-]/g, '');
+        const label = str(o.label ?? o.name ?? o.title, 36);
+        if (!id || !label) continue;
+        const note = str(o.note ?? o.text ?? o.desc, 180) || undefined;
+        parts.push({ id, label, ...(note ? { note } : {}) });
+      }
+      const hlRaw = str(r.highlight ?? r.focus, 32)
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, '');
+      const highlight = hlRaw && parts.some((pt) => pt.id === hlRaw) ? hlRaw : undefined;
+      return {
+        type: 'illustration',
+        title,
+        width: cleaned.width,
+        height: cleaned.height,
+        svg: cleaned.svg,
+        ...(parts.length ? { parts } : {}),
+        ...(highlight ? { highlight } : {}),
+      };
     }
     default:
       return null;
@@ -565,10 +733,14 @@ const SVG_ALLOWED_ATTRS = new Set([
   'd', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry', 'width', 'height', 'points',
   'fill', 'fill-opacity', 'stroke', 'stroke-width', 'stroke-dasharray', 'stroke-linecap', 'stroke-linejoin',
   'opacity', 'transform', 'font-size', 'font-weight', 'text-anchor', 'dominant-baseline', 'dx', 'dy',
-  'id', 'class', 'marker-end', 'marker-start', 'viewbox', 'refx', 'refy', 'markerwidth', 'markerheight', 'orient',
+  'id', 'class', 'data-part', 'marker-end', 'marker-start', 'viewbox', 'refx', 'refy', 'markerwidth', 'markerheight', 'orient',
   'offset', 'stop-color', 'stop-opacity', 'gradientunits',
 ]);
-const SVG_SAFE_CLASSES = new Set(['dg-float', 'dg-bob', 'dg-pulse', 'dg-flow', 'dg-spin', 'dg-rock']);
+export const SVG_SAFE_CLASSES = new Set([
+  'dg-float', 'dg-bob', 'dg-pulse', 'dg-flow', 'dg-flow-rev', 'dg-flow-fast',
+  'dg-spin', 'dg-spin-slow', 'dg-rock', 'dg-breathe', 'dg-glow', 'dg-blink',
+  'dg-slide-r', 'dg-slide-u', 'dg-draw', 'dg-orbit', 'dg-fade-in',
+]);
 const SVG_ATTR_CASE: Record<string, string> = {
   viewbox: 'viewBox', refx: 'refX', refy: 'refY', markerwidth: 'markerWidth', markerheight: 'markerHeight', gradientunits: 'gradientUnits',
 };
@@ -614,6 +786,10 @@ export function sanitizeSvg(raw: unknown, widthHint?: unknown, heightHint?: unkn
       if (k.startsWith('on') || !SVG_ALLOWED_ATTRS.has(k)) continue;
       if (k === 'class') {
         v = v.split(/\s+/).filter((c) => SVG_SAFE_CLASSES.has(c)).join(' ');
+        if (!v) continue;
+      }
+      if (k === 'data-part') {
+        v = v.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 32);
         if (!v) continue;
       }
       if (/javascript:|data:|vbscript:|expression\(|https?:\/\//i.test(v)) continue;
@@ -685,7 +861,15 @@ export type Area = { circle?: [number, number, number]; poly?: [number, number][
 /** Illustrated motif or circular badge placed inside a visual diagram (forces, scene, callout, layers, flow, compare, cycle). */
 export type ArtItem = { icon?: string; subject?: string; badge?: string; x: number; y: number; w: number; h: number; tilt?: number; tone?: number };
 const hueOf = (i: number) => (i % 5) + 1;
-export type Layout = { width: number; height: number; boxes: Box[]; lines: Line[]; areas: Area[]; art?: ArtItem[]; rawSvg?: { svg: string; width: number; height: number; y: number }; fs: number };
+export type Layout = {
+  width: number; height: number; boxes: Box[]; lines: Line[]; areas: Area[]; art?: ArtItem[];
+  rawSvg?: { svg: string; width: number; height: number; y: number; highlight?: string };
+  presetSlot?: { preset: VisualPreset; y: number; highlight?: string; notes?: Record<string, string> };
+  orbitSlot?: { cx: number; cy: number; coreR: number; rings: { r: number; count: number; tone: number; dur: number; active: boolean }[] };
+  waveSlot?: { x0: number; x1: number; y0: number; y1: number; waves: { freq: number; amp: number; tone: number }[]; showLength?: boolean; showAmp?: boolean };
+  balanceSlot?: { cx: number; y: number; tilt: number; leftLabel: string; rightLabel: string; fulcrum?: string };
+  fs: number;
+};
 
 let NF = FS; // font size of the boxes of the diagram being laid out
 /** Symbols of the diagram being laid out (by label, spaces/hyphens ignored); a box with a symbol has 24 px less room for text. */
@@ -1020,6 +1204,10 @@ export function layoutDiagram(d: Diagram, stateIndex?: number): Layout {
   const areas: Area[] = [];
   const art: ArtItem[] = [];
   let rawSvg: Layout['rawSvg'];
+  let presetSlot: Layout['presetSlot'];
+  let orbitSlot: Layout['orbitSlot'];
+  let waveSlot: Layout['waveSlot'];
+  let balanceSlot: Layout['balanceSlot'];
   let y = PAD;
   if (d.title) {
     const tl = wrap(d.title, W - 2 * PAD, 17);
@@ -1815,9 +2003,144 @@ export function layoutDiagram(d: Diagram, stateIndex?: number): Layout {
       y += rowH + gapY;
     });
     y -= gapY;
+  } else if (d.type === 'preset') {
+    const pr = resolveVisualPreset(d.preset);
+    if (pr) {
+      const scaledH = Math.round(((W - 2 * PAD) * pr.height) / pr.width);
+      presetSlot = { preset: pr, y, ...(d.highlight ? { highlight: d.highlight } : {}), ...(d.notes ? { notes: d.notes } : {}) };
+      y += scaledH;
+    }
+  } else if (d.type === 'orbit') {
+    const n = d.rings.length;
+    const rx0 = 318, rw = W - PAD - rx0;
+    const rowItems = [{ label: d.center, note: undefined as string | undefined, isCenter: true, tone: 1 }, ...d.rings.map((rg, idx) => ({ label: rg.label, note: rg.note, isCenter: false, tone: hueOf(idx + 1) }))];
+    let ry = y;
+    const rowMidY: number[] = [];
+    for (const it of rowItems) {
+      const ll = wrap(it.label, rw - 18, 13.5);
+      const lh = ll.length * 18 + 12;
+      const isHl = it.isCenter ? !d.highlight || d.highlight === it.label : d.highlight === it.label;
+      boxes.push({ x: rx0, y: ry, w: rw, h: lh, lines: ll, kind: isHl ? 'accent' : 'node', fs: 13.5, tone: it.tone });
+      rowMidY.push(ry + lh / 2);
+      ry += lh + 4;
+      if (it.note) {
+        const nl = wrap(it.note, rw - 8, 12);
+        const nh = nl.length * 15;
+        boxes.push({ x: rx0 + 4, y: ry, w: rw - 8, h: nh, lines: nl, kind: 'label', align: 'start', fs: 12 });
+        ry += nh + 4;
+      }
+      ry += 6;
+    }
+    const blockH = Math.max(236, ry - y - 6);
+    const cx = 152, cy = y + blockH / 2;
+    const coreR = 24;
+    const maxR = Math.min(116, blockH / 2 - 10);
+    const ringSpecs = d.rings.map((rg, idx) => {
+      const r = n === 1 ? Math.min(82, maxR) : coreR + 22 + ((maxR - coreR - 22) * idx) / (n - 1);
+      return {
+        r,
+        count: rg.count ?? Math.min(4, idx + 1),
+        tone: hueOf(idx + 1),
+        dur: 6.5 + idx * 3.8,
+        active: d.highlight === rg.label,
+      };
+    });
+    orbitSlot = { cx, cy, coreR, rings: ringSpecs };
+    // Clean non-crossing leader lines from center & each orbit ring right edge to its label box
+    lines.push({ pts: [[cx + coreR + 2, cy], [rx0 - 24, rowMidY[0]], [rx0 - 4, rowMidY[0]]], tone: 1, width: 1.8, dotStart: true });
+    ringSpecs.forEach((rg, idx) => {
+      const ang = -0.55 + (n > 1 ? (1.1 * idx) / (n - 1) : 0);
+      const ax = cx + rg.r * Math.cos(ang), ay = cy + rg.r * Math.sin(ang);
+      const ty = rowMidY[idx + 1];
+      lines.push({ pts: [[ax, ay], [rx0 - 20, ty], [rx0 - 4, ty]], tone: rg.tone, width: 1.8, dotStart: true });
+    });
+    y += blockH;
+  } else if (d.type === 'wave') {
+    const plotH = 176;
+    const x0 = PAD + 30, y1 = y + 24, y0 = y1 + plotH, x1 = W - PAD - 12;
+    if (d.y) boxes.push({ x: x0 + 4, y, w: 320, h: 20, lines: [d.y], kind: 'bold', align: 'start', fs: 13 });
+    if (d.x) boxes.push({ x: x1 - 300, y: y0 + 6, w: 300, h: 20, lines: [d.x], kind: 'bold', align: 'end', fs: 13 });
+    waveSlot = {
+      x0, x1, y0, y1,
+      waves: d.waves.map((w, idx) => ({ freq: w.freq ?? (idx === 0 ? 1.5 : 3), amp: w.amp ?? (idx === 0 ? 0.82 : 0.55), tone: hueOf(idx) })),
+      showLength: d.showLength,
+      showAmp: d.showAmp,
+    };
+    y = y0 + 30;
+    const gap = 12;
+    const nw = d.waves.length;
+    const maxLw = Math.floor((inner - (nw - 1) * gap) / nw);
+    const lws = d.waves.map((w) => Math.min(maxLw, Math.max(76, w.label.length * charW(13) + 26)));
+    const wls = d.waves.map((w, idx) => wrap(w.label, lws[idx] - 14, 13, 2));
+    const wh = Math.max(26, ...wls.map((l) => l.length * 17 + 8));
+    const totalW = lws.reduce((a, b) => a + b, 0) + (nw - 1) * gap;
+    let lx = PAD + (inner - totalW) / 2;
+    d.waves.forEach((_, idx) => {
+      boxes.push({ x: lx, y, w: lws[idx], h: wh, lines: wls[idx], kind: 'node', fs: 13, tone: hueOf(idx) });
+      lx += lws[idx] + gap;
+    });
+    y += wh;
+  } else if (d.type === 'balance') {
+    const st = stateIndex !== undefined ? d.states?.[stateIndex] : undefined;
+    const lw = d.left.weight ?? 5, rw = d.right.weight ?? 5;
+    const tilt = st ? st.tilt : Math.max(-12, Math.min(12, Math.round((rw - lw) * 2.8)));
+    balanceSlot = { cx: W / 2, y, tilt, leftLabel: d.left.label, rightLabel: d.right.label, fulcrum: d.fulcrum };
+    y += 158;
+    const gap = 18;
+    const cw = (inner - gap) / 2;
+    const sides = [d.left, d.right];
+    const headLines = sides.map((s) => wrap(s.label, cw - 18, 14));
+    const headH = Math.max(...headLines.map((l) => l.length * 18 + 14));
+    const itemLines = sides.map((s) => (s.items ?? []).flatMap((it) => wrap('• ' + it, cw - 20, 13.5, 3)));
+    const hasItems = itemLines.some((l) => l.length > 0);
+    const bodyH = hasItems ? Math.max(...itemLines.map((l) => Math.max(36, l.length * 18 + 16))) : 0;
+    sides.forEach((_, idx) => {
+      const x = PAD + idx * (cw + gap);
+      const tone = idx === 0 ? 1 : 2;
+      boxes.push({ x, y, w: cw, h: headH, lines: headLines[idx], kind: 'accent', fs: 14, tone });
+      if (hasItems && itemLines[idx].length) {
+        boxes.push({ x, y: y + headH + 6, w: cw, h: bodyH, lines: itemLines[idx], kind: 'soft', align: 'start', fs: 13.5, tone });
+      }
+    });
+    y += headH + (hasItems ? 6 + bodyH : 0);
+  } else if (d.type === 'zoom') {
+    const n = d.levels.length;
+    const gap = n >= 5 ? 12 : 18;
+    const cw = (inner - (n - 1) * gap) / n;
+    const hasScale = d.levels.some((l) => !!l.scale);
+    const hasNote = d.levels.some((l) => !!l.note);
+    const artH = n >= 4 ? 54 : 66;
+    const artW = Math.min(cw - 14, n >= 4 ? 76 : 96);
+    const labels = d.levels.map((l) => wrap(l.label, cw - 14, n >= 5 ? 12.5 : 13.5));
+    const notes = d.levels.map((l) => (l.note ? wrap(l.note, cw - 12, 11.5) : []));
+    const labH = Math.max(...labels.map((l) => l.length * 17 + 12));
+    const noteH = hasNote ? Math.max(0, ...notes.map((l) => l.length * 15)) : 0;
+    const topOff = hasScale ? 26 : 6;
+    const cardH = topOff + artH + 10 + labH + (hasNote ? noteH + 8 : 6);
+    d.levels.forEach((lv, idx) => {
+      const x = PAD + idx * (cw + gap);
+      const tone = hueOf(idx);
+      boxes.push({ x, y, w: cw, h: cardH, lines: [], kind: 'soft', tone });
+      if (lv.scale) {
+        boxes.push({ x: x + 6, y: y + 4, w: cw - 12, h: 20, lines: [lv.scale], kind: 'tag', fs: 11, tone });
+      }
+      const m = lv.icon || matchIllustration(lv.label) || matchIllustration(lv.note);
+      if (m) art.push({ icon: m, subject: lv.label, x: x + (cw - artW) / 2, y: y + topOff, w: artW, h: artH, tone });
+      else art.push({ badge: `${idx + 1}×`, x: x + cw / 2 - 18, y: y + topOff + (artH - 36) / 2, w: 36, h: 36, tone });
+      const ly = y + topOff + artH + 8;
+      boxes.push({ x: x + 5, y: ly, w: cw - 10, h: labH, lines: labels[idx], kind: idx === n - 1 ? 'accent' : 'node', fs: n >= 5 ? 12.5 : 13.5, tone });
+      if (notes[idx].length) {
+        boxes.push({ x: x + 5, y: ly + labH + 4, w: cw - 10, h: notes[idx].length * 15, lines: notes[idx], kind: 'label', fs: 11.5 });
+      }
+      if (idx < n - 1) {
+        const ax = x + cw + 2, bx = x + cw + gap - 2, midY = y + topOff + artH / 2;
+        lines.push({ pts: [[ax, midY], [bx, midY]], arrow: true, tone, width: 2.2 });
+      }
+    });
+    y += cardH;
   } else if (d.type === 'illustration') {
     const scaledH = Math.round(((W - 2 * PAD) * d.height) / d.width);
-    rawSvg = { svg: d.svg, width: d.width, height: d.height, y };
+    rawSvg = { svg: d.svg, width: d.width, height: d.height, y, ...(d.highlight ? { highlight: d.highlight } : {}) };
     y += scaledH;
   }
   // symbols: on the boxes whose label has one (the text was wrapped narrower for it above)
@@ -1827,7 +2150,16 @@ export function layoutDiagram(d: Diagram, stateIndex?: number): Layout {
       const ic = ICON_OF.get(nk(b.lines.join(' ')));
       if (ic) b.icon = ic;
     }
-  return { width: W, height: Math.ceil(y + PAD), boxes, lines, areas, ...(art.length ? { art } : {}), ...(rawSvg ? { rawSvg } : {}), fs: NF };
+  return {
+    width: W, height: Math.ceil(y + PAD), boxes, lines, areas,
+    ...(art.length ? { art } : {}),
+    ...(rawSvg ? { rawSvg } : {}),
+    ...(presetSlot ? { presetSlot } : {}),
+    ...(orbitSlot ? { orbitSlot } : {}),
+    ...(waveSlot ? { waveSlot } : {}),
+    ...(balanceSlot ? { balanceSlot } : {}),
+    fs: NF,
+  };
 }
 
 function curve(s: Shape): (t: number) => number {
@@ -1886,7 +2218,8 @@ const r1 = (n: number) => Math.round(n * 10) / 10;
 export type DiagramView = { hide?: number; reveal?: number; steps?: boolean; /** built up step by step: only the first `upto` text boxes are shown */ upto?: number; /** several labels covered, numbered 1, 2, 3 … (labelling tasks) */ hideMany?: number[];
   /** labelling by drag & drop: the term placed on covered box k (shown instead of the number) */ filled?: (string | undefined)[];
   /** after checking: covered box k right (green) or wrong (red) */ marks?: (boolean | undefined)[];
-  /** active state index for interactive `forces` diagrams (e.g. Reiseflug / Steigflug / Landung) */ state?: number;
+  /** active state index for interactive `forces`, `balance` or `preset` diagrams */ state?: number;
+  /** focused part id for interactive `preset` diagrams */ focus?: string;
   /** Studyflix-style entrance & ambient motion (used in skill explanations) */ animate?: boolean };
 
 /** A term inside a covered box: as many words per line as fit, at most two lines (the rest shortened). */
@@ -1946,7 +2279,7 @@ export function diagramBoxCount(d: Diagram): number {
 export const STEP_TYPES: Diagram['type'][] = ['flow', 'cycle', 'timeline', 'pyramid'];
 
 /** Diagram kinds whose directed arrows carry an animated flow stream in skill explanations. */
-const FLOW_STREAM_TYPES = new Set<Diagram['type']>(['scene', 'flow', 'cycle', 'forces', 'model', 'network', 'decision']);
+const FLOW_STREAM_TYPES = new Set<Diagram['type']>(['scene', 'flow', 'cycle', 'forces', 'model', 'network', 'decision', 'zoom']);
 
 export function renderDiagram(d: Diagram, p: Palette = PALETTES.light, view?: DiagramView): string {
   const L = layoutDiagram(d, view?.state);
@@ -1963,7 +2296,7 @@ export function renderDiagram(d: Diagram, p: Palette = PALETTES.light, view?: Di
     `<marker id="${id}-${name}" viewBox="0 0 10 10" refX="${refX}" refY="5" markerWidth="${sz}" markerHeight="${sz}" orient="auto-start-reverse"><path d="M0 1.2 L10 5 L0 8.8 z" fill="${color}"/></marker>`;
   out.push(
     `<svg xmlns="http://www.w3.org/2000/svg"${anim ? ` class="dg-animated dg-type-${d.type}"` : ''} viewBox="0 0 ${L.width} ${L.height}" width="${L.width}" height="${L.height}" font-family="Manrope, Arial, sans-serif" role="img">`,
-    `<defs>${p.tones.map((t, i) => marker('a' + (i + 1), t.line) + marker('b' + (i + 1), t.line, 5.5, 7.5)).join('')}${marker('m', p.muted)}<filter id="${id}-s" x="-10%" y="-10%" width="120%" height="150%"><feDropShadow dx="0" dy="1.5" stdDeviation="1.6" flood-color="${p.shadow}"/></filter></defs>`,
+    `<defs>${p.tones.map((t, i) => marker('a' + (i + 1), t.line) + marker('b' + (i + 1), t.line, 5.5, 7.5)).join('')}${marker('m', p.muted)}<filter id="${id}-s" x="-10%" y="-10%" width="120%" height="150%"><feDropShadow dx="0" dy="1.5" stdDeviation="1.6" flood-color="${p.shadow}"/></filter>${L.waveSlot ? `<clipPath id="${id}-wc"><rect x="${r1(L.waveSlot.x0)}" y="${r1(L.waveSlot.y1)}" width="${r1(L.waveSlot.x1 - L.waveSlot.x0)}" height="${r1(L.waveSlot.y0 - L.waveSlot.y1)}"/></clipPath>` : ''}</defs>`,
   );
   if (p.bg) out.push(`<rect width="100%" height="100%" fill="${p.bg}"/>`);
   let areaIdx = 0;
@@ -1990,7 +2323,7 @@ export function renderDiagram(d: Diagram, p: Palette = PALETTES.light, view?: Di
       out.push(`<polygon${aAttr} points="${a.poly.map(([x, y]) => `${r1(x)},${r1(y)}`).join(' ')}" fill="${fill}" stroke="${a.fill === 'accent' ? fill : t.stroke}" stroke-width="1.4" stroke-linejoin="round" filter="url(#${id}-s)"/>`);
     }
   }
-  // Empty soft backdrop cards (used in `scene` behind illustrations) render before art and lines
+  // Empty soft backdrop cards (used in `scene`, `layers`, `zoom` behind illustrations) render before art and lines
   const backdrop = (b: Box) => !b.lines.length && b.kind === 'soft';
   let bdIdx = 0;
   for (const b of L.boxes) {
@@ -1998,6 +2331,142 @@ export function renderDiagram(d: Diagram, p: Palette = PALETTES.light, view?: Di
     const t = tn(b.tone);
     const bdAttr = anim ? ` class="dg-anim-backdrop" style="animation-delay:${dly(0.04, bdIdx++, 0.08, 0.72)}s"` : '';
     out.push(`<rect${bdAttr} x="${r1(b.x)}" y="${r1(b.y)}" width="${r1(b.w)}" height="${r1(b.h)}" rx="14" fill="${t.soft}" stroke="${t.stroke}" stroke-width="1.2" stroke-opacity="0.5"/>`);
+  }
+  if (L.presetSlot) {
+    const { preset, y: py, highlight, notes } = L.presetSlot;
+    const scale = (L.width - 2 * PAD) / preset.width;
+    const pPal: PresetPalette = {
+      teal: p.tones[0].line, tealSoft: p.tones[0].soft, tealNode: p.tones[0].node,
+      berry: p.tones[1].line, berrySoft: p.tones[1].soft, berryNode: p.tones[1].node,
+      amber: p.tones[2].line, amberSoft: p.tones[2].soft, amberNode: p.tones[2].node,
+      blue: p.tones[3].line, blueSoft: p.tones[3].soft, blueNode: p.tones[3].node,
+      violet: p.tones[4].line, violetSoft: p.tones[4].soft, violetNode: p.tones[4].node,
+      text: p.text, muted: p.muted, onAccent: p.onAccent, bg: p.bg ?? p.tones[0].soft,
+    };
+    const body = preset.render(pPal, {
+      highlight: view?.focus ?? highlight,
+      state: view?.state,
+      notes,
+      animated: anim,
+      uid: id,
+    });
+    out.push(`<g class="dg-preset" transform="translate(${PAD} ${r1(py)}) scale(${scale.toFixed(4)})">${body}</g>`);
+  }
+  if (L.orbitSlot) {
+    const { cx, cy, coreR, rings } = L.orbitSlot;
+    const outerR = (rings[rings.length - 1]?.r ?? coreR + 36) + 14;
+    out.push(`<g class="dg-orbit">`);
+    out.push(`<circle cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(outerR)}" fill="${p.tones[0].soft}" fill-opacity="0.6" stroke="${p.tones[0].stroke}" stroke-opacity="0.22" stroke-width="1.2"/>`);
+    rings.forEach((rg, idx) => {
+      const t = tn(rg.tone);
+      out.push(`<circle class="dg-orbit-ring" cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(rg.r)}" fill="none" stroke="${t.line}" stroke-width="${rg.active ? 2.4 : 1.5}" stroke-opacity="${rg.active ? 0.85 : 0.45}"${idx % 2 === 1 ? ' stroke-dasharray="4 4"' : ''}/>`);
+      const rotAttr = anim ? ` class="dg-orbit-rot" style="transform-origin:${r1(cx)}px ${r1(cy)}px;animation-duration:${rg.dur.toFixed(1)}s"` : '';
+      const dots: string[] = [];
+      for (let k = 0; k < rg.count; k++) {
+        const ang = (k * 2 * Math.PI) / rg.count - Math.PI / 2 + idx * 0.55;
+        const dx = cx + rg.r * Math.cos(ang), dy = cy + rg.r * Math.sin(ang);
+        dots.push(`<circle class="dg-orbit-dot" cx="${r1(dx)}" cy="${r1(dy)}" r="${rg.active ? 6.8 : 5.4}" fill="${t.line}" stroke="${p.onAccent}" stroke-width="1.6"/>`);
+      }
+      out.push(`<g${rotAttr}>${dots.join('')}</g>`);
+    });
+    if (anim) {
+      out.push(`<circle class="dg-pulse" cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(coreR + 7)}" fill="${tn(1).line}" fill-opacity="0.18"/>`);
+    }
+    out.push(`<circle cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(coreR)}" fill="${tn(1).accent}" stroke="${p.onAccent}" stroke-width="2.2" filter="url(#${id}-s)"/>`);
+    out.push(`</g>`);
+  }
+  if (L.waveSlot) {
+    const { x0, x1, y0, y1, waves, showLength, showAmp } = L.waveSlot;
+    const plotW = x1 - x0;
+    const midY = (y0 + y1) / 2;
+    const maxAmpPx = (y0 - y1) / 2 - 14;
+    out.push(`<g class="dg-wave">`);
+    out.push(`<rect x="${r1(x0)}" y="${r1(y1)}" width="${r1(plotW)}" height="${r1(y0 - y1)}" rx="10" fill="${p.tones[0].soft}" fill-opacity="0.55" stroke="${p.tones[0].stroke}" stroke-opacity="0.25"/>`);
+    out.push(`<line x1="${r1(x0)}" y1="${r1(midY)}" x2="${r1(x1 + 6)}" y2="${r1(midY)}" stroke="${p.muted}" stroke-width="1.6" marker-end="url(#${id}-m)"/>`);
+    out.push(`<line x1="${r1(x0)}" y1="${r1(y0)}" x2="${r1(x0)}" y2="${r1(y1 - 4)}" stroke="${p.muted}" stroke-width="1.6" marker-end="url(#${id}-m)"/>`);
+    out.push(`<g clip-path="url(#${id}-wc)">`);
+    waves.forEach((w) => {
+      const t = tn(w.tone);
+      const period = plotW / w.freq;
+      const ampPx = maxAmpPx * w.amp;
+      const samples = 96;
+      const startX = x0 - period;
+      const span = plotW + period;
+      const pts: string[] = [];
+      for (let k = 0; k <= samples; k++) {
+        const px = startX + (span * k) / samples;
+        const py = midY - ampPx * Math.sin(((px - x0) / period) * 2 * Math.PI);
+        pts.push(`${k === 0 ? 'M' : 'L'}${r1(px)} ${r1(py)}`);
+      }
+      const dur = Math.max(1.8, 3.8 / Math.sqrt(w.freq)).toFixed(2);
+      const runAttr = anim ? ` class="dg-wave-run" style="--wave-shift:${r1(period)}px;animation-duration:${dur}s"` : '';
+      out.push(`<path${runAttr} d="${pts.join(' ')}" fill="none" stroke="${t.line}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`);
+    });
+    out.push(`</g>`);
+    const w0 = waves[0];
+    if (w0) {
+      const period = plotW / w0.freq;
+      const ampPx = maxAmpPx * w0.amp;
+      const pk1 = x0 + period * 0.25;
+      const pk2 = x0 + period * 1.25;
+      if (showLength && period <= plotW * 0.96) {
+        const lx1 = pk2 <= x1 - 8 ? pk1 : x0 + 6;
+        const lx2 = pk2 <= x1 - 8 ? pk2 : x0 + 6 + period;
+        const ly = Math.max(y1 + 11, midY - ampPx - 10);
+        const mx = (lx1 + lx2) / 2;
+        out.push(`<line x1="${r1(lx1)}" y1="${r1(ly)}" x2="${r1(lx2)}" y2="${r1(ly)}" stroke="${p.tones[2].line}" stroke-width="1.8" marker-start="url(#${id}-b3)" marker-end="url(#${id}-b3)"/>`);
+        out.push(`<rect x="${r1(mx - 12)}" y="${r1(ly - 9)}" width="24" height="18" rx="9" fill="${p.tones[2].soft}" stroke="${p.tones[2].line}" stroke-width="1.2"/>`);
+        out.push(`<text x="${r1(mx)}" y="${r1(ly)}" font-size="12" font-weight="800" fill="${p.tones[2].line}" text-anchor="middle" dominant-baseline="central">λ</text>`);
+      }
+      if (showAmp && pk1 <= x1 - 16) {
+        const topY = midY - ampPx;
+        const ay = (midY + topY) / 2;
+        out.push(`<line x1="${r1(pk1)}" y1="${r1(midY - 2)}" x2="${r1(pk1)}" y2="${r1(topY + 2)}" stroke="${p.tones[1].line}" stroke-width="1.8" stroke-dasharray="3 2" marker-start="url(#${id}-b2)" marker-end="url(#${id}-b2)"/>`);
+        out.push(`<rect x="${r1(pk1 + 6)}" y="${r1(ay - 9)}" width="20" height="18" rx="9" fill="${p.tones[1].soft}" stroke="${p.tones[1].line}" stroke-width="1.2"/>`);
+        out.push(`<text x="${r1(pk1 + 16)}" y="${r1(ay)}" font-size="11.5" font-weight="800" fill="${p.tones[1].line}" text-anchor="middle" dominant-baseline="central">A</text>`);
+      }
+    }
+    out.push(`</g>`);
+  }
+  if (L.balanceSlot) {
+    const { cx, y: by, tilt, leftLabel, rightLabel, fulcrum } = L.balanceSlot;
+    const pivotY = by + 54;
+    const baseY = by + 122;
+    const arm = 164;
+    const panDrop = 46;
+    const lx = cx - arm + 16, rx = cx + arm - 16;
+    const short = (t: string) => (t.length > 16 ? t.slice(0, 15) + '…' : t);
+    const t1 = tn(1), t2 = tn(2), t3 = tn(3);
+    out.push(`<g class="dg-balance">`);
+    // Base & fulcrum
+    out.push(`<rect x="${r1(cx - 58)}" y="${r1(baseY)}" width="116" height="10" rx="5" fill="${t3.accent}"/>`);
+    out.push(`<polygon points="${r1(cx)},${r1(pivotY)} ${r1(cx - 24)},${r1(baseY)} ${r1(cx + 24)},${r1(baseY)}" fill="${t3.node}" stroke="${t3.stroke}" stroke-width="2" stroke-linejoin="round"/>`);
+    if (fulcrum) {
+      const fw = Math.min(200, Math.max(76, fulcrum.length * 7.2 + 22));
+      out.push(`<rect x="${r1(cx - fw / 2)}" y="${r1(baseY + 14)}" width="${r1(fw)}" height="20" rx="10" fill="${t3.soft}" stroke="${t3.stroke}" stroke-width="1.2"/>`);
+      out.push(`<text x="${r1(cx)}" y="${r1(baseY + 24)}" font-size="11.5" font-weight="700" fill="${p.text}" text-anchor="middle" dominant-baseline="central">${esc(fulcrum)}</text>`);
+    }
+    // Tilting beam + gravity-aligned pans
+    out.push(`<g class="dg-bal-beam" style="transform-origin:${r1(cx)}px ${r1(pivotY)}px;transform:rotate(${tilt}deg)">`);
+    out.push(`<rect x="${r1(cx - arm)}" y="${r1(pivotY - 4.5)}" width="${r1(arm * 2)}" height="9" rx="4.5" fill="${t1.accent}" filter="url(#${id}-s)"/>`);
+    // Left hanging pan
+    out.push(`<g transform="rotate(${-tilt} ${r1(lx)} ${r1(pivotY)})">`);
+    out.push(`<line x1="${r1(lx)}" y1="${r1(pivotY + 3)}" x2="${r1(lx - 34)}" y2="${r1(pivotY + panDrop)}" stroke="${t1.line}" stroke-width="1.6"/>`);
+    out.push(`<line x1="${r1(lx)}" y1="${r1(pivotY + 3)}" x2="${r1(lx + 34)}" y2="${r1(pivotY + panDrop)}" stroke="${t1.line}" stroke-width="1.6"/>`);
+    out.push(`<path d="M ${r1(lx - 44)} ${r1(pivotY + panDrop)} Q ${r1(lx)} ${r1(pivotY + panDrop + 20)} ${r1(lx + 44)} ${r1(pivotY + panDrop)} Z" fill="${t1.node}" stroke="${t1.stroke}" stroke-width="2"/>`);
+    out.push(`<rect x="${r1(lx - 46)}" y="${r1(pivotY + panDrop - 24)}" width="92" height="20" rx="10" fill="${t1.soft}" stroke="${t1.stroke}" stroke-width="1.2"/>`);
+    out.push(`<text x="${r1(lx)}" y="${r1(pivotY + panDrop - 14)}" font-size="11" font-weight="700" fill="${p.text}" text-anchor="middle" dominant-baseline="central">${esc(short(leftLabel))}</text>`);
+    out.push(`</g>`);
+    // Right hanging pan
+    out.push(`<g transform="rotate(${-tilt} ${r1(rx)} ${r1(pivotY)})">`);
+    out.push(`<line x1="${r1(rx)}" y1="${r1(pivotY + 3)}" x2="${r1(rx - 34)}" y2="${r1(pivotY + panDrop)}" stroke="${t2.line}" stroke-width="1.6"/>`);
+    out.push(`<line x1="${r1(rx)}" y1="${r1(pivotY + 3)}" x2="${r1(rx + 34)}" y2="${r1(pivotY + panDrop)}" stroke="${t2.line}" stroke-width="1.6"/>`);
+    out.push(`<path d="M ${r1(rx - 44)} ${r1(pivotY + panDrop)} Q ${r1(rx)} ${r1(pivotY + panDrop + 20)} ${r1(rx + 44)} ${r1(pivotY + panDrop)} Z" fill="${t2.node}" stroke="${t2.stroke}" stroke-width="2"/>`);
+    out.push(`<rect x="${r1(rx - 46)}" y="${r1(pivotY + panDrop - 24)}" width="92" height="20" rx="10" fill="${t2.soft}" stroke="${t2.stroke}" stroke-width="1.2"/>`);
+    out.push(`<text x="${r1(rx)}" y="${r1(pivotY + panDrop - 14)}" font-size="11" font-weight="700" fill="${p.text}" text-anchor="middle" dominant-baseline="central">${esc(short(rightLabel))}</text>`);
+    out.push(`</g>`);
+    out.push(`<circle cx="${r1(cx)}" cy="${r1(pivotY)}" r="7" fill="${p.onAccent}" stroke="${t1.accent}" stroke-width="2.6"/>`);
+    out.push(`</g></g>`);
   }
   if (L.art?.length) {
     let artIdx = 0;
@@ -2053,7 +2522,14 @@ export function renderDiagram(d: Diagram, p: Palette = PALETTES.light, view?: Di
       .replace(/\{\{bg\}\}/g, p.bg ?? p.tones[0].soft)
       .replace(/\bid="([\w-]+)"/g, `id="${id}-i-$1"`)
       .replace(/url\(#([\w-]+)\)/g, `url(#${id}-i-$1)`);
-    out.push(`<g${anim ? ' class="dg-anim-raw"' : ''} transform="translate(${PAD} ${r1(L.rawSvg.y)}) scale(${scale.toFixed(4)})">${themed}</g>`);
+    const fk = (view?.focus ?? L.rawSvg.highlight ?? '').toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    const interactive = themed.replace(/<([a-zA-Z][\w:-]*)([^>]*\bdata-part="([^"]+)"[^>]*)>/g, (_m, tag: string, attrs: string, pid: string) => {
+      const on = !!fk && pid.toLowerCase().replace(/[^a-z0-9_-]/g, '') === fk;
+      const extra = ['ps-part', on ? 'ps-focus' : fk ? 'ps-dim' : ''].filter(Boolean).join(' ');
+      if (/\bclass="/.test(attrs)) return `<${tag}${attrs.replace(/\bclass="([^"]*)"/, `class="$1 ${extra}"`)}>`;
+      return `<${tag} class="${extra}"${attrs}>`;
+    });
+    out.push(`<g${anim ? ' class="dg-anim-raw"' : ''} transform="translate(${PAD} ${r1(L.rawSvg.y)}) scale(${scale.toFixed(4)})">${interactive}</g>`);
   }
   let lineIdx = 0;
   let curveIdx = 0;
@@ -2324,10 +2800,15 @@ export const withDiagram = (html: string, d: Diagram) => stripGraphics(html) + d
 
 /** Names of the diagram kinds (for choosing one). */
 export const DIAGRAM_KINDS: { id: Diagram['type']; label: string }[] = [
+  { id: 'preset', label: 'Animierte Themen-Szene (Vorlage)' },
   { id: 'scene', label: 'Bildhafte Szene (Akteure & Pfeile)' },
   { id: 'forces', label: 'Kräfte & Richtungen am Objekt' },
   { id: 'callout', label: 'Objekt-Aufbau (Beschriftung)' },
   { id: 'layers', label: 'Schichten / Ebenen (Aufbau)' },
+  { id: 'orbit', label: 'Umlaufbahnen / Schalen (Orbit)' },
+  { id: 'wave', label: 'Schwingung / Welle (live)' },
+  { id: 'balance', label: 'Waage / Abwägung' },
+  { id: 'zoom', label: 'Zoom-Stufen (Makro → Mikro)' },
   { id: 'flow', label: 'Bild-Ablauf (Schritte)' },
   { id: 'compare', label: 'Bild-Vergleich (Gegenüberstellung)' },
   { id: 'cycle', label: 'Kreislauf' },

@@ -2600,6 +2600,147 @@ console.log('Bildhafte Erklärgrafiken (forces, scene, callout, illustration)');
   ok(plotAnim.includes('dg-anim-curve'), 'plot: Kurve zeichnet sich animiert');
   const safeCls = D.sanitizeSvg('<g class="dg-float evil-class"><circle cx="20" cy="20" r="10" class="dg-pulse"/><rect x="40" y="10" width="20" height="20" class="unknown"/></g>');
   ok(!!safeCls && safeCls.svg.includes('class="dg-float"') && safeCls.svg.includes('class="dg-pulse"') && !safeCls.svg.includes('evil-class') && !safeCls.svg.includes('unknown'), 'sanitizeSvg behält nur sichere Animationsklassen');
+
+  // Stage 1 + 3: Handcrafted animated visual presets (30 presets, interactive parts & states, topic-aware prompt hint)
+  const VP = await import('../src/lib/visualPresets');
+  ok(VP.VISUAL_PRESETS.length >= 30, `Mindestens 30 animierte Grafik-Presets vorhanden (${VP.VISUAL_PRESETS.length})`);
+  let allPresetsOk = true;
+  const badPresets: string[] = [];
+  for (const pr of VP.VISUAL_PRESETS) {
+    const d1 = D.parseDiagram({ type: 'preset', preset: pr.id, title: pr.title, highlight: pr.parts[0]?.id });
+    const d2 = D.parseDiagram({ type: pr.id });
+    if (!d1 || d1.type !== 'preset' || d1.preset !== pr.id || !d2 || d2.type !== 'preset' || d2.preset !== pr.id) {
+      allPresetsOk = false;
+      badPresets.push(pr.id + ':parse');
+      continue;
+    }
+    const svgL = D.renderDiagram(d1, D.PALETTES.light, { animate: true, focus: pr.parts[0]?.id, state: pr.states ? 1 : undefined });
+    const svgD = D.renderDiagram(d1, D.PALETTES.dark, { animate: true });
+    const gOpen = (svgL.match(/<g\b/g) ?? []).length;
+    const gClose = (svgL.match(/<\/g>/g) ?? []).length;
+    if (!svgL.startsWith('<svg') || !svgL.endsWith('</svg>') || !svgL.includes('dg-preset') || !svgL.includes('data-part=') || !svgL.includes('ps-focus') || !svgD.includes('dg-preset') || gOpen !== gClose) {
+      allPresetsOk = false;
+      badPresets.push(`${pr.id}:svg(g=${gOpen}/${gClose})`);
+    }
+  }
+  ok(allPresetsOk, `Alle ${VP.VISUAL_PRESETS.length} Presets parsen (explizit & per Typ-Alias) und rendern sauberes animiertes Light/Dark-SVG` + (badPresets.length ? ` [${badPresets.join(', ')}]` : ''));
+
+  // Disambiguation: anatomie with parts stays callout, without parts resolves to preset
+  const anaPreset = D.parseDiagram({ type: 'anatomie', title: 'Organe des Menschen' });
+  const anaCallout = D.parseDiagram({ type: 'anatomie', subject: 'Herz', parts: [{ side: 'left', label: 'Vorhof' }, { side: 'right', label: 'Kammer' }] });
+  ok(anaPreset?.type === 'preset' && anaPreset.preset === 'anatomie' && anaCallout?.type === 'callout', 'anatomie: ohne parts → Preset, mit parts → callout');
+
+  const astroPicks = VP.relevantPresetsFor('general', 'Planeten im Sonnensystem und Mondphasen', 5).map((x) => x.id);
+  const bioPicks = VP.relevantPresetsFor('general', 'Blutkreislauf, Herz und Atmung der Lunge', 5).map((x) => x.id);
+  const lawPicks = VP.relevantPresetsFor('law', 'Gewaltenteilung Legislative Exekutive', 5).map((x) => x.id);
+  const musPicks = VP.relevantPresetsFor('music', 'Quintenzirkel Dur und Moll Tonarten', 5).map((x) => x.id);
+  ok(astroPicks.includes('sonnensystem') && astroPicks.includes('mondphasen'), 'relevantPresetsFor findet Sonnensystem & Mondphasen für Astronomie');
+  ok(bioPicks.includes('blutkreislauf') && bioPicks.includes('atmung'), 'relevantPresetsFor findet Blutkreislauf & Atmung für Biologie');
+  ok(lawPicks.includes('gewaltenteilung') && musPicks.includes('musik_kreis'), 'relevantPresetsFor findet Gewaltenteilung (Recht) & Quintenzirkel (Musik)');
+  ok(VP.presetPromptHint('general', 'Sonnensystem').includes('sonnensystem'), 'presetPromptHint enthält thematisch passende Preset-IDs');
+
+  // Stage 2: 4 universal parametric animated builders (orbit, wave, balance, zoom)
+  const orbitD = D.parseDiagram({
+    type: 'orbit',
+    title: 'Schalenmodell des Atoms',
+    center: 'Atomkern',
+    rings: [
+      { label: 'K-Schale', count: 2, note: 'max. 2 Elektronen' },
+      { label: 'L-Schale', count: 6, note: 'Valenzschale' },
+      { label: 'M-Schale', count: 3 },
+    ],
+    highlight: 'L-Schale',
+  })!;
+  ok(orbitD?.type === 'orbit', 'orbit: korrekt geparst');
+  checkClean(D.layoutDiagram(orbitD), 'orbit Schalenmodell');
+  const orbitSvg = D.renderDiagram(orbitD, D.PALETTES.light, { animate: true });
+  ok(orbitSvg.includes('dg-orbit-rot') && orbitSvg.includes('dg-orbit-dot'), 'orbit: rendert rotierende Bahnen & Satelliten');
+
+  const waveD = D.parseDiagram({
+    type: 'wave',
+    title: 'Hoher vs. tiefer Ton',
+    x: 'Zeit t',
+    y: 'Auslenkung',
+    waves: [
+      { label: 'Hoher Ton (schnell)', freq: 3, amp: 0.8 },
+      { label: 'Tiefer Ton (langsam)', freq: 1.2, amp: 0.7 },
+    ],
+    showLength: true,
+    showAmp: true,
+  })!;
+  ok(waveD?.type === 'wave', 'wave: korrekt geparst');
+  checkClean(D.layoutDiagram(waveD), 'wave Schallwellen');
+  const waveSvg = D.renderDiagram(waveD, D.PALETTES.light, { animate: true });
+  ok(waveSvg.includes('dg-wave-run') && waveSvg.includes('--wave-shift:') && waveSvg.includes('>λ<') && waveSvg.includes('>A<'), 'wave: rendert laufende Sinuswellen mit λ- und A-Markern');
+
+  const balD = D.parseDiagram({
+    type: 'balance',
+    title: 'Abwägung im Kaufrecht',
+    left: { label: 'Käuferinteressen', weight: 6, items: ['Mängelfreie Ware', 'Rücktrittsrecht'] },
+    right: { label: 'Verkäuferinteressen', weight: 4, items: ['Recht zur Nacherfüllung', 'Planungssicherheit'] },
+    fulcrum: '§ 437 BGB',
+    states: [
+      { name: 'Ausgeglichen', tilt: 0, note: 'Beide Seiten im Gleichgewicht.' },
+      { name: 'Käufer überwiegt', tilt: -10, note: 'Nach gescheiterter Nacherfüllung kippt die Waage.' },
+    ],
+  })!;
+  ok(balD?.type === 'balance', 'balance: korrekt geparst');
+  checkClean(D.layoutDiagram(balD, 0), 'balance Ausgeglichen');
+  checkClean(D.layoutDiagram(balD, 1), 'balance Gekippt');
+  const balSvg0 = D.renderDiagram(balD, D.PALETTES.light, { state: 0, animate: true });
+  const balSvg1 = D.renderDiagram(balD, D.PALETTES.light, { state: 1, animate: true });
+  ok(balSvg0.includes('dg-bal-beam') && balSvg0.includes('rotate(0deg)') && balSvg1.includes('rotate(-10deg)'), 'balance: kippt Waage je nach Zustand');
+
+  const zoomD = D.parseDiagram({
+    type: 'zoom',
+    title: 'Vom Körper bis zur DNA',
+    levels: [
+      { label: 'Körper', scale: '1,7 m', icon: 'person', note: 'Gesamtorganismus' },
+      { label: 'Organ', scale: '10 cm', icon: 'herz', note: 'z. B. Herz' },
+      { label: 'Zelle', scale: '20 µm', icon: 'zelle', note: 'Grundbaustein' },
+      { label: 'DNA', scale: '2 nm', icon: 'dna', note: 'Erbinformation' },
+    ],
+  })!;
+  ok(zoomD?.type === 'zoom', 'zoom: korrekt geparst');
+  checkClean(D.layoutDiagram(zoomD), 'zoom Körper bis DNA');
+  const zoomSvg = D.renderDiagram(zoomD, D.PALETTES.light, { animate: true });
+  ok(zoomSvg.includes('dg-flow-stream') && zoomSvg.includes('2 nm'), 'zoom: rendert Maßstabs-Karten und animierte Zoom-Pfeile');
+
+  // Stage 3: Interactive custom SVG illustration with data-part focus & expanded animation vocabulary
+  const illInteractive = D.parseDiagram({
+    type: 'illustration',
+    title: 'Destillation',
+    width: 600,
+    height: 320,
+    svg: '<g data-part="kolben" class="dg-breathe bad-cls"><circle cx="150" cy="200" r="50" fill="{{teal}}"/></g><g data-part="kuehler" class="dg-flow-fast"><rect x="260" y="120" width="160" height="30" fill="{{blue}}"/></g>',
+    parts: [
+      { id: 'kolben', label: 'Siedekolben', note: 'Hier verdampft der Stoff mit niedrigerem Siedepunkt zuerst.' },
+      { id: 'kuehler', label: 'Liebigkühler', note: 'Kühlt den Dampf wieder ab, sodass er kondensiert.' },
+    ],
+    highlight: 'kolben',
+  })!;
+  ok(illInteractive?.type === 'illustration' && illInteractive.parts?.length === 2 && illInteractive.highlight === 'kolben', 'Stage 3 illustration: parst interaktive parts & highlight');
+  const illSvg = D.renderDiagram(illInteractive, D.PALETTES.light, { animate: true, focus: 'kuehler' });
+  ok(
+    illSvg.includes('dg-breathe') &&
+      illSvg.includes('dg-flow-fast') &&
+      !illSvg.includes('bad-cls') &&
+      illSvg.includes('data-part="kolben"') &&
+      illSvg.includes('ps-dim') &&
+      illSvg.includes('ps-focus'),
+    'Stage 3 illustration: behält sichere Animationsklassen & setzt ps-focus/ps-dim auf data-part',
+  );
+
+  ok(
+    P.FIGURE_RULE.includes('"preset"') &&
+      P.FIGURE_RULE.includes('"orbit"') &&
+      P.FIGURE_RULE.includes('"wave"') &&
+      P.FIGURE_RULE.includes('"balance"') &&
+      P.FIGURE_RULE.includes('"zoom"') &&
+      P.FIGURE_RULE.includes('data-part') &&
+      P.FIGURE_RULE.includes('narration'),
+    'FIGURE_RULE dokumentiert Preset-Engine, alle 4 Baukästen, interaktive Illustrationen & narration',
+  );
 }
 
 console.log(failures ? `\n${failures} Test(s) fehlgeschlagen` : '\nAlle SRS-Tests bestanden');

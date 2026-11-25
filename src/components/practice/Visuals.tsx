@@ -1,11 +1,12 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { CardContent } from '../CardContent';
 import { IconChevron, IconPause, IconPlay, IconRefresh, IconStop } from '../Icons';
 import { highlightCode } from '../../lib/javaHighlight';
 import { playNote } from '../../lib/musicAudio';
 import { runJs, runPython, runSql } from '../../lib/codeRun';
 import { runJavaLocal } from '../../lib/javaRun';
-import { PALETTES, renderDiagram, type Diagram } from '../../lib/diagram';
+import { diagramBoxCount, PALETTES, renderDiagram, type Diagram } from '../../lib/diagram';
+import { resolveVisualPreset } from '../../lib/visualPresets';
 import { useResolvedTheme } from '../../lib/theme';
 import { CODE_LANG_LABEL } from '../../lib/practice';
 import {
@@ -434,15 +435,48 @@ export function TablesView({ tables }: { tables: Table[] }) {
 }
 
 // ---------- a picture of the explanation ----------
-/** A Studyflix-style animated graphic of the explanation (with replay button and optional auto-playing state switches for `forces` diagrams). */
-export function BuildFigure({ diagram, caption }: { diagram: Diagram; caption?: string; narration?: string[] }) {
+/** A Studyflix-style animated graphic of the explanation (with replay, state switches, interactive clickable parts + guided tour on `preset`/`illustration`, and step-by-step narration mode). */
+export function BuildFigure({ diagram, caption, narration }: { diagram: Diagram; caption?: string; narration?: string[] }) {
   const theme = useResolvedTheme();
   const [figRef, seen] = useInView<HTMLElement>();
-  const states = diagram.type === 'forces' && diagram.states?.length ? diagram.states : undefined;
+  const preset = useMemo(() => (diagram.type === 'preset' ? resolveVisualPreset(diagram.preset) : undefined), [diagram]);
+  const parts: { id: string; label: string; note?: string }[] = useMemo(() => {
+    if (preset?.parts.length) return preset.parts;
+    if (diagram.type === 'illustration' && diagram.parts?.length) return diagram.parts;
+    return [];
+  }, [preset, diagram]);
+  const states: { name: string; note?: string }[] | undefined =
+    diagram.type === 'forces' && diagram.states?.length
+      ? diagram.states
+      : diagram.type === 'balance' && diagram.states?.length
+        ? diagram.states
+        : preset?.states?.length
+          ? preset.states
+          : undefined;
+  const boxTotal = useMemo(() => (narration && narration.length >= 2 ? diagramBoxCount(diagram) : 0), [diagram, narration]);
+  const storySteps = narration && narration.length >= 2 && boxTotal >= 2 ? narration : undefined;
+
   const [stateIdx, setStateIdx] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [playKey, setPlayKey] = useState(0);
+  const initialFocus = diagram.type === 'preset' || diagram.type === 'illustration' ? diagram.highlight : undefined;
+  const [focus, setFocus] = useState<string | undefined>(initialFocus);
+  const [touring, setTouring] = useState(false);
+  const [storyStep, setStoryStep] = useState<number | null>(null);
+  const [storyPlaying, setStoryPlaying] = useState(false);
+
+  useEffect(() => {
+    setFocus(initialFocus);
+    setStateIdx(0);
+    setPlaying(false);
+    setTouring(false);
+    setStoryStep(null);
+    setStoryPlaying(false);
+  }, [diagram, initialFocus]);
+
   const active = states ? Math.min(stateIdx, states.length - 1) : undefined;
+
+  // Auto-cycle states (forces / balance / preset)
   useEffect(() => {
     if (!playing || !states || states.length < 2) return;
     const t = window.setInterval(() => {
@@ -450,15 +484,90 @@ export function BuildFigure({ diagram, caption }: { diagram: Diagram; caption?: 
     }, 2400);
     return () => window.clearInterval(t);
   }, [playing, states]);
+
+  // Guided spotlight tour through interactive parts (preset / illustration)
+  useEffect(() => {
+    if (!touring || parts.length < 2) return;
+    const t = window.setInterval(() => {
+      setFocus((cur) => {
+        const idx = parts.findIndex((pt) => pt.id === cur);
+        return parts[(idx + 1) % parts.length].id;
+      });
+    }, 2800);
+    return () => window.clearInterval(t);
+  }, [touring, parts]);
+
+  // Auto-advance step-by-step narration
+  useEffect(() => {
+    if (!storyPlaying || !storySteps) return;
+    if (storyStep !== null && storyStep >= storySteps.length - 1) {
+      setStoryPlaying(false);
+      return;
+    }
+    const t = window.setTimeout(() => {
+      setStoryStep((s) => (s === null ? 0 : Math.min(storySteps.length - 1, s + 1)));
+    }, 2200);
+    return () => window.clearTimeout(t);
+  }, [storyPlaying, storyStep, storySteps]);
+
+  const upto =
+    storySteps && storyStep !== null
+      ? Math.max(1, Math.min(boxTotal, Math.round(((storyStep + 1) / storySteps.length) * boxTotal)))
+      : undefined;
+
   const svg = useMemo(
-    () => renderDiagram(diagram, PALETTES[theme], { ...(active !== undefined ? { state: active } : {}), animate: seen }),
-    [diagram, theme, active, seen],
+    () =>
+      renderDiagram(diagram, PALETTES[theme], {
+        ...(active !== undefined ? { state: active } : {}),
+        ...(focus ? { focus } : {}),
+        ...(upto !== undefined ? { upto } : {}),
+        animate: seen && upto === undefined,
+      }),
+    [diagram, theme, active, focus, upto, seen],
   );
   const stateNote = states && active !== undefined ? states[active]?.note : undefined;
+  const activePart = useMemo(() => {
+    if (!parts.length || !focus) return undefined;
+    const norm = (v: string) =>
+      v.toLowerCase().replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss').replace(/[^a-z0-9_-]/g, '');
+    const fk = norm(focus);
+    return parts.find((pt) => norm(pt.id) === fk || norm(pt.label) === fk);
+  }, [parts, focus]);
+  const focusNote = activePart
+    ? (diagram.type === 'preset' ? (diagram.notes?.[activePart.id] ?? diagram.notes?.[activePart.label]) : undefined) ?? activePart.note
+    : undefined;
+  const onDiagramClick = (e: MouseEvent<HTMLDivElement>) => {
+    if (!parts.length) return;
+    const hit = (e.target as Element | null)?.closest?.('[data-part]')?.getAttribute('data-part');
+    if (!hit) return;
+    setTouring(false);
+    setFocus((cur) => (cur === hit ? undefined : hit));
+  };
+  const toggleTour = () => {
+    if (touring) {
+      setTouring(false);
+      return;
+    }
+    if (!focus && parts.length) setFocus(parts[0].id);
+    setTouring(true);
+  };
+  const toggleStoryPlay = () => {
+    if (!storySteps) return;
+    if (storyPlaying) {
+      setStoryPlaying(false);
+      return;
+    }
+    if (storyStep === null || storyStep >= storySteps.length - 1) setStoryStep(0);
+    setStoryPlaying(true);
+  };
   const replay = () => {
     setPlaying(false);
+    setTouring(false);
+    setStoryPlaying(false);
+    setStoryStep(null);
     setPlayKey((x) => x + 1);
   };
+  const mountKey = `${seen ? 1 : 0}-${diagram.type === 'forces' ? (active ?? 0) : 0}-${playKey}`;
   return (
     <figure ref={figRef} className="practice-figure build-figure">
       <div className="figure-bar">
@@ -493,9 +602,86 @@ export function BuildFigure({ diagram, caption }: { diagram: Diagram; caption?: 
         </button>
       </div>
       {/* our own SVG with escaped labels / strictly sanitized illustration – safe to insert */}
-      <div key={`${seen ? 1 : 0}-${active ?? 0}-${playKey}`} className="diagram" dangerouslySetInnerHTML={{ __html: svg }} />
+      <div
+        key={mountKey}
+        className={'diagram' + (parts.length ? ' diagram-interactive' : '')}
+        onClick={onDiagramClick}
+        dangerouslySetInnerHTML={{ __html: svg }}
+      />
+      {parts.length > 0 && (
+        <div className="figure-parts" role="group" aria-label="Bestandteile erkunden">
+          {parts.length >= 2 && (
+            <button
+              type="button"
+              className={'figure-part-chip figure-tour-btn' + (touring ? ' active' : '')}
+              onClick={toggleTour}
+              title={touring ? 'Rundgang stoppen' : 'Alle Bestandteile nacheinander hervorheben'}
+            >
+              {touring ? <IconPause size={11} /> : <IconPlay size={11} />} {touring ? 'Stopp' : 'Rundgang'}
+            </button>
+          )}
+          {parts.map((pt) => {
+            const on = activePart?.id === pt.id;
+            return (
+              <button
+                key={pt.id}
+                type="button"
+                className={'figure-part-chip' + (on ? ' active' : '')}
+                aria-pressed={on}
+                onClick={() => (setTouring(false), setFocus((cur) => (cur === pt.id ? undefined : pt.id)))}
+              >
+                {pt.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {storySteps && (
+        <div className="figure-story-bar">
+          <button type="button" className={'btn sm ' + (storyPlaying ? 'primary' : 'outline')} onClick={toggleStoryPlay}>
+            {storyPlaying ? <IconPause size={12} /> : <IconPlay size={12} />}{' '}
+            {storyPlaying ? 'Pause' : storyStep === null ? 'Schritt für Schritt' : 'Weiter abspielen'}
+          </button>
+          {storyStep !== null && (
+            <>
+              <button
+                type="button"
+                className="btn sm ghost"
+                disabled={storyStep <= 0}
+                onClick={() => (setStoryPlaying(false), setStoryStep((s) => Math.max(0, (s ?? 0) - 1)))}
+              >
+                ←
+              </button>
+              <small className="muted">
+                Schritt {storyStep + 1} / {storySteps.length}
+              </small>
+              <button
+                type="button"
+                className="btn sm ghost"
+                disabled={storyStep >= storySteps.length - 1}
+                onClick={() => (setStoryPlaying(false), setStoryStep((s) => Math.min(storySteps.length - 1, (s ?? 0) + 1)))}
+              >
+                →
+              </button>
+              <button type="button" className="btn sm ghost" onClick={() => (setStoryPlaying(false), setStoryStep(null))}>
+                Alles zeigen
+              </button>
+            </>
+          )}
+        </div>
+      )}
+      {storySteps && storyStep !== null && storySteps[storyStep] && (
+        <p key={`story-${storyStep}`} className="figure-state-note figure-part-note">
+          <strong>Schritt {storyStep + 1}:</strong> <CardContent text={storySteps[storyStep]} className="inline" />
+        </p>
+      )}
+      {focusNote && activePart && (
+        <p key={`part-${activePart.id}`} className="figure-state-note figure-part-note">
+          <strong>{activePart.label}:</strong> <CardContent text={focusNote} className="inline" />
+        </p>
+      )}
       {stateNote && (
-        <p key={active} className="figure-state-note">
+        <p key={`state-${active}`} className="figure-state-note">
           <CardContent text={stateNote} className="inline" />
         </p>
       )}

@@ -10,6 +10,7 @@ import { DAY, dayKey, startOfDay } from './util';
 import { spreadClip } from './sample';
 import type { DeckFile } from './store';
 import { MINI_IDEAS, SKILL_IDEAS } from './topicPool';
+import { presetPromptHint } from './visualPresets';
 import type { CaseGrade, CaseTask } from './tasks';
 
 export type PlanQuestion = { q: string; options: string[]; multi?: boolean };
@@ -502,6 +503,7 @@ ${variety.styleRule}
 ${variety.taskRule}
 ${skill.mini ? miniLessonRule(variety.style) : paceOf(skill) === 'fast' ? FAST_RULE : paceOf(skill) === 'gentle' ? GENTLE_RULE + '\n' + beginnerRule(skill, stageIndex, i) : beginnerRule(skill, stageIndex, i)}
 ${FIGURE_RULE}
+${presetPromptHint(skill.domain, `${skill.title} ${stage.name} ${lesson.title} ${lesson.goal}`)}
 NUR ERKLÄRTES ABFRAGEN (streng!): Jede einzelne Aufgabe darf AUSSCHLIESSLICH Begriffe, Abkürzungen (z. B. IPv4, DNS, Fachkürzel), Zahlen, Regeln und Zusammenhänge abfragen, die vorher ausdrücklich in deinen "bites" oder im "example" erklärt wurden (oder nachweislich aus einer früheren Lektion bekannt sind). Keine Fakten- oder Schätzfragen zu Zahlen oder Begriffen, die nicht im Text standen – die Person soll Gelerntes anwenden, niemals blind raten!
 REIHENFOLGE IM JSON: zuerst "kind", "topic", "style", "intro", "bites" (die vollständige Erklärung), "example", "figures" (und ggf. Fach-Visuals/"labs"), und ERST DANACH "problems" – schreibe die Aufgaben erst, wenn deine gesamte Erklärung feststeht, und prüfe bei jeder Aufgabe, ob wirklich jeder abgefragte Begriff vorher in "bites" erklärt wurde. Halte Texte knapp und klar.
 ${JSON_ONLY}`,
