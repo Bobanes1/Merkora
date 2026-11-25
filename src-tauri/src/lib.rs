@@ -5,6 +5,7 @@ mod export;
 mod java_setup;
 mod server;
 mod storage;
+mod tts_setup;
 
 use base64::Engine;
 use once_cell::sync::Lazy;
@@ -844,6 +845,11 @@ pub fn run() {
             list_backups,
             read_backup,
             backup_now,
+            tts_status,
+            tts_install_voice,
+            tts_remove_voice,
+            tts_uninstall_all,
+            tts_speak,
         ])
         .setup(|app| {
             // Android: learning data and pictures live in the app's own private folder
@@ -1007,3 +1013,79 @@ async fn java_uninstall() -> Result<(), String> {
     }
     Ok(())
 }
+
+// ---------- offline Neural-TTS (desktop): Piper engine + ONNX voices ----------
+static TTS_INSTALLING: AtomicBool = AtomicBool::new(false);
+
+#[tauri::command]
+fn tts_status() -> tts_setup::TtsStatus {
+    tts_setup::status()
+}
+
+#[tauri::command]
+async fn tts_install_voice(app: AppHandle, voice_id: String) -> Result<tts_setup::TtsStatus, String> {
+    #[cfg(mobile)]
+    {
+        let _ = (app, voice_id);
+        Err("Auf dem Handy wird die System-Sprachausgabe genutzt.".into())
+    }
+    #[cfg(desktop)]
+    {
+        if TTS_INSTALLING.swap(true, Ordering::SeqCst) {
+            return Err("Eine Stimme wird bereits heruntergeladen.".into());
+        }
+        let res = tts_setup::install_voice(&voice_id, |p| {
+            let _ = app.emit("tts-progress", p);
+        })
+        .await;
+        TTS_INSTALLING.store(false, Ordering::SeqCst);
+        res
+    }
+}
+
+#[tauri::command]
+async fn tts_remove_voice(voice_id: String) -> Result<tts_setup::TtsStatus, String> {
+    #[cfg(mobile)]
+    {
+        let _ = voice_id;
+        Ok(tts_setup::status())
+    }
+    #[cfg(desktop)]
+    {
+        tauri::async_runtime::spawn_blocking(move || tts_setup::remove_voice(&voice_id))
+            .await
+            .map_err(|e| e.to_string())?
+    }
+}
+
+#[tauri::command]
+async fn tts_uninstall_all() -> Result<tts_setup::TtsStatus, String> {
+    #[cfg(mobile)]
+    {
+        Ok(tts_setup::status())
+    }
+    #[cfg(desktop)]
+    {
+        tauri::async_runtime::spawn_blocking(tts_setup::uninstall_all)
+            .await
+            .map_err(|e| e.to_string())?
+    }
+}
+
+/// Synthesizes text with an installed Piper neural voice and returns base64-encoded WAV audio.
+#[tauri::command]
+async fn tts_speak(voice_id: String, text: String) -> Result<String, String> {
+    #[cfg(mobile)]
+    {
+        let _ = (voice_id, text);
+        Err("Auf dem Handy nicht verfügbar.".into())
+    }
+    #[cfg(desktop)]
+    {
+        let bytes = tauri::async_runtime::spawn_blocking(move || tts_setup::synthesize(&voice_id, &text))
+            .await
+            .map_err(|e| e.to_string())??;
+        Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
+    }
+}
+

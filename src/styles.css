@@ -14089,11 +14089,117 @@ html.phone .goal-ring.in-hero .gr-legend { display: none; }
   .tool-tab-ico,
   .formula-tile,
   .sql-table-pill,
-  .m3d-card {
+  .m3d-card,
+  .tts-voice {
     animation: none !important;
     transition: none !important;
   }
 }
+
+/* ---------- Offline Neural-TTS (Piper) Voice Manager ---------- */
+.tts-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  border-radius: var(--r-lg);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+.tts-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.tts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px;
+}
+.tts-voice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--r-md);
+  background: var(--white);
+  border: 1px solid var(--line);
+  transition: border-color 0.14s ease, background 0.14s ease;
+}
+.tts-voice.installed {
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--line));
+}
+.tts-voice.active {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, var(--white));
+}
+.tts-voice-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.tts-lang-tag {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+.tts-voice-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+.tts-voice-text b {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tts-pill {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--ok-soft);
+  color: var(--ok-ink);
+}
+.tts-pill.hd {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+.tts-voice-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+.tts-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+
 
 
 

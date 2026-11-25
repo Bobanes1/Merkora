@@ -265,3 +265,53 @@ export async function pickFolder(): Promise<string | null> {
   const r = await open({ directory: true, multiple: false, title: 'Ordner für Sicherungen wählen' });
   return typeof r === 'string' ? r : null;
 }
+
+// ---------- offline Neural-TTS (Piper, desktop) ----------
+export type TtsVoiceInfo = {
+  id: string;
+  lang: 'de' | 'en' | 'fr' | 'es' | 'it';
+  locale: string;
+  name: string;
+  label: string;
+  quality: 'low' | 'medium' | 'high';
+  sizeMb: number;
+  recommended: boolean;
+};
+
+export type TtsStatus = {
+  supported: boolean;
+  engineInstalled: boolean;
+  installedVoices: string[];
+  catalog: TtsVoiceInfo[];
+};
+
+export type TtsProgress = {
+  voiceId: string;
+  progress: number;
+  stage: 'engine' | 'unpack' | 'voice' | 'done';
+};
+
+export async function ttsStatus(): Promise<TtsStatus | null> {
+  if (!inTauri || isAndroid) return null;
+  try {
+    return await invoke<TtsStatus>('tts_status');
+  } catch {
+    return null;
+  }
+}
+
+export async function ttsInstallVoice(voiceId: string, onProgress?: (p: TtsProgress) => void): Promise<TtsStatus> {
+  const unlisten = onProgress
+    ? await (await import('@tauri-apps/api/event')).listen<TtsProgress>('tts-progress', (e) => onProgress(e.payload))
+    : undefined;
+  try {
+    return await invoke<TtsStatus>('tts_install_voice', { voiceId });
+  } finally {
+    unlisten?.();
+  }
+}
+
+export const ttsRemoveVoice = (voiceId: string) => invoke<TtsStatus>('tts_remove_voice', { voiceId });
+export const ttsUninstallAll = () => invoke<TtsStatus>('tts_uninstall_all');
+export const ttsSpeakWavB64 = (voiceId: string, text: string) => invoke<string>('tts_speak', { voiceId, text });
+
