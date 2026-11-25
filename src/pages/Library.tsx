@@ -1,7 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { DeckCoverOf } from '../components/DeckCover';
+import { DeckSettingsModal } from '../components/DeckSettingsModal';
 import { Plant } from '../components/Plant';
 import { Mascot } from '../components/Mascot';
+import { isLeech } from '../lib/cardLinks';
+import { estimateStudyMinutes, formatEstMinutes } from '../lib/deckTools';
 import { undoable } from '../lib/undo';
 import { accentFor } from '../lib/util';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -19,8 +22,12 @@ import {
   IconList,
   IconPlay,
   IconPlus,
+  IconSearch,
+  IconSettings,
   IconShuffle,
   IconSparkle,
+  IconStar,
+  IconStarLine,
   IconTrash,
 } from '../components/Icons';
 import { ConfirmModal, Modal, PromptModal } from '../components/Modal';
@@ -43,12 +50,16 @@ import {
   deleteFolder,
   deleteWorkspace,
   dueCards,
-  newCardsLeft,
-  setSettings,
   moveDeck,
+  newCardsLeft,
   renameCourse,
   renameFolder,
   renameWorkspace,
+  reorderDecks,
+  setSettings,
+  toggleArchiveCourse,
+  togglePinCourse,
+  togglePinDeck,
   updateDeck,
   useData,
   type Course,
@@ -70,6 +81,7 @@ type Dialog =
   | { kind: 'rename-deck'; id: string; name: string }
   | { kind: 'rename-folder'; course: Course; folder: Folder }
   | { kind: 'move-deck'; deck: Deck }
+  | { kind: 'deck-settings'; deck: Deck }
   | { kind: 'del-ws'; ws: Workspace }
   | { kind: 'del-course'; course: Course }
   | { kind: 'del-deck'; id: string; name: string }
@@ -77,6 +89,7 @@ type Dialog =
   | { kind: 'exam' }
   | null;
 
+type LibFilter = 'all' | 'due' | 'exam' | 'leech' | 'pinned' | 'archived';
 
 export default function Library() {
   const { ws, course } = useParams();
@@ -86,12 +99,31 @@ export default function Library() {
   const [create, setCreate] = useState<{ courseId?: string; back?: Course } | null>(null);
   const [builder, setBuilder] = useState(false);
   const [session, setSession] = useState<{ title: string; items: SessionItem[] } | null>(null);
+  const [libQuery, setLibQuery] = useState('');
+  const [libFilter, setLibFilter] = useState<LibFilter>('all');
 
   const workspace = ws ? data.workspaces.find((w) => w.slug === ws) : undefined;
   const crs = workspace && course ? data.courses.find((c) => c.workspaceId === workspace.id && c.slug === course) : undefined;
   const shownWs = workspace ? [workspace] : data.workspaces;
   const phone = usePhone();
   const view = phone ? 'list' : (data.settings.libraryView ?? 'tiles');
+
+  const activeCourseIds = useMemo(() => new Set(data.courses.filter((c) => !c.archived).map((c) => c.id)), [data.courses]);
+  const activeDecks = useMemo(() => data.decks.filter((d) => !d.archived && activeCourseIds.has(d.courseId)), [data.decks, activeCourseIds]);
+  const allDueItems = useMemo(() => dueAcross(activeDecks, (d) => newCardsLeft(d as Deck)), [activeDecks]);
+  const allDueEst = formatEstMinutes(estimateStudyMinutes(allDueItems.length, data.reviews));
+
+  const recentDecks = useMemo(() => {
+    const lastAt = new Map<string, number>();
+    for (const r of data.reviews) lastAt.set(r.deckId, Math.max(lastAt.get(r.deckId) ?? 0, r.at));
+    return [...activeDecks]
+      .filter((d) => lastAt.has(d.id) || d.updatedAt)
+      .sort((a, b) => (lastAt.get(b.id) ?? b.updatedAt ?? 0) - (lastAt.get(a.id) ?? a.updatedAt ?? 0))
+      .slice(0, 4);
+  }, [activeDecks, data.reviews]);
+
+  const archivedCourseCount = data.courses.filter((c) => c.archived).length;
+  const exams = upcomingExams(data);
 
   useEffect(() => {
     document.title = `${crs?.name ?? workspace?.name ?? 'Bibliothek'} – Merkora`;
@@ -114,6 +146,26 @@ export default function Library() {
         <StudySession title={session.title} items={session.items} onExit={() => setSession(null)} />
       </div>
     );
+
+  const qLower = libQuery.trim().toLowerCase();
+  const filterCourses = (list: Course[]) => {
+    const matched = list.filter((c) => {
+      if (libFilter === 'archived') return !!c.archived;
+      if (c.archived) return false;
+      const cDecks = data.decks.filter((d) => d.courseId === c.id && !d.archived);
+      if (libFilter === 'pinned' && !c.pinned && !cDecks.some((d) => d.pinned)) return false;
+      if (libFilter === 'due' && cDecks.reduce((n, d) => n + dueCards(d).length, 0) === 0) return false;
+      if (libFilter === 'exam' && !exams.some((e) => cDecks.some((d) => examCovers(e, d)))) return false;
+      if (libFilter === 'leech' && !cDecks.some((d) => d.cards.some(isLeech))) return false;
+      if (qLower) {
+        const hitCourse = c.name.toLowerCase().includes(qLower);
+        const hitDeck = cDecks.some((d) => d.name.toLowerCase().includes(qLower));
+        if (!hitCourse && !hitDeck) return false;
+      }
+      return true;
+    });
+    return [...matched].sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned));
+  };
 
   return (
     <div className={crs ? 'page wide' : 'page'}>
@@ -171,8 +223,72 @@ export default function Library() {
             </div>
           </header>
 
+          {(allDueItems.length > 0 || recentDecks.length > 0) && (
+            <section className="lib-quickbar">
+              {allDueItems.length > 0 && (
+                <button
+                  type="button"
+                  className="btn primary"
+                  onClick={() => setSession({ title: 'Alle fälligen Karten heute', items: allDueItems })}
+                >
+                  <IconPlay size={13} /> Alle fälligen heute lernen ({allDueItems.length}{allDueEst ? ` · ${allDueEst}` : ''})
+                </button>
+              )}
+              {recentDecks.length > 0 && (
+                <div className="lib-recent">
+                  <small className="muted">Zuletzt:</small>
+                  {recentDecks.map((d) => {
+                    const n = dueCards(d).length;
+                    return (
+                      <Link key={d.id} to={deckUrl(data, d)} className="chip lib-recent-chip">
+                        <DeckCoverOf deck={d} size={16} />
+                        <span>{d.name}</span>
+                        {n > 0 && <span className="tab-badge">{n}</span>}
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          )}
+
+          <div className="lib-filterbar">
+            <div className="search lib-search">
+              <IconSearch size={15} />
+              <input
+                type="search"
+                placeholder="Kurse oder Decks filtern …"
+                value={libQuery}
+                onChange={(e) => setLibQuery(e.target.value)}
+                aria-label="Bibliothek filtern"
+              />
+            </div>
+            <div className="chips">
+              {(
+                [
+                  ['all', 'Alle'],
+                  ['due', 'Fällig'],
+                  ['exam', 'Prüfung bald'],
+                  ['leech', 'Problemkarten'],
+                  ['pinned', 'Angeheftet'],
+                ] as [LibFilter, string][]
+              ).map(([id, label]) => (
+                <button key={id} type="button" className={`chip ${libFilter === id ? 'on' : ''}`} onClick={() => setLibFilter(id)}>
+                  {label}
+                </button>
+              ))}
+              {archivedCourseCount > 0 && (
+                <button type="button" className={`chip ${libFilter === 'archived' ? 'on' : ''}`} onClick={() => setLibFilter(libFilter === 'archived' ? 'all' : 'archived')}>
+                  Archiv ({archivedCourseCount})
+                </button>
+              )}
+            </div>
+          </div>
+
           {shownWs.map((w) => {
-            const courses = data.courses.filter((c) => c.workspaceId === w.id);
+            const rawCourses = data.courses.filter((c) => c.workspaceId === w.id);
+            const courses = filterCourses(rawCourses);
+            if ((qLower || libFilter !== 'all') && courses.length === 0) return null;
             return (
               <section key={w.id} className="ws-block">
                 <div className="ws-head">
@@ -198,11 +314,13 @@ export default function Library() {
                   {courses.map((c) => (
                     <CourseCard key={c.id} course={c} ws={w} setDialog={setDialog} />
                   ))}
-                  <button type="button" className="course-card add" onClick={() => setDialog({ kind: 'course', ws: w })}>
-                    <IconPlus size={22} />
-                    <b>Neuer Kurs</b>
-                    <small>z. B. ein Fach oder Semester</small>
-                  </button>
+                  {libFilter !== 'archived' && (
+                    <button type="button" className="course-card add" onClick={() => setDialog({ kind: 'course', ws: w })}>
+                      <IconPlus size={22} />
+                      <b>Neuer Kurs</b>
+                      <small>z. B. ein Fach oder Semester</small>
+                    </button>
+                  )}
                 </div>
                 )}
               </section>
@@ -269,6 +387,9 @@ export default function Library() {
         />
       )}
       {dialog?.kind === 'move-deck' && <MoveDeckModal deck={dialog.deck} onClose={() => setDialog(null)} />}
+      {dialog?.kind === 'deck-settings' && (
+        <DeckSettingsModal deck={data.decks.find((x) => x.id === dialog.deck.id) ?? dialog.deck} onClose={() => setDialog(null)} />
+      )}
       {dialog?.kind === 'del-ws' && (
         <ConfirmModal
           title="Workspace löschen?"
@@ -332,21 +453,24 @@ export default function Library() {
   );
 }
 
-/** A course as a card: folder look, decks, progress, due cards and the next exam. */
+/** A course as a card: folder look, decks, progress, due cards, pin/archive and the next exam. */
 function CourseCard({ course, ws, setDialog }: { course: Course; ws: Workspace; setDialog: (d: Dialog) => void }) {
   const data = useData();
-  const decks = data.decks.filter((d) => d.courseId === course.id);
+  const decks = data.decks.filter((d) => d.courseId === course.id && !d.archived);
   const sum = courseSummary(course, decks, (d) => dueCards(d as Deck).length);
   const pct = sum.mastery;
   const due = sum.due;
   const exam = upcomingExams(data).find((e) => decks.some((d) => examCovers(e, d)));
   return (
-    <div className="course-card" style={{ ['--acc' as string]: `var(--c${accentFor(course.id)})` }}>
+    <div className={`course-card${course.pinned ? ' pinned' : ''}${course.archived ? ' archived' : ''}`} style={{ ['--acc' as string]: `var(--c${accentFor(course.id)})` }}>
       <Link to={`/library/${ws.slug}/${course.slug}`} className="course-card-link">
         <span className="course-icon">
           <IconFolder size={22} />
         </span>
-        <b>{course.name}</b>
+        <b>
+          {course.name}
+          {course.pinned && <IconStar size={12} className="pin-star" />}
+        </b>
         <small>
           {decks.length} {decks.length === 1 ? 'Deck' : 'Decks'}
           {sum.folders > 0 && ` · ${sum.folders} Ordner`} · {sum.cards} Karten
@@ -358,7 +482,13 @@ function CourseCard({ course, ws, setDialog }: { course: Course; ws: Workspace; 
           <small>{pct}%</small>
         </span>
         <span className="course-tags">
-          {due > 0 ? <span className="pill-count">{due} fällig</span> : <span className="pill-ok">alles erledigt</span>}
+          {course.archived ? (
+            <span className="badge">Archiviert</span>
+          ) : due > 0 ? (
+            <span className="pill-count">{due} fällig</span>
+          ) : (
+            <span className="pill-ok">alles erledigt</span>
+          )}
           {exam && (
             <span className="exam-chip small">
               <IconCalendar size={12} /> {countdownText(exam)}
@@ -367,6 +497,12 @@ function CourseCard({ course, ws, setDialog }: { course: Course; ws: Workspace; 
         </span>
       </Link>
       <div className="course-card-actions">
+        <button type="button" className={'icon-btn' + (course.pinned ? ' on' : '')} aria-label={course.pinned ? 'Lösen' : 'Anheften'} title={course.pinned ? 'Nicht mehr anheften' : 'Oben anheften'} onClick={() => togglePinCourse(course.id)}>
+          {course.pinned ? <IconStar size={14} /> : <IconStarLine size={14} />}
+        </button>
+        <button type="button" className="icon-btn" aria-label={course.archived ? 'Aus Archiv holen' : 'Archivieren'} title={course.archived ? 'Aus Archiv holen' : 'Kurs archivieren'} onClick={() => toggleArchiveCourse(course.id)}>
+          <IconFolder size={14} />
+        </button>
         <button type="button" className="icon-btn" aria-label="Kurs umbenennen" onClick={() => setDialog({ kind: 'rename-course', course })}>
           <IconEdit size={15} />
         </button>
@@ -501,7 +637,7 @@ function CourseList({ courses, ws, setDialog }: { courses: Course[]; ws: Workspa
   );
 }
 
-/** Course page: key figures on top, decks in folders on the left, the chosen deck's cards on the right. */
+/** Course page: key figures on top, decks in folders on the left (drag & drop), the chosen deck's cards on the right. */
 function CourseView({
   course,
   workspace,
@@ -515,7 +651,23 @@ function CourseView({
 }) {
   const data = useData();
   const navigate = useNavigate();
-  const decks = data.decks.filter((d) => d.courseId === course.id);
+  const [deckQuery, setDeckQuery] = useState('');
+  const [showArchived, setShowArchived] = useState(false);
+  const [dragDeckId, setDragDeckId] = useState<string | null>(null);
+  const [overTarget, setOverTarget] = useState<string | null>(null);
+
+  const rawCourseDecks = data.decks.filter((d) => d.courseId === course.id);
+  const archivedCount = rawCourseDecks.filter((d) => d.archived).length;
+  const sortGroup = (list: Deck[]) =>
+    [...list].sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || (a.order ?? 1e9) - (b.order ?? 1e9) || a.createdAt - b.createdAt);
+  const decks = sortGroup(
+    rawCourseDecks.filter((d) => {
+      if (showArchived ? !d.archived : d.archived) return false;
+      if (deckQuery.trim() && !d.name.toLowerCase().includes(deckQuery.trim().toLowerCase())) return false;
+      return true;
+    }),
+  );
+  const activeCourseDecks = rawCourseDecks.filter((d) => !d.archived);
   const [selected, setSelected] = useState<string | null>(null);
   // right column: the chosen deck's cards or all documents of the course
   const [view, setView] = useState<'deck' | 'docs'>('deck');
@@ -525,10 +677,11 @@ function CourseView({
   const [closed, setClosed] = useState<Record<string, boolean>>({});
   const [addMenu, setAddMenu] = useState(false);
   const deck = decks.find((d) => d.id === selected) ?? decks[0];
-  const cards = decks.flatMap((d) => d.cards);
+  const cards = activeCourseDecks.flatMap((d) => d.cards);
   const pct = masteryPercent(cards);
-  const due = decks.reduce((a, d) => a + dueCards(d).length, 0);
-  const exam = upcomingExams(data).find((e) => decks.some((d) => examCovers(e, d)));
+  const due = activeCourseDecks.reduce((a, d) => a + dueCards(d).length, 0);
+  const dueEst = formatEstMinutes(estimateStudyMinutes(due, data.reviews));
+  const exam = upcomingExams(data).find((e) => activeCourseDecks.some((d) => examCovers(e, d)));
   const folders = course.folders ?? [];
   const names = shortNames(decks);
   const loose = decks.filter((d) => !d.folderId || !folders.some((f) => f.id === d.folderId));
@@ -549,14 +702,58 @@ function CourseView({
     );
   };
 
+  const dropIntoFolder = (folderId: string | undefined) => {
+    if (!dragDeckId) return;
+    moveDeck(dragDeckId, folderId, course.id);
+    setDragDeckId(null);
+    setOverTarget(null);
+  };
+
+  const dropOntoDeck = (target: Deck) => {
+    if (!dragDeckId || dragDeckId === target.id) return;
+    const dragged = rawCourseDecks.find((x) => x.id === dragDeckId);
+    if (!dragged) return;
+    if (dragged.folderId !== target.folderId) {
+      moveDeck(dragDeckId, target.folderId, course.id);
+    }
+    const siblings = sortGroup(rawCourseDecks.filter((x) => x.folderId === target.folderId && !x.archived));
+    const ids = siblings.map((x) => x.id).filter((id) => id !== dragDeckId);
+    const toIdx = ids.indexOf(target.id);
+    ids.splice(toIdx < 0 ? ids.length : toIdx, 0, dragDeckId);
+    reorderDecks(ids);
+    setDragDeckId(null);
+    setOverTarget(null);
+  };
+
   const deckRow = (d: Deck) => {
     const n = dueCards(d).length;
     return (
-      <div key={d.id} className={`cdeck ${deck?.id === d.id ? 'on' : ''}`}>
+      <div
+        key={d.id}
+        draggable
+        onDragStart={(e) => {
+          setDragDeckId(d.id);
+          e.dataTransfer.effectAllowed = 'move';
+        }}
+        onDragOver={(e) => {
+          if (!dragDeckId || dragDeckId === d.id) return;
+          e.preventDefault();
+          e.stopPropagation();
+          setOverTarget('deck:' + d.id);
+        }}
+        onDragLeave={() => overTarget === 'deck:' + d.id && setOverTarget(null)}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropOntoDeck(d);
+        }}
+        onDragEnd={() => (setDragDeckId(null), setOverTarget(null))}
+        className={`cdeck ${deck?.id === d.id ? 'on' : ''}${d.pinned ? ' pinned' : ''}${overTarget === 'deck:' + d.id ? ' drag-over' : ''}`}
+      >
         <button
           type="button"
           className="cdeck-main"
-          title={selected === d.id ? 'Nochmal klicken zum Öffnen' : undefined}
+          title={selected === d.id ? 'Nochmal klicken zum Öffnen · ziehbar zum Sortieren' : 'Ziehbar in Ordner oder zum Sortieren'}
           onClick={() => {
             if (phone || (selected === d.id && view === 'deck')) return navigate(deckUrl(data, d));
             setSelected(d.id);
@@ -564,13 +761,22 @@ function CourseView({
           }}
         >
           <DeckCoverOf deck={d} size={22} />
-          <span className="cdeck-name" title={d.name}>{names.get(d.id)}</span>
+          <span className="cdeck-name" title={d.name}>
+            {names.get(d.id)}
+            {d.pinned && <IconStar size={11} className="pin-star" />}
+          </span>
           {n > 0 && <span className="pill-count">{n}</span>}
           <Plant pct={masteryPercent(d.cards)} size={22} />
           <small className="cdeck-pct">{masteryPercent(d.cards)}%</small>
         </button>
         <span className="cdeck-actions">
-          <button type="button" className="icon-btn" aria-label="Verschieben" title="In Ordner verschieben" onClick={() => setDialog({ kind: 'move-deck', deck: d })}>
+          <button type="button" className={'icon-btn' + (d.pinned ? ' on' : '')} aria-label={d.pinned ? 'Lösen' : 'Anheften'} title={d.pinned ? 'Nicht mehr anheften' : 'Oben anheften'} onClick={() => togglePinDeck(d.id)}>
+            {d.pinned ? <IconStar size={13} /> : <IconStarLine size={13} />}
+          </button>
+          <button type="button" className="icon-btn" aria-label="Deck-Einstellungen" title="Limits, Duplizieren, Zusammenführen, Archiv" onClick={() => setDialog({ kind: 'deck-settings', deck: d })}>
+            <IconSettings size={14} />
+          </button>
+          <button type="button" className="icon-btn" aria-label="Verschieben" title="In Ordner oder anderen Kurs verschieben" onClick={() => setDialog({ kind: 'move-deck', deck: d })}>
             <IconFolder size={14} />
           </button>
           <button type="button" className="icon-btn" aria-label="Umbenennen" onClick={() => setDialog({ kind: 'rename-deck', id: d.id, name: d.name })}>
@@ -601,7 +807,7 @@ function CourseView({
               <IconFolder size={14} /> Dokumente ({docCount})
             </button>
           )}
-          {studyButton(`Kurs: ${course.name}`, decks, (n) => (n ? `Ganzen Kurs lernen (${n})` : 'Ganzen Kurs üben'), 'btn primary sm')}
+          {studyButton(`Kurs: ${course.name}`, activeCourseDecks, (n) => (n ? `Ganzen Kurs lernen (${n}${dueEst ? ` · ${dueEst}` : ''})` : 'Ganzen Kurs üben'), 'btn primary sm')}
         </div>
         <div className="course-stats">
           <div className="cstat">
@@ -624,7 +830,7 @@ function CourseView({
             </div>
           </div>
           <div className="cstat">
-            <small>Heute fällig</small>
+            <small>Heute fällig{dueEst ? ` (${dueEst})` : ''}</small>
             <b className="cstat-big">{due}</b>
           </div>
           <div className="cstat">
@@ -643,7 +849,7 @@ function CourseView({
         <section className="panel course-decks">
           <div className="panel-head">
             <h2>
-              Alle Decks <span className="count-badge">{decks.length}</span>
+              {showArchived ? 'Archivierte Decks' : 'Alle Decks'} <span className="count-badge">{decks.length}</span>
             </h2>
             <div className="add-wrap">
               <button type="button" className="btn outline sm" onClick={() => setAddMenu((v) => !v)} aria-expanded={addMenu}>
@@ -662,46 +868,100 @@ function CourseView({
             </div>
           </div>
 
-          {folders.map((f) => {
-            const inside = decks.filter((d) => d.folderId === f.id);
-            const isClosed = closed[f.id];
-            return (
-              <div key={f.id} className="cfolder">
-                <div className="cfolder-head">
-                  <button type="button" className="cfolder-toggle" onClick={() => setClosed((c) => ({ ...c, [f.id]: !c[f.id] }))}>
-                    {isClosed ? <IconChevron size={14} /> : <IconChevronDown size={14} />}
-                    <IconFolder size={16} />
-                    <b>{f.name}</b>
-                    <small className="muted">{inside.length}</small>
-                  </button>
-                  {studyButton(`Ordner: ${f.name}`, inside, (n) => (n ? `Lernen ${n}` : 'Üben'), 'btn ghost sm cfolder-study')}
-                  <span className="cdeck-actions">
-                    <button type="button" className="icon-btn" aria-label="Deck in diesem Ordner" title="Neues Deck in diesem Ordner" onClick={() => setDialog({ kind: 'deck', course, folderId: f.id })}>
-                      <IconPlus size={14} />
-                    </button>
-                    <button type="button" className="icon-btn" aria-label="Ordner umbenennen" onClick={() => setDialog({ kind: 'rename-folder', course, folder: f })}>
-                      <IconEdit size={14} />
-                    </button>
-                    <button type="button" className="icon-btn" aria-label="Ordner löschen" onClick={() => undoable(`Ordner „${f.name}“ entfernt – die Decks bleiben im Kurs`, () => deleteFolder(course.id, f.id))}>
-                      <IconTrash size={14} />
-                    </button>
-                  </span>
-                </div>
-                {!isClosed && (
-                  <div className="cfolder-body">{inside.length ? inside.map(deckRow) : <p className="muted small">Leer – verschiebe Decks hierher.</p>}</div>
-                )}
+          {(rawCourseDecks.length > 3 || archivedCount > 0) && (
+            <div className="cdeck-filter-row">
+              <div className="search grow">
+                <IconSearch size={14} />
+                <input
+                  type="search"
+                  placeholder="Decks suchen …"
+                  value={deckQuery}
+                  onChange={(e) => setDeckQuery(e.target.value)}
+                  aria-label="Decks im Kurs suchen"
+                />
               </div>
-            );
-          })}
-          {loose.map(deckRow)}
+              {archivedCount > 0 && (
+                <button type="button" className={`chip ${showArchived ? 'on' : ''}`} onClick={() => setShowArchived((v) => !v)}>
+                  Archiv ({archivedCount})
+                </button>
+              )}
+            </div>
+          )}
+
+          {!showArchived &&
+            folders.map((f) => {
+              const inside = decks.filter((d) => d.folderId === f.id);
+              const isClosed = closed[f.id];
+              const isOver = overTarget === 'folder:' + f.id;
+              return (
+                <div
+                  key={f.id}
+                  className={`cfolder${isOver ? ' drag-over' : ''}`}
+                  onDragOver={(e) => {
+                    if (!dragDeckId) return;
+                    e.preventDefault();
+                    setOverTarget('folder:' + f.id);
+                  }}
+                  onDragLeave={() => isOver && setOverTarget(null)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    dropIntoFolder(f.id);
+                  }}
+                >
+                  <div className="cfolder-head">
+                    <button type="button" className="cfolder-toggle" onClick={() => setClosed((c) => ({ ...c, [f.id]: !c[f.id] }))}>
+                      {isClosed ? <IconChevron size={14} /> : <IconChevronDown size={14} />}
+                      <IconFolder size={16} />
+                      <b>{f.name}</b>
+                      <small className="muted">{inside.length}</small>
+                    </button>
+                    {studyButton(`Ordner: ${f.name}`, inside, (n) => (n ? `Lernen ${n}` : 'Üben'), 'btn ghost sm cfolder-study')}
+                    <span className="cdeck-actions">
+                      <button type="button" className="icon-btn" aria-label="Deck in diesem Ordner" title="Neues Deck in diesem Ordner" onClick={() => setDialog({ kind: 'deck', course, folderId: f.id })}>
+                        <IconPlus size={14} />
+                      </button>
+                      <button type="button" className="icon-btn" aria-label="Ordner umbenennen" onClick={() => setDialog({ kind: 'rename-folder', course, folder: f })}>
+                        <IconEdit size={14} />
+                      </button>
+                      <button type="button" className="icon-btn" aria-label="Ordner löschen" onClick={() => undoable(`Ordner „${f.name}“ entfernt – die Decks bleiben im Kurs`, () => deleteFolder(course.id, f.id))}>
+                        <IconTrash size={14} />
+                      </button>
+                    </span>
+                  </div>
+                  {!isClosed && (
+                    <div className="cfolder-body">{inside.length ? inside.map(deckRow) : <p className="muted small">Leer – ziehe Decks per Drag &amp; Drop hierher.</p>}</div>
+                  )}
+                </div>
+              );
+            })}
+          <div
+            className={`cdeck-loose-zone${overTarget === 'loose' ? ' drag-over' : ''}`}
+            onDragOver={(e) => {
+              if (!dragDeckId) return;
+              e.preventDefault();
+              setOverTarget('loose');
+            }}
+            onDragLeave={() => overTarget === 'loose' && setOverTarget(null)}
+            onDrop={(e) => {
+              e.preventDefault();
+              dropIntoFolder(undefined);
+            }}
+          >
+            {loose.map(deckRow)}
+            {dragDeckId && folders.length > 0 && <small className="muted cdeck-drop-hint">Hier ablegen, um aus Ordner zu lösen</small>}
+          </div>
           {!decks.length && (
             <div className="empty">
               <Mascot mood="wave" size={84} />
-              <b>Noch keine Decks</b>
-              <p className="muted">Lege ein Deck an – leer, mit KI aus PDF, Word oder PowerPoint oder aus einem Anki-Stapel.</p>
-              <button type="button" className="btn primary" onClick={() => setDialog({ kind: 'deck', course })}>
-                <IconPlus size={16} /> Neues Deck
-              </button>
+              <b>{showArchived ? 'Keine archivierten Decks' : deckQuery ? 'Kein Deck gefunden' : 'Noch keine Decks'}</b>
+              {!showArchived && !deckQuery && (
+                <>
+                  <p className="muted">Lege ein Deck an – leer, mit KI, per CSV/Quizlet oder aus einem Anki-Stapel.</p>
+                  <button type="button" className="btn primary" onClick={() => setDialog({ kind: 'deck', course })}>
+                    <IconPlus size={16} /> Neues Deck
+                  </button>
+                </>
+              )}
             </div>
           )}
         </section>

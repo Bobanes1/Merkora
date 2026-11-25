@@ -5,7 +5,7 @@ import { kvDel, kvGet, kvSet, mediaDeleteMany, mediaKeys } from './db';
 import { desktop, isDesktop } from './desktop';
 import { capForExam, nextExamAt } from './exams';
 import { masterySnapshot, withSnapshot } from './weekly';
-import { DEFAULT_NEW_PER_DAY, pickDue, planNewForCourse, withoutReview } from './newCards';
+import { DEFAULT_NEW_PER_DAY, newLeft, pickDue, planNewForCourse, withoutReview } from './newCards';
 import { newSrs, schedule, setSchedulerOptions, type Rating, type Srs } from './srs';
 import { dayKey, uid, uniqueSlug } from './util';
 import type { Diagram } from './diagram';
@@ -20,6 +20,10 @@ export type Card = {
   id: string;
   front: string;
   back: string;
+  /** Optional hint / mnemonic revealed before flipping the card. */
+  hint?: string;
+  /** Temporarily excluded from scheduled reviews without deleting the card. */
+  suspended?: boolean;
   html?: boolean;
   /** Marked with ★ (Anki: tag "marked"). */
   marked?: boolean;
@@ -113,6 +117,15 @@ export type Deck = {
   matchBest?: number;
   /** What is asked when learning: the term (front, default), the definition (back) or mixed. */
   askSide?: AskSide;
+  /** Per-deck daily limits overriding global settings (optional). */
+  newPerDay?: number;
+  maxReviewsPerDay?: number;
+  /** Pinned at top of course / library. */
+  pinned?: boolean;
+  /** Archived decks are hidden from active library & global due counts without deleting them. */
+  archived?: boolean;
+  /** Explicit drag-and-drop sort position within its course/folder. */
+  order?: number;
   quiz?: QuizQuestion[];
   podcast?: PodcastLine[];
   chat: ChatMsg[];
@@ -136,7 +149,7 @@ export type Deck = {
 export type DeckFile = { id: string; name: string; size: number; addedAt: number; /** MIME type (missing on older entries = PDF) */ type?: string };
 /** A folder inside a course that groups decks. */
 export type Folder = { id: string; name: string };
-export type Course = { id: string; workspaceId: string; name: string; slug: string; folders?: Folder[] };
+export type Course = { id: string; workspaceId: string; name: string; slug: string; folders?: Folder[]; pinned?: boolean; archived?: boolean };
 export type Workspace = { id: string; name: string; slug: string };
 export type Review = { deckId: string; cardId: string; at: number; rating: Rating };
 /** An exam date linked to the decks it covers. */
@@ -282,6 +295,14 @@ export type Settings = {
   /** Pomodoro phases in minutes. */
   pomodoroWork: number;
   pomodoroBreak: number;
+  /** Pomodoro: longer break after every 4th round (default 15 min). */
+  pomodoroLongBreak?: number;
+  /** Pomodoro: daily focus-round goal (default 4). */
+  pomodoroGoal?: number;
+  /** Pomodoro: automatically start next work round after break ends. */
+  pomodoroAutoStart?: boolean;
+  /** Pomodoro: automatically start/resume ambient sounds in focus phase and pause in break. */
+  pomodoroAutoSound?: boolean;
   /** Pomodoro: chime at the end of a round (default on). */
   pomodoroSound?: boolean;
   /** Use a different AI model for the chat (tutor, explanations, grading) than for generating content. */
@@ -321,14 +342,19 @@ const CHAT_KEY_KEY = 'merkora.chatkey';
 const PRIVACY_KEY = 'merkora.privacy';
 const OLD = { data: 'lernblitz.data', key: 'lernblitz.apikey', privacy: 'lernblitz.privacy' };
 
-function safeGet(store: Storage, k: string): string | null {
+const localStore = (): Storage | undefined => (typeof localStorage !== 'undefined' ? localStorage : undefined);
+const sessionStore = (): Storage | undefined => (typeof sessionStorage !== 'undefined' ? sessionStorage : undefined);
+
+function safeGet(store: Storage | undefined, k: string): string | null {
+  if (!store) return null;
   try {
     return store.getItem(k);
   } catch {
     return null;
   }
 }
-function safeSet(store: Storage, k: string, v: string | null): boolean {
+function safeSet(store: Storage | undefined, k: string, v: string | null): boolean {
+  if (!store) return false;
   try {
     if (v === null) store.removeItem(k);
     else store.setItem(k, v);
@@ -462,7 +488,7 @@ export function normalize(raw: unknown): Data | null {
 export { desktop, isAndroid, isDesktop } from './desktop';
 
 function loadPrivacy(): Privacy {
-  const raw = safeGet(localStorage, PRIVACY_KEY) ?? safeGet(localStorage, OLD.privacy);
+  const raw = safeGet(localStore(), PRIVACY_KEY) ?? safeGet(localStore(), OLD.privacy);
   // The learning progress is always saved automatically on this device (the core of the app).
   if (isDesktop) return { consent: 'all', keepKey: true, ...(raw ? safeParse(raw) : {}), keepData: true } as Privacy;
   if (raw) {
@@ -493,8 +519,8 @@ const listeners = new Set<() => void>();
 /** Loads saved data (desktop save file, IndexedDB, then older browser-storage copies). Call once before rendering. */
 export async function initStore() {
   apiKey =
-    safeGet(localStorage, KEY_KEY) ?? safeGet(sessionStorage, KEY_KEY) ?? safeGet(localStorage, OLD.key) ?? safeGet(sessionStorage, OLD.key) ?? '';
-  chatKey = safeGet(localStorage, CHAT_KEY_KEY) ?? safeGet(sessionStorage, CHAT_KEY_KEY) ?? '';
+    safeGet(localStore(), KEY_KEY) ?? safeGet(sessionStore(), KEY_KEY) ?? safeGet(localStore(), OLD.key) ?? safeGet(sessionStore(), OLD.key) ?? '';
+  chatKey = safeGet(localStore(), CHAT_KEY_KEY) ?? safeGet(sessionStore(), CHAT_KEY_KEY) ?? '';
   let loaded: Data | null = null;
   let fromIdb: Data | null = null;
   try {
@@ -516,7 +542,7 @@ export async function initStore() {
     }
   } else loaded = fromIdb;
   if (!loaded) {
-    const raw = safeGet(sessionStorage, DATA_KEY) ?? safeGet(localStorage, OLD.data) ?? safeGet(sessionStorage, OLD.data);
+    const raw = safeGet(sessionStore(), DATA_KEY) ?? safeGet(localStore(), OLD.data) ?? safeGet(sessionStore(), OLD.data);
     if (raw) {
       try {
         loaded = normalize(JSON.parse(raw));
@@ -526,11 +552,11 @@ export async function initStore() {
     }
   }
   data = loaded ?? sampleData();
-  safeSet(localStorage, OLD.data, null);
-  safeSet(sessionStorage, OLD.data, null);
-  safeSet(localStorage, OLD.key, null);
-  safeSet(sessionStorage, OLD.key, null);
-  safeSet(localStorage, OLD.privacy, null);
+  safeSet(localStore(), OLD.data, null);
+  safeSet(sessionStore(), OLD.data, null);
+  safeSet(localStore(), OLD.key, null);
+  safeSet(sessionStore(), OLD.key, null);
+  safeSet(localStore(), OLD.privacy, null);
   emit();
   if (privacy.keepData) void collectMediaGarbage();
 }
@@ -555,7 +581,7 @@ function persistNow(sync = false) {
   }
   // In the desktop app the save file (with daily backups) is the store; no second copy in the browser storage.
   if (!desktop) kvSet(DATA_KEY, stamped).then(done, failed);
-  safeSet(sessionStorage, DATA_KEY, null);
+  safeSet(sessionStore(), DATA_KEY, null);
   return pending;
 }
 function setWarning(w: string) {
@@ -586,13 +612,15 @@ if (typeof window !== 'undefined') {
 }
 
 function persist() {
-  if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(persistNow, 250);
-  safeSet(privacy.keepKey ? localStorage : sessionStorage, KEY_KEY, apiKey || null);
-  safeSet(privacy.keepKey ? sessionStorage : localStorage, KEY_KEY, null);
-  safeSet(privacy.keepKey ? localStorage : sessionStorage, CHAT_KEY_KEY, chatKey || null);
-  safeSet(privacy.keepKey ? sessionStorage : localStorage, CHAT_KEY_KEY, null);
-  if (privacy.consent !== 'unset') safeSet(localStorage, PRIVACY_KEY, JSON.stringify(privacy));
+  if (typeof window !== 'undefined') {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(persistNow, 250);
+  }
+  safeSet(privacy.keepKey ? localStore() : sessionStore(), KEY_KEY, apiKey || null);
+  safeSet(privacy.keepKey ? sessionStore() : localStore(), KEY_KEY, null);
+  safeSet(privacy.keepKey ? localStore() : sessionStore(), CHAT_KEY_KEY, chatKey || null);
+  safeSet(privacy.keepKey ? sessionStore() : localStore(), CHAT_KEY_KEY, null);
+  if (privacy.consent !== 'unset') safeSet(localStore(), PRIVACY_KEY, JSON.stringify(privacy));
 }
 
 function emit() {
@@ -773,13 +801,73 @@ export function updateDeck(id: string, patch: Partial<Deck> | ((d: Deck) => Part
     decks: d.decks.map((x) => (x.id === id ? { ...x, ...(typeof patch === 'function' ? patch(x) : patch), updatedAt: Date.now() } : x)),
   }));
 }
-export type NewCard = { front: string; back: string; html?: boolean; styleId?: string; cardClass?: string; tags?: string[]; marked?: boolean; srs?: Srs; run?: string };
+export function togglePinCourse(id: string) {
+  update((d) => ({ ...d, courses: d.courses.map((c) => (c.id === id ? { ...c, pinned: c.pinned ? undefined : true } : c)) }));
+}
+export function toggleArchiveCourse(id: string) {
+  update((d) => ({ ...d, courses: d.courses.map((c) => (c.id === id ? { ...c, archived: c.archived ? undefined : true } : c)) }));
+}
+export function togglePinDeck(id: string) {
+  updateDeck(id, (x) => ({ pinned: x.pinned ? undefined : true }));
+}
+export function toggleArchiveDeck(id: string) {
+  updateDeck(id, (x) => ({ archived: x.archived ? undefined : true }));
+}
+export function reorderDecks(orderedIds: string[]) {
+  const rank = new Map(orderedIds.map((id, i) => [id, i]));
+  const now = Date.now();
+  update((d) => ({
+    ...d,
+    decks: d.decks.map((x) => (rank.has(x.id) ? { ...x, order: rank.get(x.id)!, updatedAt: now } : x)),
+  }));
+}
+/** Creates a copy of a deck (optionally keeping SRS progress). */
+export function duplicateDeck(deckId: string, keepProgress = false): Deck | undefined {
+  const src = data.decks.find((x) => x.id === deckId);
+  if (!src) return undefined;
+  const now = Date.now();
+  const cards: Card[] = src.cards.map((c) => ({
+    ...c,
+    id: uid(),
+    createdAt: now,
+    updatedAt: now,
+    srs: keepProgress ? { ...c.srs } : newSrs(now),
+  }));
+  return addDeck(src.courseId, `${src.name} (Kopie)`, {
+    folderId: src.folderId,
+    cards,
+    source: src.source,
+    summary: src.summary,
+    askSide: src.askSide,
+    newPerDay: src.newPerDay,
+    maxReviewsPerDay: src.maxReviewsPerDay,
+    cover: src.cover ? { ...src.cover } : undefined,
+    styles: src.styles ? { ...src.styles } : undefined,
+  });
+}
+/** Merges all cards (and their reviews) from `sourceDeckId` into `targetDeckId`, then removes the source deck. */
+export function mergeDecks(sourceDeckId: string, targetDeckId: string): number {
+  if (sourceDeckId === targetDeckId) return 0;
+  const src = data.decks.find((x) => x.id === sourceDeckId);
+  const dst = data.decks.find((x) => x.id === targetDeckId);
+  if (!src || !dst) return 0;
+  const cardIds = src.cards.map((c) => c.id);
+  const moved = cardIds.length ? moveCards(sourceDeckId, cardIds, targetDeckId) : 0;
+  if (src.styles) {
+    updateDeck(targetDeckId, (x) => ({ styles: { ...src.styles, ...(x.styles ?? {}) } }));
+  }
+  deleteDeck(sourceDeckId);
+  return moved;
+}
+export type NewCard = { front: string; back: string; hint?: string; suspended?: boolean; html?: boolean; styleId?: string; cardClass?: string; tags?: string[]; marked?: boolean; srs?: Srs; run?: string };
 export function addCards(deckId: string, pairs: NewCard[]) {
   const now = Date.now();
   const cards: Card[] = pairs.map((p) => ({
     id: uid(),
     front: p.front,
     back: p.back,
+    ...(p.hint?.trim() ? { hint: p.hint.trim() } : {}),
+    ...(p.suspended ? { suspended: true } : {}),
     ...(p.html ? { html: true } : {}),
     ...(p.styleId ? { styleId: p.styleId } : {}),
     ...(p.cardClass ? { cardClass: p.cardClass } : {}),
@@ -795,12 +883,35 @@ export function addCards(deckId: string, pairs: NewCard[]) {
 export function toggleMark(deckId: string, cardId: string) {
   updateDeck(deckId, (x) => ({ cards: x.cards.map((c) => (c.id === cardId ? { ...c, marked: c.marked ? undefined : true, updatedAt: Date.now() } : c)) }));
 }
+/** Suspend or unsuspend a card (excluded from scheduled reviews while suspended). */
+export function toggleSuspendCard(deckId: string, cardId: string) {
+  updateDeck(deckId, (x) => ({ cards: x.cards.map((c) => (c.id === cardId ? { ...c, suspended: c.suspended ? undefined : true, updatedAt: Date.now() } : c)) }));
+}
 export function updateCard(deckId: string, cardId: string, patch: Partial<Card>) {
   updateDeck(deckId, (x) => ({ cards: x.cards.map((c) => (c.id === cardId ? { ...c, ...patch, updatedAt: Date.now() } : c)) }));
 }
 export function deleteCard(deckId: string, cardId: string) {
   updateDeck(deckId, (x) => ({ cards: x.cards.filter((c) => c.id !== cardId) }));
   update((d) => ({ ...d, deleted: tomb(d, [cardId]) }));
+}
+export function bulkUpdateCards(deckId: string, cardIds: string[], fn: (c: Card) => Partial<Card>) {
+  const set = new Set(cardIds);
+  const now = Date.now();
+  updateDeck(deckId, (x) => ({ cards: x.cards.map((c) => (set.has(c.id) ? { ...c, ...fn(c), updatedAt: now } : c)) }));
+}
+export function bulkDeleteCards(deckId: string, cardIds: string[]) {
+  const set = new Set(cardIds);
+  updateDeck(deckId, (x) => ({ cards: x.cards.filter((c) => !set.has(c.id)) }));
+  update((d) => ({ ...d, deleted: tomb(d, cardIds) }));
+}
+export function bulkResetCards(deckId: string, cardIds: string[]) {
+  const set = new Set(cardIds);
+  const now = Date.now();
+  update((d) => ({
+    ...d,
+    decks: d.decks.map((x) => (x.id === deckId ? { ...x, cards: x.cards.map((c) => (set.has(c.id) ? { ...c, srs: newSrs(now), updatedAt: now } : c)) } : x)),
+    reviews: d.reviews.filter((r) => !(r.deckId === deckId && set.has(r.cardId))),
+  }));
 }
 /** Moves cards to another deck, with their learning state and history. Returns how many were moved. */
 export function moveCards(fromDeckId: string, cardIds: string[], toDeckId: string): number {
@@ -903,6 +1014,15 @@ export function toggleTodo(id: string): string | undefined {
 export function deleteTodo(id: string) {
   update((d) => ({ ...d, todos: (d.todos ?? []).filter((t) => t.id !== id), deleted: tomb(d, [id]) }));
 }
+/** Moves todo `fromId` before `toId` inside the same list by updating explicit `order` values. */
+export function reorderTodos(orderedIds: string[]) {
+  const rank = new Map(orderedIds.map((id, i) => [id, i]));
+  const now = Date.now();
+  update((d) => ({
+    ...d,
+    todos: (d.todos ?? []).map((t) => (rank.has(t.id) ? { ...t, order: rank.get(t.id)!, updatedAt: now } : t)),
+  }));
+}
 
 // ---------- gamification ----------
 export function addXp(n: number) {
@@ -988,19 +1108,36 @@ export function deckUrl(d: Data, deck: Deck, tab?: string) {
   const w = c ? d.workspaces.find((x) => x.id === c.workspaceId) : undefined;
   return `/library/${w?.slug}/${c?.slug}/${deck.slug}${tab ? `?tab=${tab}` : ''}`;
 }
-/** Due cards: learned cards whose time has come plus today's share of new cards (see settings "Neue Karten pro Tag"). */
-export const dueCards = (deck: Deck, now = Date.now()) => pickDue(deck.cards, now, newCardsLeft(deck, now));
-/** New cards this deck may still introduce today – the daily limit is shared by all decks of a course. */
+/** Due cards: active learned cards whose time has come plus today's share of new cards (respects archived & per-deck limits). */
+export function dueCards(deck: Deck, now = Date.now()) {
+  if (deck.archived) return [];
+  const picked = pickDue(deck.cards, now, newCardsLeft(deck, now));
+  if (deck.maxReviewsPerDay !== undefined && deck.maxReviewsPerDay >= 0) {
+    const today = dayKey(now);
+    const doneToday = data.reviews.filter((r) => r.deckId === deck.id && dayKey(r.at) === today).length;
+    const revLeft = Math.max(0, deck.maxReviewsPerDay - doneToday);
+    const learned = picked.filter((c) => c.srs.last !== undefined).slice(0, revLeft);
+    const fresh = picked.filter((c) => c.srs.last === undefined);
+    return [...learned, ...fresh];
+  }
+  return picked;
+}
+/** New cards this deck may still introduce today – uses per-deck override if set, otherwise shared course limit. */
 const planCache = new WeakMap<Data, Map<string, Map<string, number>>>();
 export function newCardsLeft(deck: Deck, now = Date.now()) {
+  if (deck.archived) return 0;
+  const today = dayKey(now);
+  const boost = deck.newBoost?.day === today ? deck.newBoost.n : 0;
+  if (deck.newPerDay !== undefined && deck.newPerDay >= 0) {
+    return newLeft(deck.cards, now, deck.newPerDay, boost);
+  }
   let byCourse = planCache.get(data);
   if (!byCourse) planCache.set(data, (byCourse = new Map()));
-  const key = deck.courseId + '|' + dayKey(now);
+  const key = deck.courseId + '|' + today;
   let plan = byCourse.get(key);
   if (!plan) {
-    const today = dayKey(now);
     const decks = data.decks
-      .filter((d) => d.courseId === deck.courseId)
+      .filter((d) => d.courseId === deck.courseId && !d.archived && d.newPerDay === undefined)
       .map((d) => ({ id: d.id, cards: d.cards, boost: d.newBoost?.day === today ? d.newBoost.n : 0 }));
     plan = planNewForCourse(decks, now, data.settings.newPerDay ?? DEFAULT_NEW_PER_DAY);
     byCourse.set(key, plan);

@@ -1,40 +1,70 @@
-import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { playUi } from '../../lib/uiSound';
-import { IconPlay, IconPlus, IconShuffle, IconSparkle } from '../../components/Icons';
+import { IconBulb, IconEdit, IconHelp, IconNote, IconPause, IconPlay, IconPlus, IconShuffle, IconSparkle } from '../../components/Icons';
 import { CardContent, lookOf } from '../../components/CardContent';
+import { DrawPad } from '../../components/DrawPad';
 import { Confetti, Mascot, praise, type Mood } from '../../components/Mascot';
 import { Markdown } from '../../components/Markdown';
+import { Modal } from '../../components/Modal';
 import { FocusButton } from '../../components/Pomodoro';
 import { countAnswerTime } from '../../lib/pomodoro';
 import { explainCard, gradeAnswer, hasKey } from '../../lib/ai';
-import { cardBackText, cardFrontText } from '../../lib/content';
+import { cardFrontText, htmlToText } from '../../lib/content';
+import { estimateStudyMinutes, formatEstMinutes, renderClozeAnswer, renderClozeQuestion } from '../../lib/deckTools';
 import { RATINGS, formatDelay, schedule, type Rating, type Srs } from '../../lib/srs';
-import { addXp, toggleMark, boostNewCards, dueCards, logReview, newCardsLeft, reviewCard, setSettings, undoReview, updateDeck, useStore, type Card, type Deck } from '../../lib/store';
+import {
+  addXp,
+  boostNewCards,
+  dueCards,
+  logReview,
+  newCardsLeft,
+  reviewCard,
+  setSettings,
+  toggleMark,
+  toggleSuspendCard,
+  undoReview,
+  updateDeck,
+  useStore,
+  type Card,
+  type Deck,
+} from '../../lib/store';
+import { allTags, hasTag } from '../../lib/tags';
+import { undoable } from '../../lib/undo';
 import { capForExam, countdownText, nextExamAt, nextExamForDeck } from '../../lib/exams';
 import { pipGreeting, pipReaction, pipSummary } from '../../lib/pipLines';
-import { answerOnly } from '../../lib/backSide';
 import { MarkButton } from '../../components/MarkButton';
 import { dayKey } from '../../lib/util';
-import { becomesLeech } from '../../lib/cardLinks';
+import { becomesLeech, isLeech } from '../../lib/cardLinks';
 import { ASK_SIDES, asksBack, sidesFor, type AskSide } from '../../lib/askSide';
-import { htmlToText } from '../../lib/content';
 import { graphicQuiz, withDiagramView } from '../../lib/diagram';
-
-/** Explanations already asked for in this session. */
-const explainMemo = new Map<string, string>();
-
-/** A stable number per card id (picks which label of a graphic is covered). */
-const seedOf = (id: string) => [...id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
 import { ImproveCardDialog } from '../../components/ImproveCardDialog';
 import { SpeakButton } from '../../components/SpeakButton';
 import { usePhone } from '../../lib/phone';
 import { useSwipe } from '../../components/useSwipe';
 import { htmlSpeech } from '../../lib/speechText';
 import { speak, stopSpeaking } from '../../lib/speech';
+import { CardEditor } from './CardsTab';
+
+/** Explanations already asked for in this session. */
+const explainMemo = new Map<string, string>();
+
+/** A stable number per card id (picks which label of a graphic is covered). */
+const seedOf = (id: string) => [...id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
 
 type Grade = { score: number; verdict: string; feedback: string };
+type RoundFilter = 'due' | 'new' | 'leech' | 'marked' | 'cram' | 'all';
 
-export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => void }) {
+export default function LearnTab({
+  deck,
+  onDone,
+  customRound,
+  onClearCustom,
+}: {
+  deck: Deck;
+  onDone: () => void;
+  customRound?: { ids: string[]; label: string } | null;
+  onClearCustom?: () => void;
+}) {
   const newPerDay = useStore((s) => s.data.settings.newPerDay);
   const [startAfterBoost, setStartAfterBoost] = useState(false);
   const exams = useStore((s) => s.data.exams);
@@ -46,10 +76,18 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
     return formatDelay(capForExam(schedule(s, r, now), nextExamAt({ exams, decks }, deck.id, now), now).due - now);
   };
   const [mode, setMode] = useState<'due' | 'all' | null>(null);
+  const [modeLabel, setModeLabel] = useState('');
   const [queue, setQueue] = useState<string[]>([]);
+  const [pickFilter, setPickFilter] = useState<RoundFilter>('due');
+  const [pickTag, setPickTag] = useState('');
+  const [batchCap, setBatchCap] = useState<number>(0); // 0 = all
   const phone = usePhone();
   // phone: swiping the turned card rates it (left = Nochmal, right = Gut)
   const [flipped, setFlipped] = useState(false);
+  const [showHint, setShowHint] = useState(false);
+  const [editingCard, setEditingCard] = useState(false);
+  const [showPad, setShowPad] = useState(false);
+  const [showKeys, setShowKeys] = useState(false);
   const [done, setDone] = useState(0);
   const [typed, setTyped] = useState('');
   const [typeMode, setTypeMode] = useState(false);
@@ -61,6 +99,7 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
   /** A card that has just become a problem card (forgotten again and again). */
   const [leech, setLeech] = useState<string | null>(null);
   const [improving, setImproving] = useState<string | null>(null);
+  const [missedIds, setMissedIds] = useState<string[]>([]);
   const autoRead = useStore((s) => !!s.data.settings.speechAuto);
   // Pip's reactions: streaks, cards that finally sit, half time, last cards …
   const [run, setRun] = useState({ streak: 0, misses: 0, firstTry: 0, seen: new Set<string>() });
@@ -80,6 +119,7 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
   };
   const [undo, setUndo] = useState<Undo | null>(null);
   const reviews = useStore((s) => s.data.reviews);
+  const deckReviews = useMemo(() => reviews.filter((r) => r.deckId === deck.id), [reviews, deck.id]);
   const mood: Mood = busy
     ? 'think'
     : grade
@@ -89,6 +129,9 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
         : lastRating === null ? 'wave' : lastRating >= 3 ? 'happy' : lastRating === 1 ? 'sad' : 'idle';
   const moodSay = busy ? 'Ich denke nach …' : say.text;
 
+  const activeCards = useMemo(() => deck.cards.filter((c) => !c.suspended), [deck.cards]);
+  const tags = useMemo(() => allTags(activeCards), [activeCards]);
+
   const dueIds = useMemo(
     () =>
       dueCards(deck)
@@ -96,30 +139,46 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
         .map((c) => c.id),
     // only when the deck's card set (or today's new-card limit) changes, not after each review
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [deck.id, deck.cards.length, deck.newBoost?.n, deck.newBoost?.day, newPerDay],
+    [deck.id, deck.cards.length, deck.newBoost?.n, deck.newBoost?.day, deck.newPerDay, deck.maxReviewsPerDay, newPerDay],
   );
 
   // after "+10 neue Karten" the round starts as soon as the new cards are due
   useEffect(() => {
     if (!startAfterBoost) return;
     setStartAfterBoost(false);
-    start('due');
+    startIds(dueIds, 'due', 'Fällige Karten');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dueIds]);
-  const fresh = deck.cards.filter((c) => c.srs.last === undefined);
+
+  const fresh = activeCards.filter((c) => c.srs.last === undefined);
   const newDueIds = new Set(fresh.slice(0, newCardsLeft(deck)).map((c) => c.id));
   const newInDue = dueIds.filter((id) => newDueIds.has(id)).length;
   const waiting = fresh.length - newInDue;
+  const leechList = useMemo(() => activeCards.filter(isLeech), [activeCards]);
+  const markedList = useMemo(() => activeCards.filter((c) => c.marked), [activeCards]);
 
   // which side is asked (per deck); "mixed" draws anew for every round
   const side: AskSide = deck.askSide ?? 'front';
   const [roundSeed, setRoundSeed] = useState(() => Date.now());
-  const start = (m: 'due' | 'all') => {
+
+  const reset = () => {
+    setFlipped(false);
+    setShowHint(false);
+    setTyped('');
+    setGrade(null);
+    setExplain('');
+    setError('');
+  };
+
+  const startIds = (rawIds: string[], m: 'due' | 'all', label: string) => {
+    const ids = batchCap > 0 ? rawIds.slice(0, batchCap) : rawIds;
+    if (!ids.length) return;
     setRoundSeed(Date.now());
-    const ids = m === 'due' ? dueIds : [...deck.cards.map((c) => c.id)].sort(() => Math.random() - 0.5);
     setQueue(ids);
     setMode(m);
+    setModeLabel(label);
     setDone(0);
+    setMissedIds([]);
     setRun({ streak: 0, misses: 0, firstTry: 0, seen: new Set() });
     setLastRating(null);
     setUndo(null);
@@ -127,14 +186,44 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
     reset();
   };
 
-  // no automatic start: the start screen shows the settings (which side is asked) first
+  // Auto-launch when Deck.tsx passes a custom card selection (from CardsTab / MasteryTab)
+  useEffect(() => {
+    if (!customRound?.ids.length) return;
+    startIds(customRound.ids, 'all', customRound.label);
+    onClearCustom?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customRound]);
 
-  const reset = () => {
-    setFlipped(false);
-    setTyped('');
-    setGrade(null);
-    setExplain('');
-    setError('');
+  const poolForFilter = useMemo(() => {
+    const byTag = (list: Card[]) => (pickTag ? list.filter((c) => hasTag(c, pickTag)) : list);
+    if (pickFilter === 'due') {
+      const dueSet = new Set(dueIds);
+      return byTag(activeCards.filter((c) => dueSet.has(c.id))).sort((a, b) => a.srs.due - b.srs.due);
+    }
+    if (pickFilter === 'new') return byTag(fresh);
+    if (pickFilter === 'leech') return byTag(leechList);
+    if (pickFilter === 'marked') return byTag(markedList);
+    if (pickFilter === 'cram') {
+      return [...byTag(activeCards)].sort((a, b) => (b.srs.lapses - a.srs.lapses) || (a.srs.ease - b.srs.ease));
+    }
+    return [...byTag(activeCards)].sort(() => Math.random() - 0.5);
+  }, [pickFilter, pickTag, dueIds, activeCards, fresh, leechList, markedList]);
+
+  const startSelectedFilter = () => {
+    const labelMap: Record<RoundFilter, string> = {
+      due: 'Fällige Karten',
+      new: 'Neue Karten',
+      leech: 'Problemkarten',
+      marked: 'Markierte Karten',
+      cram: 'Prüfungs-Cramming',
+      all: 'Freies Üben',
+    };
+    const label = pickTag ? `${labelMap[pickFilter]} · #${pickTag}` : labelMap[pickFilter];
+    startIds(
+      poolForFilter.map((c) => c.id),
+      pickFilter === 'due' ? 'due' : 'all',
+      label,
+    );
   };
 
   const card = deck.cards.find((c) => c.id === queue[0]);
@@ -148,13 +237,16 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
     return graphicQuiz(qa.answer, seedOf(card.id) + roundSeed);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [card?.id, card?.srs.reps, card?.srs.lapses, quizOn, qa.question, qa.answer, roundSeed]);
-  const shownQuestion = gq ? `${qa.question}<p class="gq-ask">Was gehört an die markierte Stelle?</p>${gq.graphic}` : qa.question;
-  // the answer: the covered label marked, or graphics that build up step by step (not with animations off)
-  const shownAnswer = gq ? gq.answer : card?.html && animOn ? withDiagramView(qa.answer, { steps: true }) : qa.answer;
+  const rawQuestion = gq ? `${qa.question}<p class="gq-ask">Was gehört an die markierte Stelle?</p>${gq.graphic}` : qa.question;
+  const shownQuestion = renderClozeQuestion(rawQuestion, card?.html);
+  // the answer: the covered label marked, or graphics that build up step by step (not with animations off), plus revealed cloze
+  const rawAnswer = gq ? gq.answer : card?.html && animOn ? withDiagramView(qa.answer, { steps: true }) : qa.answer;
+  const shownAnswer = renderClozeAnswer(rawAnswer, card?.html);
+  const clozeFrontFilled = card && rawQuestion !== shownQuestion ? renderClozeAnswer(rawQuestion, card.html) : null;
   const hasGraphics = deck.cards.some((c) => c.html && c.back.includes('data-diagram='));
   const plain = (s: string) => (card?.html ? htmlToText(s) : s);
-  const frontSpeech = card ? (card.html ? htmlSpeech(qa.question) : qa.question) : '';
-  const backSpeech = card ? (card.html ? htmlSpeech(qa.answer) : qa.answer) : '';
+  const frontSpeech = card ? (card.html ? htmlSpeech(shownQuestion) : shownQuestion) : '';
+  const backSpeech = card ? (card.html ? htmlSpeech(shownAnswer) : shownAnswer) : '';
   // "Karten automatisch vorlesen": question when a card appears, answer when it is turned
   useEffect(() => {
     if (!autoRead || !card) return;
@@ -179,6 +271,7 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
       setUndo({ cardId: card.id, prevSrs: card.srs, at, xp, queue, done, run, say, lastRating, leech });
       countAnswerTime();
       setLastRating(r);
+      if (r === 1) setMissedIds((m) => (m.includes(card.id) ? m : [...m, card.id]));
       // Cards that are still in a short learning step (minutes) come back later in this round.
       const comesBack = r === 1 || (scheduled && schedule(card.srs, r).due - Date.now() <= 60 * 60 * 1000);
       setQueue((q) => (comesBack ? [...q.slice(1), q[0]] : q.slice(1)));
@@ -219,6 +312,14 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
     reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [undo, deck.id]);
+
+  const suspendCurrent = useCallback(() => {
+    if (!card) return;
+    undoable('Karte aus dem Lernplan pausiert', () => toggleSuspendCard(deck.id, card.id));
+    setQueue((q) => q.slice(1));
+    reset();
+  }, [card, deck.id]);
+
   const undoBtn = undo && (
     <button type="button" className="btn ghost sm undo-btn" onClick={takeBack} title="Letzte Bewertung zurücknehmen (Taste Z)">
       ↶ Rückgängig
@@ -227,18 +328,22 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
 
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
+      if (editingCard || showPad || showKeys) return;
       const tag = (e.target as HTMLElement).tagName;
-      if (tag === 'TEXTAREA' || tag === 'INPUT') return;
+      if (tag === 'TEXTAREA' || tag === 'INPUT' || tag === 'SELECT' || (e.target as HTMLElement).isContentEditable) return;
       if (e.key === ' ' && card) {
         e.preventDefault();
         setFlipped(true);
       } else if (flipped && ['1', '2', '3', '4'].includes(e.key)) rate(Number(e.key) as Rating);
       else if (card && (e.key === 'm' || e.key === 'M') && !e.ctrlKey && !e.metaKey && !e.altKey) toggleMark(deck.id, card.id);
+      else if (card && (e.key === 'e' || e.key === 'E') && !e.ctrlKey && !e.metaKey && !e.altKey) (e.preventDefault(), setEditingCard(true));
+      else if (card && card.hint && (e.key === 'h' || e.key === 'H') && !e.ctrlKey && !e.metaKey && !e.altKey) setShowHint((v) => !v);
       else if ((e.key === 'z' || e.key === 'Z') && !e.ctrlKey && !e.metaKey && !e.altKey) takeBack();
+      else if (e.key === '?') setShowKeys((v) => !v);
     };
     window.addEventListener('keydown', k);
     return () => window.removeEventListener('keydown', k);
-  }, [card, flipped, rate, deck.id, takeBack]);
+  }, [card, flipped, rate, deck.id, takeBack, editingCard, showPad, showKeys]);
   // phone: after turning, the card follows the finger – right = „Gut“, left = „Nochmal“
   const swipeProps = useSwipe(phone && flipped && !typeMode, rate);
 
@@ -290,8 +395,11 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
       </div>
     );
 
+  if (mode === null || !card) {
+    const effectiveCount = batchCap > 0 ? Math.min(batchCap, poolForFilter.length) : poolForFilter.length;
+    const est = formatEstMinutes(estimateStudyMinutes(effectiveCount, deckReviews));
+    const missedCards = missedIds.map((id) => deck.cards.find((c) => c.id === id)).filter((c): c is Card => !!c);
 
-  if (mode === null || !card)
     return (
       <div className="empty learn-start">
         {mode !== null && done > 0 && <Confetti count={50} />}
@@ -305,8 +413,8 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
           {dueIds.length && mode === null
             ? 'Starte deine Wiederholung – im richtigen Moment wiederholt bleibt es am längsten hängen.'
             : mode === null && waiting > 0
-              ? `Wiederholungen erledigt. ${waiting} neue Karten warten – das Tageskontingent neuer Karten geht im Kurs der Reihe nach an die Decks. Mit „10 neue Karten“ fängst du hier trotzdem an.`
-              : 'Alles wiederholt. Du kannst trotzdem frei üben – das verschiebt deinen Plan kaum.'}
+              ? `Wiederholungen erledigt. ${waiting} neue Karten warten – mit „10 neue Karten“ fängst du hier trotzdem an.`
+              : 'Alles wiederholt. Du kannst trotzdem gezielt üben – das verschiebt deinen Plan kaum.'}
         </p>
         {mode === null && dueIds.length > 0 && (
           <p className="due-split">
@@ -318,12 +426,81 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
             </span>
             {waiting > 0 && (
               <span className="muted">
-                {waiting} neue warten auf die nächsten Tage ({newPerDay ?? 20} pro Tag im Kurs)
+                {waiting} neue warten auf die nächsten Tage ({deck.newPerDay ?? newPerDay ?? 20} pro Tag)
               </span>
             )}
           </p>
         )}
+
+        {mode !== null && missedCards.length > 0 && (
+          <div className="learn-missed-box">
+            <div className="learn-missed-head">
+              <b>Noch unsicher in dieser Runde ({missedCards.length})</b>
+              <button type="button" className="btn outline sm" onClick={() => startIds(missedCards.map((c) => c.id), 'all', 'Unsichere Karten')}>
+                <IconPlay size={12} /> Nochmal üben
+              </button>
+            </div>
+            <ul>
+              {missedCards.slice(0, 6).map((c) => (
+                <li key={c.id}>{cardFrontText(c).slice(0, 90)}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         <div className="learn-settings">
+          <span className="field-label">Welche Karten üben?</span>
+          <div className="chips center">
+            <button type="button" className={`chip ${pickFilter === 'due' ? 'on' : ''}`} onClick={() => setPickFilter('due')}>
+              Fällig ({dueIds.length})
+            </button>
+            {fresh.length > 0 && (
+              <button type="button" className={`chip ${pickFilter === 'new' ? 'on' : ''}`} onClick={() => setPickFilter('new')}>
+                Nur neue ({fresh.length})
+              </button>
+            )}
+            {leechList.length > 0 && (
+              <button type="button" className={`chip ${pickFilter === 'leech' ? 'on' : ''}`} onClick={() => setPickFilter('leech')}>
+                Problemkarten ({leechList.length})
+              </button>
+            )}
+            {markedList.length > 0 && (
+              <button type="button" className={`chip ${pickFilter === 'marked' ? 'on' : ''}`} onClick={() => setPickFilter('marked')}>
+                Markiert ({markedList.length})
+              </button>
+            )}
+            <button type="button" className={`chip ${pickFilter === 'cram' ? 'on' : ''}`} onClick={() => setPickFilter('cram')} title="Schwierigste Karten zuerst – ideal kurz vor der Prüfung">
+              Prüfungs-Cramming
+            </button>
+            <button type="button" className={`chip ${pickFilter === 'all' ? 'on' : ''}`} onClick={() => setPickFilter('all')}>
+              Alle ({activeCards.length})
+            </button>
+          </div>
+
+          <div className="learn-opts-row">
+            {tags.length > 0 && (
+              <select className="input sm" aria-label="Nach Tag filtern" value={pickTag} onChange={(e) => setPickTag(e.target.value)}>
+                <option value="">Alle Tags</option>
+                {tags.map((t) => (
+                  <option key={t} value={t}>
+                    #{t}
+                  </option>
+                ))}
+              </select>
+            )}
+            <div className="seg compact" role="radiogroup" aria-label="Rundengröße">
+              {[
+                { v: 15, l: '15' },
+                { v: 30, l: '30' },
+                { v: 0, l: 'Alle' },
+              ].map((o) => (
+                <button key={o.v} type="button" role="radio" aria-checked={batchCap === o.v} className={batchCap === o.v ? 'on' : ''} onClick={() => setBatchCap(o.v)}>
+                  {o.l}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <span className="field-label">Was soll gefragt werden?</span>
           <AskSidePicker deck={deck} />
           {hasGraphics && (
@@ -334,11 +511,10 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
           )}
         </div>
         <div className="row-gap center">
-          {dueIds.length > 0 && mode === null && (
-            <button type="button" className="btn primary learn-start-btn" onClick={() => start('due')}>
-              <IconPlay size={14} /> Starten · {dueIds.length} {dueIds.length === 1 ? 'Karte' : 'Karten'}
-            </button>
-          )}
+          <button type="button" className="btn primary learn-start-btn" disabled={effectiveCount === 0} onClick={startSelectedFilter}>
+            <IconPlay size={14} /> Starten · {effectiveCount} {effectiveCount === 1 ? 'Karte' : 'Karten'}
+            {est ? ` (${est})` : ''}
+          </button>
           {waiting > 0 && (
             <button
               type="button"
@@ -352,9 +528,11 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
               <IconPlus size={16} /> 10 neue Karten
             </button>
           )}
-          <button type="button" className="btn outline" onClick={() => start('all')}>
-            <IconShuffle size={16} /> Alle Karten üben
-          </button>
+          {pickFilter !== 'all' && (
+            <button type="button" className="btn ghost" onClick={() => startIds([...activeCards.map((c) => c.id)].sort(() => Math.random() - 0.5), 'all', 'Freies Üben')}>
+              <IconShuffle size={16} /> Alle mischen
+            </button>
+          )}
           {mode !== null && (
             <button type="button" className="btn ghost" onClick={onDone}>
               Fortschritt ansehen
@@ -364,6 +542,7 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
         </div>
       </div>
     );
+  }
 
   const total = done + queue.length;
   return (
@@ -386,8 +565,22 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
         <span className="bar">
           <i style={{ width: `${(done / Math.max(1, total)) * 100}%` }} />
         </span>
-        <span className="muted small">{mode === 'due' ? 'Fällige Karten' : 'Freies Üben'}</span>
+        <span className="muted small">{modeLabel || (mode === 'due' ? 'Fällige Karten' : 'Freies Üben')}</span>
         {undoBtn}
+        <button type="button" className="icon-btn sm" aria-label="Karte bearbeiten" title="Karte bearbeiten (Taste E)" onClick={() => setEditingCard(true)}>
+          <IconEdit size={14} />
+        </button>
+        <button type="button" className="icon-btn sm" aria-label="Karte pausieren" title="Karte aus dem Lernplan pausieren" onClick={suspendCurrent}>
+          <IconPause size={14} />
+        </button>
+        <button type="button" className={'icon-btn sm' + (showPad ? ' on' : '')} aria-label="Schmierblatt öffnen" title="Zeichen-Schmierblatt öffnen" onClick={() => setShowPad(true)}>
+          <IconNote size={14} />
+        </button>
+        {!phone && (
+          <button type="button" className="icon-btn sm" aria-label="Tastenkürzel" title="Tastenkürzel (?)" onClick={() => setShowKeys(true)}>
+            <IconHelp size={14} />
+          </button>
+        )}
         <AskSidePicker deck={deck} compact />
         <FocusButton />
       </div>
@@ -415,8 +608,25 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
           }}
         />
       )}
+      {editingCard && <CardEditor deck={deck} card={card} onClose={() => setEditingCard(false)} />}
+      {showPad && <DrawPad onClose={() => setShowPad(false)} onSave={() => setShowPad(false)} />}
+      {showKeys && (
+        <Modal title="Tastenkürzel beim Lernen" onClose={() => setShowKeys(false)}>
+          <ul className="shortcuts-list">
+            <li><kbd>Leertaste</kbd> Karte umdrehen / Antwort zeigen</li>
+            <li><kbd>1</kbd> – <kbd>4</kbd> Bewerten (Nochmal, Schwer, Gut, Einfach)</li>
+            <li><kbd>H</kbd> Hinweis / Eselsbrücke einblenden</li>
+            <li><kbd>E</kbd> Aktuelle Karte direkt bearbeiten</li>
+            <li><kbd>M</kbd> Karte markieren (★)</li>
+            <li><kbd>Z</kbd> Letzte Bewertung rückgängig machen</li>
+            <li><kbd>?</kbd> Diese Hilfe öffnen</li>
+          </ul>
+        </Modal>
+      )}
       <Mascot className="learn-mascot" mood={mood} pulse={done + queue.length} size={64} say={moodSay} />
-      <div key={`${card.id}-${flipped ? 'b' : 'f'}`} className={`flashcard ${flipped ? 'flipped flip-in' : 'card-in'}`}
+      <div
+        key={`${card.id}-${flipped ? 'b' : 'f'}`}
+        className={`flashcard ${flipped ? 'flipped flip-in' : 'card-in'}`}
         onClick={() => !typeMode && setFlipped(true)}
         {...swipeProps}
       >
@@ -424,7 +634,20 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
         <small className="fc-label">
           Frage <SpeakButton text={frontSpeech} label="Frage vorlesen" className="icon-btn fc-speak" />
         </small>
-        <CardContent text={shownQuestion} html={card.html} look={lookOf(deck, card)} className="fc-front" />
+        <CardContent text={flipped && clozeFrontFilled ? clozeFrontFilled : shownQuestion} html={card.html} look={lookOf(deck, card)} className="fc-front" />
+        {!flipped && card.hint && (
+          <div className="fc-clue" onClick={(e) => e.stopPropagation()}>
+            {showHint ? (
+              <div className="fc-clue-box">
+                <IconBulb size={14} /> <span>{card.hint}</span>
+              </div>
+            ) : (
+              <button type="button" className="btn ghost sm" onClick={() => setShowHint(true)}>
+                <IconBulb size={14} /> Hinweis zeigen (H)
+              </button>
+            )}
+          </div>
+        )}
         {flipped && (
           <>
             <hr />
@@ -437,6 +660,11 @@ export default function LearnTab({ deck, onDone }: { deck: Deck; onDone: () => v
               </p>
             )}
             <CardContent text={shownAnswer} html={card.html} look={lookOf(deck, card)} className="fc-back" />
+            {card.hint && (
+              <div className="fc-clue-box after">
+                <IconBulb size={13} /> <small>{card.hint}</small>
+              </div>
+            )}
           </>
         )}
         {!flipped && !typeMode && <span className="fc-hint">{phone ? 'Tippen zum Umdrehen – danach wischen: ← Nochmal, Gut →' : 'Klicken oder Leertaste zum Umdrehen'}</span>}

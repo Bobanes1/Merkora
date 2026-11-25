@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { htmlToText, textToHtml } from '../lib/content';
+import { buildPrintHtml, type PrintLayout } from '../lib/deckTools';
 import { exportApkg, inTauri } from '../lib/desktop';
 import { pushToast } from '../lib/jobs';
 import type { Deck } from '../lib/store';
@@ -11,16 +12,36 @@ import { ShareDialog } from './ShareDialog';
 
 const csvCell = (s: string) => `"${s.replace(/"/g, '""')}"`;
 
-/** Export a deck: Anki package (desktop app) or CSV table. */
+/** Export a deck: share, Anki package (desktop app), CSV table, or printable study sheet / PDF. */
 export function ExportDialog({ deck, onClose }: { deck: Deck; onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [share, setShare] = useState(false);
+  const [printLayout, setPrintLayout] = useState<PrintLayout>('table');
 
   const csv = () => {
     const text = (c: Deck['cards'][number], side: string) => (c.html ? htmlToText(side) : side);
     const rows = [['Vorderseite', 'Rückseite', 'Tags'], ...deck.cards.map((c) => [text(c, c.front), text(c, c.back), toAnkiTags(c.tags, c.marked).join(' ')])];
-    download(`${deck.name}.csv`, '﻿' + rows.map((r) => r.map(csvCell).join(';')).join('\r\n'), 'text/csv');
+    download(`${deck.name}.csv`, '\uFEFF' + rows.map((r) => r.map(csvCell).join(';')).join('\r\n'), 'text/csv');
+    onClose();
+  };
+
+  const printSheet = () => {
+    const html = buildPrintHtml(deck, printLayout);
+    const w = window.open('', '_blank', 'width=900,height=720');
+    if (!w) {
+      download(`${deck.name}-druck.html`, html, 'text/html');
+      pushToast({ text: 'Druck-Datei heruntergeladen – einfach im Browser öffnen & drucken.', ok: true });
+      onClose();
+      return;
+    }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    setTimeout(() => {
+      w.focus();
+      w.print();
+    }, 250);
     onClose();
   };
 
@@ -66,8 +87,28 @@ export function ExportDialog({ deck, onClose }: { deck: Deck; onClose: () => voi
           <b>Tabelle (.csv)</b>
           <small>Nur Text: Vorderseite, Rückseite, Tags – für Excel, Numbers oder andere Apps.</small>
         </button>
+        <div className="export-print-box">
+          <b>Druck- &amp; PDF-Lernzettel</b>
+          <small className="muted">Sauberes Drucklayout – über den Druckdialog auch direkt als PDF speicherbar.</small>
+          <div className="row-gap">
+            <div className="seg sm" role="radiogroup" aria-label="Drucklayout">
+              <button type="button" role="radio" aria-checked={printLayout === 'table'} className={printLayout === 'table' ? 'on' : ''} onClick={() => setPrintLayout('table')}>
+                Tabelle
+              </button>
+              <button type="button" role="radio" aria-checked={printLayout === 'fold'} className={printLayout === 'fold' ? 'on' : ''} onClick={() => setPrintLayout('fold')}>
+                Falt-Zettel
+              </button>
+              <button type="button" role="radio" aria-checked={printLayout === 'cards'} className={printLayout === 'cards' ? 'on' : ''} onClick={() => setPrintLayout('cards')}>
+                Ausschneide-Karten
+              </button>
+            </div>
+            <button type="button" className="btn primary sm" onClick={printSheet} disabled={busy}>
+              Drucken / PDF
+            </button>
+          </div>
+        </div>
       </div>
-      <p className="muted small">Die Datei landet in deinem Download-Ordner. Der Lernfortschritt wird nicht mit exportiert.</p>
+      <p className="muted small">Der Lernfortschritt wird beim Export nicht mit übertragen.</p>
       {error && <div className="form-error">{error}</div>}
     </Modal>
   );
