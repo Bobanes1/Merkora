@@ -228,11 +228,16 @@ pub fn status() -> TtsStatus {
 }
 
 pub fn cache_key(voice_id: &str, text: &str) -> String {
+    use std::fmt::Write;
     let mut h = sha1_smol::Sha1::new();
     h.update(voice_id.as_bytes());
     h.update(b"\n");
     h.update(text.as_bytes());
-    h.digest().to_string()
+    let mut out = String::with_capacity(40);
+    for b in h.digest().bytes() {
+        let _ = write!(&mut out, "{b:02x}");
+    }
+    out
 }
 
 #[cfg(desktop)]
