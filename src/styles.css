@@ -11849,13 +11849,143 @@ html.phone .goal-ring.in-hero .gr-legend { display: none; }
 .label-chip.bad { border-color: #d93f3f; background: color-mix(in srgb, #d93f3f 12%, var(--white)); }
 .label-chip:disabled { cursor: default; opacity: 0.85; transform: none; }
 
-/* ---------- Studyflix visual diagrams: interactive states & crisp vector motion ---------- */
-.figure-states { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-bottom: 8px; }
-.figure-state-note { margin: 8px 0 0; padding: 8px 12px; border-radius: var(--r-md); background: var(--surface-2); border: 1px solid var(--line); font-size: 13.5px; color: var(--ink); text-align: center; }
+/* ---------- Studyflix visual diagrams & skill explanation animations ---------- */
+.practice-figure.build-figure, .sketch { position: relative; }
+.figure-bar { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.figure-states { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-bottom: 8px; padding-right: 32px; }
+.figure-replay { position: absolute; top: 8px; right: 8px; z-index: 2; opacity: 0.5; transition: opacity 0.18s ease, transform 0.35s ease; }
+.figure-replay:hover { opacity: 1; transform: rotate(-180deg); }
+.figure-state-note { margin: 8px 0 0; padding: 8px 12px; border-radius: var(--r-md); background: var(--surface-2); border: 1px solid var(--line); font-size: 13.5px; color: var(--ink); text-align: center; animation: dg-note-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both; }
 .diagram .dg-art { transition: transform 0.35s ease; }
 .diagram .dg-vec { animation: dg-vec-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
 @keyframes dg-vec-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes dg-note-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* Choreographed entrance for animated explanation diagrams */
+.dg-animated .dg-anim-title { animation: dg-title-in 0.36s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.dg-animated .dg-anim-backdrop { transform-box: fill-box; transform-origin: center; animation: dg-backdrop-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.dg-animated .dg-anim-box { transform-box: fill-box; transform-origin: center; animation: dg-box-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.dg-animated .dg-anim-art { transform-box: fill-box; transform-origin: center; animation: dg-art-pop 0.52s cubic-bezier(0.34, 1.42, 0.64, 1) both; }
+.dg-animated .dg-anim-badge { transform-box: fill-box; transform-origin: center; animation: dg-art-pop 0.48s cubic-bezier(0.34, 1.5, 0.64, 1) both; }
+.dg-animated .dg-anim-badge.dg-vs-pulse { animation: dg-art-pop 0.48s cubic-bezier(0.34, 1.5, 0.64, 1) both, dg-vs-beat 2.6s ease-in-out 0.9s infinite; }
+.dg-animated .dg-anim-area { transform-box: fill-box; transform-origin: center; animation: dg-area-in 0.48s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.dg-animated .dg-anim-venn-l { transform-box: fill-box; transform-origin: center; animation: dg-venn-l 0.62s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.dg-animated .dg-anim-venn-r { transform-box: fill-box; transform-origin: center; animation: dg-venn-r 0.62s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.dg-animated .dg-anim-pie { transform-box: view-box; animation: dg-pie-in 0.56s cubic-bezier(0.34, 1.25, 0.64, 1) both; }
+.dg-animated .dg-anim-bar { transform-box: fill-box; transform-origin: left center; animation: dg-bar-grow 0.6s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.dg-animated .dg-anim-dot { transform-box: fill-box; transform-origin: center; animation: dg-dot-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.dg-animated .dg-dot-ring { transform-box: fill-box; transform-origin: center; animation: dg-ring-pulse 2.2s ease-out infinite; }
+.dg-animated .dg-anim-draw { stroke-dasharray: 100; stroke-dashoffset: 100; animation: dg-draw-path 0.56s cubic-bezier(0.35, 0, 0.2, 1) both; }
+.dg-animated .dg-anim-curve { stroke-dasharray: 100; stroke-dashoffset: 100; animation: dg-draw-path 0.92s cubic-bezier(0.35, 0, 0.2, 1) both; }
+.dg-animated .dg-anim-dashed { animation: dg-vec-in 0.45s ease both, dg-dash-march 1.6s linear infinite; }
+.dg-animated .dg-flow-stream { opacity: 0; pointer-events: none; animation: dg-stream-in 0.35s ease both, dg-stream-move 1.55s linear infinite; }
+.dg-animated .dg-flow-stream.dg-flow-force { animation: dg-stream-in 0.35s ease both, dg-stream-move-lg 1.15s linear infinite; }
+
+/* Ambient Studyflix motion on motifs (nested inside .dg-art so tilt transforms stay intact) */
+.dg-animated .dg-alive { transform-box: fill-box; transform-origin: center; }
+.dg-animated .dg-alive-float, .dg-animated .dg-float { transform-box: fill-box; transform-origin: center; animation: dg-float 3.2s ease-in-out infinite; }
+.dg-animated .dg-alive-bob, .dg-animated .dg-bob { transform-box: fill-box; transform-origin: center; animation: dg-bob 3.4s ease-in-out infinite; }
+.dg-animated .dg-alive-pulse, .dg-animated .dg-pulse { transform-box: fill-box; transform-origin: center; animation: dg-pulse 2.7s ease-in-out infinite; }
+.dg-animated .dg-alive-spin, .dg-animated .dg-spin { transform-box: fill-box; transform-origin: center; animation: dg-spin 14s linear infinite; }
+.dg-animated .dg-alive-rock, .dg-animated .dg-rock { transform-box: fill-box; transform-origin: center; animation: dg-rock 4.2s ease-in-out infinite; }
+.dg-animated .dg-alive-idle { animation: dg-idle 4.2s ease-in-out infinite; }
+.dg-animated .dg-flow { animation: dg-dash-march 1.6s linear infinite; }
+
+/* Custom AI-generated Studyflix SVG illustrations: crisp staggered entrance + live dashed flows */
+.dg-animated .dg-anim-raw > * { transform-box: fill-box; transform-origin: center; animation: dg-box-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.dg-animated .dg-anim-raw > :nth-child(2) { animation-delay: 0.07s; }
+.dg-animated .dg-anim-raw > :nth-child(3) { animation-delay: 0.14s; }
+.dg-animated .dg-anim-raw > :nth-child(4) { animation-delay: 0.21s; }
+.dg-animated .dg-anim-raw > :nth-child(5) { animation-delay: 0.28s; }
+.dg-animated .dg-anim-raw > :nth-child(6) { animation-delay: 0.35s; }
+.dg-animated .dg-anim-raw > :nth-child(7) { animation-delay: 0.42s; }
+.dg-animated .dg-anim-raw > :nth-child(8) { animation-delay: 0.49s; }
+.dg-animated .dg-anim-raw > :nth-child(n+9) { animation-delay: 0.56s; }
+.dg-animated .dg-anim-raw [stroke-dasharray] { animation: dg-vec-in 0.45s ease both, dg-dash-march 1.8s linear infinite; }
+
+@keyframes dg-title-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@keyframes dg-backdrop-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: none; } }
+@keyframes dg-box-in { from { opacity: 0; transform: translateY(7px) scale(0.95); } to { opacity: 1; transform: none; } }
+@keyframes dg-art-pop { from { opacity: 0; transform: scale(0.68) translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes dg-area-in { from { opacity: 0; transform: translateY(10px) scale(0.95); } to { opacity: 1; transform: none; } }
+@keyframes dg-venn-l { from { opacity: 0; transform: translateX(-28px) scale(0.9); } to { opacity: 1; transform: none; } }
+@keyframes dg-venn-r { from { opacity: 0; transform: translateX(28px) scale(0.9); } to { opacity: 1; transform: none; } }
+@keyframes dg-pie-in { from { opacity: 0; transform: scale(0.28); } to { opacity: 1; transform: scale(1); } }
+@keyframes dg-bar-grow { from { opacity: 0.35; transform: scaleX(0); } to { opacity: 1; transform: scaleX(1); } }
+@keyframes dg-dot-pop { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: scale(1); } }
+@keyframes dg-ring-pulse { 0% { opacity: 0.72; transform: scale(0.55); } 80%, 100% { opacity: 0; transform: scale(1.75); } }
+@keyframes dg-draw-path { 0% { stroke-dashoffset: 100; opacity: 0; } 12% { opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 1; } }
+@keyframes dg-dash-march { from { stroke-dashoffset: 22; } to { stroke-dashoffset: 0; } }
+@keyframes dg-stream-in { from { opacity: 0; } to { opacity: 0.72; } }
+@keyframes dg-stream-move { from { stroke-dashoffset: 25; } to { stroke-dashoffset: 0; } }
+@keyframes dg-stream-move-lg { from { stroke-dashoffset: 26; } to { stroke-dashoffset: 0; } }
+@keyframes dg-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+@keyframes dg-bob { 0%, 100% { transform: translateY(0) rotate(-2.2deg); } 50% { transform: translateY(-2.5px) rotate(2.2deg); } }
+@keyframes dg-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.055); } }
+@keyframes dg-vs-beat { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+@keyframes dg-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes dg-rock { 0%, 100% { transform: rotate(-4.5deg); } 50% { transform: rotate(4.5deg); } }
+@keyframes dg-idle { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+
+/* Directional transitions & choreographed content reveals in skill explanations */
+.bite-card.anim-next { animation: bite-next 0.34s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.bite-card.anim-prev { animation: bite-prev 0.34s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes bite-next { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: none; } }
+@keyframes bite-prev { from { opacity: 0; transform: translateX(-18px); } to { opacity: 1; transform: none; } }
+
+.bite-card.bite-anim .bite-title { animation: exp-rise 0.34s cubic-bezier(0.22, 1, 0.36, 1) 0.03s both; }
+.bite-card.bite-anim .bite-text > :nth-child(1) { animation: exp-rise 0.34s cubic-bezier(0.22, 1, 0.36, 1) 0.06s both; }
+.bite-card.bite-anim .bite-text > :nth-child(2) { animation: exp-rise 0.34s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both; }
+.bite-card.bite-anim .bite-text > :nth-child(3) { animation: exp-rise 0.34s cubic-bezier(0.22, 1, 0.36, 1) 0.18s both; }
+.bite-card.bite-anim .bite-text > :nth-child(n+4) { animation: exp-rise 0.34s cubic-bezier(0.22, 1, 0.36, 1) 0.23s both; }
+.bite-card.bite-anim .practice-figures { animation: exp-rise 0.38s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both; }
+.bite-card.bite-anim .bite-check { animation: exp-rise 0.38s cubic-bezier(0.22, 1, 0.36, 1) 0.18s both; }
+.sprint-bite { animation: exp-rise 0.38s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.phase-panel { animation: bite-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes exp-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* Worked example steps & result cascade */
+.practice-example .practice-step { animation: step-slide 0.38s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.practice-example .practice-step > span { animation: dg-dot-pop 0.38s cubic-bezier(0.34, 1.56, 0.64, 1) both; animation-delay: inherit; }
+.practice-example .example-result { animation: step-slide 0.42s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes step-slide { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
+
+/* Bite check feedback & estimate pin motion */
+.bite-check .form-ok, .bite-check .form-error, .bite-reveal-box, .bite-reveal-note { animation: dg-note-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.bite-est-pin.truth { animation: est-pin-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+@keyframes est-pin-pop { from { opacity: 0; transform: translate(-50%, -50%) scale(0); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+
+/* Animated subject visuals: ProgramView, SketchView, SyntaxView, TablesView */
+.program-line { transition: background 0.22s ease, box-shadow 0.22s ease; }
+.program-trace { animation: dg-note-in 0.26s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.trace-vars tr.changed td { animation: trace-flash 0.55s ease both; }
+@keyframes trace-flash { 0% { background: color-mix(in srgb, #e0b23a 62%, transparent); } 100% { background: color-mix(in srgb, #e0b23a 28%, transparent); } }
+
+.sketch.sk-anim .sk-party { transform-box: fill-box; transform-origin: center; animation: dg-art-pop 0.46s cubic-bezier(0.34, 1.4, 0.64, 1) both; }
+.sketch.sk-anim .sk-link:not(.anspruch) path { stroke-dasharray: 100; stroke-dashoffset: 100; animation: dg-draw-path 0.58s cubic-bezier(0.35, 0, 0.2, 1) both; }
+.sketch.sk-anim .sk-link.anspruch path { animation: dg-vec-in 0.45s ease both, dg-dash-march 1.6s linear infinite; }
+.sketch.sk-anim .sk-label { animation: dg-vec-in 0.36s ease both; }
+
+.syntax .sp { animation: exp-rise 0.34s cubic-bezier(0.22, 1, 0.36, 1) both; transition: transform 0.16s ease; }
+.syntax .sp:hover { transform: translateY(-2px); }
+.lang-table tbody tr { animation: step-slide 0.32s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.lang-table mark { display: inline-block; animation: dg-dot-pop 0.36s cubic-bezier(0.34, 1.5, 0.64, 1) 0.18s both; }
+
 @media (prefers-reduced-motion: reduce) {
-  .diagram .dg-vec, .diagram .dg-art { animation: none; transition: none; }
+  .diagram .dg-vec, .diagram .dg-art, .figure-state-note, .figure-replay,
+  .dg-animated *, .bite-card, .bite-card *, .sprint-bite, .phase-panel,
+  .practice-example .practice-step, .practice-example .practice-step > span, .practice-example .example-result,
+  .bite-check .form-ok, .bite-check .form-error, .bite-reveal-box, .bite-reveal-note, .bite-est-pin.truth,
+  .program-line, .program-trace, .trace-vars tr.changed td,
+  .sketch.sk-anim *, .syntax .sp, .lang-table tbody tr, .lang-table mark {
+    animation: none !important;
+    transition: none !important;
+  }
+  .dg-animated .dg-anim-draw, .dg-animated .dg-anim-curve, .sketch.sk-anim .sk-link:not(.anspruch) path {
+    stroke-dasharray: none !important;
+    stroke-dashoffset: 0 !important;
+  }
+  .dg-animated .dg-flow-stream, .dg-animated .dg-dot-ring { display: none !important; }
 }
+
 

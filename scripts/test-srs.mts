@@ -2550,6 +2550,39 @@ console.log('Bildhafte Erklärgrafiken (forces, scene, callout, illustration)');
   ok((cycL.art?.length ?? 0) === 1, 'cycle: passendes Studyflix-Motiv im Zentrum');
 
   ok(P.FIGURE_RULE.includes('"forces"') && P.FIGURE_RULE.includes('"scene"') && P.FIGURE_RULE.includes('"callout"') && P.FIGURE_RULE.includes('"layers"') && P.FIGURE_RULE.includes('"illustration"'), 'FIGURE_RULE beschreibt alle 5 bildhaften Formen');
+
+  // Studyflix explanation animations (diagram animate mode + semantic motif motion + safe SVG animation classes)
+  ok(
+    I.illustrationMotion('flugzeug') === 'float' &&
+      I.illustrationMotion('schiff') === 'bob' &&
+      I.illustrationMotion('herz') === 'pulse' &&
+      I.illustrationMotion('zahnrad') === 'spin' &&
+      I.illustrationMotion('atom') === 'rock' &&
+      I.illustrationMotion('vertrag') === 'idle',
+    'illustrationMotion liefert passende Studyflix-Bewegung pro Motiv',
+  );
+  const fAnim = D.renderDiagram(forces, D.PALETTES.light, { state: 1, animate: true });
+  ok(
+    fAnim.includes('class="dg-animated dg-type-forces"') &&
+      fAnim.includes('dg-alive-float') &&
+      fAnim.includes('dg-anim-draw') &&
+      fAnim.includes('dg-flow-stream dg-flow-force') &&
+      fAnim.includes('rotate(-7') &&
+      !D.renderDiagram(forces, D.PALETTES.light, { state: 1 }).includes('dg-animated'),
+    'forces: animate-Modus animiert Motiv, Pfeile, Kraftfluss & Neigung ohne Standard-Rendering zu ändern',
+  );
+  const sAnim = D.renderDiagram(scene, D.PALETTES.light, { animate: true });
+  ok(sAnim.includes('dg-anim-backdrop') && sAnim.includes('dg-anim-art') && sAnim.includes('dg-flow-stream'), 'scene: animate-Modus animiert Karten, Motive und Datenfluss');
+  const cAnim = D.renderDiagram(callout, D.PALETTES.light, { animate: true });
+  ok(cAnim.includes('dg-dot-ring') && cAnim.includes('dg-alive-pulse'), 'callout: animate-Modus animiert Anker-Ringe und Motiv');
+  const barAnim = D.renderDiagram(D.parseDiagram({ type: 'bars', bars: [{ label: 'A', value: 10 }, { label: 'B', value: 25 }] })!, D.PALETTES.light, { animate: true });
+  ok(barAnim.includes('dg-anim-bar'), 'bars: Balken wachsen animiert');
+  const vennAnim = D.renderDiagram(D.parseDiagram({ type: 'venn', sets: [{ label: 'A', items: ['x'] }, { label: 'B', items: ['y'] }], shared: ['z'] })!, D.PALETTES.light, { animate: true });
+  ok(vennAnim.includes('dg-anim-venn-l') && vennAnim.includes('dg-anim-venn-r'), 'venn: Kreise gleiten animiert zusammen');
+  const plotAnim = D.renderDiagram(D.parseDiagram({ type: 'plot', x: { label: 'x', min: 0, max: 10 }, y: { label: 'y', min: 0, max: 10 }, functions: [{ label: 'f(x)', expr: 'x' }] })!, D.PALETTES.light, { animate: true });
+  ok(plotAnim.includes('dg-anim-curve'), 'plot: Kurve zeichnet sich animiert');
+  const safeCls = D.sanitizeSvg('<g class="dg-float evil-class"><circle cx="20" cy="20" r="10" class="dg-pulse"/><rect x="40" y="10" width="20" height="20" class="unknown"/></g>');
+  ok(!!safeCls && safeCls.svg.includes('class="dg-float"') && safeCls.svg.includes('class="dg-pulse"') && !safeCls.svg.includes('evil-class') && !safeCls.svg.includes('unknown'), 'sanitizeSvg behält nur sichere Animationsklassen');
 }
 
 console.log(failures ? `\n${failures} Test(s) fehlgeschlagen` : '\nAlle SRS-Tests bestanden');

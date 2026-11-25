@@ -269,7 +269,7 @@ export function PracticeSetView({ set, host, head, onDone, guided, focus }: { se
               Weiter zu den Aufgaben <IconChevron size={14} />
             </button>
           </div>
-          <section className="panel">
+          <section className="panel phase-panel">
             <Explanation set={set} host={host} hideText />
           </section>
           {labs}
@@ -646,7 +646,7 @@ function SprintOverview({ set, bites, host, hasExample, labs, onDone }: { set: P
           <span className="muted small">Kompakt-Theorie · danach direkt üben</span>
         </div>
         {bites.map((b, k) => (
-          <div key={k} className="sprint-bite">
+          <div key={k} className="sprint-bite" style={{ animationDelay: `${Math.min(0.45, k * 0.09).toFixed(2)}s` }}>
             {b.title && <h3>{b.title}</h3>}
             <div className="md bite-text">
               <Markdown text={b.text} />
@@ -669,11 +669,13 @@ function SprintOverview({ set, bites, host, hasExample, labs, onDone }: { set: P
 /** The explanation in bites: read a little, interact with a varied quick check, go on. */
 function BitesView({ set, bites, host, hasExample, onDone, onSkip }: { set: PracticeSet; bites: Bite[]; host: SetHost; hasExample: boolean; onDone: () => void; onSkip: () => void }) {
   const [k, setK] = useState(() => Math.max(0, Math.min(set.bite ?? 0, bites.length - 1)));
+  const [dir, setDir] = useState<'init' | 'next' | 'prev'>('init');
   const [done, setDone] = useState(false);
   const actions = useRef<CheckActions>({});
   const b = bites[k];
   const answered = !b?.check || done;
   const go = (to: number) => {
+    setDir(to >= k ? 'next' : 'prev');
     setK(to);
     setDone(false);
     actions.current = {};
@@ -701,7 +703,7 @@ function BitesView({ set, bites, host, hasExample, onDone, onSkip }: { set: Prac
   if (!b) return null;
   const fig = b.figure !== undefined ? set.figures?.[b.figure] : undefined;
   return (
-    <section className="panel bite-card" key={k}>
+    <section className={`panel bite-card bite-anim${dir !== 'init' ? ` anim-${dir}` : ''}`} key={k}>
       <div className="bite-dots">
         {bites.map((_, j) => (
           <button key={j} type="button" className={j === k ? 'on' : j < k ? 'done' : ''} onClick={() => go(j)} aria-label={`Theorie ${j + 1}`} />
@@ -713,7 +715,7 @@ function BitesView({ set, bites, host, hasExample, onDone, onSkip }: { set: Prac
           Kenn ich schon – direkt üben ›
         </button>
       </div>
-      {b.title && <h3>{b.title}</h3>}
+      {b.title && <h3 className="bite-title">{b.title}</h3>}
       <div className="md bite-text">
         <Markdown text={b.text} />
       </div>
@@ -794,13 +796,13 @@ function WorkedExample({ example, code }: { example: NonNullable<PracticeSet['ex
         (shown ? (
           <>
             {example.steps.map((s, k) => (
-              <div key={k} className="practice-step">
+              <div key={k} className="practice-step" style={{ animationDelay: `${Math.min(0.65, 0.08 + k * 0.09).toFixed(2)}s` }}>
                 <span>{k + 1}</span>
                 <CardContent text={s} />
               </div>
             ))}
             {example.answer && (
-              <p className="example-result">
+              <p className="example-result" style={{ animationDelay: `${Math.min(0.75, 0.12 + example.steps.length * 0.09).toFixed(2)}s` }}>
                 <b>Ergebnis:</b> <CardContent text={example.answer} className="inline" />
               </p>
             )}

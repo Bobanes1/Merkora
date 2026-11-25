@@ -4,7 +4,7 @@
  * Pure (no DOM) – tested in scripts/test-srs.mts.
  */
 import { ICON_NAMES, ICONS } from './diagramIcons';
-import { ILLUSTRATION_NAMES, matchIllustration, renderIllustration, type IllustrationPalette } from './illustrations';
+import { ILLUSTRATION_NAMES, illustrationMotion, matchIllustration, renderIllustration, type IllustrationPalette } from './illustrations';
 import { compileExpr, sampleCurve } from './plotExpr';
 
 export type ForceDir = 'up' | 'down' | 'left' | 'right' | 'up-left' | 'up-right' | 'down-left' | 'down-right';
@@ -565,9 +565,10 @@ const SVG_ALLOWED_ATTRS = new Set([
   'd', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry', 'width', 'height', 'points',
   'fill', 'fill-opacity', 'stroke', 'stroke-width', 'stroke-dasharray', 'stroke-linecap', 'stroke-linejoin',
   'opacity', 'transform', 'font-size', 'font-weight', 'text-anchor', 'dominant-baseline', 'dx', 'dy',
-  'id', 'marker-end', 'marker-start', 'viewbox', 'refx', 'refy', 'markerwidth', 'markerheight', 'orient',
+  'id', 'class', 'marker-end', 'marker-start', 'viewbox', 'refx', 'refy', 'markerwidth', 'markerheight', 'orient',
   'offset', 'stop-color', 'stop-opacity', 'gradientunits',
 ]);
+const SVG_SAFE_CLASSES = new Set(['dg-float', 'dg-bob', 'dg-pulse', 'dg-flow', 'dg-spin', 'dg-rock']);
 const SVG_ATTR_CASE: Record<string, string> = {
   viewbox: 'viewBox', refx: 'refX', refy: 'refY', markerwidth: 'markerWidth', markerheight: 'markerHeight', gradientunits: 'gradientUnits',
 };
@@ -609,8 +610,12 @@ export function sanitizeSvg(raw: unknown, widthHint?: unknown, heightHint?: unkn
     let m: RegExpExecArray | null;
     while ((m = attrRe.exec(rawAttrs))) {
       const k = m[1].toLowerCase();
-      const v = (m[2] ?? m[3] ?? '').trim();
+      let v = (m[2] ?? m[3] ?? '').trim();
       if (k.startsWith('on') || !SVG_ALLOWED_ATTRS.has(k)) continue;
+      if (k === 'class') {
+        v = v.split(/\s+/).filter((c) => SVG_SAFE_CLASSES.has(c)).join(' ');
+        if (!v) continue;
+      }
       if (/javascript:|data:|vbscript:|expression\(|https?:\/\//i.test(v)) continue;
       if (/url\(/i.test(v) && !/^url\(#[\w-]+\)$/i.test(v)) continue;
       const canonAttr = SVG_ATTR_CASE[k] ?? k;
@@ -1881,7 +1886,8 @@ const r1 = (n: number) => Math.round(n * 10) / 10;
 export type DiagramView = { hide?: number; reveal?: number; steps?: boolean; /** built up step by step: only the first `upto` text boxes are shown */ upto?: number; /** several labels covered, numbered 1, 2, 3 … (labelling tasks) */ hideMany?: number[];
   /** labelling by drag & drop: the term placed on covered box k (shown instead of the number) */ filled?: (string | undefined)[];
   /** after checking: covered box k right (green) or wrong (red) */ marks?: (boolean | undefined)[];
-  /** active state index for interactive `forces` diagrams (e.g. Reiseflug / Steigflug / Landung) */ state?: number };
+  /** active state index for interactive `forces` diagrams (e.g. Reiseflug / Steigflug / Landung) */ state?: number;
+  /** Studyflix-style entrance & ambient motion (used in skill explanations) */ animate?: boolean };
 
 /** A term inside a covered box: as many words per line as fit, at most two lines (the rest shortened). */
 function fitLines(text: string, width: number, fs: number): string[] {
@@ -1939,10 +1945,15 @@ export function diagramBoxCount(d: Diagram): number {
 /** Graphics that read best when they appear box by box. */
 export const STEP_TYPES: Diagram['type'][] = ['flow', 'cycle', 'timeline', 'pyramid'];
 
+/** Diagram kinds whose directed arrows carry an animated flow stream in skill explanations. */
+const FLOW_STREAM_TYPES = new Set<Diagram['type']>(['scene', 'flow', 'cycle', 'forces', 'model', 'network', 'decision']);
+
 export function renderDiagram(d: Diagram, p: Palette = PALETTES.light, view?: DiagramView): string {
   const L = layoutDiagram(d, view?.state);
   const quiz = view && (view.hide !== undefined || view.reveal !== undefined || view.hideMany?.length) ? quizBoxes(L) : [];
   const steps = !!view?.steps && STEP_TYPES.includes(d.type);
+  const anim = !!view?.animate && !quiz.length && view?.upto === undefined;
+  const dly = (base: number, idx: number, stepS = 0.08, maxS = 0.95) => Math.min(maxS, base + idx * stepS).toFixed(2);
   let step = 0;
   // ids per colour scheme, so several diagrams on one page never borrow each other's arrow colours
   const id = 'dg' + (p.tones[0].line + p.tones[1].line + (p.bg ?? '')).replace(/[^0-9a-z]/gi, '');
@@ -1951,36 +1962,55 @@ export function renderDiagram(d: Diagram, p: Palette = PALETTES.light, view?: Di
   const marker = (name: string, color: string, sz = 8, refX = 9) =>
     `<marker id="${id}-${name}" viewBox="0 0 10 10" refX="${refX}" refY="5" markerWidth="${sz}" markerHeight="${sz}" orient="auto-start-reverse"><path d="M0 1.2 L10 5 L0 8.8 z" fill="${color}"/></marker>`;
   out.push(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${L.width} ${L.height}" width="${L.width}" height="${L.height}" font-family="Manrope, Arial, sans-serif" role="img">`,
+    `<svg xmlns="http://www.w3.org/2000/svg"${anim ? ` class="dg-animated dg-type-${d.type}"` : ''} viewBox="0 0 ${L.width} ${L.height}" width="${L.width}" height="${L.height}" font-family="Manrope, Arial, sans-serif" role="img">`,
     `<defs>${p.tones.map((t, i) => marker('a' + (i + 1), t.line) + marker('b' + (i + 1), t.line, 5.5, 7.5)).join('')}${marker('m', p.muted)}<filter id="${id}-s" x="-10%" y="-10%" width="120%" height="150%"><feDropShadow dx="0" dy="1.5" stdDeviation="1.6" flood-color="${p.shadow}"/></filter></defs>`,
   );
   if (p.bg) out.push(`<rect width="100%" height="100%" fill="${p.bg}"/>`);
+  let areaIdx = 0;
   for (const a of L.areas) {
     const t = tn(a.hue);
     if (a.circle) {
       const [cx, cy, r] = a.circle;
-      out.push(`<circle cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(r)}" fill="${t.line}" fill-opacity="0.16" stroke="${t.line}" stroke-width="2"/>`);
+      const aAttr = anim
+        ? d.type === 'venn'
+          ? ` class="${areaIdx === 0 ? 'dg-anim-venn-l' : 'dg-anim-venn-r'}" style="animation-delay:${dly(0.08, areaIdx, 0.12, 0.5)}s"`
+          : ` class="dg-anim-dot" style="animation-delay:${dly(0.52, areaIdx, 0.1, 1.0)}s"`
+        : '';
+      areaIdx++;
+      out.push(`<circle${aAttr} cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(r)}" fill="${t.line}" fill-opacity="0.16" stroke="${t.line}" stroke-width="2"/>`);
     } else if (a.poly) {
       const fill = a.fill === 'accent' ? t.accent : a.fill === 'soft' ? t.soft : t.node;
-      out.push(`<polygon points="${a.poly.map(([x, y]) => `${r1(x)},${r1(y)}`).join(' ')}" fill="${fill}" stroke="${a.fill === 'accent' ? fill : t.stroke}" stroke-width="1.4" stroke-linejoin="round" filter="url(#${id}-s)"/>`);
+      const isPieWedge = d.type === 'pie' && a.poly.length > 4;
+      const aAttr = anim
+        ? isPieWedge
+          ? ` class="dg-anim-pie" style="transform-origin:${r1(a.poly[0][0])}px ${r1(a.poly[0][1])}px;animation-delay:${dly(0.08, areaIdx, 0.08, 0.85)}s"`
+          : ` class="dg-anim-area" style="animation-delay:${dly(0.1, areaIdx, 0.08, 0.85)}s"`
+        : '';
+      areaIdx++;
+      out.push(`<polygon${aAttr} points="${a.poly.map(([x, y]) => `${r1(x)},${r1(y)}`).join(' ')}" fill="${fill}" stroke="${a.fill === 'accent' ? fill : t.stroke}" stroke-width="1.4" stroke-linejoin="round" filter="url(#${id}-s)"/>`);
     }
   }
   // Empty soft backdrop cards (used in `scene` behind illustrations) render before art and lines
   const backdrop = (b: Box) => !b.lines.length && b.kind === 'soft';
+  let bdIdx = 0;
   for (const b of L.boxes) {
     if (!backdrop(b)) continue;
     const t = tn(b.tone);
-    out.push(`<rect x="${r1(b.x)}" y="${r1(b.y)}" width="${r1(b.w)}" height="${r1(b.h)}" rx="14" fill="${t.soft}" stroke="${t.stroke}" stroke-width="1.2" stroke-opacity="0.5"/>`);
+    const bdAttr = anim ? ` class="dg-anim-backdrop" style="animation-delay:${dly(0.04, bdIdx++, 0.08, 0.72)}s"` : '';
+    out.push(`<rect${bdAttr} x="${r1(b.x)}" y="${r1(b.y)}" width="${r1(b.w)}" height="${r1(b.h)}" rx="14" fill="${t.soft}" stroke="${t.stroke}" stroke-width="1.2" stroke-opacity="0.5"/>`);
   }
   if (L.art?.length) {
+    let artIdx = 0;
     for (const item of L.art) {
       const t = tn(item.tone);
       const cx = r1(item.x + item.w / 2), cy = r1(item.y + item.h / 2);
       if (item.badge) {
         const rad = r1(Math.min(item.w, item.h) / 2);
         const fs = item.badge.length > 1 ? 11 : 15;
+        const badgeCls = anim ? `dg-art dg-anim-badge${item.badge === 'VS' ? ' dg-vs-pulse' : ''}` : 'dg-art';
+        const badgeStyle = anim ? ` style="animation-delay:${dly(0.12, artIdx++, 0.09, 0.85)}s"` : '';
         out.push(
-          `<g class="dg-art"><circle cx="${cx}" cy="${cy}" r="${rad}" fill="${t.accent}" stroke="${p.onAccent}" stroke-width="2" filter="url(#${id}-s)"/><text x="${cx}" y="${cy}" font-size="${fs}" font-weight="800" fill="${p.onAccent}" text-anchor="middle" dominant-baseline="central">${esc(item.badge)}</text></g>`,
+          `<g class="${badgeCls}"${badgeStyle}><circle cx="${cx}" cy="${cy}" r="${rad}" fill="${t.accent}" stroke="${p.onAccent}" stroke-width="2" filter="url(#${id}-s)"/><text x="${cx}" y="${cy}" font-size="${fs}" font-weight="800" fill="${p.onAccent}" text-anchor="middle" dominant-baseline="central">${esc(item.badge)}</text></g>`,
         );
         continue;
       }
@@ -1996,7 +2026,16 @@ export function renderDiagram(d: Diagram, p: Palette = PALETTES.light, view?: Di
         violet: p.tones[4].line,
       };
       const inner = renderIllustration(item.icon, item.subject, item.x, item.y, item.w, item.h, artPal);
-      out.push(item.tilt ? `<g class="dg-art" transform="rotate(${item.tilt} ${cx} ${cy})">${inner}</g>` : `<g class="dg-art">${inner}</g>`);
+      if (anim) {
+        const ent = dly(0.09, artIdx++, 0.09, 0.8);
+        const liveDelay = (Number(ent) + 0.45).toFixed(2);
+        const mot = illustrationMotion(item.icon, item.subject);
+        out.push(
+          `<g class="dg-art-wrap dg-anim-art" style="animation-delay:${ent}s"><g class="dg-art"${item.tilt ? ` transform="rotate(${item.tilt} ${cx} ${cy})"` : ''}><g class="dg-alive dg-alive-${mot}" style="animation-delay:${liveDelay}s">${inner}</g></g></g>`,
+        );
+      } else {
+        out.push(item.tilt ? `<g class="dg-art" transform="rotate(${item.tilt} ${cx} ${cy})">${inner}</g>` : `<g class="dg-art">${inner}</g>`);
+      }
     }
   }
   if (L.rawSvg) {
@@ -2014,30 +2053,72 @@ export function renderDiagram(d: Diagram, p: Palette = PALETTES.light, view?: Di
       .replace(/\{\{bg\}\}/g, p.bg ?? p.tones[0].soft)
       .replace(/\bid="([\w-]+)"/g, `id="${id}-i-$1"`)
       .replace(/url\(#([\w-]+)\)/g, `url(#${id}-i-$1)`);
-    out.push(`<g transform="translate(${PAD} ${r1(L.rawSvg.y)}) scale(${scale.toFixed(4)})">${themed}</g>`);
+    out.push(`<g${anim ? ' class="dg-anim-raw"' : ''} transform="translate(${PAD} ${r1(L.rawSvg.y)}) scale(${scale.toFixed(4)})">${themed}</g>`);
   }
+  let lineIdx = 0;
+  let curveIdx = 0;
   for (const l of L.lines) {
     const color = l.muted ? p.muted : tn(l.tone).line;
     const sw = l.width ?? (l.muted && !l.arrow ? 1.5 : l.pts.length > 10 ? 2.6 : 2);
     const toneIdx = ((Math.max(1, l.tone ?? 1) - 1) % p.tones.length) + 1;
     const m = `url(#${id}-${l.muted ? 'm' : (sw >= 3.5 ? 'b' : 'a') + toneIdx})`;
+    const isCurve = l.pts.length > 10;
+    const lineDelay = anim
+      ? d.type === 'plot' || d.type === 'axes'
+        ? isCurve
+          ? dly(0.28, curveIdx++, 0.18, 0.9)
+          : l.dashed
+            ? '0.78'
+            : dly(0.06, lineIdx++, 0.03, 0.35)
+        : d.type === 'forces'
+          ? dly(0.2, lineIdx++, 0.11, 0.85)
+          : dly(0.22, lineIdx++, 0.085, 0.95)
+      : '';
+    const canStream = anim && !!l.arrow && !l.both && !l.muted && !l.dashed && FLOW_STREAM_TYPES.has(d.type);
+    const streamDelay = anim ? (Number(lineDelay) + 0.45).toFixed(2) : '';
+    const streamSw = r1(Math.max(1.4, sw * 0.55));
+    const streamDash = d.type === 'forces' ? '8 18' : '5 20';
     if (l.quad && l.pts.length === 2) {
       const [[x1, y1], [x2, y2]] = l.pts;
       const [qx, qy] = l.quad;
+      const pathD = `M ${r1(x1)} ${r1(y1)} Q ${r1(qx)} ${r1(qy)} ${r1(x2)} ${r1(y2)}`;
+      const cls = anim ? `dg-vec ${l.dashed ? 'dg-anim-dashed' : 'dg-anim-draw'}` : 'dg-vec';
+      const animAttr = anim ? `${l.dashed ? '' : ' pathLength="100"'} style="animation-delay:${lineDelay}s"` : '';
       out.push(
-        `<path class="dg-vec" d="M ${r1(x1)} ${r1(y1)} Q ${r1(qx)} ${r1(qy)} ${r1(x2)} ${r1(y2)}" fill="none" stroke="${color}" stroke-width="${sw}"${l.dashed ? ' stroke-dasharray="6 5"' : ''} stroke-linecap="round"${l.arrow ? ` marker-end="${m}"` : ''}${l.both ? ` marker-start="${m}"` : ''}/>`,
+        `<path class="${cls}"${animAttr} d="${pathD}" fill="none" stroke="${color}" stroke-width="${sw}"${l.dashed ? ' stroke-dasharray="6 5"' : ''} stroke-linecap="round"${l.arrow ? ` marker-end="${m}"` : ''}${l.both ? ` marker-start="${m}"` : ''}/>`,
       );
+      if (canStream) {
+        out.push(
+          `<path class="dg-flow-stream${d.type === 'forces' ? ' dg-flow-force' : ''}" d="${pathD}" fill="none" stroke="${p.onAccent}" stroke-width="${streamSw}" stroke-dasharray="${streamDash}" stroke-linecap="round" style="animation-delay:${streamDelay}s"/>`,
+        );
+      }
     } else {
       const pts = l.pts.map(([x, y]) => `${r1(x)},${r1(y)}`).join(' ');
+      const baseCls = sw >= 3 ? 'dg-vec' : '';
+      const cls = anim ? [baseCls, l.dashed ? 'dg-anim-dashed' : isCurve ? 'dg-anim-curve' : 'dg-anim-draw'].filter(Boolean).join(' ') : baseCls;
+      const animAttr = anim ? `${l.dashed ? '' : ' pathLength="100"'} style="animation-delay:${lineDelay}s"` : '';
       out.push(
-        `<polyline${sw >= 3 ? ' class="dg-vec"' : ''} points="${pts}" fill="none" stroke="${color}" stroke-width="${sw}"${l.dashed ? ' stroke-dasharray="6 5"' : ''} stroke-linejoin="round" stroke-linecap="round"${l.arrow ? ` marker-end="${m}"` : ''}${l.both ? ` marker-start="${m}"` : ''}/>`,
+        `<polyline${cls ? ` class="${cls}"` : ''}${animAttr} points="${pts}" fill="none" stroke="${color}" stroke-width="${sw}"${l.dashed ? ' stroke-dasharray="6 5"' : ''} stroke-linejoin="round" stroke-linecap="round"${l.arrow ? ` marker-end="${m}"` : ''}${l.both ? ` marker-start="${m}"` : ''}/>`,
       );
+      if (canStream) {
+        out.push(
+          `<polyline class="dg-flow-stream${d.type === 'forces' ? ' dg-flow-force' : ''}" points="${pts}" fill="none" stroke="${p.onAccent}" stroke-width="${streamSw}" stroke-dasharray="${streamDash}" stroke-linejoin="round" stroke-linecap="round" style="animation-delay:${streamDelay}s"/>`,
+        );
+      }
     }
     if (l.dotStart && l.pts.length) {
-      out.push(`<circle cx="${r1(l.pts[0][0])}" cy="${r1(l.pts[0][1])}" r="3.6" fill="${color}"/>`);
+      const dx = r1(l.pts[0][0]), dy = r1(l.pts[0][1]);
+      if (anim) {
+        out.push(`<circle class="dg-dot-ring" cx="${dx}" cy="${dy}" r="6.5" fill="none" stroke="${color}" stroke-width="1.6" style="animation-delay:${lineDelay}s"/>`);
+        out.push(`<circle class="dg-anim-dot" cx="${dx}" cy="${dy}" r="3.6" fill="${color}" style="animation-delay:${lineDelay}s"/>`);
+      } else {
+        out.push(`<circle cx="${dx}" cy="${dy}" r="3.6" fill="${color}"/>`);
+      }
     }
   }
   const isMatrixY = (b: Box) => d.type === 'matrix' && b.kind === 'label' && b.w < 40;
+  let barIdx = 0;
+  let dotIdx = 0;
   const drawBox = (b: Box, bi: number) => {
     if (backdrop(b)) return;
     const qi = quiz.indexOf(bi);
@@ -2071,8 +2152,15 @@ export function renderDiagram(d: Diagram, p: Palette = PALETTES.light, view?: Di
       const stroke = b.kind === 'node' || b.kind === 'node2' || b.kind === 'soft' || b.kind === 'tag' ? t.stroke : null;
       const raised = b.lines.length && (b.kind === 'node' || b.kind === 'accent' || b.kind === 'node2' || b.kind === 'accent2');
       const rx = !b.lines.length ? 4 : b.kind === 'tag' ? b.h / 2 : 12;
+      const emptyAttr = anim && !b.lines.length
+        ? d.type === 'bars'
+          ? ` class="dg-anim-bar" style="animation-delay:${dly(0.14, barIdx++, 0.08, 0.85)}s"`
+          : d.type === 'timeline'
+            ? ` class="dg-anim-dot" style="animation-delay:${dly(0.2, dotIdx++, 0.1, 0.95)}s"`
+            : ''
+        : '';
       out.push(
-        `<rect x="${r1(b.x)}" y="${r1(b.y)}" width="${r1(b.w)}" height="${r1(b.h)}" rx="${r1(Math.min(rx, b.h / 2))}" fill="${fill}"${stroke ? ` stroke="${stroke}" stroke-width="${b.kind === 'soft' || b.kind === 'tag' ? 1 : 1.5}"` : ''}${raised ? ` filter="url(#${id}-s)"` : ''}/>`,
+        `<rect${emptyAttr} x="${r1(b.x)}" y="${r1(b.y)}" width="${r1(b.w)}" height="${r1(b.h)}" rx="${r1(Math.min(rx, b.h / 2))}" fill="${fill}"${stroke ? ` stroke="${stroke}" stroke-width="${b.kind === 'soft' || b.kind === 'tag' ? 1 : 1.5}"` : ''}${raised ? ` filter="url(#${id}-s)"` : ''}/>`,
       );
     }
     if (!b.lines.length) return;
@@ -2103,6 +2191,7 @@ export function renderDiagram(d: Diagram, p: Palette = PALETTES.light, view?: Di
       out.push(`<rect class="dg-reveal" x="${r1(b.x - 3)}" y="${r1(b.y - 3)}" width="${r1(b.w + 6)}" height="${r1(b.h + 6)}" rx="${r1(Math.min(14, b.h / 2 + 3))}" fill="none" stroke="${tn(1).line}" stroke-width="3"/>`);
   };
   let shown = 0;
+  let boxIdx = 0;
   L.boxes.forEach((b, bi) => {
     const mark = out.length;
     drawBox(b, bi);
@@ -2113,6 +2202,14 @@ export function renderDiagram(d: Diagram, p: Palette = PALETTES.light, view?: Di
       out.push('</g>');
     } else if (steps && out.length > mark && b.lines.length) {
       out.splice(mark, 0, `<g class="dg-step" style="animation-delay:${(step++ * 0.15).toFixed(2)}s">`);
+      out.push('</g>');
+    } else if (anim && out.length > mark && b.lines.length) {
+      const isTitle = !!d.title && bi === 0 && b.kind === 'bold';
+      if (isTitle) {
+        out.splice(mark, 0, '<g class="dg-anim-title">');
+      } else {
+        out.splice(mark, 0, `<g class="dg-anim-box" style="animation-delay:${dly(0.14, boxIdx++, 0.065, 0.95)}s">`);
+      }
       out.push('</g>');
     }
   });
