@@ -762,3 +762,30 @@ export function renderIllustration(
   // Clean geometric Studyflix object badge if no motif matches
   return `<rect x="${(cx - r * 1.25).toFixed(1)}" y="${(cy - r * 0.72).toFixed(1)}" width="${(r * 2.5).toFixed(1)}" height="${(r * 1.44).toFixed(1)}" rx="14" fill="${pal.accent}"/>`;
 }
+
+export type IllustrationMotion = 'float' | 'bob' | 'pulse' | 'spin' | 'rock' | 'idle';
+
+const MOTION_BY_KEY: Record<string, IllustrationMotion> = {
+  // floating / flying / gliding motifs
+  flugzeug: 'float', tragflaeche: 'float', rakete: 'float', wolke: 'float', satellit: 'float',
+  ball: 'float', mond: 'float', tropfen: 'float', note: 'float', paket: 'float', brief: 'float', sprechblase: 'float',
+  // swaying / rocking / rolling motifs
+  schiff: 'bob', pflanze: 'bob', baum: 'bob', waage: 'bob', hebel: 'bob', feder: 'bob',
+  kompass: 'bob', welle: 'bob', auto: 'bob', lkw: 'bob',
+  // pulsing / living / radiating motifs
+  herz: 'pulse', gehirn: 'pulse', lunge: 'pulse', lampe: 'pulse', flamme: 'pulse', sonne: 'pulse',
+  zelle: 'pulse', bakterie: 'pulse', blut: 'pulse', dna: 'pulse', router: 'pulse', netzwerk: 'pulse',
+  stromkreis: 'pulse', batterie: 'pulse', magnet: 'pulse', vulkan: 'pulse', ziel: 'pulse', megafon: 'pulse',
+  auge: 'pulse', chip: 'pulse',
+  // rotating / oscillating scientific motifs
+  zahnrad: 'spin',
+  atom: 'rock', erde: 'rock', molekuel: 'rock', uhr: 'rock', kolben: 'rock', mikroskop: 'rock', prisma: 'rock',
+};
+
+/** Ambient Studyflix motion style for an illustration motif (used when a diagram is rendered animated). Pure – tested. */
+export function illustrationMotion(icon?: string, subject?: string): IllustrationMotion {
+  const match = resolveIllustration(icon, subject);
+  if (match?.kind === 'art') return MOTION_BY_KEY[match.key] ?? 'idle';
+  return 'idle';
+}
+

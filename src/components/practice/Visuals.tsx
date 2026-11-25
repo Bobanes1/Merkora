@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { CardContent } from '../CardContent';
-import { IconChevron, IconPlay, IconStop } from '../Icons';
+import { IconChevron, IconPause, IconPlay, IconRefresh, IconStop } from '../Icons';
 import { highlightCode } from '../../lib/javaHighlight';
 import { playNote } from '../../lib/musicAudio';
 import { runJs, runPython, runSql } from '../../lib/codeRun';
@@ -21,6 +21,29 @@ import {
   type SketchKind,
   type Table,
 } from '../../lib/visuals';
+
+/** Fires once when an explanation graphic scrolls into view (falls back to immediate true if IntersectionObserver is unavailable). */
+function useInView<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [seen, setSeen] = useState(() => typeof IntersectionObserver === 'undefined');
+  useEffect(() => {
+    if (seen) return;
+    const el = ref.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setSeen(true);
+          io.disconnect();
+        }
+      },
+      { threshold: 0.12 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [seen]);
+  return [ref, seen] as const;
+}
 
 // ---------- sheet of music ----------
 const GAP = 10, TOP = 34;
@@ -142,14 +165,31 @@ export function ScoreView({ score }: { score: Score }) {
 }
 
 // ---------- example program ----------
-/** A small example program: run it, or go through it line by line with the values of the variables. */
+/** A small example program: run it, or go through it line by line (manually or animated auto-play) with the values of the variables. */
 export function ProgramView({ program }: { program: Program }) {
   const [step, setStep] = useState<number | null>(null);
+  const [auto, setAuto] = useState(false);
   const [out, setOut] = useState<{ text: string; error?: string; note?: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const lines = program.code.split('\n');
   const cur = step !== null ? program.trace[step] : null;
   const changed = step !== null ? changedVars(program.trace, step) : [];
+  useEffect(() => {
+    if (!auto || !program.trace.length) return;
+    if (step !== null && step >= program.trace.length - 1) {
+      setAuto(false);
+      return;
+    }
+    const t = window.setTimeout(() => {
+      setStep((s) => (s === null ? 0 : Math.min(program.trace.length - 1, s + 1)));
+    }, 1400);
+    return () => window.clearTimeout(t);
+  }, [auto, step, program.trace.length]);
+  const toggleAuto = () => {
+    if (auto) return setAuto(false);
+    if (step === null || step >= program.trace.length - 1) setStep(0);
+    setAuto(true);
+  };
   const run = async () => {
     setBusy(true);
     setOut(null);
@@ -188,33 +228,39 @@ export function ProgramView({ program }: { program: Program }) {
         <button type="button" className="btn outline sm" onClick={() => void run()} disabled={busy}>
           <IconPlay size={14} /> {busy ? 'Läuft …' : 'Ausführen'}
         </button>
-        {program.trace.length > 0 &&
-          (step === null ? (
-            <button type="button" className="btn outline sm" onClick={() => setStep(0)}>
-              Schritt für Schritt
+        {program.trace.length > 0 && (
+          <>
+            <button type="button" className={'btn sm ' + (auto ? 'primary' : 'outline')} onClick={toggleAuto}>
+              {auto ? <IconPause size={14} /> : <IconPlay size={14} />} {auto ? 'Pause' : 'Ablauf abspielen'}
             </button>
-          ) : (
-            <>
-              <button type="button" className="btn ghost sm" onClick={() => setStep(Math.max(0, step - 1))} disabled={step === 0}>
-                ‹ Zurück
+            {step === null ? (
+              <button type="button" className="btn ghost sm" onClick={() => (setAuto(false), setStep(0))}>
+                Schritt für Schritt
               </button>
-              <span className="muted small">
-                Schritt {step + 1} von {program.trace.length}
-              </span>
-              <button type="button" className="btn primary sm" onClick={() => setStep(step + 1 < program.trace.length ? step + 1 : null)}>
-                {step + 1 < program.trace.length ? (
-                  <>
-                    Weiter <IconChevron size={13} />
-                  </>
-                ) : (
-                  'Fertig'
-                )}
-              </button>
-            </>
-          ))}
+            ) : (
+              <>
+                <button type="button" className="btn ghost sm" onClick={() => (setAuto(false), setStep(Math.max(0, step - 1)))} disabled={step === 0}>
+                  ‹ Zurück
+                </button>
+                <span className="muted small">
+                  Schritt {step + 1} von {program.trace.length}
+                </span>
+                <button type="button" className="btn primary sm" onClick={() => (setAuto(false), setStep(step + 1 < program.trace.length ? step + 1 : null))}>
+                  {step + 1 < program.trace.length ? (
+                    <>
+                      Weiter <IconChevron size={13} />
+                    </>
+                  ) : (
+                    'Fertig'
+                  )}
+                </button>
+              </>
+            )}
+          </>
+        )}
       </div>
       {cur && (
-        <div className="program-trace">
+        <div key={step} className="program-trace">
           <p>
             <b>Zeile {cur.line}:</b> {cur.note}
           </p>
@@ -247,6 +293,8 @@ export function ProgramView({ program }: { program: Program }) {
 const KIND_LABEL: Record<SketchKind, string> = { vertrag: 'Vertrag', anspruch: 'Anspruch?', uebereignung: 'Übereignung', sonstiges: 'Beziehung' };
 /** Who is involved, and who wants what from whom – drawn like a case sketch in a law course. */
 export function SketchView({ sketch }: { sketch: Sketch }) {
+  const [figRef, seen] = useInView<HTMLElement>();
+  const [playKey, setPlayKey] = useState(0);
   const n = sketch.parties.length;
   const W = 520, H = n > 2 ? 300 : 190;
   // 2 → side by side, 3 → triangle, 4–5 → around a circle
@@ -262,8 +310,11 @@ export function SketchView({ sketch }: { sketch: Sketch }) {
   for (const l of sketch.links) total.set(pairKey(l.from, l.to), (total.get(pairKey(l.from, l.to)) ?? 0) + 1);
   const pairs = new Map<string, number>();
   return (
-    <figure className="sketch">
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Fallskizze">
+    <figure ref={figRef} className={'sketch' + (seen ? ' sk-anim' : '')}>
+      <button type="button" className="icon-btn figure-replay" title="Animation nochmal abspielen" aria-label="Animation nochmal abspielen" onClick={() => setPlayKey((x) => x + 1)}>
+        <IconRefresh size={14} />
+      </button>
+      <svg key={`${seen ? 1 : 0}-${playKey}`} viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Fallskizze">
         <defs>
           <marker id="sk-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M0 1 L10 5 L0 9 z" className="sk-head" />
@@ -282,18 +333,19 @@ export function SketchView({ sketch }: { sketch: Sketch }) {
           const sx = x1 + (dx / len) * 62, sy = y1 + (dy / len) * 30;
           const ex = x2 - (dx / len) * 62, ey = y2 - (dy / len) * 30;
           const cx = (sx + ex) / 2 + nx * 1.6, cy = (sy + ey) / 2 + ny * 1.6;
+          const dly = `${(0.22 + k * 0.14).toFixed(2)}s`;
           return (
-            <g key={k} className={'sk-link ' + l.kind}>
-              <path d={`M${sx} ${sy} Q ${cx} ${cy} ${ex} ${ey}`} markerEnd="url(#sk-a)" markerStart={l.kind === 'vertrag' ? 'url(#sk-a)' : undefined} />
-              {l.kind === 'uebereignung' && <path d={`M${sx + ny * 0.15} ${sy - nx * 0.15 + 5} Q ${cx} ${cy + 5} ${ex} ${ey + 5}`} markerEnd="url(#sk-a)" className="double" />}
-              <text x={cx} y={cy - 6} textAnchor="middle" className="sk-label">
+            <g key={k} className={'sk-link ' + l.kind} style={{ animationDelay: dly }}>
+              <path pathLength={100} style={{ animationDelay: dly }} d={`M${sx} ${sy} Q ${cx} ${cy} ${ex} ${ey}`} markerEnd="url(#sk-a)" markerStart={l.kind === 'vertrag' ? 'url(#sk-a)' : undefined} />
+              {l.kind === 'uebereignung' && <path pathLength={100} style={{ animationDelay: dly }} d={`M${sx + ny * 0.15} ${sy - nx * 0.15 + 5} Q ${cx} ${cy + 5} ${ex} ${ey + 5}`} markerEnd="url(#sk-a)" className="double" />}
+              <text x={cx} y={cy - 6} textAnchor="middle" className="sk-label" style={{ animationDelay: `${(0.38 + k * 0.14).toFixed(2)}s` }}>
                 {l.label || KIND_LABEL[l.kind]}
               </text>
             </g>
           );
         })}
         {sketch.parties.map((p, k) => (
-          <g key={p.id} className="sk-party">
+          <g key={p.id} className="sk-party" style={{ animationDelay: `${(0.06 + k * 0.1).toFixed(2)}s` }}>
             <rect x={pos[k][0] - 58} y={pos[k][1] - 26} width={116} height={52} rx={12} />
             <text x={pos[k][0]} y={pos[k][1] - (p.role ? 3 : -5)} textAnchor="middle" className="sk-name">
               {p.name}
@@ -330,7 +382,7 @@ export function SyntaxView({ sentences }: { sentences: Sentence[] }) {
         <div key={k} className="syntax-sentence">
           <p>
             {s.parts.map((p, j) => (
-              <span key={j} className={'sp ' + p.role} title={ROLE_LABEL[p.role]}>
+              <span key={j} className={'sp ' + p.role} title={ROLE_LABEL[p.role]} style={{ animationDelay: `${Math.min(0.6, (k * 3 + j) * 0.065).toFixed(2)}s` }}>
                 {p.text}
                 <small>{ROLE_LABEL[p.role]}</small>
               </span>
@@ -366,7 +418,7 @@ export function TablesView({ tables }: { tables: Table[] }) {
           )}
           <tbody>
             {t.rows.map((r, j) => (
-              <tr key={j}>
+              <tr key={j} style={{ animationDelay: `${Math.min(0.55, j * 0.055).toFixed(2)}s` }}>
                 {r.map((c, i) => (
                   <td key={i}>
                     {markedParts(c).map((p, q) => (p.mark ? <mark key={q}>{p.text}</mark> : <Fragment key={q}>{p.text}</Fragment>))}
@@ -382,39 +434,68 @@ export function TablesView({ tables }: { tables: Table[] }) {
 }
 
 // ---------- a picture of the explanation ----------
-/** A graphic of the explanation, shown whole immediately (with optional state switches for `forces` diagrams). */
+/** A Studyflix-style animated graphic of the explanation (with replay button and optional auto-playing state switches for `forces` diagrams). */
 export function BuildFigure({ diagram, caption }: { diagram: Diagram; caption?: string; narration?: string[] }) {
   const theme = useResolvedTheme();
+  const [figRef, seen] = useInView<HTMLElement>();
   const states = diagram.type === 'forces' && diagram.states?.length ? diagram.states : undefined;
   const [stateIdx, setStateIdx] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [playKey, setPlayKey] = useState(0);
   const active = states ? Math.min(stateIdx, states.length - 1) : undefined;
+  useEffect(() => {
+    if (!playing || !states || states.length < 2) return;
+    const t = window.setInterval(() => {
+      setStateIdx((s) => (s + 1) % states.length);
+    }, 2400);
+    return () => window.clearInterval(t);
+  }, [playing, states]);
   const svg = useMemo(
-    () => renderDiagram(diagram, PALETTES[theme], active !== undefined ? { state: active } : undefined),
-    [diagram, theme, active],
+    () => renderDiagram(diagram, PALETTES[theme], { ...(active !== undefined ? { state: active } : {}), animate: seen }),
+    [diagram, theme, active, seen],
   );
   const stateNote = states && active !== undefined ? states[active]?.note : undefined;
+  const replay = () => {
+    setPlaying(false);
+    setPlayKey((x) => x + 1);
+  };
   return (
-    <figure className="practice-figure build-figure">
-      {states && (
-        <div className="figure-states" role="tablist" aria-label="Zustand umschalten">
-          {states.map((st, idx) => (
-            <button
-              key={idx}
-              type="button"
-              role="tab"
-              aria-selected={idx === active}
-              className={'btn sm ' + (idx === active ? 'primary' : 'outline')}
-              onClick={() => setStateIdx(idx)}
-            >
-              {st.name}
-            </button>
-          ))}
-        </div>
-      )}
+    <figure ref={figRef} className="practice-figure build-figure">
+      <div className="figure-bar">
+        {states && (
+          <div className="figure-states" role="tablist" aria-label="Zustand umschalten">
+            {states.map((st, idx) => (
+              <button
+                key={idx}
+                type="button"
+                role="tab"
+                aria-selected={idx === active}
+                className={'btn sm ' + (idx === active ? 'primary' : 'outline')}
+                onClick={() => (setPlaying(false), setStateIdx(idx))}
+              >
+                {st.name}
+              </button>
+            ))}
+            {states.length >= 2 && (
+              <button
+                type="button"
+                className={'btn sm ' + (playing ? 'primary' : 'ghost')}
+                onClick={() => setPlaying((p) => !p)}
+                title={playing ? 'Zustands-Animation pausieren' : 'Zustände nacheinander abspielen'}
+              >
+                {playing ? <IconPause size={13} /> : <IconPlay size={13} />} {playing ? 'Pause' : 'Abspielen'}
+              </button>
+            )}
+          </div>
+        )}
+        <button type="button" className="icon-btn figure-replay" title="Animation nochmal abspielen" aria-label="Animation nochmal abspielen" onClick={replay}>
+          <IconRefresh size={14} />
+        </button>
+      </div>
       {/* our own SVG with escaped labels / strictly sanitized illustration – safe to insert */}
-      <div className="diagram" dangerouslySetInnerHTML={{ __html: svg }} />
+      <div key={`${seen ? 1 : 0}-${active ?? 0}-${playKey}`} className="diagram" dangerouslySetInnerHTML={{ __html: svg }} />
       {stateNote && (
-        <p className="figure-state-note">
+        <p key={active} className="figure-state-note">
           <CardContent text={stateNote} className="inline" />
         </p>
       )}
