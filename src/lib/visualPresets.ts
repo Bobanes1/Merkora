@@ -184,7 +184,7 @@ export const VISUAL_PRESETS: VisualPreset[] = [
       const a = (angles[st] * Math.PI) / 180;
       const mx = cx + R * Math.cos(a), my = cy + R * Math.sin(a);
       const rays = [92, 132, 172, 212, 252]
-        .map((y) => `<line class="ps-flow" x1="22" y1="${y}" x2="112" y2="${y}" stroke="${p.amber}" stroke-width="2.4" stroke-dasharray="8 6" stroke-linecap="round"/>`)
+        .map((y) => `<line class="ps-flow" x1="22" y1="${y}" x2="112" y2="${y}" stroke="${p.amber}" stroke-width="2.4" stroke-dasharray="7 5" stroke-linecap="round"/>`)
         .join('');
       const viewX = 515, viewY = 166, vr = 36;
       const phaseClip =
@@ -262,8 +262,8 @@ export const VISUAL_PRESETS: VisualPreset[] = [
         </g>
         <g ${partAttrs('mantel', o.highlight)}>
           <path d="M ${cx} ${cy} L ${cx} ${cy - 138} A 138 138 0 0 1 ${cx + 138} ${cy} Z" fill="${p.berry}" stroke="${p.onAccent}" stroke-width="1.5"/>
-          <path class="ps-flow" d="M ${cx + 38} ${cy - 112} A 118 118 0 0 1 ${cx + 112} ${cy - 38}" fill="none" stroke="${p.amber}" stroke-width="3" stroke-dasharray="8 8" stroke-linecap="round"/>
-          <path class="ps-flow-rev" d="M ${cx + 28} ${cy - 86} A 92 92 0 0 1 ${cx + 86} ${cy - 28}" fill="none" stroke="${p.onAccent}" stroke-width="2" stroke-dasharray="6 8" opacity="0.7" stroke-linecap="round"/>
+          <path class="ps-flow" d="M ${cx + 38} ${cy - 112} A 118 118 0 0 1 ${cx + 112} ${cy - 38}" fill="none" stroke="${p.amber}" stroke-width="3" stroke-dasharray="6 6" stroke-linecap="round"/>
+          <path class="ps-flow-rev" d="M ${cx + 28} ${cy - 86} A 92 92 0 0 1 ${cx + 86} ${cy - 28}" fill="none" stroke="${p.onAccent}" stroke-width="2" stroke-dasharray="5 7" opacity="0.7" stroke-linecap="round"/>
           <line x1="${cx + 104}" y1="${cy - 44}" x2="404" y2="132" stroke="${p.berry}" stroke-width="2"/>
           ${pill(404, 121, 174, 'Erdmantel (Konvektion)', p.berry, p.bg, p.text)}
         </g>
@@ -300,7 +300,7 @@ export const VISUAL_PRESETS: VisualPreset[] = [
     ],
     render: (p, o) => {
       const steam = [92, 130, 168]
-        .map((x, idx) => `<path class="ps-flow-rev" style="animation-delay:${(idx * 0.25).toFixed(2)}s" d="M ${x} 248 Q ${x - 8} 214 ${x} 182 Q ${x + 8} 150 ${x} 118" fill="none" stroke="${p.blue}" stroke-width="2.6" stroke-dasharray="8 8" stroke-linecap="round"/>`)
+        .map((x, idx) => `<path class="ps-flow-rev" style="animation-delay:${(idx * 0.25).toFixed(2)}s" d="M ${x} 248 Q ${x - 8} 214 ${x} 182 Q ${x + 8} 150 ${x} 118" fill="none" stroke="${p.blue}" stroke-width="2.6" stroke-dasharray="6 6" stroke-linecap="round"/>`)
         .join('');
       const drops = [380, 405, 430, 455, 480]
         .map((x, idx) => `<line class="ps-rain" style="animation-delay:${(idx * 0.22).toFixed(2)}s" x1="${x}" y1="128" x2="${x - 6}" y2="152" stroke="${p.blue}" stroke-width="2.6" stroke-linecap="round"/>`)
@@ -322,7 +322,7 @@ export const VISUAL_PRESETS: VisualPreset[] = [
           <g class="ps-drift">
             <path d="M 225 94 C 212 94 204 84 206 72 C 208 60 220 54 232 58 C 238 42 264 38 278 52 C 292 48 308 58 308 72 C 308 86 296 94 282 94 Z" fill="${p.onAccent}" stroke="${p.blue}" stroke-width="2"/>
           </g>
-          <path class="ps-flow" d="M 316 74 L 368 74" fill="none" stroke="${p.muted}" stroke-width="2.4" stroke-dasharray="6 5" stroke-linecap="round"/>
+          <path class="ps-flow" d="M 316 74 L 368 74" fill="none" stroke="${p.muted}" stroke-width="2.4" stroke-dasharray="6 6" stroke-linecap="round"/>
           ${pill(188, 16, 150, '2. Kondensation', p.violet, p.bg, p.text)}
         </g>
         <g ${partAttrs('niederschlag', o.highlight)}>
@@ -331,7 +331,7 @@ export const VISUAL_PRESETS: VisualPreset[] = [
           ${pill(402, 20, 152, '3. Niederschlag ↓', p.blue, p.bg, p.text)}
         </g>
         <g ${partAttrs('abfluss', o.highlight)}>
-          <path class="ps-flow" d="M 438 194 C 404 226 362 246 314 256 C 282 262 262 270 236 274" fill="none" stroke="${p.blue}" stroke-width="5" stroke-dasharray="10 8" stroke-linecap="round"/>
+          <path class="ps-flow" d="M 438 194 C 404 226 362 246 314 256 C 282 262 262 270 236 274" fill="none" stroke="${p.blue}" stroke-width="5" stroke-dasharray="14 10" stroke-linecap="round"/>
           <path class="ps-flow" d="M 480 288 Q 370 306 250 296" fill="none" stroke="${p.teal}" stroke-width="2.6" stroke-dasharray="6 6" stroke-linecap="round"/>
           ${pill(334, 294, 210, '4. Abfluss & Grundwasser ←', p.teal, p.bg, p.text)}
         </g>
@@ -439,17 +439,17 @@ export const VISUAL_PRESETS: VisualPreset[] = [
       <!-- Oxygen-poor blue paths (right half of loop on viewer left) -->
       <g ${partAttrs('venen', o.highlight)}>
         <path d="M 272 150 C 200 130 185 68 250 56" fill="none" stroke="${p.blue}" stroke-width="7" stroke-linecap="round"/>
-        <path class="ps-flow" d="M 272 150 C 200 130 185 68 250 56" fill="none" stroke="${p.onAccent}" stroke-width="3" stroke-dasharray="6 14" stroke-linecap="round"/>
+        <path class="ps-flow" d="M 272 150 C 200 130 185 68 250 56" fill="none" stroke="${p.onAccent}" stroke-width="3" stroke-dasharray="8 16" stroke-linecap="round"/>
         <path d="M 250 286 C 175 280 185 204 272 188" fill="none" stroke="${p.blue}" stroke-width="7" stroke-linecap="round"/>
-        <path class="ps-flow" d="M 250 286 C 175 280 185 204 272 188" fill="none" stroke="${p.onAccent}" stroke-width="3" stroke-dasharray="6 14" stroke-linecap="round"/>
+        <path class="ps-flow" d="M 250 286 C 175 280 185 204 272 188" fill="none" stroke="${p.onAccent}" stroke-width="3" stroke-dasharray="8 16" stroke-linecap="round"/>
         ${pill(18, 158, 152, 'O₂-arm (Venen)', p.blue, p.bg, p.text)}
       </g>
       <!-- Oxygen-rich red/berry paths (left heart → body on viewer right) -->
       <g ${partAttrs('arterien', o.highlight)}>
         <path d="M 350 56 C 415 68 400 130 328 150" fill="none" stroke="${p.berry}" stroke-width="7" stroke-linecap="round"/>
-        <path class="ps-flow" d="M 350 56 C 415 68 400 130 328 150" fill="none" stroke="${p.onAccent}" stroke-width="3" stroke-dasharray="6 14" stroke-linecap="round"/>
+        <path class="ps-flow" d="M 350 56 C 415 68 400 130 328 150" fill="none" stroke="${p.onAccent}" stroke-width="3" stroke-dasharray="8 16" stroke-linecap="round"/>
         <path d="M 328 188 C 415 204 425 280 350 286" fill="none" stroke="${p.berry}" stroke-width="7" stroke-linecap="round"/>
-        <path class="ps-flow" d="M 328 188 C 415 204 425 280 350 286" fill="none" stroke="${p.onAccent}" stroke-width="3" stroke-dasharray="6 14" stroke-linecap="round"/>
+        <path class="ps-flow" d="M 328 188 C 415 204 425 280 350 286" fill="none" stroke="${p.onAccent}" stroke-width="3" stroke-dasharray="8 16" stroke-linecap="round"/>
         ${pill(430, 158, 152, 'O₂-reich (Arterien)', p.berry, p.bg, p.text)}
       </g>
       <!-- Lungs top -->
@@ -506,7 +506,7 @@ export const VISUAL_PRESETS: VisualPreset[] = [
         <rect x="6" y="6" width="588" height="328" rx="18" fill="${p.blueSoft}" stroke="${p.blue}" stroke-opacity="0.22"/>
         <g ${partAttrs('luftroehre', o.highlight)}>
           <rect x="284" y="34" width="32" height="84" rx="10" fill="${p.tealNode}" stroke="${p.teal}" stroke-width="2"/>
-          <path class="${exhale ? 'ps-flow-rev' : 'ps-flow'}" d="M 300 22 L 300 120" fill="none" stroke="${exhale ? p.berry : p.blue}" stroke-width="4" stroke-dasharray="7 7" stroke-linecap="round"/>
+          <path class="${exhale ? 'ps-flow-rev' : 'ps-flow'}" d="M 300 22 L 300 120" fill="none" stroke="${exhale ? p.berry : p.blue}" stroke-width="4" stroke-dasharray="6 6" stroke-linecap="round"/>
           <line x1="284" y1="68" x2="180" y2="68" stroke="${p.teal}" stroke-width="1.8"/>
           ${pill(22, 57, 158, exhale ? 'Ausatmen (CO₂ ↑)' : 'Einatmen (O₂ ↓)', exhale ? p.berry : p.blue, p.bg, p.text)}
         </g>
@@ -649,7 +649,7 @@ export const VISUAL_PRESETS: VisualPreset[] = [
           <g ${partAttrs('rueckgrat', o.highlight)}>
             <polyline points="${s1.join(' ')}" fill="none" stroke="${p.blue}" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
             <polyline points="${s2.join(' ')}" fill="none" stroke="${p.teal}" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
-            <polyline class="ps-flow" points="${s1.join(' ')}" fill="none" stroke="${p.onAccent}" stroke-width="2.2" stroke-dasharray="8 20" stroke-linecap="round"/>
+            <polyline class="ps-flow" points="${s1.join(' ')}" fill="none" stroke="${p.onAccent}" stroke-width="2.2" stroke-dasharray="6 18" stroke-linecap="round"/>
           </g>
         </g>
         <g ${partAttrs('rueckgrat', o.highlight)}>${pill(24, 24, 184, 'Zucker-Phosphat-Strang', p.blue, p.bg, p.text)}</g>
@@ -681,7 +681,7 @@ export const VISUAL_PRESETS: VisualPreset[] = [
       <!-- Presynaptic terminal (left) -->
       <g ${partAttrs('signal', o.highlight)}>
         <path d="M 16 142 L 154 142 C 188 142 224 96 254 102 C 276 106 276 238 254 242 C 224 248 188 202 154 202 L 16 202 Z" fill="${p.blueNode}" stroke="${p.blue}" stroke-width="2.4"/>
-        <path class="ps-flow" d="M 28 172 L 194 172" fill="none" stroke="${p.amber}" stroke-width="5" stroke-dasharray="10 12" stroke-linecap="round"/>
+        <path class="ps-flow" d="M 28 172 L 194 172" fill="none" stroke="${p.amber}" stroke-width="5" stroke-dasharray="10 14" stroke-linecap="round"/>
         ${pill(22, 34, 178, '1. Aktionspotenzial →', p.amber, p.bg, p.text)}
       </g>
       <!-- Vesicles -->
@@ -706,7 +706,7 @@ export const VISUAL_PRESETS: VisualPreset[] = [
         ${[132, 172, 212]
           .map((y) => `<rect class="ps-pulse" x="330" y="${y - 9}" width="16" height="18" rx="5" fill="${p.violet}" stroke="${p.onAccent}" stroke-width="1.3"/>`)
           .join('')}
-        <path class="ps-flow" d="M 382 172 L 568 172" fill="none" stroke="${p.teal}" stroke-width="5" stroke-dasharray="10 12" stroke-linecap="round"/>
+        <path class="ps-flow" d="M 382 172 L 568 172" fill="none" stroke="${p.teal}" stroke-width="5" stroke-dasharray="10 14" stroke-linecap="round"/>
         ${pill(396, 286, 184, '4. Rezeptor → neues Signal', p.teal, p.bg, p.text)}
       </g>
     `,
@@ -735,15 +735,15 @@ export const VISUAL_PRESETS: VisualPreset[] = [
       <g ${partAttrs('licht', o.highlight)}>
         <circle class="ps-pulse" cx="76" cy="68" r="28" fill="${p.amber}"/>
         <circle class="ps-glow" cx="76" cy="68" r="38" fill="${p.amber}" opacity="0.22"/>
-        <path class="ps-flow" d="M 106 86 L 236 144" fill="none" stroke="${p.amber}" stroke-width="3.2" stroke-dasharray="8 7" stroke-linecap="round"/>
-        <path class="ps-flow" d="M 96 100 L 222 162" fill="none" stroke="${p.amber}" stroke-width="2.4" stroke-dasharray="7 8" stroke-linecap="round"/>
+        <path class="ps-flow" d="M 106 86 L 236 144" fill="none" stroke="${p.amber}" stroke-width="3.2" stroke-dasharray="7 5" stroke-linecap="round"/>
+        <path class="ps-flow" d="M 96 100 L 222 162" fill="none" stroke="${p.amber}" stroke-width="2.4" stroke-dasharray="5 7" stroke-linecap="round"/>
         ${pill(114, 24, 128, 'Sonnenlicht', p.amber, p.bg, p.text)}
       </g>
       <!-- Soil & Water -->
       <g ${partAttrs('wasser', o.highlight)}>
         <path d="M 180 286 Q 300 274 420 286 L 420 334 L 180 334 Z" fill="${p.amberNode}" stroke="${p.amber}" stroke-width="1.6"/>
         <path d="M 300 232 L 300 296 M 300 292 L 268 318 M 300 292 L 334 316 M 300 296 L 296 322" fill="none" stroke="${p.amber}" stroke-width="4" stroke-linecap="round"/>
-        <path class="ps-flow-rev" d="M 300 298 L 300 218" fill="none" stroke="${p.blue}" stroke-width="4" stroke-dasharray="7 7" stroke-linecap="round"/>
+        <path class="ps-flow-rev" d="M 300 298 L 300 218" fill="none" stroke="${p.blue}" stroke-width="4" stroke-dasharray="6 6" stroke-linecap="round"/>
         ${pill(22, 286, 146, 'Wasser (H₂O) ↑', p.blue, p.bg, p.text)}
       </g>
       <!-- Leaf & Chloroplast -->
@@ -756,13 +756,13 @@ export const VISUAL_PRESETS: VisualPreset[] = [
       </g>
       <!-- CO2 in -->
       <g ${partAttrs('co2', o.highlight)}>
-        <path class="ps-flow" d="M 136 184 L 218 184" fill="none" stroke="${p.violet}" stroke-width="3.4" stroke-dasharray="7 7" stroke-linecap="round"/>
+        <path class="ps-flow" d="M 136 184 L 218 184" fill="none" stroke="${p.violet}" stroke-width="3.4" stroke-dasharray="6 6" stroke-linecap="round"/>
         ${pill(18, 173, 114, 'CO₂ hinein →', p.violet, p.bg, p.text)}
       </g>
       <!-- O2 out -->
       <g ${partAttrs('sauerstoff', o.highlight)}>
-        <path class="ps-flow" d="M 374 148 L 468 110" fill="none" stroke="${p.blue}" stroke-width="3.6" stroke-dasharray="7 7" stroke-linecap="round"/>
-        <path class="ps-flow" d="M 374 186 L 468 206" fill="none" stroke="${p.amber}" stroke-width="3.2" stroke-dasharray="7 7" stroke-linecap="round"/>
+        <path class="ps-flow" d="M 374 148 L 468 110" fill="none" stroke="${p.blue}" stroke-width="3.6" stroke-dasharray="6 6" stroke-linecap="round"/>
+        <path class="ps-flow" d="M 374 186 L 468 206" fill="none" stroke="${p.amber}" stroke-width="3.2" stroke-dasharray="6 6" stroke-linecap="round"/>
         ${pill(450, 74, 134, 'O₂ hinaus →', p.blue, p.bg, p.text)}
         ${pill(442, 198, 142, 'Zucker (Energie)', p.amber, p.bg, p.text)}
       </g>
@@ -863,8 +863,8 @@ export const VISUAL_PRESETS: VisualPreset[] = [
         </g>
         <!-- Lower slower streamlines -->
         <g ${partAttrs('unterseite', o.highlight)}>
-          <path class="ps-flow" d="M 32 214 Q 260 226 564 ${steep ? 242 : 220}" fill="none" stroke="${p.amber}" stroke-width="2.6" stroke-dasharray="9 12" stroke-linecap="round"/>
-          <path class="ps-flow" d="M 32 246 Q 260 254 564 ${steep ? 268 : 250}" fill="none" stroke="${p.amber}" stroke-width="2" stroke-dasharray="9 12" stroke-linecap="round"/>
+          <path class="ps-flow" d="M 32 214 Q 260 226 564 ${steep ? 242 : 220}" fill="none" stroke="${p.amber}" stroke-width="2.6" stroke-dasharray="10 14" stroke-linecap="round"/>
+          <path class="ps-flow" d="M 32 246 Q 260 254 564 ${steep ? 268 : 250}" fill="none" stroke="${p.amber}" stroke-width="2" stroke-dasharray="10 14" stroke-linecap="round"/>
           ${pill(34, 286, 216, 'Unten: langsamer → Überdruck', p.amber, p.bg, p.text)}
         </g>
         <!-- Airfoil cross-section -->
@@ -909,9 +909,9 @@ export const VISUAL_PRESETS: VisualPreset[] = [
       const outRays = concave
         ? ys.map((y) => {
             const dy = y - 172;
-            return `<line class="ps-flow" x1="290" y1="${y}" x2="556" y2="${(172 + dy * 2.0).toFixed(1)}" stroke="${p.amber}" stroke-width="2.8" stroke-dasharray="10 7" stroke-linecap="round"/><line x1="170" y1="172" x2="290" y2="${y}" stroke="${p.violet}" stroke-width="1.6" stroke-dasharray="4 4" opacity="0.65"/>`;
+            return `<line class="ps-flow" x1="290" y1="${y}" x2="556" y2="${(172 + dy * 2.0).toFixed(1)}" stroke="${p.amber}" stroke-width="2.8" stroke-dasharray="14 10" stroke-linecap="round"/><line x1="170" y1="172" x2="290" y2="${y}" stroke="${p.violet}" stroke-width="1.6" stroke-dasharray="4 4" opacity="0.65"/>`;
           }).join('')
-        : ys.map((y) => `<line class="ps-flow" x1="290" y1="${y}" x2="556" y2="${(172 + (172 - y) * 0.78).toFixed(1)}" stroke="${p.amber}" stroke-width="2.8" stroke-dasharray="10 7" stroke-linecap="round"/>`).join('');
+        : ys.map((y) => `<line class="ps-flow" x1="290" y1="${y}" x2="556" y2="${(172 + (172 - y) * 0.78).toFixed(1)}" stroke="${p.amber}" stroke-width="2.8" stroke-dasharray="14 10" stroke-linecap="round"/>`).join('');
       const fx = concave ? 170 : 440;
       const lensPath = concave
         ? 'M 272 72 L 308 72 Q 294 172 308 272 L 272 272 Q 286 172 272 72 Z'
@@ -921,7 +921,7 @@ export const VISUAL_PRESETS: VisualPreset[] = [
         <!-- Optical axis -->
         <line x1="26" y1="172" x2="574" y2="172" stroke="${p.muted}" stroke-width="1.5" stroke-dasharray="6 5"/>
         <g ${partAttrs('einfall', o.highlight)}>
-          ${ys.map((y) => `<line class="ps-flow" x1="34" y1="${y}" x2="288" y2="${y}" stroke="${p.amber}" stroke-width="2.8" stroke-dasharray="10 7" stroke-linecap="round"/>`).join('')}
+          ${ys.map((y) => `<line class="ps-flow" x1="34" y1="${y}" x2="288" y2="${y}" stroke="${p.amber}" stroke-width="2.8" stroke-dasharray="14 10" stroke-linecap="round"/>`).join('')}
           ${pill(24, 24, 168, 'Parallele Lichtstrahlen →', p.amber, p.bg, p.text)}
         </g>
         ${outRays}
@@ -1005,10 +1005,10 @@ export const VISUAL_PRESETS: VisualPreset[] = [
     render: (p, o) => `
       <rect x="6" y="6" width="588" height="328" rx="18" fill="${p.tealSoft}" stroke="${p.teal}" stroke-opacity="0.2"/>
       <!-- Animated data buses -->
-      <path class="ps-flow" d="M 134 156 L 214 156" fill="none" stroke="${p.teal}" stroke-width="4" stroke-dasharray="8 8" stroke-linecap="round"/>
-      <path class="ps-flow" d="M 386 156 L 466 156" fill="none" stroke="${p.teal}" stroke-width="4" stroke-dasharray="8 8" stroke-linecap="round"/>
-      <path class="ps-flow" d="M 278 214 L 278 250" fill="none" stroke="${p.blue}" stroke-width="3.6" stroke-dasharray="7 7" stroke-linecap="round"/>
-      <path class="ps-flow-rev" d="M 322 214 L 322 250" fill="none" stroke="${p.amber}" stroke-width="3.6" stroke-dasharray="7 7" stroke-linecap="round"/>
+      <path class="ps-flow" d="M 134 156 L 214 156" fill="none" stroke="${p.teal}" stroke-width="4" stroke-dasharray="6 6" stroke-linecap="round"/>
+      <path class="ps-flow" d="M 386 156 L 466 156" fill="none" stroke="${p.teal}" stroke-width="4" stroke-dasharray="6 6" stroke-linecap="round"/>
+      <path class="ps-flow" d="M 278 214 L 278 250" fill="none" stroke="${p.blue}" stroke-width="3.6" stroke-dasharray="6 6" stroke-linecap="round"/>
+      <path class="ps-flow-rev" d="M 322 214 L 322 250" fill="none" stroke="${p.amber}" stroke-width="3.6" stroke-dasharray="6 6" stroke-linecap="round"/>
       <!-- Input -->
       <g ${partAttrs('eingabe', o.highlight)}>
         <rect x="22" y="118" width="112" height="76" rx="14" fill="${p.tealNode}" stroke="${p.teal}" stroke-width="2"/>
@@ -1067,11 +1067,11 @@ export const VISUAL_PRESETS: VisualPreset[] = [
       <!-- Routes -->
       <g ${partAttrs('pakete', o.highlight)}>
         <path d="M 124 166 Q 214 68 300 78 Q 390 88 476 166" fill="none" stroke="${p.teal}" stroke-width="3.6"/>
-        <path class="ps-flow" d="M 124 166 Q 214 68 300 78 Q 390 88 476 166" fill="none" stroke="${p.onAccent}" stroke-width="2.4" stroke-dasharray="10 18"/>
+        <path class="ps-flow" d="M 124 166 Q 214 68 300 78 Q 390 88 476 166" fill="none" stroke="${p.onAccent}" stroke-width="2.4" stroke-dasharray="8 16"/>
         <path d="M 124 172 L 476 172" fill="none" stroke="${p.amber}" stroke-width="3.6"/>
-        <path class="ps-flow" d="M 124 172 L 476 172" fill="none" stroke="${p.onAccent}" stroke-width="2.4" stroke-dasharray="10 18"/>
+        <path class="ps-flow" d="M 124 172 L 476 172" fill="none" stroke="${p.onAccent}" stroke-width="2.4" stroke-dasharray="8 16"/>
         <path d="M 124 178 Q 214 276 300 266 Q 390 256 476 178" fill="none" stroke="${p.berry}" stroke-width="3.6"/>
-        <path class="ps-flow" d="M 124 178 Q 214 276 300 266 Q 390 256 476 178" fill="none" stroke="${p.onAccent}" stroke-width="2.4" stroke-dasharray="10 18"/>
+        <path class="ps-flow" d="M 124 178 Q 214 276 300 266 Q 390 256 476 178" fill="none" stroke="${p.onAccent}" stroke-width="2.4" stroke-dasharray="8 16"/>
         <!-- Packet badges -->
         <g class="ps-float"><rect x="192" y="96" width="32" height="22" rx="6" fill="${p.teal}"/><text x="208" y="111" font-size="11" font-weight="800" fill="${p.onAccent}" text-anchor="middle">#1</text></g>
         <g class="ps-float" style="animation-delay:0.4s"><rect x="342" y="160" width="32" height="22" rx="6" fill="${p.amber}"/><text x="358" y="175" font-size="11" font-weight="800" fill="${p.onAccent}" text-anchor="middle">#2</text></g>
@@ -1120,10 +1120,10 @@ export const VISUAL_PRESETS: VisualPreset[] = [
       <g ${partAttrs('geldstrom', o.highlight)}>
         <!-- Top: Haushalte -> Unternehmen (Konsumausgaben) -->
         <path d="M 164 134 Q 300 72 436 134" fill="none" stroke="${p.amber}" stroke-width="4.5"/>
-        <path class="ps-flow" d="M 164 134 Q 300 72 436 134" fill="none" stroke="${p.onAccent}" stroke-width="2.2" stroke-dasharray="8 14"/>
+        <path class="ps-flow" d="M 164 134 Q 300 72 436 134" fill="none" stroke="${p.onAccent}" stroke-width="2.2" stroke-dasharray="8 16"/>
         <!-- Bottom: Unternehmen -> Haushalte (Löhne) -->
         <path d="M 436 208 Q 300 270 164 208" fill="none" stroke="${p.teal}" stroke-width="4.5"/>
-        <path class="ps-flow" d="M 436 208 Q 300 270 164 208" fill="none" stroke="${p.onAccent}" stroke-width="2.2" stroke-dasharray="8 14"/>
+        <path class="ps-flow" d="M 436 208 Q 300 270 164 208" fill="none" stroke="${p.onAccent}" stroke-width="2.2" stroke-dasharray="8 16"/>
         ${pill(216, 78, 168, 'Konsumausgaben € →', p.amber, p.bg, p.text)}
         ${pill(224, 244, 152, '← Löhne & Gehälter €', p.teal, p.bg, p.text)}
       </g>
@@ -1255,13 +1255,13 @@ export const VISUAL_PRESETS: VisualPreset[] = [
         <!-- Lava stream -->
         <g ${partAttrs('lava', o.highlight)}>
           <path d="M326 105 C354 134 388 186 436 254" fill="none" stroke="${p.berry}" stroke-width="${erupt ? 10 : 4}" stroke-linecap="round" opacity="${erupt ? 0.92 : 0.32}"/>
-          <path class="${erupt ? 'ps-flow-fast' : 'ps-flow'}" d="M326 105 C354 134 388 186 436 254" fill="none" stroke="${p.amber}" stroke-width="${erupt ? 4 : 2}" stroke-dasharray="8 10" stroke-linecap="round" opacity="${erupt ? 1 : 0.4}"/>
+          <path class="${erupt ? 'ps-flow-fast' : 'ps-flow'}" d="M326 105 C354 134 388 186 436 254" fill="none" stroke="${p.amber}" stroke-width="${erupt ? 4 : 2}" stroke-dasharray="10 14" stroke-linecap="round" opacity="${erupt ? 1 : 0.4}"/>
           ${pill(436, 168, 124, 'Lavastrom', p.berry, p.bg, p.text)}
         </g>
         <!-- Chimney (Schlot) -->
         <g ${partAttrs('schlot', o.highlight)}>
           <path d="M286 266 L292 104 L308 104 L314 266 Z" fill="${p.berry}" fill-opacity="0.78"/>
-          <path class="${erupt ? 'ps-flow-fast' : 'ps-flow'}" d="M300 264 L300 108" fill="none" stroke="${p.amber}" stroke-width="4" stroke-dasharray="8 10" stroke-linecap="round"/>
+          <path class="${erupt ? 'ps-flow-fast' : 'ps-flow'}" d="M300 264 L300 108" fill="none" stroke="${p.amber}" stroke-width="4" stroke-dasharray="10 14" stroke-linecap="round"/>
           ${pill(32, 152, 118, 'Schlot', p.berry, p.bg, p.text)}
           <line x1="150" y1="163" x2="290" y2="163" stroke="${p.berry}" stroke-width="1.5" stroke-dasharray="4 3"/>
         </g>
@@ -1313,18 +1313,18 @@ export const VISUAL_PRESETS: VisualPreset[] = [
         <g ${partAttrs('sonne', o.highlight)}>
           <circle class="ps-glow" cx="78" cy="64" r="40" fill="${p.amber}" opacity="0.26"/>
           <circle cx="78" cy="64" r="24" fill="${p.amber}" stroke="${p.onAccent}" stroke-width="2"/>
-          <path class="ps-flow-fast" d="M100 84 L214 252" fill="none" stroke="${p.amber}" stroke-width="4" stroke-dasharray="10 10" stroke-linecap="round"/>
-          <path class="ps-flow-fast" d="M112 72 L248 248" fill="none" stroke="${p.amber}" stroke-width="3" stroke-dasharray="8 10" stroke-linecap="round"/>
+          <path class="ps-flow-fast" d="M100 84 L214 252" fill="none" stroke="${p.amber}" stroke-width="4" stroke-dasharray="12 12" stroke-linecap="round"/>
+          <path class="ps-flow-fast" d="M112 72 L248 248" fill="none" stroke="${p.amber}" stroke-width="3" stroke-dasharray="10 14" stroke-linecap="round"/>
           ${pill(18, 108, 134, 'Sonnenlicht', p.amber, p.bg, p.text)}
         </g>
         <!-- Outgoing & trapped heat radiation -->
         <g ${partAttrs('rueckstrahlung', o.highlight)}>
           <!-- Escaping part -->
-          <path class="ps-flow" d="M312 248 L352 40" fill="none" stroke="${p.berry}" stroke-width="${strong ? 2 : 3.4}" stroke-dasharray="7 9" stroke-linecap="round" opacity="${strong ? 0.55 : 0.9}"/>
+          <path class="ps-flow" d="M312 248 L352 40" fill="none" stroke="${p.berry}" stroke-width="${strong ? 2 : 3.4}" stroke-dasharray="5 7" stroke-linecap="round" opacity="${strong ? 0.55 : 0.9}"/>
           <text x="364" y="54" font-size="11.5" font-weight="700" fill="${p.muted}">ins All${strong ? ' (weniger)' : ''}</text>
           <!-- Reflected back down -->
-          <path class="ps-flow" d="M294 250 L310 144 L392 254" fill="none" stroke="${p.berry}" stroke-width="${strong ? 4.5 : 3}" stroke-dasharray="9 9" stroke-linecap="round"/>
-          ${strong ? `<path class="ps-flow-fast" d="M342 252 L378 148 L458 258" fill="none" stroke="${p.berry}" stroke-width="4" stroke-dasharray="9 9" stroke-linecap="round"/>` : ''}
+          <path class="ps-flow" d="M294 250 L310 144 L392 254" fill="none" stroke="${p.berry}" stroke-width="${strong ? 4.5 : 3}" stroke-dasharray="12 12" stroke-linecap="round"/>
+          ${strong ? `<path class="ps-flow-fast" d="M342 252 L378 148 L458 258" fill="none" stroke="${p.berry}" stroke-width="4" stroke-dasharray="12 12" stroke-linecap="round"/>` : ''}
           ${pill(410, 206, 168, 'Wärmerückstrahlung', p.berry, p.bg, p.text)}
         </g>
       `;
@@ -1519,7 +1519,7 @@ export const VISUAL_PRESETS: VisualPreset[] = [
           <path class="ps-flow-fast" d="M184 128 L220 128" fill="none" stroke="${p.amber}" stroke-width="3.2" stroke-dasharray="6 6" stroke-linecap="round"/>
           <path class="ps-flow-fast" d="M378 128 L414 128" fill="none" stroke="${p.amber}" stroke-width="3.2" stroke-dasharray="6 6" stroke-linecap="round"/>
           <rect x="40" y="254" width="520" height="24" rx="12" fill="${p.amberNode}" stroke="${p.amber}" stroke-width="1.8"/>
-          <path class="ps-flow" d="M62 266 L538 266" fill="none" stroke="${p.amber}" stroke-width="4" stroke-dasharray="12 10" stroke-linecap="round"/>
+          <path class="ps-flow" d="M62 266 L538 266" fill="none" stroke="${p.amber}" stroke-width="4" stroke-dasharray="14 10" stroke-linecap="round"/>
           <text x="300" y="302" font-size="12.5" font-weight="800" fill="${p.text}" text-anchor="middle">Wärmeenergie zuführen → Schmelzen · Verdampfen (rückwärts: Kondensieren · Erstarren)</text>
         </g>
       `;
@@ -1574,8 +1574,8 @@ export const VISUAL_PRESETS: VisualPreset[] = [
         <!-- Neutralization box -->
         <g ${partAttrs('neutralisation', o.highlight)}>
           <rect x="76" y="232" width="448" height="72" rx="14" fill="${p.bg}" stroke="${p.teal}" stroke-width="2"/>
-          <path class="ps-flow" d="M112 268 L244 268" fill="none" stroke="${p.berry}" stroke-width="3" stroke-dasharray="7 7"/>
-          <path class="ps-flow-rev" d="M356 268 L488 268" fill="none" stroke="${p.violet}" stroke-width="3" stroke-dasharray="7 7"/>
+          <path class="ps-flow" d="M112 268 L244 268" fill="none" stroke="${p.berry}" stroke-width="3" stroke-dasharray="6 6"/>
+          <path class="ps-flow-rev" d="M356 268 L488 268" fill="none" stroke="${p.violet}" stroke-width="3" stroke-dasharray="6 6"/>
           <text x="300" y="260" font-size="13.5" font-weight="800" fill="${p.text}" text-anchor="middle">Neutralisation:  H⁺ + OH⁻  →  H₂O</text>
           <text x="300" y="284" font-size="12" font-weight="600" fill="${p.muted}" text-anchor="middle">Säure + Base gleichen sich gegenseitig zu Wasser &amp; Salz aus</text>
         </g>
@@ -1612,7 +1612,7 @@ export const VISUAL_PRESETS: VisualPreset[] = [
           <!-- Right heart (drawn on viewer's left, O2-poor blue) -->
           <g ${partAttrs('rechter_teil', o.highlight)}>
             <path d="M296 76 C230 76 196 124 202 184 C208 242 252 282 296 296 Z" fill="${p.blueNode}" stroke="${p.blue}" stroke-width="3"/>
-            <path class="${sys ? 'ps-flow-fast' : 'ps-flow'}" d="${sys ? 'M252 222 C248 164 256 106 274 52' : 'M234 52 C240 108 248 164 256 226'}" fill="none" stroke="${p.blue}" stroke-width="4" stroke-dasharray="8 8" stroke-linecap="round"/>
+            <path class="${sys ? 'ps-flow-fast' : 'ps-flow'}" d="${sys ? 'M252 222 C248 164 256 106 274 52' : 'M234 52 C240 108 248 164 256 226'}" fill="none" stroke="${p.blue}" stroke-width="4" stroke-dasharray="6 6" stroke-linecap="round"/>
             <text x="246" y="138" font-size="11.5" font-weight="800" fill="${p.text}" text-anchor="middle">Rechter</text>
             <text x="246" y="152" font-size="11.5" font-weight="800" fill="${p.text}" text-anchor="middle">Vorhof</text>
             <text x="252" y="232" font-size="11.5" font-weight="800" fill="${p.text}" text-anchor="middle">Rechte</text>
@@ -1621,7 +1621,7 @@ export const VISUAL_PRESETS: VisualPreset[] = [
           <!-- Left heart (drawn on viewer's right, O2-rich berry) -->
           <g ${partAttrs('linker_teil', o.highlight)}>
             <path d="M304 76 C370 76 404 124 398 184 C392 242 348 282 304 296 Z" fill="${p.berryNode}" stroke="${p.berry}" stroke-width="4"/>
-            <path class="${sys ? 'ps-flow-fast' : 'ps-flow'}" d="${sys ? 'M348 222 C352 164 344 106 326 52' : 'M366 52 C360 108 352 164 344 226'}" fill="none" stroke="${p.berry}" stroke-width="4" stroke-dasharray="8 8" stroke-linecap="round"/>
+            <path class="${sys ? 'ps-flow-fast' : 'ps-flow'}" d="${sys ? 'M348 222 C352 164 344 106 326 52' : 'M366 52 C360 108 352 164 344 226'}" fill="none" stroke="${p.berry}" stroke-width="4" stroke-dasharray="6 6" stroke-linecap="round"/>
             <text x="354" y="138" font-size="11.5" font-weight="800" fill="${p.text}" text-anchor="middle">Linker</text>
             <text x="354" y="152" font-size="11.5" font-weight="800" fill="${p.text}" text-anchor="middle">Vorhof</text>
             <text x="348" y="232" font-size="11.5" font-weight="800" fill="${p.text}" text-anchor="middle">Linke</text>
@@ -1724,9 +1724,9 @@ export const VISUAL_PRESETS: VisualPreset[] = [
       <rect x="6" y="6" width="588" height="328" rx="18" fill="${p.blueSoft}" stroke="${p.blue}" stroke-opacity="0.22"/>
       <!-- Control triangle -->
       <g ${partAttrs('kontrolle', o.highlight)}>
-        <path class="ps-flow" d="M242 104 L148 228" fill="none" stroke="${p.teal}" stroke-width="3.2" stroke-dasharray="8 8"/>
-        <path class="ps-flow" d="M358 104 L452 228" fill="none" stroke="${p.berry}" stroke-width="3.2" stroke-dasharray="8 8"/>
-        <path class="ps-flow" d="M214 268 L386 268" fill="none" stroke="${p.amber}" stroke-width="3.2" stroke-dasharray="8 8"/>
+        <path class="ps-flow" d="M242 104 L148 228" fill="none" stroke="${p.teal}" stroke-width="3.2" stroke-dasharray="6 6"/>
+        <path class="ps-flow" d="M358 104 L452 228" fill="none" stroke="${p.berry}" stroke-width="3.2" stroke-dasharray="6 6"/>
+        <path class="ps-flow" d="M214 268 L386 268" fill="none" stroke="${p.amber}" stroke-width="3.2" stroke-dasharray="6 6"/>
         <circle class="ps-pulse" cx="300" cy="196" r="42" fill="${p.bg}" stroke="${p.violet}" stroke-width="2.2"/>
         <text x="300" y="191" font-size="11.5" font-weight="800" fill="${p.violet}" text-anchor="middle">Kontrolle</text>
         <text x="300" y="207" font-size="11" font-weight="700" fill="${p.muted}" text-anchor="middle">&amp; Balance</text>
@@ -1866,9 +1866,9 @@ export const VISUAL_PRESETS: VisualPreset[] = [
       </g>
       <!-- PK -> FK join curves -->
       <g ${partAttrs('join', o.highlight)}>
-        <path class="ps-flow" d="M248 162 C298 162 302 162 352 162" fill="none" stroke="${p.amber}" stroke-width="3.2" stroke-dasharray="7 6"/>
-        <path class="ps-flow" d="M248 162 C298 162 302 198 352 198" fill="none" stroke="${p.amber}" stroke-width="2.8" stroke-dasharray="7 6"/>
-        <path class="ps-flow" d="M248 198 C298 198 302 234 352 234" fill="none" stroke="${p.berry}" stroke-width="2.8" stroke-dasharray="7 6"/>
+        <path class="ps-flow" d="M248 162 C298 162 302 162 352 162" fill="none" stroke="${p.amber}" stroke-width="3.2" stroke-dasharray="7 5"/>
+        <path class="ps-flow" d="M248 162 C298 162 302 198 352 198" fill="none" stroke="${p.amber}" stroke-width="2.8" stroke-dasharray="7 5"/>
+        <path class="ps-flow" d="M248 198 C298 198 302 234 352 234" fill="none" stroke="${p.berry}" stroke-width="2.8" stroke-dasharray="7 5"/>
         ${pill(256, 276, 88, '1 : n JOIN', p.amber, p.amberNode, p.text)}
       </g>
       <g ${partAttrs('schluessel', o.highlight)}>

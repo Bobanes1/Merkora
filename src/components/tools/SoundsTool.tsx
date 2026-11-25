@@ -22,7 +22,7 @@ import {
 import { remaining } from '../../lib/pomodoroRule';
 import { usePomodoro } from '../../lib/pomodoro';
 import { toolWindows } from '../../lib/toolWindows';
-import { IconClose, IconPause, IconPlay, IconPlus, IconPopout, IconStop } from '../Icons';
+import { IconClose, IconPause, IconPlay, IconPlus, IconPopout, IconSpeaker, IconStop } from '../Icons';
 
 /** Thin line pictures for the sounds. */
 const SOUND_ICON: Record<SoundId, string> = {
@@ -33,9 +33,12 @@ const SOUND_ICON: Record<SoundId, string> = {
   fire: 'M12 21c4 0 6-2.5 6-6 0-4-3-6-4-9-1 2-2 3-3 3 0-2-1-3-2-5-1 3-3 6-3 11 0 3.5 2 6 6 6zM12 21c-1.7 0-3-1.2-3-3 0-2 1.5-3 3-5 1.5 2 3 3 3 5 0 1.8-1.3 3-3 3z',
   wind: 'M3 8h11a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h7',
   birds: 'M3 9c2-2 4-2 6 0 2-2 4-2 6 0M10 16c1.5-1.5 3-1.5 4.5 0 1.5-1.5 3-1.5 4.5 0',
+  night: 'M17 14.5A6.5 6.5 0 0 1 9.5 7a6.5 6.5 0 1 0 7.5 7.5zM17 5l.5 1.5L19 7l-1.5.5L17 9l-.5-1.5L15 7l1.5-.5z',
+  cafe: 'M4 10h12v5a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4v-5zM16 11h2a2 2 0 0 1 0 4h-2M7 6c0-1 .8-1.5 1-2.5M11 6c0-1 .8-1.5 1-2.5',
   brown: 'M2 12c2-6 4 6 6 0s4 6 6 0 4 6 6 0 2-3 2-3',
   pink: 'M2 12c1.5-5 3 5 4.5 0s3 5 4.5 0 3 5 4.5 0 3 5 4.5 0',
   white: 'M2 12l2-4 2 8 2-8 2 8 2-8 2 8 2-8 2 8 2-8 2 4',
+  lofi: 'M4 7h16v10H4zM8 12a2 2 0 1 0 0 .01M16 12a2 2 0 1 0 0 .01M10 12h4',
   pad: 'M4 18V8M9 18V5M14 18V9M19 18V6',
   piano: 'M3 5h18v14H3zM8 5v9M12 5v9M16 5v9M6.5 5v5M10.5 5v5M14.5 5v5',
   bowls: 'M4 11h16a8 8 0 0 1-16 0zM9 20h6M12 7V4M8 8 6.5 5.5M16 8l1.5-2.5',
@@ -54,6 +57,7 @@ export function SoundsTool({ compact = false }: { compact?: boolean }) {
   const pomo = usePomodoro();
   const [favs, setFavs] = useState<Favourite[]>(loadFavourites);
   const [name, setName] = useState('');
+  const [compactTab, setCompactTab] = useState<'mix' | SoundGroup>('mix');
   const active = Object.keys(a.playing).length > 0;
   const timerLeft = a.timerEnd ? Math.max(0, Math.round((a.timerEnd - Date.now()) / 60000)) : null;
   const pomoMin = pomo.running && pomo.phase === 'work' ? Math.ceil(remaining(pomo, Date.now()) / 60000) : 0;
@@ -72,45 +76,99 @@ export function SoundsTool({ compact = false }: { compact?: boolean }) {
   };
 
   if (compact) {
+    const presets = [...favs, ...PRESETS];
+    const groupHasActive = (g: SoundGroup) => SOUNDS.some((s) => s.group === g && a.playing[s.id] !== undefined);
+    const tabs: { id: 'mix' | SoundGroup; label: string; dot?: boolean }[] = [
+      { id: 'mix', label: 'Mix' },
+      { id: 'natur', label: 'Natur', dot: groupHasActive('natur') },
+      { id: 'rauschen', label: 'Rauschen', dot: groupHasActive('rauschen') },
+      { id: 'musik', label: 'Musik', dot: groupHasActive('musik') },
+    ];
     return (
-      <div className="sounds compact">
-        <div className="sounds-now-main">
-          <span className="grow">
-            <b>{active ? mixLabel(a.playing) : 'Kein Klang aktiv'}</b>
-            <small className="muted">{active ? (a.paused ? 'pausiert' : 'läuft') : 'Mischung wählen'}</small>
+      <div className="snd-mini">
+        <div className={`snd-mini-now${active && !a.paused ? ' playing' : ''}`}>
+          <span className="sounds-eq small" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+            <i />
+          </span>
+          <span className="snd-mini-title" title={active ? mixLabel(a.playing) : 'Kein Klang aktiv'}>
+            {active ? mixLabel(a.playing) : 'Kein Klang aktiv'}
           </span>
           {active && (
-            <>
-              <button type="button" className="btn primary sm" onClick={a.paused ? resumeAll : pauseAll} aria-label={a.paused ? 'Weiter' : 'Pause'}>
-                {a.paused ? <IconPlay size={13} /> : <IconPause size={13} />}
+            <span className="snd-mini-ctrls">
+              <button type="button" className="snd-mini-btn primary" onClick={a.paused ? resumeAll : pauseAll} aria-label={a.paused ? 'Weiter' : 'Pause'} title={a.paused ? 'Weiter' : 'Pause'}>
+                {a.paused ? <IconPlay size={12} /> : <IconPause size={12} />}
               </button>
-              <button type="button" className="btn ghost sm" onClick={stopAll} aria-label="Stopp">
-                <IconStop size={13} />
+              <button type="button" className="snd-mini-btn" onClick={stopAll} aria-label="Stopp" title="Stopp">
+                <IconStop size={12} />
               </button>
-            </>
+            </span>
           )}
         </div>
-        <label className="sounds-master">
-          <span className="muted small">Lautstärke</span>
-          <input type="range" min={0} max={1} step={0.01} value={a.master} onChange={(e) => setMasterVolume(Number(e.target.value))} />
+
+        <label className="snd-mini-vol">
+          <IconSpeaker size={14} />
+          <input type="range" min={0} max={1} step={0.01} value={a.master} aria-label="Lautstärke" onChange={(e) => setMasterVolume(Number(e.target.value))} />
+          <small>{Math.round(a.master * 100)}%</small>
         </label>
-        <div className="sounds-presets">
-          {[...favs, ...PRESETS].map((f, k) => (
-            <button key={f.name + k} type="button" className="chip" onClick={() => playMix(f.mix)}>
-              <IconPlay size={11} /> {f.name}
+
+        <div className="snd-mini-tabs" role="tablist" aria-label="Klang-Kategorien">
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={compactTab === t.id}
+              className={`snd-mini-tab${compactTab === t.id ? ' on' : ''}`}
+              onClick={() => setCompactTab(t.id)}
+            >
+              {t.label}
+              {t.dot && <i className="snd-mini-dot" aria-hidden="true" />}
             </button>
           ))}
         </div>
-        <div className="sound-grid compact">
-          {SOUNDS.map((s) => {
-            const on = a.playing[s.id] !== undefined;
-            return (
-              <button key={s.id} type="button" className={`chip ${on ? 'on' : ''}`} aria-pressed={on} onClick={() => toggleSound(s.id)}>
-                {s.label}
+
+        {compactTab === 'mix' ? (
+          <div className="snd-mini-presets">
+            {presets.map((f, k) => (
+              <button key={f.name + k} type="button" className="snd-mini-preset" onClick={() => playMix(f.mix)}>
+                <IconPlay size={11} />
+                <span>{f.name}</span>
               </button>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div className="snd-mini-list">
+            {SOUNDS.filter((s) => s.group === compactTab).map((s) => {
+              const on = a.playing[s.id] !== undefined;
+              return (
+                <div key={s.id} className={`snd-mini-row${on ? ' on' : ''}`}>
+                  <button type="button" className="snd-mini-row-btn" aria-pressed={on} onClick={() => toggleSound(s.id)}>
+                    <span className="snd-mini-ico">
+                      <SoundIcon id={s.id} size={14} />
+                    </span>
+                    <span className="snd-mini-name">{s.label}</span>
+                    <span className="snd-mini-state">{on ? 'An' : ''}</span>
+                  </button>
+                  {on && (
+                    <input
+                      type="range"
+                      className="snd-mini-slider"
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={a.playing[s.id]}
+                      aria-label={`Lautstärke ${s.label}`}
+                      onChange={(e) => setSoundVolume(s.id, Number(e.target.value))}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     );
   }

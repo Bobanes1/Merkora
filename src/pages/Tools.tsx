@@ -10,6 +10,7 @@ import {
   IconHeadphones,
   IconHeart,
   IconImage,
+  IconMindmap,
   IconMusic,
   IconNote,
   IconPopout,
@@ -22,6 +23,7 @@ import { Lab, LAB_DEFAULTS, LAB_TITLES } from '../components/labs/Labs';
 import { BreathingTool } from '../components/tools/BreathingTool';
 import { CalculatorTool } from '../components/tools/CalculatorTool';
 import { CodePlaygroundTool } from '../components/tools/CodePlaygroundTool';
+import { Models3DTool } from '../components/tools/Models3DTool';
 import { PeriodicTableTool } from '../components/tools/PeriodicTableTool';
 import { PianoTool } from '../components/tools/PianoTool';
 import { PomodoroTool } from '../components/tools/PomodoroTool';
@@ -30,6 +32,7 @@ import { SoundsTool } from '../components/tools/SoundsTool';
 import { VisualLibraryTool } from '../components/tools/VisualLibraryTool';
 import { WorkPlanner } from '../components/tools/WorkPlanner';
 import { useAmbient } from '../lib/ambient';
+import { MODELS_3D } from '../lib/models3d';
 import { VISUAL_PRESETS } from '../lib/visualPresets';
 import { usePhone } from '../lib/phone';
 import { fmtClock, usePomodoro } from '../lib/pomodoro';
@@ -49,6 +52,7 @@ type Tab =
   | 'notes'
   | 'breath'
   | 'visuals'
+  | 'models3d'
   | 'code'
   | 'calc'
   | 'labs'
@@ -73,6 +77,7 @@ const TABS: TabDef[] = [
   { id: 'notes', group: 'focus', label: 'Notizblock', icon: IconNote },
   { id: 'breath', group: 'focus', label: 'Atem-Reset', icon: IconHeart },
   { id: 'visuals', group: 'subject', label: 'Grafiken', icon: IconImage },
+  { id: 'models3d', group: 'subject', label: '3D-Modelle', icon: IconMindmap },
   { id: 'code', group: 'subject', label: 'Code-Spielwiese', icon: IconCode },
   { id: 'calc', group: 'subject', label: 'Rechner', icon: IconTarget },
   { id: 'labs', group: 'subject', label: 'Mathe-Labore', icon: IconChart },
@@ -166,6 +171,7 @@ export default function Tools() {
     ...(soundCount > 0 ? { sounds: amb.paused ? '⏸' : '●' } : {}),
     ...(nextExamDays !== null ? { exams: nextExamDays === 0 ? 'Heute' : `${nextExamDays} T` } : {}),
     visuals: String(VISUAL_PRESETS.length),
+    models3d: String(MODELS_3D.length),
   };
 
   return (
@@ -190,22 +196,33 @@ export default function Tools() {
       {phone ? (
         <ToolPicker tab={tab} setTab={setTab} badges={badges} />
       ) : (
-        <div className="tools-groups" role="tablist" aria-label="Tools-Bereiche">
+        <nav className="tools-dock" role="tablist" aria-label="Tools-Bereiche">
           {GROUPS.map((g) => (
-            <div key={g.id} className="tools-group">
-              <small className="tools-group-label">{g.label}</small>
-              <div className="seg wrap tools-tabs">
+            <div key={g.id} className="tools-dock-row">
+              <span className="tools-group-label">{g.label}</span>
+              <div className="tools-dock-items">
                 {TABS.filter((t) => t.group === g.id).map((t) => (
-                  <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} className={`mode-${t.id} ${tab === t.id ? 'on' : ''}`} onClick={() => setTab(t.id)}>
-                    <t.icon size={14} />
-                    <span>{t.label}</span>
-                    {badges[t.id] && <span className={`tab-badge ${t.id === 'sounds' && !amb.paused ? 'live' : ''}`}>{badges[t.id]}</span>}
+                  <button
+                    key={t.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={tab === t.id}
+                    className={`tool-tab mode-${t.id}${tab === t.id ? ' on' : ''}`}
+                    onClick={() => setTab(t.id)}
+                  >
+                    <span className="tool-tab-ico" aria-hidden="true">
+                      <t.icon size={15} />
+                    </span>
+                    <span className="tool-tab-label">{t.label}</span>
+                    {badges[t.id] && (
+                      <span className={`tab-badge${t.id === 'sounds' && !amb.paused ? ' live' : ''}`}>{badges[t.id]}</span>
+                    )}
                   </button>
                 ))}
               </div>
             </div>
           ))}
-        </div>
+        </nav>
       )}
 
       {tab === 'todos' && <Todos embedded />}
@@ -244,6 +261,8 @@ export default function Tools() {
       )}
 
       {tab === 'visuals' && <VisualLibraryTool />}
+
+      {tab === 'models3d' && <Models3DTool />}
 
       {tab === 'code' && <CodePlaygroundTool />}
 

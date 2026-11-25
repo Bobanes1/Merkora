@@ -2361,7 +2361,7 @@ export function renderDiagram(d: Diagram, p: Palette = PALETTES.light, view?: Di
   if (L.orbitSlot) {
     const { cx, cy, coreR, rings } = L.orbitSlot;
     const outerR = (rings[rings.length - 1]?.r ?? coreR + 36) + 14;
-    out.push(`<g class="dg-orbit">`);
+    out.push(`<g class="dg-orbit-wrap">`);
     out.push(`<circle cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(outerR)}" fill="${p.tones[0].soft}" fill-opacity="0.6" stroke="${p.tones[0].stroke}" stroke-opacity="0.22" stroke-width="1.2"/>`);
     rings.forEach((rg, idx) => {
       const t = tn(rg.tone);
