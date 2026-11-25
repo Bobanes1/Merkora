@@ -11971,8 +11971,69 @@ html.phone .goal-ring.in-hero .gr-legend { display: none; }
 .lang-table tbody tr { animation: step-slide 0.32s cubic-bezier(0.22, 1, 0.36, 1) both; }
 .lang-table mark { display: inline-block; animation: dg-dot-pop 0.36s cubic-bezier(0.34, 1.5, 0.64, 1) 0.18s both; }
 
+/* Interactive preset part explorer & animated Studyflix preset / builder motion */
+.diagram-interactive .ps-part { cursor: pointer; transition: opacity 0.22s ease, filter 0.22s ease; }
+.diagram-interactive .ps-part:hover { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--primary) 52%, transparent)); }
+.diagram .ps-dim { opacity: 0.3; }
+.diagram .ps-focus { opacity: 1; filter: drop-shadow(0 0 7px color-mix(in srgb, var(--primary) 65%, transparent)); }
+.figure-parts { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 8px; }
+.figure-part-chip {
+  padding: 4px 10px;
+  border-radius: var(--r-full);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease, transform 0.14s ease;
+}
+.figure-part-chip:hover { border-color: var(--primary); color: var(--primary); transform: translateY(-1px); }
+.figure-part-chip.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.figure-tour-btn { display: inline-flex; align-items: center; gap: 4px; border-style: dashed; }
+.figure-story-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; margin-top: 8px; }
+.figure-state-note.figure-part-note { border-left: 3px solid var(--primary); text-align: left; }
+
+.diagram .dg-bal-beam { transition: transform 0.55s cubic-bezier(0.34, 1.35, 0.64, 1); }
+.dg-animated .dg-preset { animation: dg-backdrop-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.dg-animated .dg-orbit-rot, .dg-animated .ps-orbit, .dg-animated .dg-orbit { animation: ps-spin 14s linear infinite; }
+.dg-animated .dg-wave-run { animation: dg-wave-shift 2.8s linear infinite; }
+.dg-animated .ps-flow { animation: ps-dash 1.6s linear infinite; }
+.dg-animated .ps-flow-fast, .dg-animated .dg-flow-fast { animation: ps-dash 0.85s linear infinite; }
+.dg-animated .ps-flow-rev, .dg-animated .dg-flow-rev { animation: ps-dash-rev 1.6s linear infinite; }
+.dg-animated .dg-spin-slow { transform-box: fill-box; transform-origin: center; animation: dg-spin 26s linear infinite; }
+.dg-animated .ps-pulse { transform-box: fill-box; transform-origin: center; animation: ps-pulse 2.2s ease-in-out infinite; }
+.dg-animated .ps-glow, .dg-animated .dg-glow { transform-box: fill-box; transform-origin: center; animation: ps-glow 2.8s ease-in-out infinite; }
+.dg-animated .ps-breathe, .dg-animated .dg-breathe { transform-box: fill-box; transform-origin: center; animation: ps-breathe 3.8s ease-in-out infinite; }
+.dg-animated .dg-blink { animation: ps-twinkle 1.6s ease-in-out infinite; }
+.dg-animated .dg-slide-r { animation: ps-drift-x 2.6s ease-in-out infinite; }
+.dg-animated .dg-slide-u { animation: ps-drift 2.6s ease-in-out infinite; }
+.dg-animated .dg-draw { stroke-dasharray: 100; stroke-dashoffset: 100; animation: dg-draw-path 0.85s cubic-bezier(0.35, 0, 0.2, 1) both; }
+.dg-animated .dg-fade-in { animation: dg-vec-in 0.55s ease both; }
+.dg-animated .ps-heartbeat { transform-box: fill-box; transform-origin: center; animation: ps-heartbeat 1.35s ease-in-out infinite; }
+.dg-animated .ps-twinkle { animation: ps-twinkle 2.6s ease-in-out infinite; }
+.dg-animated .ps-rain { animation: ps-rain 1.4s linear infinite; }
+.dg-animated .ps-drift { animation: ps-drift 2.6s ease-in-out infinite; }
+.dg-animated .ps-drift-x { animation: ps-drift-x 2.8s ease-in-out infinite; }
+.dg-animated .ps-float { transform-box: fill-box; transform-origin: center; animation: dg-float 3.2s ease-in-out infinite; }
+.dg-animated .ps-lung-morph { transform-box: fill-box; transform-origin: center; transition: transform 0.6s ease; }
+
+@keyframes ps-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes dg-wave-shift { from { transform: translateX(0); } to { transform: translateX(var(--wave-shift, 120px)); } }
+@keyframes ps-dash { from { stroke-dashoffset: 24; } to { stroke-dashoffset: 0; } }
+@keyframes ps-dash-rev { from { stroke-dashoffset: 0; } to { stroke-dashoffset: 24; } }
+@keyframes ps-pulse { 0%, 100% { transform: scale(1); opacity: 0.92; } 50% { transform: scale(1.08); opacity: 1; } }
+@keyframes ps-glow { 0%, 100% { transform: scale(0.95); opacity: 0.28; } 50% { transform: scale(1.1); opacity: 0.65; } }
+@keyframes ps-breathe { 0%, 100% { transform: scale(0.97); } 50% { transform: scale(1.045); } }
+@keyframes ps-heartbeat { 0%, 100% { transform: scale(1); } 16% { transform: scale(1.12); } 30% { transform: scale(1); } 46% { transform: scale(1.08); } 62% { transform: scale(1); } }
+@keyframes ps-twinkle { 0%, 100% { opacity: 0.22; } 50% { opacity: 0.95; } }
+@keyframes ps-rain { 0% { transform: translateY(-6px); opacity: 0; } 25% { opacity: 0.9; } 85% { opacity: 0.85; } 100% { transform: translateY(20px); opacity: 0; } }
+@keyframes ps-drift { 0% { transform: translateY(4px); opacity: 0.35; } 50% { transform: translateY(-7px); opacity: 1; } 100% { transform: translateY(4px); opacity: 0.35; } }
+@keyframes ps-drift-x { 0%, 100% { transform: translateX(-5px); } 50% { transform: translateX(7px); } }
+
 @media (prefers-reduced-motion: reduce) {
-  .diagram .dg-vec, .diagram .dg-art, .figure-state-note, .figure-replay,
+  .diagram .dg-vec, .diagram .dg-art, .diagram .dg-bal-beam, .diagram-interactive .ps-part,
+  .figure-state-note, .figure-replay, .figure-part-chip,
   .dg-animated *, .bite-card, .bite-card *, .sprint-bite, .phase-panel,
   .practice-example .practice-step, .practice-example .practice-step > span, .practice-example .example-result,
   .bite-check .form-ok, .bite-check .form-error, .bite-reveal-box, .bite-reveal-note, .bite-est-pin.truth,
@@ -11981,7 +12042,7 @@ html.phone .goal-ring.in-hero .gr-legend { display: none; }
     animation: none !important;
     transition: none !important;
   }
-  .dg-animated .dg-anim-draw, .dg-animated .dg-anim-curve, .sketch.sk-anim .sk-link:not(.anspruch) path {
+  .dg-animated .dg-anim-draw, .dg-animated .dg-anim-curve, .dg-animated .dg-draw, .sketch.sk-anim .sk-link:not(.anspruch) path {
     stroke-dasharray: none !important;
     stroke-dashoffset: 0 !important;
   }
