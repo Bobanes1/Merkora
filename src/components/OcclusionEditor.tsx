@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { escapeHtml } from '../lib/content';
-import { addCards, type Deck } from '../lib/store';
+import { addCards, type CardSourceRef, type Deck } from '../lib/store';
 import { IconTrash, IconUpload } from './Icons';
 import { Modal } from './Modal';
 import { storeImage } from './RichField';
@@ -29,10 +29,22 @@ export function occlusionHtml(mediaId: string, rects: Rect[], active: number, an
 /** Shown inside another window: that window's footer element receives the buttons. */
 export type Embed = { footerEl: HTMLElement | null };
 
-export function OcclusionEditor({ deck, onClose, embed }: { deck: Deck; onClose: () => void; embed?: Embed }) {
+export function OcclusionEditor({
+  deck,
+  onClose,
+  embed,
+  initialImage,
+  sourceRef,
+}: {
+  deck: Deck;
+  onClose: () => void;
+  embed?: Embed;
+  initialImage?: { id: string; url: string };
+  sourceRef?: CardSourceRef;
+}) {
   const fileRef = useRef<HTMLInputElement>(null);
   const areaRef = useRef<HTMLDivElement>(null);
-  const [img, setImg] = useState<{ id: string; url: string } | null>(null);
+  const [img, setImg] = useState<{ id: string; url: string } | null>(initialImage ?? null);
   const [rects, setRects] = useState<Rect[]>([]);
   const [draft, setDraft] = useState<Rect | null>(null);
   const [header, setHeader] = useState('');
@@ -93,6 +105,7 @@ export function OcclusionEditor({ deck, onClose, embed }: { deck: Deck; onClose:
         back: occlusionHtml(img.id, rects, i, true, hideAll, header.trim(), extra.trim()),
         html: true,
         tags: ['bildverdeckung'],
+        ...(sourceRef ? { sourceRef } : {}),
       })),
     );
     onClose();

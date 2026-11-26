@@ -15,8 +15,11 @@ import { hasCloze, renderClozeAnswer, renderClozeQuestion } from '../lib/deckToo
 import { RATINGS, formatDelay, schedule, type Rating } from '../lib/srs';
 import { addXp, logReview, reviewCard, toggleSuspendCard, undoReview, useStore, type Card } from '../lib/store';
 import { CardContent, lookOf } from './CardContent';
-import { IconBulb, IconClose, IconEdit, IconHelp, IconPause, IconRefresh } from './Icons';
+import { IconBulb, IconClose, IconDoc, IconEdit, IconHelp, IconPause, IconRefresh } from './Icons';
 import { FocusButton } from './Pomodoro';
+import { PdfSourceDrawer } from './PdfStudio';
+import { pdfFiles } from '../lib/deckFiles';
+import { resolveCardPage } from '../lib/interference';
 import { countAnswerTime } from '../lib/pomodoro';
 import { cardFrontText } from '../lib/content';
 
@@ -37,6 +40,7 @@ export function StudySession({ title, items, onExit }: { title: string; items: S
   const [editing, setEditing] = useState(false);
   const [scratch, setScratch] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [sourceOpen, setSourceOpen] = useState(false);
   const phone = usePhone();
   // "Rückgängig" for the last rating (one step)
   const [undo, setUndo] = useState<{ deckId: string; cardId: string; prevSrs: Card['srs']; at: number; xp: number; queue: SessionItem[]; done: number } | null>(null);
@@ -265,6 +269,13 @@ export function StudySession({ title, items, onExit }: { title: string; items: S
                 <IconBulb size={14} /> <b>Hinweis:</b> {card.hint}
               </div>
             )}
+            {pdfFiles(deck.files).length > 0 && resolveCardPage(card, deck.source) && (
+              <div className="fc-source-row" onClick={(e) => e.stopPropagation()}>
+                <button type="button" className="source-ref-chip" onClick={() => setSourceOpen(true)}>
+                  <IconDoc size={13} /> S. {resolveCardPage(card, deck.source)} · Im Skript zeigen
+                </button>
+              </div>
+            )}
           </>
         )}
         {!flipped && <span className="fc-hint">{phone ? 'Tippen zum Umdrehen – danach wischen: ← Nochmal, Gut →' : 'Klicken oder Leertaste zum Umdrehen'}</span>}
@@ -287,6 +298,15 @@ export function StudySession({ title, items, onExit }: { title: string; items: S
       )}
       {editing && <CardEditor deck={deck} card={card} onClose={() => setEditing(false)} />}
       {scratch && <DrawPad onClose={() => setScratch(false)} onSave={() => setScratch(false)} />}
+      {sourceOpen && resolveCardPage(card, deck.source) && (
+        <PdfSourceDrawer
+          deck={deck}
+          page={resolveCardPage(card, deck.source)!}
+          fileId={card.sourceRef?.fileId}
+          excerpt={card.sourceRef?.excerpt}
+          onClose={() => setSourceOpen(false)}
+        />
+      )}
       {showHelp && (
         <Modal title="Tastenkürzel in der Lernrunde" onClose={() => setShowHelp(false)}>
           <div className="shortcuts-list">

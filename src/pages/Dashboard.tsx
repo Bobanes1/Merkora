@@ -40,6 +40,7 @@ import { dayKey } from '../lib/util';
 import { shortName } from '../lib/deckNames';
 import { WeekReview } from '../components/WeekReview';
 import { HomeTodos } from '../components/HomeTodos';
+import { AutopilotCard } from '../components/AutopilotCard';
 import { PomodoroTool } from '../components/tools/PomodoroTool';
 
 type Tab = 'tasks' | 'decks' | 'quick';
@@ -228,6 +229,8 @@ export default function Dashboard() {
         )}
 
         {!apiKey && data.settings.provider !== 'custom' && !data.settings.noKeyHintClosed && <NoKeyHint />}
+
+        <AutopilotCard onStartSession={(title, items) => setSession({ title, items })} />
 
         {!phone && <WeekReview />}
 

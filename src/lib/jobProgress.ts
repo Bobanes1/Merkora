@@ -7,7 +7,7 @@ export const JOB_STEPS = ['Wartet', 'KI arbeitet', 'Fertig'] as const;
 export const jobStep = (j: Job) => (j.status === 'queued' ? 0 : j.status === 'running' ? 1 : 2);
 
 /** Rough times (s) until there is enough own history. */
-const DEFAULT_SECONDS: Record<JobKind, number> = { cards: 90, summary: 60, quiz: 45, practice: 60 };
+const DEFAULT_SECONDS: Record<JobKind, number> = { cards: 90, summary: 60, quiz: 45, practice: 60, podcast: 55 };
 
 /** Typical duration (s) of a job of this kind: the median of the last 10 finished ones. */
 export function typicalSeconds(jobs: Job[], kind: JobKind): number {

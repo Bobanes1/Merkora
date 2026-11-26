@@ -11,13 +11,14 @@ import { JavaSetup } from '../JavaSetup';
 import { IconBulb, IconCheck, IconChevron, IconClose, IconHelp, IconPlay, IconPlus, IconSparkle, IconSpeaker, IconSpeakerOff, IconStar, IconTarget } from '../Icons';
 import { useLearnFocus } from '../../lib/learnFocus';
 import { Lab } from '../labs/Labs';
+import { matchModel3DForTopic } from '../../lib/models3d';
 import { completeJson, gradeAnswer, hasKey } from '../../lib/ai';
 import { speak, stopSpeaking, useCanSpeak } from '../../lib/speech';
 import { biteSpeechParts } from '../../lib/speechText';
 import { gapCheckPrompt, parseGapCheck } from '../../lib/tasks';
 import { openExternal } from '../../lib/desktop';
 import { buildHarness, harnessOffset, localJava, mapErrors, parseResults, runJavaLocal, runJavaOnline, type RunResult, type TestResult } from '../../lib/javaRun';
-import { bitesFrom, checkAnswer, checkBiteGap, cleanSolve, goingWell, harderPrompt, insertTaskAfter, insertTaskLater, nextOpen, parseHarder, pickNext, settledCount, mistakePrompt, parseMistake, parseSimpler, parseSimplerBite, simplerBitePrompt, simplerPrompt, DOMAIN_LABEL, problemCount, solvedCount, taskList, type Bite, type BiteCheck, type JavaProblem, type MathProblem, type PracticeSet, type ProblemProgress } from '../../lib/practice';
+import { bitesFrom, checkAnswer, checkBiteGap, cleanSolve, goingWell, harderPrompt, insertTaskAfter, insertTaskLater, nextOpen, parseHarder, pickNext, settledCount, mistakePrompt, parseMistake, parseSimpler, parseSimplerBite, simplerBitePrompt, simplerPrompt, DOMAIN_LABEL, problemCount, solvedCount, taskList, type Bite, type BiteCheck, type JavaProblem, type LabSpec, type MathProblem, type PracticeSet, type ProblemProgress } from '../../lib/practice';
 import { setSettings, useStore } from '../../lib/store';
 import { CaseTaskView, ClassifyTaskView, ClozeTaskView, MultiTaskView, OrderTaskView } from './ActiveTasks';
 import { MusicTaskView } from './MusicTask';
@@ -78,7 +79,21 @@ export function PracticeSetView({ set, host, head, onDone, guided, focus }: { se
   };
   const bites = guided ? bitesFrom(set) : [];
   const isSprint = !!guided && set.style === 'sprint';
-  const hasExample = !!(set.example || set.figures?.length || set.score || set.sketch || set.syntax?.length || set.tables?.length || set.program || set.labs.length);
+  const effectiveLabs: LabSpec[] = (() => {
+    if (set.labs.some((l) => l.type === 'model3d')) return set.labs;
+    const matched = matchModel3DForTopic(set.topic);
+    if (!matched) return set.labs;
+    return [
+      {
+        type: 'model3d',
+        modelId: matched.modelId,
+        ...(matched.variantId ? { variantId: matched.variantId } : {}),
+        ask: 'Drehe das 3D-Modell, klicke die Markierungen an oder nutze Schichten & Röntgen-Modus.',
+      },
+      ...set.labs,
+    ];
+  })();
+  const hasExample = !!(set.example || set.figures?.length || set.score || set.sketch || set.syntax?.length || set.tables?.length || set.program || effectiveLabs.length);
   const order: Phase[] = isSprint
     ? [...(bites.length || hasExample ? (['learn'] as Phase[]) : []), 'practice']
     : [...(bites.length ? (['learn'] as Phase[]) : []), ...(hasExample ? (['example'] as Phase[]) : []), 'practice'];
@@ -204,7 +219,7 @@ export function PracticeSetView({ set, host, head, onDone, guided, focus }: { se
     </section>
   );
 
-  const labs = set.labs.map((l, k) => <Lab key={k} spec={l} />);
+  const labs = effectiveLabs.map((l, k) => <Lab key={k} spec={l} />);
 
   if (!g)
     return (

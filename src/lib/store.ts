@@ -15,6 +15,32 @@ import { moveCardsIn } from './moveCards';
 
 export type Provider = 'openai' | 'anthropic' | 'gemini' | 'openrouter' | 'custom';
 
+/** Link back to the exact PDF/script page & excerpt where a card came from. */
+export type CardSourceRef = {
+  fileId?: string;
+  fileName?: string;
+  page: number;
+  excerpt?: string;
+};
+
+/** Cached transfer/application variant for mature cards (generated in batches on opt-in). */
+export type CardTransferQ = {
+  q: string;
+  a: string;
+  kind: 'apply' | 'spot_error';
+};
+
+/** A highlight saved directly on a PDF page inside Living Script Studio. */
+export type PdfHighlight = {
+  id: string;
+  fileId: string;
+  page: number;
+  text: string;
+  note?: string;
+  color?: 'yellow' | 'green' | 'blue' | 'rose';
+  createdAt: number;
+};
+
 /** A flashcard. With `html` the sides are (sanitised) HTML that may contain images and audio, like Anki cards. */
 export type Card = {
   id: string;
@@ -40,6 +66,12 @@ export type Card = {
   srs: Srs;
   /** Made by one "Mit KI erstellen" (its parts know each other's questions). */
   run?: string;
+  /** Exact source anchor back to a PDF page / excerpt in Living Script Studio. */
+  sourceRef?: CardSourceRef;
+  /** Cached transfer check variant for mature cards (opt-in, zero re-generation cost). */
+  transferQ?: CardTransferQ;
+  /** Timestamp when a mock exam / skill mistake flagged this card for priority retesting. */
+  retestBoostAt?: number;
 };
 export type QuizQuestion = { question: string; options: string[]; answer: number; explanation: string };
 export type MockQuestion = {
@@ -92,7 +124,8 @@ export type MockExam = {
   friend?: { name: string; grade?: string; percent?: number; passed?: boolean; scale?: string };
 };
 export type MockHistory = { at: number; title: string; level: string; percent: number; grade: string; passed: boolean; scale: string };
-export type PodcastLine = { speaker: 'A' | 'B'; text: string };
+export type PodcastLine = { speaker: 'A' | 'B'; text: string; chapter?: string };
+export type PodcastMeta = { title?: string; voiceA?: string; voiceB?: string; createdAt?: number; minutes?: number };
 export type ChatMsg = { role: 'user' | 'assistant'; content: string; /** Pictures sent along (JPEG data addresses) – only for models that read images. */ images?: string[] };
 export type PathResult = { stars: number; best: number; at: number };
 
@@ -108,6 +141,8 @@ export type Deck = {
   source: string;
   /** Original files of the material (PDF presentations), stored like pictures; shown under "Lernmaterial". */
   files?: DeckFile[];
+  /** Saved highlights on PDF pages inside Living Script Studio. */
+  highlights?: PdfHighlight[];
   summary?: string;
   /** Mind map of the material (Merkora graphic, drawn like the card graphics). */
   mindmap?: Diagram;
@@ -128,6 +163,7 @@ export type Deck = {
   order?: number;
   quiz?: QuizQuestion[];
   podcast?: PodcastLine[];
+  podcastMeta?: PodcastMeta;
   chat: ChatMsg[];
   /** Cover: colour, pattern and icon (lib/look.ts); without it an automatic one. */
   cover?: import('./look').DeckCover;
@@ -191,7 +227,7 @@ export type Exam = {
   updatedAt?: number;
 };
 
-export type JobKind = 'summary' | 'quiz' | 'cards' | 'practice';
+export type JobKind = 'summary' | 'quiz' | 'cards' | 'practice' | 'podcast';
 export type JobStatus = 'queued' | 'running' | 'done' | 'error' | 'cancelled';
 export type Job = {
   id: string;
@@ -501,8 +537,7 @@ export function normalize(raw: unknown): Data | null {
     reviews,
     settings: migrateSettings({ ...base.settings, ...(d.settings ?? {}) }),
     game: { ...base.game, ...(d.game ?? {}) },
-    // the podcast feature is paused – its unfinished jobs are dropped
-    jobs: (d.jobs ?? []).filter((j) => (j.kind as string) !== 'podcast'),
+    jobs: d.jobs ?? [],
     exams: d.exams ?? [],
     todos: d.todos ?? [],
     skills: d.skills ?? [],
@@ -908,7 +943,7 @@ export function mergeDecks(sourceDeckId: string, targetDeckId: string): number {
   deleteDeck(sourceDeckId);
   return moved;
 }
-export type NewCard = { front: string; back: string; hint?: string; suspended?: boolean; html?: boolean; styleId?: string; cardClass?: string; tags?: string[]; marked?: boolean; srs?: Srs; run?: string };
+export type NewCard = { front: string; back: string; hint?: string; suspended?: boolean; html?: boolean; styleId?: string; cardClass?: string; tags?: string[]; marked?: boolean; srs?: Srs; run?: string; sourceRef?: CardSourceRef };
 export function addCards(deckId: string, pairs: NewCard[]) {
   const now = Date.now();
   const cards: Card[] = pairs.map((p) => ({
@@ -923,10 +958,46 @@ export function addCards(deckId: string, pairs: NewCard[]) {
     ...(p.tags?.length ? { tags: p.tags } : {}),
     ...(p.marked ? { marked: true } : {}),
     ...(p.run ? { run: p.run } : {}),
+    ...(p.sourceRef ? { sourceRef: p.sourceRef } : {}),
     createdAt: now,
     srs: p.srs ?? newSrs(now),
   }));
   updateDeck(deckId, (x) => ({ cards: [...x.cards, ...cards] }));
+}
+
+/** Adds a saved PDF highlight in Living Script Studio. */
+export function addDeckHighlight(deckId: string, h: Omit<PdfHighlight, 'id' | 'createdAt'>): PdfHighlight {
+  const item: PdfHighlight = { ...h, id: uid(), createdAt: Date.now() };
+  updateDeck(deckId, (x) => ({ highlights: [...(x.highlights ?? []), item] }));
+  return item;
+}
+
+/** Removes a saved PDF highlight from a deck. */
+export function removeDeckHighlight(deckId: string, highlightId: string) {
+  updateDeck(deckId, (x) => ({ highlights: (x.highlights ?? []).filter((h) => h.id !== highlightId) }));
+}
+
+/** Saves cached transfer questions onto mature cards so they are never regenerated twice. */
+export function setCardTransferQuestions(deckId: string, byCardId: Record<string, CardTransferQ>) {
+  const now = Date.now();
+  updateDeck(deckId, (x) => ({
+    cards: x.cards.map((c) => (byCardId[c.id] ? { ...c, transferQ: byCardId[c.id], updatedAt: now } : c)),
+  }));
+}
+
+/** Closed-loop feedback: prioritizes cards linked to mock exam mistakes for near-term retesting. */
+export function boostCardsForRetest(deckId: string, cardIds: string[]) {
+  if (!cardIds.length) return;
+  const set = new Set(cardIds);
+  const now = Date.now();
+  updateDeck(deckId, (x) => ({
+    cards: x.cards.map((c) => {
+      if (!set.has(c.id)) return c;
+      // Gently pull due date to now if card was scheduled far out, without destroying its SRS history
+      const due = c.srs.due > now ? now : c.srs.due;
+      return { ...c, retestBoostAt: now, srs: { ...c.srs, due }, updatedAt: now };
+    }),
+  }));
 }
 /** Mark or unmark a card (★). */
 export function toggleMark(deckId: string, cardId: string) {

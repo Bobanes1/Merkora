@@ -55,6 +55,19 @@ export const estimate = {
     output: 300 + writtenTasks * 90,
   }),
   chat: (materialChars: number, historyChars: number): Estimate => ({ input: 120 + tokensOf(Math.min(materialChars, MATERIAL_LIMIT) + historyChars), output: 400 }),
+  podcast: (materialChars: number, minutes = 6): Estimate => ({
+    input: 320 + tokensOf(Math.min(materialChars, 22000)),
+    output: Math.round(minutes * 320),
+  }),
+  feynman: (contextChars: number, turns = 5): Estimate => ({
+    input: turns * (280 + tokensOf(Math.min(contextChars, 5500)) + 260),
+    output: turns * 220,
+  }),
+  transferBatch: (cardCount: number): Estimate => ({
+    input: 220 + cardCount * 95,
+    output: cardCount * 85,
+  }),
+  compareCards: (): Estimate => ({ input: 320, output: 240 }),
 };
 
 export const sumEstimates = (...e: Estimate[]): Estimate => e.reduce((a, b) => ({ input: a.input + b.input, output: a.output + b.output }), { input: 0, output: 0 });

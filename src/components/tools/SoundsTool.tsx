@@ -22,7 +22,7 @@ import {
 import { remaining } from '../../lib/pomodoroRule';
 import { usePomodoro } from '../../lib/pomodoro';
 import { toolWindows } from '../../lib/toolWindows';
-import { IconClose, IconPause, IconPlay, IconPlus, IconPopout, IconSpeaker, IconStop } from '../Icons';
+import { IconChevronDown, IconClock, IconClose, IconPause, IconPlay, IconPlus, IconPopout, IconSpeaker, IconStarLine, IconStop } from '../Icons';
 
 /** Thin line pictures for the sounds. */
 const SOUND_ICON: Record<SoundId, string> = {
@@ -60,8 +60,15 @@ export function SoundsTool({ compact = false }: { compact?: boolean }) {
   const pomo = usePomodoro();
   const [favs, setFavs] = useState<Favourite[]>(loadFavourites);
   const [name, setName] = useState('');
-  const [compactTab, setCompactTab] = useState<'mix' | SoundGroup>('mix');
-  const active = Object.keys(a.playing).length > 0;
+  const [pillMode, setPillMode] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState<boolean | null>(null);
+  const [drawerTab, setDrawerTab] = useState<'presets' | 'sounds'>('presets');
+  const [soundGroup, setSoundGroup] = useState<SoundGroup>('natur');
+  const [timerOpen, setTimerOpen] = useState(false);
+  const [savedToast, setSavedToast] = useState(false);
+
+  const activeIds = Object.keys(a.playing) as SoundId[];
+  const active = activeIds.length > 0;
   const timerLeft = a.timerEnd ? Math.max(0, Math.round((a.timerEnd - Date.now()) / 60000)) : null;
   const pomoMin = pomo.running && pomo.phase === 'work' ? Math.ceil(remaining(pomo, Date.now()) / 60000) : 0;
 
@@ -71,6 +78,8 @@ export function SoundsTool({ compact = false }: { compact?: boolean }) {
     setFavs(list);
     saveFavourites(list);
     setName('');
+    setSavedToast(true);
+    window.setTimeout(() => setSavedToast(false), 1600);
   };
   const removeFav = (n: string) => {
     const list = favs.filter((f) => f.name !== n);
@@ -80,98 +89,313 @@ export function SoundsTool({ compact = false }: { compact?: boolean }) {
 
   if (compact) {
     const presets = [...favs, ...PRESETS];
-    const groupHasActive = (g: SoundGroup) => SOUNDS.some((s) => s.group === g && a.playing[s.id] !== undefined);
-    const tabs: { id: 'mix' | SoundGroup; label: string; dot?: boolean }[] = [
-      { id: 'mix', label: 'Mix' },
-      { id: 'natur', label: 'Natur', dot: groupHasActive('natur') },
-      { id: 'rauschen', label: 'Rauschen', dot: groupHasActive('rauschen') },
-      { id: 'musik', label: 'Musik', dot: groupHasActive('musik') },
-    ];
-    return (
-      <div className="snd-mini">
-        <div className={`snd-mini-now${active && !a.paused ? ' playing' : ''}`}>
+    const showDrawer = drawerOpen !== null ? drawerOpen : !active;
+    const quickStart = () => {
+      if (active) {
+        if (a.paused) resumeAll();
+        else pauseAll();
+      } else {
+        playMix((presets[0] ?? PRESETS[0]).mix);
+      }
+    };
+
+    // Ultra-compact single-row Audio Pill mode
+    if (pillMode) {
+      return (
+        <div className={`snd-pill${active && !a.paused ? ' playing' : ''}`}>
+          <button
+            type="button"
+            className="snd-pop-play sm"
+            onClick={quickStart}
+            aria-label={active && !a.paused ? 'Pause' : 'Abspielen'}
+            title={active && !a.paused ? 'Pause' : 'Abspielen'}
+          >
+            {active && !a.paused ? <IconPause size={13} /> : <IconPlay size={13} />}
+          </button>
           <span className="sounds-eq small" aria-hidden="true">
             <i />
             <i />
             <i />
             <i />
           </span>
-          <span className="snd-mini-title" title={active ? mixLabel(a.playing) : 'Kein Klang aktiv'}>
-            {active ? mixLabel(a.playing) : 'Kein Klang aktiv'}
+          <span className="snd-pill-title" title={active ? mixLabel(a.playing) : 'Kein Klang aktiv'}>
+            {active ? mixLabel(a.playing) : 'Bereit'}
           </span>
+          <input
+            type="range"
+            className="snd-pill-vol"
+            min={0}
+            max={1}
+            step={0.01}
+            value={a.master}
+            aria-label="Gesamtlautstärke"
+            onChange={(e) => setMasterVolume(Number(e.target.value))}
+          />
           {active && (
-            <span className="snd-mini-ctrls">
-              <button type="button" className="snd-mini-btn primary" onClick={a.paused ? resumeAll : pauseAll} aria-label={a.paused ? 'Weiter' : 'Pause'} title={a.paused ? 'Weiter' : 'Pause'}>
-                {a.paused ? <IconPlay size={12} /> : <IconPause size={12} />}
-              </button>
-              <button type="button" className="snd-mini-btn" onClick={stopAll} aria-label="Stopp" title="Stopp">
+            <button type="button" className="snd-pop-iconbtn" onClick={stopAll} aria-label="Stopp" title="Stopp">
+              <IconStop size={12} />
+            </button>
+          )}
+          <button type="button" className="snd-pop-iconbtn" onClick={() => setPillMode(false)} aria-label="Mixer aufklappen" title="Studio-Mixer aufklappen">
+            <IconChevronDown size={14} />
+          </button>
+        </div>
+      );
+    }
+
+    const activeSounds = SOUNDS.filter((s) => a.playing[s.id] !== undefined);
+    const statusText = !active
+      ? 'Wähle unten eine Mischung oder einen Klang'
+      : [
+          a.paused ? 'Pausiert' : `${activeSounds.length} ${activeSounds.length === 1 ? 'Klang' : 'Klänge'} aktiv`,
+          timerLeft !== null ? `stoppt in ${timerLeft} Min.` : '',
+        ]
+          .filter(Boolean)
+          .join(' · ');
+
+    return (
+      <div className="snd-pop">
+        {/* Hero Player Card */}
+        <div className={`snd-pop-hero${active && !a.paused ? ' playing' : ''}`}>
+          <button
+            type="button"
+            className="snd-pop-play"
+            onClick={quickStart}
+            aria-label={active && !a.paused ? 'Pause' : 'Abspielen'}
+            title={active ? (a.paused ? 'Weiter' : 'Pause') : `Startet „${(presets[0] ?? PRESETS[0]).name}“`}
+          >
+            {active && !a.paused ? <IconPause size={16} /> : <IconPlay size={16} />}
+          </button>
+
+          <div className="snd-pop-meta">
+            <div className="snd-pop-title-row">
+              <span className="sounds-eq small" aria-hidden="true">
+                <i />
+                <i />
+                <i />
+                <i />
+              </span>
+              <b title={active ? mixLabel(a.playing) : 'Lern-Klänge'}>{active ? mixLabel(a.playing) : 'Lern-Klänge'}</b>
+            </div>
+            <small>{statusText}</small>
+          </div>
+
+          <div className="snd-pop-head-acts">
+            <button
+              type="button"
+              className={`snd-pop-iconbtn${timerOpen || timerLeft !== null ? ' on' : ''}`}
+              onClick={() => setTimerOpen((v) => !v)}
+              aria-label="Sleep-Timer"
+              title={timerLeft !== null ? `Timer: ${timerLeft} Min.` : 'Sleep-Timer stellen'}
+            >
+              <IconClock size={13} />
+            </button>
+            {active && (
+              <button type="button" className="snd-pop-iconbtn" onClick={stopAll} aria-label="Alle stoppen" title="Alle stoppen">
                 <IconStop size={12} />
               </button>
-            </span>
-          )}
-        </div>
-
-        <label className="snd-mini-vol">
-          <IconSpeaker size={14} />
-          <input type="range" min={0} max={1} step={0.01} value={a.master} aria-label="Lautstärke" onChange={(e) => setMasterVolume(Number(e.target.value))} />
-          <small>{Math.round(a.master * 100)}%</small>
-        </label>
-
-        <div className="snd-mini-tabs" role="tablist" aria-label="Klang-Kategorien">
-          {tabs.map((t) => (
+            )}
             <button
-              key={t.id}
               type="button"
-              role="tab"
-              aria-selected={compactTab === t.id}
-              className={`snd-mini-tab${compactTab === t.id ? ' on' : ''}`}
-              onClick={() => setCompactTab(t.id)}
+              className="snd-pop-iconbtn"
+              onClick={() => setPillMode(true)}
+              aria-label="Mini-Pille"
+              title="Als kompakte Audio-Pille anzeigen"
             >
-              {t.label}
-              {t.dot && <i className="snd-mini-dot" aria-hidden="true" />}
+              <IconChevronDown size={14} style={{ transform: 'rotate(180deg)' }} />
             </button>
-          ))}
+          </div>
         </div>
 
-        {compactTab === 'mix' ? (
-          <div className="snd-mini-presets">
-            {presets.map((f, k) => (
-              <button key={f.name + k} type="button" className="snd-mini-preset" onClick={() => playMix(f.mix)}>
-                <IconPlay size={11} />
-                <span>{f.name}</span>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <div className="snd-mini-list">
-            {SOUNDS.filter((s) => s.group === compactTab).map((s) => {
-              const on = a.playing[s.id] !== undefined;
-              return (
-                <div key={s.id} className={`snd-mini-row${on ? ' on' : ''}`}>
-                  <button type="button" className="snd-mini-row-btn" aria-pressed={on} onClick={() => toggleSound(s.id)}>
-                    <span className="snd-mini-ico">
-                      <SoundIcon id={s.id} size={14} />
-                    </span>
-                    <span className="snd-mini-name">{s.label}</span>
-                    <span className="snd-mini-state">{on ? 'An' : ''}</span>
-                  </button>
-                  {on && (
-                    <input
-                      type="range"
-                      className="snd-mini-slider"
-                      min={0}
-                      max={1}
-                      step={0.01}
-                      value={a.playing[s.id]}
-                      aria-label={`Lautstärke ${s.label}`}
-                      onChange={(e) => setSoundVolume(s.id, Number(e.target.value))}
-                    />
-                  )}
-                </div>
-              );
-            })}
+        {/* Master Volume Row */}
+        <div className="snd-pop-vol">
+          <button
+            type="button"
+            className="snd-pop-mute"
+            aria-label={a.master > 0 ? 'Stumm schalten' : 'Ton einschalten'}
+            title={a.master > 0 ? 'Stumm schalten' : 'Ton einschalten'}
+            onClick={() => setMasterVolume(a.master > 0 ? 0 : 0.7)}
+          >
+            <IconSpeaker size={14} />
+          </button>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={a.master}
+            aria-label="Gesamtlautstärke"
+            onChange={(e) => setMasterVolume(Number(e.target.value))}
+          />
+          <small>{Math.round(a.master * 100)}%</small>
+        </div>
+
+        {/* Inline Sleep-Timer Bar */}
+        {timerOpen && (
+          <div className="snd-pop-timer">
+            <small className="muted">Stoppt nach:</small>
+            <div className="snd-pop-timer-chips">
+              {[15, 30, 60].map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  className={`chip sm${timerLeft !== null && Math.abs(timerLeft - m) < 1 ? ' on' : ''}`}
+                  onClick={() => (setSleepTimer(m), setTimerOpen(false))}
+                >
+                  {m}m
+                </button>
+              ))}
+              {pomoMin > 0 && (
+                <button type="button" className="chip sm" onClick={() => (setSleepTimer(pomoMin), setTimerOpen(false))}>
+                  Pomo ({pomoMin}m)
+                </button>
+              )}
+              {a.timerEnd && (
+                <button type="button" className="chip sm" onClick={() => (setSleepTimer(null), setTimerOpen(false))}>
+                  Aus
+                </button>
+              )}
+            </div>
           </div>
         )}
+
+        {/* Active Tracks Live Mixer – immediately visible without hunting through tabs */}
+        {activeSounds.length > 0 && (
+          <div className="snd-pop-tracks">
+            <div className="snd-pop-sec-head">
+              <small>Aktiver Mix</small>
+              <button
+                type="button"
+                className="snd-pop-textbtn"
+                onClick={saveFav}
+                title="Aktuellen Mix als Favorit speichern"
+              >
+                <IconStarLine size={11} /> {savedToast ? 'Gespeichert ✓' : 'Merken'}
+              </button>
+            </div>
+            {activeSounds.map((s) => (
+              <div key={s.id} className="snd-pop-track">
+                <span className="snd-pop-track-ico">
+                  <SoundIcon id={s.id} size={13} />
+                </span>
+                <span className="snd-pop-track-name" title={s.label}>
+                  {s.label}
+                </span>
+                <input
+                  type="range"
+                  className="snd-pop-track-slider"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={a.playing[s.id] ?? 0.7}
+                  aria-label={`Lautstärke ${s.label}`}
+                  onChange={(e) => setSoundVolume(s.id, Number(e.target.value))}
+                />
+                <button
+                  type="button"
+                  className="snd-pop-track-rm"
+                  aria-label={`${s.label} entfernen`}
+                  title="Aus Mix entfernen"
+                  onClick={() => toggleSound(s.id)}
+                >
+                  <IconClose size={11} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Collapsible Presets & Sounds Drawer */}
+        <div className="snd-pop-drawer">
+          <button
+            type="button"
+            className="snd-pop-drawer-toggle"
+            aria-expanded={showDrawer}
+            onClick={() => setDrawerOpen(!showDrawer)}
+          >
+            <span>
+              <IconPlus size={12} /> Klänge &amp; Mischungen
+            </span>
+            <IconChevronDown size={14} style={{ transform: showDrawer ? 'rotate(180deg)' : undefined }} />
+          </button>
+
+          {showDrawer && (
+            <div className="snd-pop-drawer-body">
+              <div className="snd-pop-seg" role="tablist">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={drawerTab === 'presets'}
+                  className={drawerTab === 'presets' ? 'on' : ''}
+                  onClick={() => setDrawerTab('presets')}
+                >
+                  Mischungen
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={drawerTab === 'sounds'}
+                  className={drawerTab === 'sounds' ? 'on' : ''}
+                  onClick={() => setDrawerTab('sounds')}
+                >
+                  Alle Klänge ({SOUNDS.length})
+                </button>
+              </div>
+
+              {drawerTab === 'presets' ? (
+                <div className="snd-pop-presets">
+                  {presets.map((f, k) => (
+                    <button
+                      key={f.name + k}
+                      type="button"
+                      className="snd-pop-preset"
+                      onClick={() => {
+                        playMix(f.mix);
+                        setDrawerOpen(false);
+                      }}
+                    >
+                      <IconPlay size={11} />
+                      <span>{f.name}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <>
+                  <div className="snd-pop-cats">
+                    {(['natur', 'rauschen', 'musik'] as SoundGroup[]).map((g) => (
+                      <button
+                        key={g}
+                        type="button"
+                        className={`chip sm${soundGroup === g ? ' on' : ''}`}
+                        onClick={() => setSoundGroup(g)}
+                      >
+                        {g === 'rauschen' ? 'Orte & Rauschen' : GROUP_LABEL[g]}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="snd-pop-tiles">
+                    {SOUNDS.filter((s) => s.group === soundGroup).map((s) => {
+                      const on = a.playing[s.id] !== undefined;
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          className={`snd-pop-tile${on ? ' on' : ''}`}
+                          aria-pressed={on}
+                          title={s.hint}
+                          onClick={() => toggleSound(s.id)}
+                        >
+                          <SoundIcon id={s.id} size={17} />
+                          <span>{s.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     );
   }

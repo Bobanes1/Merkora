@@ -49,6 +49,7 @@ const JOB_WORK: Record<JobKind, string[]> = {
   summary: ['Material lesen', 'Gliederung finden', 'Zusammenfassung schreiben'],
   quiz: ['Material lesen', 'Fragen formulieren', 'Antworten mischen'],
   practice: ['Material lesen', 'Aufgaben erstellen', 'Lösungswege aufschreiben'],
+  podcast: ['Material lesen', 'Gespräch strukturieren', '2-Stimmen-Skript schreiben'],
 };
 
 /** One job: the current step and a bar that follows the usual duration of this kind of job (never „done“ before it is). */

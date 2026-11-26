@@ -6,6 +6,7 @@ import { DOMAIN_LABEL } from '../lib/practice';
 import { nextLesson, skillProgress } from '../lib/skills';
 import { updateSkill, useData, type Course, type DeckFile } from '../lib/store';
 import { IconClose, IconPlus, IconSparkle } from './Icons';
+import { Mascot } from './Mascot';
 import { StartSkillModal } from './StartSkillModal';
 
 /** Shows all Skills linked to a course/module, with quick link/unlink & creation from module materials. */
@@ -79,6 +80,7 @@ export function CourseSkills({ course, onOpenMaterial }: { course: Course; onOpe
         </div>
       ) : (
         <div className="course-skill-empty">
+          <Mascot who="pip" mood="wave" size={68} />
           <p className="muted small" style={{ margin: 0 }}>
             Noch kein Skill mit diesem Modul verknüpft.
             {materials.length > 0

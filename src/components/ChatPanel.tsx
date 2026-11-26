@@ -9,6 +9,8 @@ import { Markdown } from './Markdown';
 import { NoKeyNotice } from './NoKey';
 import { SpeakButton } from './SpeakButton';
 import { markdownSpeech } from '../lib/speechText';
+import { detectSpeechLang } from '../lib/speechLang';
+import { useVoiceInput } from '../lib/voiceInput';
 
 const SUGGESTIONS = [
   'Fasse dieses Deck für mich zusammen.',
@@ -32,6 +34,11 @@ export function ChatPanel({ deck, onClose }: { deck: Deck; onClose: () => void }
   const [savedIdx, setSavedIdx] = useState<Record<number, boolean>>({});
   const endRef = useRef<HTMLDivElement>(null);
   const msgs = deck.chat;
+  const voice = useVoiceInput({
+    lang: detectSpeechLang(deck.name, 'de'),
+    continuous: false,
+    onFinal: (t) => setInput((prev) => (prev ? `${prev} ${t}` : t)),
+  });
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end' });
@@ -172,18 +179,32 @@ export function ChatPanel({ deck, onClose }: { deck: Deck; onClose: () => void }
         className="chat-input"
         onSubmit={(e) => {
           e.preventDefault();
+          voice.stop();
           send(input);
         }}
       >
+        {voice.supported && (
+          <button
+            type="button"
+            className={`icon-btn sm chat-mic${voice.listening ? ' on' : ''}`}
+            disabled={!ready || busy}
+            aria-label={voice.listening ? 'Diktat stoppen' : 'Frage einsprechen'}
+            title={voice.listening ? 'Diktat stoppen' : 'Per Mikrofon diktieren'}
+            onClick={() => voice.toggle()}
+          >
+            {voice.listening ? '⏹' : '🎙'}
+          </button>
+        )}
         <textarea
           rows={2}
           value={input}
           disabled={!ready}
-          placeholder="Was möchtest du wissen?"
+          placeholder={voice.listening ? voice.interim || 'Ich höre zu …' : 'Was möchtest du wissen?'}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
+              voice.stop();
               send(input);
             }
           }}

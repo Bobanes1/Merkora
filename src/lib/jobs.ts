@@ -35,6 +35,7 @@ import {
 } from './ai';
 import { withGraphics } from './graphics';
 import { parsePractice, practicePrompt, type PracticeKind } from './practice';
+import { parsePodcast, podcastPrompt, type PodcastLength } from './podcast';
 import { renderSlides, slidesInPart } from './slideImages';
 import { deckFileBlob } from './deckFiles';
 import { avoidList, dropDuplicates } from './chunks';
@@ -47,6 +48,7 @@ export const JOB_LABEL: Record<JobKind, string> = {
   quiz: 'Quiz',
   cards: 'Karteikarten',
   practice: 'Übungsaufgaben',
+  podcast: 'Lern-Podcast',
 };
 /** Verb that fits the job's name ("Karteikarten werden …", "Zusammenfassung wird …"). */
 export const JOB_VERB: Record<JobKind, { is: string; could: string }> = {
@@ -54,8 +56,9 @@ export const JOB_VERB: Record<JobKind, { is: string; could: string }> = {
   quiz: { is: 'wird', could: 'konnte' },
   cards: { is: 'werden', could: 'konnten' },
   practice: { is: 'werden', could: 'konnten' },
+  podcast: { is: 'wird', could: 'konnte' },
 };
-export const JOB_TAB: Record<JobKind, string> = { summary: 'summary', quiz: 'quiz', cards: 'cards', practice: 'practice' };
+export const JOB_TAB: Record<JobKind, string> = { summary: 'summary', quiz: 'quiz', cards: 'cards', practice: 'practice', podcast: 'podcast' };
 
 // ---------- toasts ----------
 export type Toast = { id: string; text: string; jobId?: string; ok: boolean; /** Link target (e.g. the calendar). */ to?: string; toLabel?: string; /** Stays until closed. */ sticky?: boolean };
@@ -96,6 +99,10 @@ function promptFor(job: Job, deck: Deck, slides: string[] = []): Prompt {
       return quizPrompt(materialFrom(deck.source, deck.cards), p.count ?? 8);
     case 'practice':
       return practicePrompt(materialFrom(deck.source, deck.cards), ((job.params as { type?: PracticeKind }).type ?? 'auto') as PracticeKind, p.count ?? 8);
+    case 'podcast': {
+      const pr = podcastPrompt(deck.name, materialFrom(deck.source, deck.cards), ((p.minutes ?? 6) as PodcastLength));
+      return { system: pr.system, user: pr.user, maxTokens: pr.maxTokens, json: true };
+    }
     case 'cards': {
       const cp = job.params as CardParams;
       const part = cp.part;
@@ -237,6 +244,16 @@ async function applyResult(job: Job, text: string, pre?: CardResult): Promise<{ 
       const set = parsePractice(parseJson(text), Math.random().toString(36).slice(2, 10), Date.now());
       if (!set) throw new AiFormatError('Die KI hat keine brauchbaren Aufgaben geliefert. Bitte versuche es noch einmal.');
       updateDeck(job.deckId, (d) => ({ practice: [set, ...(d.practice ?? [])].slice(0, 20) }));
+      break;
+    }
+    case 'podcast': {
+      const parsed = parsePodcast(parseJson(text));
+      if (!parsed.lines.length) throw new AiFormatError('Die KI hat kein brauchbares Podcast-Skript geliefert. Bitte versuche es noch einmal.');
+      const minutes = Number((job.params as { minutes?: number }).minutes ?? 6);
+      updateDeck(job.deckId, {
+        podcast: parsed.lines,
+        podcastMeta: { title: parsed.title, createdAt: Date.now(), minutes },
+      });
       break;
     }
     case 'cards': {
