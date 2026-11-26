@@ -8,7 +8,7 @@ import { ChatPanel } from '../components/ChatPanel';
 import { ExamDialog } from '../components/ExamDialog';
 import { countdownText, nextExamForDeck } from '../lib/exams';
 import { estimateStudyMinutes, formatEstMinutes } from '../lib/deckTools';
-import { IconCalendar, IconCards, IconChart, IconChat, IconDoc, IconMatch, IconMindmap, IconNote, IconPath, IconPlay, IconPractice, IconQuiz, IconSettings, IconTarget } from '../components/Icons';
+import { IconBulb, IconCalendar, IconCards, IconChart, IconChat, IconDoc, IconHeadphones, IconMatch, IconMindmap, IconNote, IconPath, IconPlay, IconPractice, IconQuiz, IconSettings, IconTarget } from '../components/Icons';
 import MatchTab from './tabs/MatchTab';
 import PathTab from './tabs/PathTab';
 import { dueCards, findPath, setSettings, useData } from '../lib/store';
@@ -27,6 +27,8 @@ import SourceTab from './tabs/SourceTab';
 import SummaryTab from './tabs/SummaryTab';
 import MindmapTab from './tabs/MindmapTab';
 import OverviewTab from './tabs/OverviewTab';
+import FeynmanTab from './tabs/FeynmanTab';
+import PodcastTab from './tabs/PodcastTab';
 
 const TABS = [
   { id: 'cards', label: 'Karten', icon: IconCards, group: 'Lernen' },
@@ -35,8 +37,10 @@ const TABS = [
   { id: 'match', label: 'Zuordnen', icon: IconMatch, group: 'Üben' },
   { id: 'quiz', label: 'Quiz', icon: IconQuiz, group: 'Üben' },
   { id: 'practice', label: 'Aufgaben', icon: IconPractice, group: 'Üben' },
+  { id: 'feynman', label: 'Erklären', icon: IconBulb, group: 'Üben' },
   { id: 'exam', label: 'Prüfung üben', icon: IconTarget, group: 'Üben' },
   { id: 'summary', label: 'Zusammenfassung', icon: IconDoc, group: 'Verstehen' },
+  { id: 'podcast', label: 'Podcast', icon: IconHeadphones, group: 'Verstehen' },
   { id: 'mindmap', label: 'Mindmap', icon: IconMindmap, group: 'Verstehen' },
   { id: 'source', label: 'Material', icon: IconNote, group: 'Verstehen' },
 ] as const;
@@ -250,11 +254,13 @@ export default function DeckPage() {
             />
           )}
           {tab === 'summary' && <SummaryTab deck={deck} />}
+          {tab === 'podcast' && <PodcastTab key={deck.id} deck={deck} />}
           {tab === 'mindmap' && <MindmapTab deck={deck} onCards={(term) => setParams({ tab: 'cards', q: term })} />}
           {tab === 'quiz' && <QuizTab deck={deck} />}
+          {tab === 'feynman' && <FeynmanTab key={deck.id} deck={deck} />}
           {tab === 'exam' && <ExamTab deck={deck} />}
           {tab === 'practice' && <PracticeTab deck={deck} />}
-          {tab === 'source' && <SourceTab deck={deck} />}
+          {tab === 'source' && <SourceTab deck={deck} onStudyCards={launchCustom} />}
         </div>
       </div>
       {phone && tab !== 'learn' && tab !== 'overview' && (

@@ -1,24 +1,30 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { playUi } from '../../lib/uiSound';
-import { IconBulb, IconEdit, IconHelp, IconNote, IconPause, IconPlay, IconPlus, IconShuffle, IconSparkle } from '../../components/Icons';
+import { IconBulb, IconDoc, IconEdit, IconHelp, IconNote, IconPause, IconPlay, IconPlus, IconShuffle, IconSparkle } from '../../components/Icons';
 import { CardContent, lookOf } from '../../components/CardContent';
 import { DrawPad } from '../../components/DrawPad';
 import { Confetti, Mascot, praise, type Mood } from '../../components/Mascot';
 import { Markdown } from '../../components/Markdown';
 import { Modal } from '../../components/Modal';
+import { PdfSourceDrawer } from '../../components/PdfStudio';
 import { FocusButton } from '../../components/Pomodoro';
+import { VoiceStudyMode } from '../../components/VoiceStudyMode';
 import { countAnswerTime } from '../../lib/pomodoro';
-import { explainCard, gradeAnswer, hasKey } from '../../lib/ai';
+import { compareCards, explainCard, gradeAnswer, hasKey, quickAnalogy, transferQuestionsBatch } from '../../lib/ai';
 import { cardFrontText, htmlToText } from '../../lib/content';
+import { pdfFiles } from '../../lib/deckFiles';
 import { estimateStudyMinutes, formatEstMinutes, renderClozeAnswer, renderClozeQuestion } from '../../lib/deckTools';
+import { cleanCardText, findConfusableCards, resolveCardPage } from '../../lib/interference';
 import { RATINGS, formatDelay, schedule, type Rating, type Srs } from '../../lib/srs';
 import {
+  addCards,
   addXp,
   boostNewCards,
   dueCards,
   logReview,
   newCardsLeft,
   reviewCard,
+  setCardTransferQuestions,
   setSettings,
   toggleMark,
   toggleSuspendCard,
@@ -100,6 +106,12 @@ export default function LearnTab({
   const [leech, setLeech] = useState<string | null>(null);
   const [improving, setImproving] = useState<string | null>(null);
   const [missedIds, setMissedIds] = useState<string[]>([]);
+  const [voiceMode, setVoiceMode] = useState<{ ids: string[]; mode: 'due' | 'all' } | null>(null);
+  const [sourceOpen, setSourceOpen] = useState(false);
+  const [transferOn, setTransferOn] = useState(false);
+  const [transferBusy, setTransferBusy] = useState(false);
+  const [analogy, setAnalogy] = useState('');
+  const [compareDone, setCompareDone] = useState(false);
   const autoRead = useStore((s) => !!s.data.settings.speechAuto);
   // Pip's reactions: streaks, cards that finally sit, half time, last cards …
   const [run, setRun] = useState({ streak: 0, misses: 0, firstTry: 0, seen: new Set<string>() });
@@ -167,6 +179,9 @@ export default function LearnTab({
     setTyped('');
     setGrade(null);
     setExplain('');
+    setAnalogy('');
+    setCompareDone(false);
+    setSourceOpen(false);
     setError('');
   };
 
@@ -378,6 +393,65 @@ export default function LearnTab({
     }
   };
 
+  const doAnalogy = async () => {
+    if (!card) return;
+    setBusy('analogy');
+    setError('');
+    try {
+      setAnalogy(await quickAnalogy(plain(qa.question), plain(qa.answer)));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const confusables = useMemo(() => {
+    if (!card || (!isLeech(card) && card.srs.lapses < 2 && !missedIds.includes(card.id))) return [];
+    return findConfusableCards(activeCards, card, 2);
+  }, [card, activeCards, missedIds]);
+
+  const doCompare = async (other: Card) => {
+    if (!card) return;
+    setBusy('compare');
+    setError('');
+    try {
+      const res = await compareCards(
+        { front: cleanCardText(card.front), back: cleanCardText(card.back) },
+        { front: cleanCardText(other.front), back: cleanCardText(other.back) },
+      );
+      addCards(deck.id, [{ front: res.front, back: res.back, hint: res.hint, tags: ['Vergleich'] }]);
+      setCompareDone(true);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const toggleTransfer = async (next: boolean) => {
+    setTransferOn(next);
+    if (!next || !hasKey('chat')) return;
+    // Token-saving batch: prepare up to 8 uncached mature cards in queue in ONE single call
+    const uncached = queue
+      .map((id) => deck.cards.find((c) => c.id === id))
+      .filter((c): c is Card => !!c && c.srs.interval >= 7 && !c.transferQ && !c.html)
+      .slice(0, 8);
+    if (!uncached.length) return;
+    setTransferBusy(true);
+    setError('');
+    try {
+      const batch = await transferQuestionsBatch(
+        uncached.map((c) => ({ id: c.id, front: cleanCardText(c.front), back: cleanCardText(c.back) })),
+      );
+      if (Object.keys(batch).length) setCardTransferQuestions(deck.id, batch);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setTransferBusy(false);
+    }
+  };
+
   /** End of the round: share known at first try, and a new daily record. */
   const summary = () => {
     const perDay = new Map<string, number>();
@@ -394,6 +468,17 @@ export default function LearnTab({
         <p className="muted">Füge zuerst Karteikarten hinzu.</p>
       </div>
     );
+
+  if (voiceMode) {
+    return (
+      <VoiceStudyMode
+        deck={deck}
+        cardIds={voiceMode.ids}
+        mode={voiceMode.mode}
+        onClose={() => setVoiceMode(null)}
+      />
+    );
+  }
 
   if (mode === null || !card) {
     const effectiveCount = batchCap > 0 ? Math.min(batchCap, poolForFilter.length) : poolForFilter.length;
@@ -515,6 +600,18 @@ export default function LearnTab({
             <IconPlay size={14} /> Starten · {effectiveCount} {effectiveCount === 1 ? 'Karte' : 'Karten'}
             {est ? ` (${est})` : ''}
           </button>
+          <button
+            type="button"
+            className="btn outline"
+            disabled={effectiveCount === 0}
+            title="Freihändig mit Sprache & Piper-Vorlesen lernen (Standard: 0 API-Tokens)"
+            onClick={() => {
+              const ids = batchCap > 0 ? poolForFilter.slice(0, batchCap).map((c) => c.id) : poolForFilter.map((c) => c.id);
+              if (ids.length) setVoiceMode({ ids, mode: pickFilter === 'due' ? 'due' : 'all' });
+            }}
+          >
+            🎙 Audio-Modus
+          </button>
           {waiting > 0 && (
             <button
               type="button"
@@ -545,6 +642,8 @@ export default function LearnTab({
   }
 
   const total = done + queue.length;
+  const activeTransfer = transferOn && card.transferQ && card.srs.interval >= 7 ? card.transferQ : null;
+  const cardPage = pdfFiles(deck.files).length > 0 ? resolveCardPage(card, deck.source) : null;
   return (
     <div className="learn">
       <PhoneFullscreen on={phone} />
@@ -567,6 +666,26 @@ export default function LearnTab({
         </span>
         <span className="muted small">{modeLabel || (mode === 'due' ? 'Fällige Karten' : 'Freies Üben')}</span>
         {undoBtn}
+        {hasKey('chat') && !phone && (
+          <button
+            type="button"
+            className={`chip sm${transferOn ? ' on' : ''}`}
+            disabled={transferBusy}
+            title="Reife Karten als Anwendungs- oder Fehlersuche-Frage prüfen (1 sparsamer Batch-Call, dauerhaft gecacht)"
+            onClick={() => void toggleTransfer(!transferOn)}
+          >
+            {transferBusy ? 'Transfer …' : transferOn ? 'Transfer an' : 'Transfer'}
+          </button>
+        )}
+        <button
+          type="button"
+          className="icon-btn sm"
+          aria-label="Audio-Modus starten"
+          title="Freihändiger Audio-Modus (0 Tokens Standard)"
+          onClick={() => setVoiceMode({ ids: queue, mode })}
+        >
+          🎙
+        </button>
         <button type="button" className="icon-btn sm" aria-label="Karte bearbeiten" title="Karte bearbeiten (Taste E)" onClick={() => setEditingCard(true)}>
           <IconEdit size={14} />
         </button>
@@ -632,9 +751,16 @@ export default function LearnTab({
       >
         <MarkButton deckId={deck.id} card={card} className="fc-mark" />
         <small className="fc-label">
-          Frage <SpeakButton text={frontSpeech} label="Frage vorlesen" className="icon-btn fc-speak" />
+          {activeTransfer ? (activeTransfer.kind === 'spot_error' ? 'Transfer · Finde den Fehler' : 'Transfer · Anwendung') : 'Frage'}{' '}
+          <SpeakButton text={activeTransfer ? activeTransfer.q : frontSpeech} label="Frage vorlesen" className="icon-btn fc-speak" />
         </small>
-        <CardContent text={flipped && clozeFrontFilled ? clozeFrontFilled : shownQuestion} html={card.html} look={lookOf(deck, card)} className="fc-front" />
+        {activeTransfer ? (
+          <div className="fc-front transfer-q">
+            <Markdown text={activeTransfer.q} />
+          </div>
+        ) : (
+          <CardContent text={flipped && clozeFrontFilled ? clozeFrontFilled : shownQuestion} html={card.html} look={lookOf(deck, card)} className="fc-front" />
+        )}
         {!flipped && card.hint && (
           <div className="fc-clue" onClick={(e) => e.stopPropagation()}>
             {showHint ? (
@@ -652,23 +778,47 @@ export default function LearnTab({
           <>
             <hr />
             <small className="fc-label">
-              Antwort <SpeakButton text={backSpeech} label="Antwort vorlesen" className="icon-btn fc-speak" />
+              {activeTransfer ? 'Transfer-Lösung' : 'Antwort'}{' '}
+              <SpeakButton text={activeTransfer ? activeTransfer.a : backSpeech} label="Antwort vorlesen" className="icon-btn fc-speak" />
             </small>
-            {gq && (
+            {gq && !activeTransfer && (
               <p className="gq-solution">
                 Gesucht war: <b>{gq.label}</b>
               </p>
             )}
-            <CardContent text={shownAnswer} html={card.html} look={lookOf(deck, card)} className="fc-back" />
+            {activeTransfer ? (
+              <div className="fc-back">
+                <Markdown text={activeTransfer.a} />
+              </div>
+            ) : (
+              <CardContent text={shownAnswer} html={card.html} look={lookOf(deck, card)} className="fc-back" />
+            )}
             {card.hint && (
               <div className="fc-clue-box after">
                 <IconBulb size={13} /> <small>{card.hint}</small>
+              </div>
+            )}
+            {cardPage && (
+              <div className="fc-source-row" onClick={(e) => e.stopPropagation()}>
+                <button type="button" className="source-ref-chip" onClick={() => setSourceOpen(true)}>
+                  <IconDoc size={13} /> S. {cardPage} · Im Skript zeigen
+                </button>
               </div>
             )}
           </>
         )}
         {!flipped && !typeMode && <span className="fc-hint">{phone ? 'Tippen zum Umdrehen – danach wischen: ← Nochmal, Gut →' : 'Klicken oder Leertaste zum Umdrehen'}</span>}
       </div>
+
+      {sourceOpen && cardPage && (
+        <PdfSourceDrawer
+          deck={deck}
+          page={cardPage}
+          fileId={card.sourceRef?.fileId}
+          excerpt={card.sourceRef?.excerpt}
+          onClose={() => setSourceOpen(false)}
+        />
+      )}
 
       {typeMode && !flipped && (
         <div className="type-answer">
@@ -690,9 +840,36 @@ export default function LearnTab({
           <p>{grade.feedback}</p>
         </div>
       )}
+      {analogy && (
+        <div className="explain analogy-box">
+          <b className="small">Pip-Alltagsanalogie</b>
+          <Markdown text={analogy} />
+        </div>
+      )}
       {explain && (
         <div className="explain">
           <Markdown text={explain} />
+        </div>
+      )}
+      {flipped && confusables.length > 0 && (
+        <div className="anti-leech-box">
+          <div className="row-gap between">
+            <span className="small">
+              <b>Verwechslungsgefahr erkannt:</b> ähnlich zu „{cleanCardText(confusables[0].card.front).slice(0, 62)}“
+            </span>
+            {compareDone ? (
+              <span className="pill-ok small">Vergleichskarte gespeichert</span>
+            ) : hasKey('chat') ? (
+              <button
+                type="button"
+                className="btn outline sm"
+                disabled={busy === 'compare'}
+                onClick={() => void doCompare(confusables[0].card)}
+              >
+                <IconSparkle size={13} /> {busy === 'compare' ? 'Wird erstellt …' : 'Vergleichskarte bauen'}
+              </button>
+            ) : null}
+          </div>
         </div>
       )}
       {error && (
@@ -728,11 +905,18 @@ export default function LearnTab({
           </label>
         </div>
       )}
-      {flipped && !explain && hasKey('chat') && (
+      {flipped && hasKey('chat') && (
         <div className="row-gap center">
-          <button type="button" className="btn ghost sm" onClick={doExplain} disabled={busy === 'explain'}>
-            <IconSparkle size={14} /> {busy === 'explain' ? 'Erklärung wird erstellt …' : 'Von der KI erklären lassen'}
-          </button>
+          {!analogy && (
+            <button type="button" className="btn ghost sm" onClick={doAnalogy} disabled={busy === 'analogy'}>
+              <IconBulb size={14} /> {busy === 'analogy' ? 'Analogie …' : 'Alltagsanalogie'}
+            </button>
+          )}
+          {!explain && (
+            <button type="button" className="btn ghost sm" onClick={doExplain} disabled={busy === 'explain'}>
+              <IconSparkle size={14} /> {busy === 'explain' ? 'Erklärung wird erstellt …' : 'Ausführlich erklären'}
+            </button>
+          )}
         </div>
       )}
     </div>

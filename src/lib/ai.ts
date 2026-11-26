@@ -1066,3 +1066,71 @@ export async function explainTerm(term: string, branch: string, deckName: string
     { system: `Du bist Pip, ein geduldiger Lerntutor. ${LANG_RULE}`, maxTokens: 700, purpose: 'chat' },
   );
 }
+
+/** Anti-Leech: creates one crisp comparison flashcard + mnemonic distinguishing two frequently confused cards. */
+export async function compareCards(
+  cardA: { front: string; back: string },
+  cardB: { front: string; back: string },
+): Promise<{ front: string; back: string; hint: string }> {
+  const r = await completeJson<{ front?: unknown; back?: unknown; hint?: unknown }>(
+    `Du erstellst eine glasklare Vergleichs-Lernkarte, um zwei häufig verwechselte Konzepte dauerhaft auseinanderzuhalten. ${LANG_RULE}
+- "front": kurze, konkrete Unterscheidungsfrage (z. B. "Worin unterscheiden sich X und Y?").
+- "back": ultraklare Gegenüberstellung in 2–4 knappen Stichpunkten (mit **Fettung** der Schlüsselwörter).
+- "hint": eine einprägsame 1-Satz-Eselsbrücke zum Auseinanderhalten.
+Format: {"front":"...","back":"...","hint":"..."}`,
+    `Karte 1:\nF: ${cardA.front}\nA: ${cardA.back}\n\nKarte 2:\nF: ${cardB.front}\nA: ${cardB.back}`,
+    700,
+    'chat',
+  );
+  const front = String(r.front ?? '').trim();
+  const back = String(r.back ?? '').trim();
+  const hint = String(r.hint ?? '').trim();
+  if (!front || !back) throw new AiError('Die KI konnte keine Vergleichskarte erstellen. Versuch es noch einmal.');
+  return { front, back, hint };
+}
+
+/** Anti-Leech: 2-sentence everyday analogy from Pip when a learner hits "Nicht verstanden". */
+export async function quickAnalogy(front: string, back: string): Promise<string> {
+  return complete(
+    [
+      {
+        role: 'user',
+        content: `Erkläre diese Lernkarte mit einer bildhaften, einprägsamen Alltagsanalogie in genau 2–3 kurzen Sätzen (kein Vorspann, kein Fachchinesisch):\n\nFrage: ${front}\nAntwort: ${back}`,
+      },
+    ],
+    { system: `Du bist Pip, ein bildhafter Lerntutor. ${LANG_RULE}`, maxTokens: 260, purpose: 'chat' },
+  );
+}
+
+/**
+ * Token-efficient batch generator for Transfer-Check variants of mature cards (5–8 cards in ONE call, cached permanently).
+ */
+export async function transferQuestionsBatch(
+  cards: { id: string; front: string; back: string }[],
+): Promise<Record<string, { q: string; a: string; kind: 'apply' | 'spot_error' }>> {
+  if (!cards.length) return {};
+  const batch = cards.slice(0, 8);
+  const list = batch.map((c, i) => `[${i + 1}] id=${c.id}\nF: ${c.front.slice(0, 180)}\nA: ${c.back.slice(0, 240)}`).join('\n\n');
+  const r = await completeJson<{ items?: unknown }>(
+    `Du erstellst zu bestehenden Lernkarten jeweils EINE kurze Transfer-Prüffrage, damit echtes Verständnis statt Mustererkennung getestet wird. ${LANG_RULE}
+Wechsle ab zwischen:
+- "apply": kurzes Alltags-/Fallbeispiel (1–2 Sätze), bei dem man das Konzept anwenden muss.
+- "spot_error": eine plausibel klingende Aussage mit EINEM fachlichen Fehler, den der Lernende finden soll.
+Antworte ausschließlich als JSON:
+{"items":[{"id":"...","kind":"apply","q":"...","a":"Knappe, klare Lösung (1–2 Sätze)"}]}`,
+    list,
+    batch.length * 150 + 250,
+    'chat',
+  );
+  const out: Record<string, { q: string; a: string; kind: 'apply' | 'spot_error' }> = {};
+  const validIds = new Set(batch.map((c) => c.id));
+  for (const item of Array.isArray(r.items) ? r.items : []) {
+    const o = (item ?? {}) as { id?: unknown; kind?: unknown; q?: unknown; a?: unknown };
+    const id = String(o.id ?? '').trim();
+    const q = String(o.q ?? '').trim();
+    const a = String(o.a ?? '').trim();
+    const kind = o.kind === 'spot_error' ? 'spot_error' : 'apply';
+    if (validIds.has(id) && q && a) out[id] = { q, a, kind };
+  }
+  return out;
+}

@@ -1,5 +1,5 @@
 import { isImageFile, ocrImageBlob, ocrPdfPages } from './ocr';
-import { pagesToText, stripRepeatedLines } from './pdfText';
+import { pagesToIndexedText, stripRepeatedLines } from './pdfText';
 
 /** File types the AI card creation & Materialbox can read (including photos/scans via Offline-OCR). */
 export const MATERIAL_ACCEPT =
@@ -55,8 +55,8 @@ export async function readFileText(file: File, onProgress?: (status: string) => 
         if (txt && txt.length > pages[pageNum - 1].length) pages[pageNum - 1] = txt;
       }
     }
-    // headers / footers repeated on every slide are left out
-    const text = pagesToText(stripRepeatedLines(pages));
+    // headers / footers repeated on every slide are left out; page anchors stay attached for Living Script Studio
+    const text = pagesToIndexedText(stripRepeatedLines(pages));
     if (!text) throw new Error('In diesem PDF wurde auch per Offline-OCR kein Text gefunden.');
     return text;
   }
@@ -137,10 +137,89 @@ export async function renderPdfPage(file: Blob, pageNo: number, width = 1400): P
   return renderPage(doc, pageNo, width);
 }
 
+/** Normalized [0..1] text span for interactive selection inside Living Script Studio. */
+export type PdfTextSpan = {
+  str: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+};
+
 /** An opened PDF for leafing through its slides (loaded once, every slide rendered on demand). */
-export async function openPdf(file: Blob): Promise<{ pages: number; render: (pageNo: number, width?: number, background?: boolean) => Promise<Blob>; close: () => void }> {
+export async function openPdf(file: Blob): Promise<{
+  pages: number;
+  render: (pageNo: number, width?: number, background?: boolean) => Promise<Blob>;
+  getPageTextItems: (pageNo: number) => Promise<PdfTextSpan[]>;
+  cropPageRect: (pageNo: number, rect: { x: number; y: number; w: number; h: number }, width?: number) => Promise<Blob>;
+  close: () => void;
+}> {
   const { doc } = await loadPdf(file);
-  return { pages: doc.numPages, render: (n, w = 1400, bg = false) => renderPage(doc, n, w, bg), close: () => void doc.destroy() };
+  return {
+    pages: doc.numPages,
+    render: (n, w = 1400, bg = false) => renderPage(doc, n, w, bg),
+    getPageTextItems: (n) => extractPageSpans(doc, n),
+    cropPageRect: (n, rect, w = 1600) => cropPage(doc, n, rect, w),
+    close: () => void doc.destroy(),
+  };
+}
+
+/** Extracts normalized [0..1] positioned text spans from a PDF page for selectable overlay. */
+async function extractPageSpans(doc: Awaited<ReturnType<typeof loadPdf>>['doc'], pageNo: number): Promise<PdfTextSpan[]> {
+  const page = await doc.getPage(pageNo);
+  const vp = page.getViewport({ scale: 1 });
+  const content = await page.getTextContent();
+  const spans: PdfTextSpan[] = [];
+  for (const raw of content.items as { str?: string; width?: number; height?: number; transform?: number[] }[]) {
+    const str = raw.str ?? '';
+    if (!str.trim() || !raw.transform) continue;
+    const tx = raw.transform;
+    const fontH = Math.hypot(tx[2], tx[3]) || Math.abs(raw.height ?? 12) || 12;
+    const xPt = tx[4];
+    const yPt = tx[5];
+    const wPt = Math.max(fontH * 0.4, raw.width ?? str.length * fontH * 0.5);
+    // PDF origin is bottom-left; convert to top-left normalized [0..1]
+    const x = Math.max(0, Math.min(1, xPt / vp.width));
+    const y = Math.max(0, Math.min(1, (vp.height - yPt - fontH * 0.9) / vp.height));
+    const w = Math.max(0.005, Math.min(1 - x, wPt / vp.width));
+    const h = Math.max(0.01, Math.min(1 - y, (fontH * 1.15) / vp.height));
+    spans.push({ str, x, y, w, h });
+  }
+  page.cleanup();
+  return spans;
+}
+
+/** Renders a cropped region [0..1] of a PDF page as a crisp JPEG Blob (for Snip → Card / Image Occlusion). */
+async function cropPage(
+  doc: Awaited<ReturnType<typeof loadPdf>>['doc'],
+  pageNo: number,
+  rect: { x: number; y: number; w: number; h: number },
+  width: number,
+): Promise<Blob> {
+  const page = await doc.getPage(pageNo);
+  const base = page.getViewport({ scale: 1 });
+  const viewport = page.getViewport({ scale: width / base.width });
+  const full = document.createElement('canvas');
+  full.width = Math.round(viewport.width);
+  full.height = Math.round(viewport.height);
+  const fctx = full.getContext('2d')!;
+  fctx.fillStyle = '#ffffff';
+  fctx.fillRect(0, 0, full.width, full.height);
+  await page.render({ canvasContext: fctx, viewport, canvas: full } as never).promise;
+  page.cleanup();
+
+  const sx = Math.max(0, Math.round(rect.x * full.width));
+  const sy = Math.max(0, Math.round(rect.y * full.height));
+  const sw = Math.max(16, Math.min(full.width - sx, Math.round(rect.w * full.width)));
+  const sh = Math.max(16, Math.min(full.height - sy, Math.round(rect.h * full.height)));
+  const out = document.createElement('canvas');
+  out.width = sw;
+  out.height = sh;
+  const octx = out.getContext('2d')!;
+  octx.fillStyle = '#ffffff';
+  octx.fillRect(0, 0, sw, sh);
+  octx.drawImage(full, sx, sy, sw, sh, 0, 0, sw, sh);
+  return new Promise((resolve, reject) => out.toBlob((b) => (b ? resolve(b) : reject(new Error('Ausschnitt konnte nicht gespeichert werden.'))), 'image/jpeg', 0.9));
 }
 
 /** `background`: drawn without waiting for screen frames (they stop while the app is hidden) – for pictures sent to the AI. */

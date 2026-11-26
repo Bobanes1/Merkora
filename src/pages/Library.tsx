@@ -40,6 +40,7 @@ import { allAcross, dueAcross } from '../lib/sessions';
 import { unifiedCourseMaterials } from '../lib/courseDocs';
 import { CourseDocs } from '../components/CourseDocs';
 import { CourseSkills } from '../components/CourseSkills';
+import { KnowledgeGraphView } from '../components/KnowledgeGraphView';
 import { usePhone } from '../lib/phone';
 import {
   addCourse,
@@ -627,8 +628,8 @@ function CourseView({
   );
   const activeCourseDecks = rawCourseDecks.filter((d) => !d.archived);
   const [selected, setSelected] = useState<string | null>(null);
-  // right column: the chosen deck's cards, the module Materialbox, or linked skills
-  const [view, setView] = useState<'deck' | 'docs' | 'skills'>(() => (activeCourseDecks.length === 0 ? 'docs' : 'deck'));
+  // right column: the chosen deck's cards, the module Materialbox, linked skills, or knowledge graph
+  const [view, setView] = useState<'deck' | 'docs' | 'skills' | 'graph'>(() => (activeCourseDecks.length === 0 ? 'docs' : 'deck'));
   const phone = usePhone();
   const docCount = unifiedCourseMaterials(course, data.decks).length;
   const skillCount = (data.skills ?? []).filter((s) => s.courseId === course.id).length;
@@ -766,6 +767,9 @@ function CourseView({
           <button type="button" className={'btn sm ' + (view === 'skills' ? 'soft' : 'outline')} aria-pressed={view === 'skills'} onClick={() => setView(view === 'skills' ? 'deck' : 'skills')}>
             <IconStar size={14} /> Skills{skillCount > 0 ? ` (${skillCount})` : ''}
           </button>
+          <button type="button" className={'btn sm ' + (view === 'graph' ? 'soft' : 'outline')} aria-pressed={view === 'graph'} onClick={() => setView(view === 'graph' ? 'deck' : 'graph')}>
+            Graph
+          </button>
           {studyButton(`Kurs: ${course.name}`, activeCourseDecks, (n) => (n ? `Ganzen Kurs lernen (${n}${dueEst ? ` · ${dueEst}` : ''})` : 'Ganzen Kurs üben'), 'btn primary sm')}
         </div>
         <div className="course-stats">
@@ -807,6 +811,10 @@ function CourseView({
         ) : phone && view === 'skills' ? (
           <section className="panel">
             <CourseSkills course={course} onOpenMaterial={() => setView('docs')} />
+          </section>
+        ) : phone && view === 'graph' ? (
+          <section className="panel">
+            <KnowledgeGraphView courseId={course.id} />
           </section>
         ) : (
         <section className="panel course-decks">
@@ -947,11 +955,16 @@ function CourseView({
             <button type="button" role="tab" aria-selected={view === 'skills'} className={view === 'skills' ? 'on' : ''} onClick={() => setView('skills')}>
               Skills{skillCount > 0 ? ` (${skillCount})` : ''}
             </button>
+            <button type="button" role="tab" aria-selected={view === 'graph'} className={view === 'graph' ? 'on' : ''} onClick={() => setView('graph')}>
+              Wissens-Graph
+            </button>
           </div>
           {view === 'docs' ? (
             <CourseDocs course={course} />
           ) : view === 'skills' ? (
             <CourseSkills course={course} onOpenMaterial={() => setView('docs')} />
+          ) : view === 'graph' ? (
+            <KnowledgeGraphView courseId={course.id} />
           ) : deck ? (
             <>
               <div className="preview-head">

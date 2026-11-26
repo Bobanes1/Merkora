@@ -2,13 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import { CreateWithAI } from '../../components/CreateWithAI';
 import { IconSparkle, IconStar, IconUpload } from '../../components/Icons';
 import { DeckFileList } from '../../components/DeckFileList';
+import { PdfStudio } from '../../components/PdfStudio';
 import { StartSkillModal } from '../../components/StartSkillModal';
 import { materialFrom } from '../../lib/ai';
-import { attachFiles } from '../../lib/deckFiles';
+import { attachFiles, pdfFiles } from '../../lib/deckFiles';
 import { MATERIAL_ACCEPT, readFileText } from '../../lib/files';
 import { updateDeck, type Deck } from '../../lib/store';
 
-export default function SourceTab({ deck }: { deck: Deck }) {
+export default function SourceTab({ deck, onStudyCards }: { deck: Deck; onStudyCards?: (ids: string[], label: string) => void }) {
   const [text, setText] = useState(deck.source);
   const [saved, setSaved] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -17,6 +18,8 @@ export default function SourceTab({ deck }: { deck: Deck }) {
   const [skillModal, setSkillModal] = useState(false);
   /** PDFs picked while the deck already has text: show only as slides, or also add their text? */
   const [pending, setPending] = useState<File[] | null>(null);
+  const pdfs = pdfFiles(deck.files);
+  const nonPdfFiles = (deck.files ?? []).filter((f) => !pdfs.some((p) => p.id === f.id));
   const hasFiles = (deck.files?.length ?? 0) > 0;
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -84,8 +87,8 @@ export default function SourceTab({ deck }: { deck: Deck }) {
     <div className="panel source">
       <div className="toolbar">
         <div>
-          <b className="toolbar-title">Lernmaterial</b>
-          <p className="muted small">Grundlage für Zusammenfassung, Quiz, Tutor und Skills. {saved ? 'Gespeichert.' : 'Wird gespeichert …'}</p>
+          <b className="toolbar-title">Lernmaterial &amp; Skript-Studio</b>
+          <p className="muted small">PDFs direkt markieren, Diagramme ausschneiden &amp; per Heatmap lernen. {saved ? 'Gespeichert.' : 'Wird gespeichert …'}</p>
         </div>
         <span className="grow" />
         <button type="button" className="btn outline sm" onClick={() => fileRef.current?.click()} disabled={busy}>
@@ -125,7 +128,8 @@ export default function SourceTab({ deck }: { deck: Deck }) {
           </div>
         </div>
       )}
-      <DeckFileList deck={deck} />
+      {pdfs.length > 0 && <PdfStudio deck={deck} onStudyCards={onStudyCards} />}
+      {nonPdfFiles.length > 0 && <DeckFileList deck={{ ...deck, files: nonPdfFiles }} />}
       {hasFiles ? (
         <details className="source-details">
           <summary>

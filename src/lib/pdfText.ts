@@ -43,3 +43,68 @@ export const pagesToText = (pages: string[]) =>
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+
+const PAGE_MARKER_RE = /^\[\[PAGE:(\d+)\]\]$/gm;
+
+/** Joins pages while preserving lightweight `[[PAGE:N]]` markers so cards & search know their exact PDF page. */
+export function pagesToIndexedText(pages: string[]): string {
+  const parts: string[] = [];
+  pages.forEach((raw, idx) => {
+    const clean = raw.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+    if (clean) parts.push(`[[PAGE:${idx + 1}]]\n${clean}`);
+  });
+  return parts.join('\n\n').trim();
+}
+
+/** Removes `[[PAGE:N]]` markers for clean reading, TTS or display. */
+export function stripPageMarkers(text: string): string {
+  return text.replace(PAGE_MARKER_RE, '').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+/** Splits indexed source text back into `{ page, text }` entries. */
+export function splitIndexedPages(source: string): { page: number; text: string }[] {
+  if (!source.includes('[[PAGE:')) return [];
+  const out: { page: number; text: string }[] = [];
+  const re = /\[\[PAGE:(\d+)\]\]\s*/g;
+  let match: RegExpExecArray | null;
+  const starts: { page: number; start: number; markerStart: number }[] = [];
+  while ((match = re.exec(source))) {
+    starts.push({ page: Number(match[1]), start: re.lastIndex, markerStart: match.index });
+  }
+  for (let i = 0; i < starts.length; i++) {
+    const end = i + 1 < starts.length ? starts[i + 1].markerStart : source.length;
+    const text = source.slice(starts[i].start, end).trim();
+    if (text) out.push({ page: starts[i].page, text });
+  }
+  return out;
+}
+
+/**
+ * Finds the best matching PDF page number for a card or excerpt inside indexed source text.
+ * Returns null if the source has no page markers or no meaningful overlap.
+ */
+export function findPageForExcerpt(source: string, query: string): number | null {
+  const pages = splitIndexedPages(source);
+  if (!pages.length) return null;
+  const clean = query
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\$\$?[^$]+\$\$?/g, ' ')
+    .replace(/[^\p{L}\p{N}\s]+/gu, ' ')
+    .toLowerCase();
+  const terms = [...new Set(clean.split(/\s+/).filter((w) => w.length >= 4))].slice(0, 14);
+  if (!terms.length) return null;
+  let bestPage: number | null = null;
+  let bestScore = 0;
+  for (const p of pages) {
+    const low = p.text.toLowerCase();
+    let score = 0;
+    for (const t of terms) {
+      if (low.includes(t)) score += t.length >= 7 ? 2 : 1;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestPage = p.page;
+    }
+  }
+  return bestScore >= 2 ? bestPage : null;
+}

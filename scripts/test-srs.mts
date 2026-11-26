@@ -3338,6 +3338,135 @@ console.log('App-weite Upgrades: Offline-Quiz, Statistik-Analyse, Zusammenfassun
       M3D.matchModel3DForTopic('Französische Revolution') === null,
     'Skills-Lektionen: 3D-Modelle werden als Lab geparst und bei passenden Themen automatisch eingebettet',
   );
+
+  // --- v0.14.0 tests: Living Script Studio, Voice, Anti-Leech, Knowledge Graph, Autopilot, Podcast, Feynman ---
+  const PDFT = await import('../src/lib/pdfText');
+  const indexed = PDFT.pagesToIndexedText(['Einleitung Zellbiologie', 'Mitochondrien erzeugen ATP durch Zellatmung', '']);
+  ok(
+    indexed.includes('[[PAGE:2]]') &&
+      PDFT.stripPageMarkers(indexed).indexOf('[[PAGE:') === -1 &&
+      PDFT.findPageForExcerpt(indexed, 'Mitochondrien ATP Zellatmung') === 2,
+    'Living Script Studio: PDF-Seitenanker bleiben erhalten und ordnen Auszüge exakt zu',
+  );
+
+  const VI = await import('../src/lib/voiceInput');
+  ok(
+    VI.parseVoiceCommand('Gut')?.type === 'rate' &&
+      (VI.parseVoiceCommand('Nochmal') as { rating?: number })?.rating === 1 &&
+      VI.parseVoiceCommand('Antwort zeigen') === null &&
+      VI.parseVoiceCommand('zeigen')?.type === 'reveal' &&
+      VI.speechLocaleFor('en') === 'en-US',
+    'Audio-Modus: Sprachbefehle & Lokalisierung werden sauber erkannt',
+  );
+
+  const INT = await import('../src/lib/interference');
+  const mockCards = [
+    { id: 'c1', front: 'Was ist Mitose?', back: 'Zellteilung mit zwei genetisch identischen Tochterzellen.', createdAt: 1, srs: { ease: 2.3, interval: 1, reps: 2, lapses: 4, due: 1, last: 1 } },
+    { id: 'c2', front: 'Was ist Meiose?', back: 'Zellteilung mit vier genetisch verschiedenen Keimzellen.', createdAt: 1, srs: { ease: 2.3, interval: 1, reps: 2, lapses: 2, due: 1, last: 1 } },
+    { id: 'c3', front: 'Hauptstadt von Frankreich?', back: 'Paris', createdAt: 1, srs: { ease: 2.5, interval: 20, reps: 5, lapses: 0, due: 9e12, last: Date.now() } },
+  ];
+  const conf = INT.findConfusableCards(mockCards as never, mockCards[0] as never, 2);
+  const vm = INT.localVoiceMatch('Zellteilung mit zwei identischen Tochterzellen', mockCards[0].back);
+  const heat = INT.pageMasteryHeatmap(
+    [{ ...mockCards[0], sourceRef: { page: 2 } }, { ...mockCards[2], sourceRef: { page: 1 } }] as never,
+    3,
+    indexed,
+  );
+  ok(
+    conf.length >= 1 &&
+      conf[0].card.id === 'c2' &&
+      vm.verdict === 'strong' &&
+      vm.percent >= 70 &&
+      heat[0].level === 'strong' &&
+      heat[1].level === 'weak' &&
+      heat[2].level === 'none',
+    'Anti-Leech & Heatmap: Verwechslungspaare (Mitose/Meiose), 0-Token-Sprachabgleich und PDF-Seiten-Heatmap funktionieren',
+  );
+
+  const KG = await import('../src/lib/knowledgeGraph');
+  const AP = await import('../src/lib/autopilot');
+  const mockData = {
+    version: 2,
+    workspaces: [{ id: 'w1', name: 'Uni', slug: 'uni' }],
+    courses: [{ id: 'co1', workspaceId: 'w1', name: 'Biologie', slug: 'bio' }],
+    decks: [
+      {
+        id: 'd1',
+        courseId: 'co1',
+        name: 'Zellbiologie',
+        slug: 'zellbiologie',
+        createdAt: 1,
+        cards: mockCards,
+        source: indexed,
+        chat: [],
+        mindmap: { type: 'mindmap', center: 'Zelle', branches: [{ label: 'Zellteilung', children: ['Mitose', 'Meiose'] }] },
+      },
+    ],
+    reviews: [],
+    settings: { provider: 'openai', model: 'gpt-4o-mini', baseUrl: '', setupDone: true, claudeBatch: false, animations: true, theme: 'system', newPerDay: 20 },
+    game: { xpByDay: {}, dailyGoal: 50 },
+    jobs: [],
+    exams: [{ id: 'e1', title: 'Bio-Klausur', date: new Date(Date.now() + 5 * 86400_000).toISOString().slice(0, 10), deckIds: ['d1'], createdAt: 1 }],
+    todos: [],
+    skills: [],
+  };
+  const gNow = KG.buildCourseGraph(mockData as never, 'co1', Date.now());
+  const gLater = KG.buildCourseGraph(mockData as never, 'co1', Date.now() + 25 * 86400_000);
+  const plan = AP.buildAutopilotPlan(mockData as never, 30, Date.now());
+  ok(
+    gNow.nodes.length >= 2 &&
+      gLater.avgRetention <= gNow.avgRetention &&
+      plan.cards.length >= 2 &&
+      plan.headline.includes('Bio-Klausur'),
+    'Wissens-Graph & Autopilot: FSRS-Vergessens-Radar projiziert Verfall und Autopilot priorisiert Prüfungen',
+  );
+
+  const POD = await import('../src/lib/podcast');
+  const parsedPod = POD.parsePodcast({
+    title: 'Zellteilung kompakt',
+    lines: [
+      { speaker: 'A', chapter: 'Einstieg', text: 'Hallo und willkommen!' },
+      { speaker: 'B', text: 'Was ist **Mitose**?' },
+    ],
+  });
+  const mkToneWav = (rate: number, samples: number) => {
+    const out = new Uint8Array(44 + samples * 2);
+    const v = new DataView(out.buffer);
+    'RIFF'.split('').forEach((c, i) => (out[i] = c.charCodeAt(0)));
+    v.setUint32(4, 36 + samples * 2, true);
+    'WAVE'.split('').forEach((c, i) => (out[8 + i] = c.charCodeAt(0)));
+    'fmt '.split('').forEach((c, i) => (out[12 + i] = c.charCodeAt(0)));
+    v.setUint32(16, 16, true);
+    v.setUint16(20, 1, true);
+    v.setUint16(22, 1, true);
+    v.setUint32(24, rate, true);
+    v.setUint32(28, rate * 2, true);
+    v.setUint16(32, 2, true);
+    v.setUint16(34, 16, true);
+    'data'.split('').forEach((c, i) => (out[36 + i] = c.charCodeAt(0)));
+    v.setUint32(40, samples * 2, true);
+    return out;
+  };
+  const mergedWav = POD.concatWavPcm([mkToneWav(16000, 160), mkToneWav(22050, 220)], 100);
+  ok(
+    parsedPod.title === 'Zellteilung kompakt' &&
+      parsedPod.lines.length === 2 &&
+      parsedPod.lines[1].text === 'Was ist Mitose?' &&
+      POD.podcastChapters(parsedPod.lines).length === 1 &&
+      mergedWav.byteLength > 44 + 440,
+    'Offline-Podcast: Parser bereinigt Markdown, extrahiert Kapitel und fügt WAVs mit Resampling sauber zusammen',
+  );
+
+  const FEY = await import('../src/lib/feynman');
+  const fConcepts = FEY.extractKeyConcepts(mockData.decks[0] as never);
+  const fReply = FEY.parseFeynmanReply({ reply: 'Sehr gut!', covered: ['Zellteilung'], score: 80, gapCards: [{ front: 'F', back: 'A' }] }, fConcepts);
+  ok(
+    fConcepts.includes('Zellteilung') &&
+      fReply.score === 80 &&
+      fReply.covered.includes('Zellteilung') &&
+      fReply.gapCards.length === 1,
+    'Feynman-Modus: lokale Konzept-Extraktion und Antwort-Parser funktionieren sauber',
+  );
 }
 
 console.log(failures ? `\n${failures} Test(s) fehlgeschlagen` : '\nAlle SRS-Tests bestanden');

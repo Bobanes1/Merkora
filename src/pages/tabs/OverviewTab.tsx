@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react';
-import { IconCards, IconChart, IconDoc, IconMatch, IconMindmap, IconNote, IconPath, IconPlay, IconQuiz, IconPractice, IconTarget } from '../../components/Icons';
+import { IconBulb, IconCards, IconChart, IconDoc, IconHeadphones, IconMatch, IconMindmap, IconNote, IconPath, IconPlay, IconQuiz, IconPractice, IconTarget } from '../../components/Icons';
 import { pathProgress } from '../../lib/path';
 import { masteryPercent } from '../../lib/stats';
 import { dueCards, type Deck } from '../../lib/store';
@@ -15,14 +15,16 @@ export default function OverviewTab({ deck, onOpen }: { deck: Deck; onOpen: (tab
   const files = deck.files?.length ?? 0;
   const modes: Mode[] = [
     { id: 'learn', label: 'Lernen', sub: due ? `${due} fällig` : 'alles wiederholt', icon: IconPlay, main: true },
-    { id: 'source', label: 'Material', sub: files ? `${files} ${files === 1 ? 'Datei' : 'Dateien'}` : 'Lernstoff & Dateien', icon: IconNote },
+    { id: 'source', label: 'Material', sub: files ? `${files} ${files === 1 ? 'Datei' : 'Dateien'}` : 'Skript-Studio', icon: IconNote },
     { id: 'cards', label: 'Karten', sub: `${n} ${n === 1 ? 'Karte' : 'Karten'}`, icon: IconCards },
     { id: 'path', label: 'Lernpfad', sub: `${path.done} / ${path.total} Stationen`, icon: IconPath },
     { id: 'match', label: 'Zuordnen', sub: 'Spiel auf Zeit', icon: IconMatch },
     { id: 'quiz', label: 'Quiz', sub: 'Multiple Choice', icon: IconQuiz },
     { id: 'practice', label: 'Aufgaben', sub: 'Mathe, Java, Labore', icon: IconPractice },
+    { id: 'feynman', label: 'Erklären', sub: 'Erklär es Pip', icon: IconBulb },
     { id: 'exam', label: 'Prüfung üben', sub: 'Probeprüfung', icon: IconTarget },
     { id: 'summary', label: 'Zusammenfassung', sub: 'zum Nachlesen', icon: IconDoc },
+    { id: 'podcast', label: 'Podcast', sub: '2-Stimmen-Audio', icon: IconHeadphones },
     { id: 'mindmap', label: 'Mindmap', sub: 'Überblick', icon: IconMindmap },
     { id: 'mastery', label: 'Fortschritt', sub: `${pct} % beherrscht`, icon: IconChart },
   ];

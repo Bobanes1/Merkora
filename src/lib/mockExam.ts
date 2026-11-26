@@ -4,7 +4,8 @@
  * Multiple choice is scored right here (no AI cost). Grades follow the chosen grading scale.
  */
 import { completeJson, LANG_RULE, materialFrom } from './ai';
-import { addCards, getState, setSettings, updateDeck, type Deck, type MockExam, type MockQuestion, type MockResult } from './store';
+import { relatedCards } from './related';
+import { addCards, boostCardsForRetest, getState, setSettings, updateDeck, type Deck, type MockExam, type MockQuestion, type MockResult } from './store';
 import { uid } from './util';
 import { spreadClip } from './sample';
 import { cleanExamText, levelLabel, gradeFor, mcPoints, mistakeCards, parseExam, relatedCardIds, tasksFor, type GradeScale, type RawExam } from './mockExamCore';
@@ -169,6 +170,18 @@ Format: {"questions":[{"id":"...","points":3,"feedback":"..."}],"summary":"...",
         { at: Date.now(), title: ex.title, level: ex.level, percent: result.percent, grade, passed, scale: ex.scale },
       ].slice(-20),
     }));
+    // Closed-loop feedback: flag matching deck cards of weak/missed exam questions for Autopilot retesting
+    const latestDeck = getState().data.decks.find((d) => d.id === deckId);
+    if (latestDeck) {
+      const missedIds = new Set<string>();
+      for (const q of ex.questions) {
+        const scored = per[q.id]?.points ?? 0;
+        if (q.points > 0 && scored / q.points < 0.7) {
+          for (const hit of relatedCards(latestDeck.cards, q.question, 3)) missedIds.add(hit.id);
+        }
+      }
+      if (missedIds.size) boostCardsForRetest(deckId, [...missedIds]);
+    }
   } catch (e) {
     patchExam(deckId, { status: 'submitted', error: (e as Error).message || 'Unbekannter Fehler' });
   }

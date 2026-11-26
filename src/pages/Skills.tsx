@@ -3,8 +3,10 @@ import { attachSkillFiles, materialAsDeckFile } from '../lib/deckFiles';
 import { combineMaterialsText, unifiedCourseMaterials } from '../lib/courseDocs';
 import { Link, useNavigate } from 'react-router-dom';
 import { IconClose, IconEdit, IconFlame, IconFolder, IconNote, IconSearch, IconShuffle, IconSparkle, IconStar, IconStarLine, IconTrash, IconUpload } from '../components/Icons';
+import { Mascot } from '../components/Mascot';
 import { PromptModal } from '../components/Modal';
 import { undoable } from '../lib/undo';
+import { pokeMove, type PokeMove } from '../lib/pipLines';
 import { NoKeyNotice } from '../components/NoKey';
 import { hasKey } from '../lib/ai';
 import { MATERIAL_ACCEPT, readFileText } from '../lib/files';
@@ -129,11 +131,46 @@ export default function Skills() {
     }
   };
 
+  const [poke, setPoke] = useState<{ move: PokeMove; n: number; active: boolean } | null>(null);
+  const pokeTimer = useRef<number | null>(null);
+  useEffect(() => () => { if (pokeTimer.current) window.clearTimeout(pokeTimer.current); }, []);
+  const pokePip = () => {
+    const move = pokeMove(poke?.move);
+    const n = (poke?.n ?? 0) + 1;
+    setPoke({ move, n, active: true });
+    if (pokeTimer.current) window.clearTimeout(pokeTimer.current);
+    pokeTimer.current = window.setTimeout(() => setPoke((p) => (p && p.n === n ? { ...p, active: false } : p)), 1500);
+  };
+  const pipSay = topic.trim()
+    ? `Klingt spannend – soll ich dir einen Lernpfad zu „${topic.trim()}“ bauen?`
+    : skills.length > 0
+      ? 'Schön dich zu sehen! Mach an einem Skill weiter oder starte etwas Neues.'
+      : 'Sag mir, was du lernen willst – ich baue dir einen Lernpfad zum Anfassen!';
+
   return (
     <div className="page skills-page">
-      <header className="page-head">
-        <h1>Skills</h1>
-        <p className="muted">Lernen durch Tun: Du gibst ein Thema an, Pip plant mit dir einen Lernpfad bis zu deinem Ziel – und dann übst du aktiv, Lektion für Lektion.</p>
+      <header className="page-head skills-pip-head">
+        <button
+          type="button"
+          className={`skills-pip-btn${poke?.active && poke.move === 'flip' ? ' poke-flip' : ''}`}
+          aria-label="Pip anstupsen"
+          title="Pip anstupsen"
+          onClick={pokePip}
+        >
+          <Mascot
+            who="pip"
+            mood={poke?.active ? (poke.move === 'flip' ? 'happy' : poke.move) : topic.trim() ? 'think' : 'wave'}
+            pulse={poke ? `${poke.n}${poke.active ? 'a' : 'r'}` : undefined}
+            size={84}
+          />
+        </button>
+        <div className="skills-pip-copy">
+          <h1>Skills</h1>
+          <p className="muted" style={{ margin: 0 }}>
+            Lernen durch Tun: Du gibst ein Thema an, Pip plant mit dir einen Lernpfad bis zu deinem Ziel – und dann übst du aktiv, Lektion für Lektion.
+          </p>
+          <span className="skills-pip-bubble">{pipSay}</span>
+        </div>
       </header>
 
       {hasKey() && onboard && (

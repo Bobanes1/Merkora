@@ -276,3 +276,43 @@ export function useCanSpeak(): boolean {
   const neural = useNeuralTtsStatus();
   return sysVoices.length > 0 || Boolean(neural?.engineInstalled && neural.installedVoices.length > 0);
 }
+
+const wavBytesCache = new Map<string, { bytes: Uint8Array; url: string }>();
+
+/**
+ * Synthesizes a single line to WAV bytes + ObjectURL using a specific Piper voice (cached in memory).
+ * Used by the Offline 2-Voice Learning Podcast for seamless pre-buffering and local WAV export.
+ */
+export async function synthesizeLineWav(text: string, voiceId: string): Promise<{ bytes: Uint8Array; url: string }> {
+  const key = `${voiceId}\n${text.trim()}`;
+  const hit = wavBytesCache.get(key);
+  if (hit) return hit;
+  const b64 = await ttsSpeakWavB64(voiceId, text.trim());
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const url = URL.createObjectURL(new Blob([bytes], { type: 'audio/wav' }));
+  if (wavBytesCache.size >= 120) {
+    const oldest = wavBytesCache.keys().next().value;
+    if (oldest) {
+      URL.revokeObjectURL(wavBytesCache.get(oldest)!.url);
+      wavBytesCache.delete(oldest);
+    }
+  }
+  const entry = { bytes, url };
+  wavBytesCache.set(key, entry);
+  return entry;
+}
+
+/** Picks two distinct installed Piper voices for Podcast Host A & B (falls back cleanly if < 2 installed). */
+export function pickPodcastVoices(installed: string[], lang: SpeechLang): { voiceA?: string; voiceB?: string } {
+  const sameLang = installed.filter((id) => id.toLowerCase().startsWith(lang));
+  const pool = sameLang.length ? sameLang : installed;
+  if (!pool.length) return {};
+  if (pool.length === 1) return { voiceA: pool[0], voiceB: pool[0] };
+  // Prefer pairing distinct voice names (e.g. thorsten + kerstin, amy + alba)
+  const voiceA = pool[0];
+  const baseA = voiceA.split('-')[1] ?? voiceA;
+  const distinct = pool.find((id) => (id.split('-')[1] ?? id) !== baseA) ?? pool[1];
+  return { voiceA, voiceB: distinct };
+}

@@ -58,7 +58,7 @@ export function ToolWindows() {
         badge={soundBadge}
         icon={<IconHeadphones size={15} />}
         defaultPos={{ right: 24, bottom: 320 }}
-        width={290}
+        width={318}
       >
         <SoundsTool compact />
       </FloatingWindow>
