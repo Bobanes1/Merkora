@@ -357,8 +357,8 @@ function CourseDecksChoiceModal({
   const est = useMemo(() => {
     if (!aiReady || mode !== 'per-file') return null;
     const allLengths = withText.flatMap((it) => splitMaterial([{ name: it.name, text: it.text }]).map((p) => p.text.length));
-    return estimate.cardsParts(allLengths, allLengths.map(() => 0), density);
-  }, [aiReady, mode, withText, density]);
+    return estimate.cardsParts(allLengths, allLengths.map(() => 0), graphics, 1600, [], density);
+  }, [aiReady, mode, withText, graphics, density]);
 
   const startPerFileAi = () => {
     let created = 0;
@@ -481,7 +481,7 @@ function CourseDecksChoiceModal({
                 </button>
               </div>
             </div>
-            {est && <CostHint tokens={est} />}
+            {est && <CostHint est={est} />}
           </>
         )}
 
