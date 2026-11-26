@@ -6,10 +6,11 @@
  */
 import { timeOfDayStats } from './appExtras';
 import { isLeech } from './cardLinks';
-import { countdownText, examAt, examCards, upcomingExams } from './exams';
+import { countdownText, examAt, examDecks, upcomingExams } from './exams';
 import { cardRetrievability } from './interference';
+import { DEFAULT_NEW_PER_DAY, pickDue } from './newCards';
 import { nextLesson, skillProgress } from './skills';
-import { dueCards, type Card, type Data, type Deck } from './store';
+import type { Card, Data, Deck } from './store';
 import { DAY } from './util';
 
 export type AutopilotBudget = 15 | 30 | 60;
@@ -33,7 +34,7 @@ export type AutopilotPlan = {
   estMinutes: number;
 };
 
-function cardPriority(card: Card, deck: Deck, isExamDeck: boolean, examTimestamp: number | null, now: number): { reason: AutopilotCardItem['reason']; priority: number } {
+function cardPriority(card: Card, _deck: Deck, isExamDeck: boolean, examTimestamp: number | null, now: number): { reason: AutopilotCardItem['reason']; priority: number } {
   const isDue = card.srs.due <= now;
   const leech = isLeech(card);
   const recentRetest = !!card.retestBoostAt && now - card.retestBoostAt < 7 * DAY;
@@ -58,17 +59,15 @@ export function buildAutopilotPlan(data: Data, budget: AutopilotBudget = 30, now
   const exams = upcomingExams(data, now);
   const nextExam = exams[0];
   const nextExamTime = nextExam ? examAt(nextExam) : null;
-  const examDeckIds = new Set<string>();
-  if (nextExam) {
-    for (const pair of examCards(data, nextExam)) examDeckIds.add(pair.deck.id);
-  }
+  const examDeckIds = new Set<string>(nextExam ? examDecks(data, nextExam).map((d) => d.id) : []);
 
   // Approximate pace: ~2.4 cards/min (leaving breathing room for skills / reflection)
   const cardCap = budget === 15 ? 20 : budget === 30 ? 40 : 75;
   const candidates: AutopilotCardItem[] = [];
+  const defaultNew = data.settings.newPerDay ?? DEFAULT_NEW_PER_DAY;
 
   for (const deck of activeDecks) {
-    const dueSet = new Set(dueCards(deck, now).map((c) => c.id));
+    const dueSet = new Set(pickDue(deck.cards, now, deck.newPerDay ?? defaultNew).map((c) => c.id));
     const isExamDeck = examDeckIds.has(deck.id);
     for (const card of deck.cards) {
       if (card.suspended) continue;
