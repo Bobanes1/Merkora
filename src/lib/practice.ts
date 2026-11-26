@@ -11,6 +11,7 @@ import { LANG_RULE, type Prompt } from './ai';
 import { parseFormulaLab, parseProgram, parseScore, parseSketch, parseSyntax, parseTables, type FormulaLab, type Program, type Score, type Sentence, type Sketch, type Table } from './visuals';
 import { FORMULA_RULE } from './ai';
 import { repairMath } from './emphasis';
+import { matchModel3DForTopic, MODEL3D_PROMPT_HINT, MODELS_3D } from './models3d';
 
 export type AnswerSpec = { type: 'number' | 'fraction' | 'expr' | 'choice' | 'text'; value: string; tolerance?: number; options?: string[] };
 export type MathProblem = { problem: string; answer: AnswerSpec; hints: string[]; steps: string[] };
@@ -34,6 +35,7 @@ export type LabSpec =
   | { type: 'urn'; N: number; K: number; n: number; ask?: string }
   | { type: 'function'; expr: string; params: Record<string, number>; min: number; max: number; ask?: string }
   | { type: 'vectors'; matrix: [[number, number], [number, number]]; ask?: string }
+  | { type: 'model3d'; modelId: string; variantId?: string; focusPart?: string; title?: string; ask?: string }
   | FormulaLab;
 
 export type ProblemProgress = {
@@ -181,6 +183,17 @@ export function parseLab(raw: unknown): LabSpec | null {
       const v = (i: number, j: number, d: number) => num(m[i]?.[j], d);
       return { type: 'vectors', matrix: [[v(0, 0, 1), v(0, 1, 0)], [v(1, 0, 0), v(1, 1, 1)]], ask };
     }
+    case 'model3d':
+    case '3d': {
+      const modelId = s(r.modelId ?? r.model ?? r.id, 40).toLowerCase();
+      const def = MODELS_3D.find((m) => m.id === modelId);
+      if (!def) return null;
+      const rawVar = s(r.variantId ?? r.variant, 40).toLowerCase();
+      const variantId = rawVar && def.variants?.some((v) => v.id === rawVar) ? rawVar : undefined;
+      const focusPart = s(r.focusPart ?? r.focus, 40) || undefined;
+      const title = s(r.title, 80) || undefined;
+      return { type: 'model3d', modelId: def.id, ...(variantId ? { variantId } : {}), ...(focusPart ? { focusPart } : {}), ...(title ? { title } : {}), ask };
+    }
   }
   return null;
 }
@@ -298,11 +311,23 @@ export function parsePractice(json: unknown, id: string, now: number): PracticeS
   const style: LessonStyle | undefined = r.style === 'discovery' || r.style === 'sprint' || r.style === 'classic' ? r.style : undefined;
   const hook = parseHook(r.hook, figures.length);
   const visuals = { ...(score ? { score } : {}), ...(program ? { program } : {}), ...(sketch ? { sketch } : {}), ...(syntax.length ? { syntax } : {}), ...(tables.length ? { tables } : {}) };
+  const topic = s(r.topic, 80) || 'Übung';
+  if (labs.length < 4 && !labs.some((l) => l.type === 'model3d')) {
+    const matched = matchModel3DForTopic(topic);
+    if (matched) {
+      labs.unshift({
+        type: 'model3d',
+        modelId: matched.modelId,
+        ...(matched.variantId ? { variantId: matched.variantId } : {}),
+        ask: 'Drehe das 3D-Modell, klicke die Markierungen an oder nutze Schichten & Röntgen-Modus.',
+      });
+    }
+  }
   return {
     id,
     createdAt: now,
     kind,
-    topic: s(r.topic, 80) || 'Übung',
+    topic,
     intro: s(r.intro, 3000),
     ...visuals,
     ...(s(r.theory, 8000) ? { theory: s(r.theory, 8000) } : {}),
@@ -579,7 +604,7 @@ export const VISUAL_RULES: Record<Domain, string> = {
   java: `Beispielprogramm: Gib der Erklärung ein kleines, vollständiges Programm (5–20 Zeilen), das man ausführen kann – Feld "program":{"lang":"java|javascript|python|sql","code":"…","output":"genaue Ausgabe","trace":[{"line":3,"vars":{"i":"0","summe":"0"},"note":"was in dieser Zeile passiert"}]} (Java: class Main mit main; SQL: zusätzlich "schema"). "trace": 4–12 Schritte durch den Ablauf, line = Zeilennummer ab 1, vars = Werte nach der Zeile.`,
   law: `Fallskizze: Zeig, wer beteiligt ist und wer was von wem will – Feld "sketch":{"parties":[{"id":"k","name":"K","role":"Käufer"},{"id":"v","name":"V","role":"Verkäufer"}],"links":[{"from":"k","to":"v","label":"Kaufvertrag § 433","kind":"vertrag"},{"from":"v","to":"k","label":"Zahlung 300 €?","kind":"anspruch"}],"question":"…"} (kind: vertrag | anspruch | uebereignung | sonstiges; 2–5 Personen). Das Prüfungsschema als "figures" (flow).`,
   language: `Sprache sichtbar machen: Felder "syntax":[{"sentence":"…","parts":[{"text":"Der Hund","role":"subjekt"},{"text":"beißt","role":"praedikat"},{"text":"den Mann","role":"akkobjekt"}],"translation":"…"}] (role: subjekt | praedikat | akkobjekt | datobjekt | adverbial | attribut | konjunktion | sonstiges) und "tables":[{"title":"Präsens von gehen","head":["Person","Form"],"rows":[["ich","geh[[e]]"],["du","geh[[st]]"]]}] – Endungen in [[…]] werden farbig.`,
-  math: `Formel-Spielwiese: Wo eine Formel mehrere Größen verbindet, gib in "labs" {"type":"formula","title":"…","expr":"K*(1+p/100)^n","vars":[{"name":"K","label":"Startkapital","min":100,"max":10000,"step":100,"value":1000,"unit":"€"},{"name":"p","label":"Zins","min":0,"max":10,"step":0.5,"value":3,"unit":"%"},{"name":"n","label":"Jahre","min":0,"max":30,"step":1,"value":10}],"result":{"label":"Endkapital","unit":"€"},"plot":"n","ask":"Frage zum Ausprobieren"} (Namen 1–3 Buchstaben; Rechenzeichen + - * / ^, sqrt, exp, ln).`,
+  math: `Formel-Spielwiese: Wo eine Formel mehrere Größen verbindet, gib in "labs" {"type":"formula","title":"…","expr":"K*(1+p/100)^n","vars":[{"name":"K","label":"Startkapital","min":100,"max":10000,"step":100,"value":1000,"unit":"€"},{"name":"p","label":"Zins","min":0,"max":10,"step":0.5,"value":3,"unit":"%"},{"name":"n","label":"Jahre","min":0,"max":30,"step":1,"value":10}],"result":{"label":"Endkapital","unit":"€"},"plot":"n","ask":"Frage zum Ausprobieren"} (Namen 1–3 Buchstaben; Rechenzeichen + - * / ^, sqrt, exp, ln).\n${MODEL3D_PROMPT_HINT}`,
   general: '',
 };
 VISUAL_RULES.general = VISUAL_RULES.math.replace('Wo eine Formel', 'Wo eine Formel (Physik, Wirtschaft, Alltag)');

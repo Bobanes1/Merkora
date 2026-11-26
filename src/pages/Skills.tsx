@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { attachSkillFiles } from '../lib/deckFiles';
+import { attachSkillFiles, materialAsDeckFile } from '../lib/deckFiles';
+import { combineMaterialsText, unifiedCourseMaterials } from '../lib/courseDocs';
 import { Link, useNavigate } from 'react-router-dom';
-import { IconClose, IconEdit, IconFlame, IconNote, IconSearch, IconShuffle, IconSparkle, IconStar, IconStarLine, IconTrash, IconUpload } from '../components/Icons';
+import { IconClose, IconEdit, IconFlame, IconFolder, IconNote, IconSearch, IconShuffle, IconSparkle, IconStar, IconStarLine, IconTrash, IconUpload } from '../components/Icons';
 import { PromptModal } from '../components/Modal';
 import { undoable } from '../lib/undo';
 import { NoKeyNotice } from '../components/NoKey';
@@ -11,7 +12,7 @@ import { DOMAIN_LABEL } from '../lib/practice';
 import { startMiniSkill, startSkill } from '../lib/skillRun';
 import { levelLabel } from '../lib/mockExamCore';
 import { nextLesson, pageTopics, skillProgress, skillStreak, skillToday } from '../lib/skills';
-import { deleteSkill, setSettings, updateSkill, useData } from '../lib/store';
+import { deleteSkill, setSettings, updateSkill, useData, type DeckFile } from '../lib/store';
 import type { Skill } from '../lib/skills';
 import { CAT_LABEL, MINI_IDEAS, SKILL_IDEAS, TOPIC_CATS, type TopicCat, type TopicIdea } from '../lib/topicPool';
 
@@ -84,13 +85,33 @@ export default function Skills() {
   const [fileNote, setFileNote] = useState('');
   // the documents themselves are kept too (not only their text), so they stay visible in the skill
   const [files, setFiles] = useState<File[]>([]);
+  const [linkedCourseId, setLinkedCourseId] = useState('');
+  const [linkedFiles, setLinkedFiles] = useState<DeckFile[]>([]);
+
+  const selectedCourse = linkedCourseId ? data.courses.find((c) => c.id === linkedCourseId) : undefined;
+  const selectedCourseMats = useMemo(
+    () => (selectedCourse ? unifiedCourseMaterials(selectedCourse, data.decks) : []),
+    [selectedCourse, data.decks],
+  );
 
   const start = () => {
     if (!topic.trim()) return;
     setSettings({ skillLevel: level });
-    const id = startSkill(topic, withGoal(level), material);
+    const id = startSkill(topic, withGoal(level), material, {
+      courseId: linkedCourseId || undefined,
+      files: linkedFiles.length ? linkedFiles : undefined,
+    });
     if (files.length) void attachSkillFiles(id, files);
     navigate(`/skills/${id}`);
+  };
+  const pullCourseMaterials = () => {
+    if (!selectedCourse || !selectedCourseMats.length) return;
+    const text = combineMaterialsText(selectedCourseMats, 60000);
+    const dfs = selectedCourseMats.map((m) => materialAsDeckFile(m)).filter((f): f is DeckFile => f !== null);
+    if (text) setMaterial((m) => [m, text].filter(Boolean).join('\n\n'));
+    if (dfs.length) setLinkedFiles((cur) => [...cur.filter((x) => !dfs.some((d) => d.id === x.id)), ...dfs]);
+    if (!topic.trim()) setTopic(selectedCourse.name);
+    setFileNote(`${selectedCourseMats.length} ${selectedCourseMats.length === 1 ? 'Datei / Notiz' : 'Dateien & Notizen'} aus „${selectedCourse.name}“ übernommen.`);
   };
   const onFiles = async (list: FileList | null) => {
     const texts: string[] = [];
@@ -160,11 +181,38 @@ export default function Skills() {
             )}
             <div className="skill-new-foot">
               <details className="skill-more">
-                <summary>Mehr Angaben (optional)</summary>
+                <summary>Mehr Angaben &amp; Material (optional)</summary>
                 <label className="field-label" htmlFor="skill-level">
                   Wo lernst du gerade?
                 </label>
                 <input id="skill-level" className="input" value={level} onChange={(e) => setLevel(e.target.value)} placeholder="z. B. Gymnasium 11. Klasse, Jura-Studium 2. Semester, Hobby" />
+                {data.courses.length > 0 && (
+                  <>
+                    <label className="field-label" htmlFor="skill-course">
+                      Mit Modul / Kurs verknüpfen (optional)
+                    </label>
+                    <div className="input-row">
+                      <select
+                        id="skill-course"
+                        className="input"
+                        value={linkedCourseId}
+                        onChange={(e) => setLinkedCourseId(e.target.value)}
+                      >
+                        <option value="">Keinem Modul zugeordnet</option>
+                        {data.courses.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                      {selectedCourseMats.length > 0 && (
+                        <button type="button" className="btn outline sm" onClick={pullCourseMaterials}>
+                          <IconFolder size={14} /> Modul-Material übernehmen ({selectedCourseMats.length})
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
                 <label className="field-label" htmlFor="skill-material">
                   Eigenes Material (Skript, Folien, Notizen) – dann richtet sich der Lernpfad danach
                 </label>
@@ -174,8 +222,16 @@ export default function Skills() {
                   <input type="file" multiple accept={MATERIAL_ACCEPT} hidden onChange={(e) => void onFiles(e.target.files)} />
                 </label>
                 {fileNote && <small className="muted"> {fileNote}</small>}
-                {files.length > 0 && (
+                {(files.length > 0 || linkedFiles.length > 0) && (
                   <ul className="skill-file-list">
+                    {linkedFiles.map((f) => (
+                      <li key={f.id}>
+                        <IconNote size={14} /> <span className="grow">{f.name}</span>
+                        <button type="button" className="icon-btn sm" aria-label={`${f.name} entfernen`} onClick={() => setLinkedFiles((x) => x.filter((y) => y.id !== f.id))}>
+                          <IconClose size={12} />
+                        </button>
+                      </li>
+                    ))}
                     {files.map((f) => (
                       <li key={f.name}>
                         <IconNote size={14} /> <span className="grow">{f.name}</span>
@@ -303,14 +359,17 @@ export default function Skills() {
 }
 
 function SkillTile({ skill, onRename }: { skill: Skill; onRename: () => void }) {
+  const data = useData();
   const p = skillProgress(skill);
   const next = nextLesson(skill);
+  const course = skill.courseId ? data.courses.find((c) => c.id === skill.courseId) : undefined;
   return (
     <Link to={`/skills/${skill.id}`} className={`skill-tile${skill.pinned ? ' pinned' : ''}`} data-domain={skill.domain}>
       <div className="skill-tile-top">
         <span className="tile-badges">
           <span className={'badge ' + skill.domain} data-domain={skill.domain}>{DOMAIN_LABEL[skill.domain]}</span>
           {skill.mini && <span className="badge mini-badge">Mini</span>}
+          {course && <span className="badge course-badge">{course.name}</span>}
         </span>
         <span className="skill-tile-tools">
           <button

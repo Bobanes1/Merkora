@@ -10,13 +10,13 @@ import { helpfulSlides, MAX_SLIDE_IMAGES, renderSlides, slidesInPart } from '../
 import { isPdf, MATERIAL_ACCEPT, MATERIAL_LABEL, readFileText, readPdfDetailed } from '../lib/files';
 import { figureLabel, markFigures, pickFigurePages } from '../lib/slides';
 import { figureInfo, figurePreview, registerFigures } from '../lib/figureFiles';
-import { attachFiles } from '../lib/deckFiles';
+import { attachFiles, linkExistingFilesToDeck } from '../lib/deckFiles';
 import { SLIDE_FIGURES } from '../config';
 import { canSurviveClose, MAX_PARALLEL, startCardJobs } from '../lib/jobs';
 import { cleanSvg, withGraphics } from '../lib/graphics';
 import { parseDiagram, PALETTES, renderDiagram } from '../lib/diagram';
 import { useResolvedTheme } from '../lib/theme';
-import { addCards, addCourse, addDeck, addWorkspace, deckUrl, getState, setSettings, updateDeck, useData, useStore } from '../lib/store';
+import { addCards, addCourse, addDeck, addWorkspace, deckUrl, getState, setSettings, updateDeck, useData, useStore, type DeckFile } from '../lib/store';
 import { IconClose, IconDoc, IconSparkle, IconStop, IconTrash, IconUpload } from './Icons';
 import { Modal } from './Modal';
 import { NoKeyNotice } from './NoKey';
@@ -54,6 +54,8 @@ export function CreateWithAI({
   onBack,
   initialNotes,
   initialFile,
+  initialTitle,
+  initialMaterials,
 }: {
   onClose: () => void;
   deckId?: string;
@@ -63,6 +65,10 @@ export function CreateWithAI({
   /** Text and/or file handed over from the start page. */
   initialNotes?: string;
   initialFile?: File;
+  /** Suggested title for a newly created deck (e.g. from a course material or skill). */
+  initialTitle?: string;
+  /** Pre-extracted materials & already-stored files (reused without re-uploading blobs). */
+  initialMaterials?: { name: string; text: string; file?: DeckFile }[];
 }) {
   const data = useData();
   const navigate = useNavigate();
@@ -70,7 +76,9 @@ export function CreateWithAI({
   const fileRef = useRef<HTMLInputElement>(null);
   const existing = deckId ? data.decks.find((d) => d.id === deckId) : undefined;
   const [notes, setNotes] = useState(initialNotes ?? '');
-  const [files, setFiles] = useState<{ id: number; name: string; text: string; pdf?: PdfInfo; src?: File }[]>([]);
+  const [files, setFiles] = useState<{ id: number; name: string; text: string; pdf?: PdfInfo; src?: File; linked?: DeckFile }[]>(() =>
+    (initialMaterials ?? []).map((m, idx) => ({ id: Date.now() + idx, name: m.name, text: m.text, ...(m.file ? { linked: m.file } : {}) })),
+  );
   // models and figures from PDF slides (Einstellungen › KI) – per run it can be switched off as well
   const slideSetting = useStore((s) => s.data.settings.slideFigures ?? true);
   const slideOn = SLIDE_FIGURES && slideSetting;
@@ -111,7 +119,7 @@ export function CreateWithAI({
     ...(notes.trim() ? [{ name: 'Notizen', text: notes.trim() }] : []),
     ...(useSource && oldSource ? [{ name: 'Bisheriges Lernmaterial', text: oldSource }] : []),
   ]);
-  const [name, setName] = useState('');
+  const [name, setName] = useState(initialTitle ?? '');
   // 0 = automatic (as many cards as the material needs)
   const [count, setCount] = useState(0);
   // „Automatisch“: compact (main topics, the default) or thorough – remembered
@@ -186,6 +194,7 @@ export function CreateWithAI({
       updateDeck(target.id, { source: [oldSource, text].filter(Boolean).join('\n\n') });
     }
     // the presentations themselves stay with the deck (shown under "Lernmaterial")
+    linkExistingFilesToDeck(target.id, files.flatMap((x) => (x.linked ? [x.linked] : [])));
     await attachFiles(target.id, files.flatMap((x) => (x.src ? [x.src] : [])));
     const fresh = getState().data.decks.find((d) => d.id === target!.id)!;
     // long material: one part after another, each knowing the cards made before
@@ -309,6 +318,7 @@ export function CreateWithAI({
       updateDeck(target.id, { source: [oldSource, text].filter(Boolean).join('\n\n') });
     }
     addCards(target.id, await withGraphics(keep, figSet));
+    linkExistingFilesToDeck(target.id, files.flatMap((x) => (x.linked ? [x.linked] : [])));
     await attachFiles(target.id, files.flatMap((x) => (x.src ? [x.src] : [])));
     const fresh = getState().data.decks.find((d) => d.id === target!.id)!;
     onClose();

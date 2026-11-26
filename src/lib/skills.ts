@@ -61,6 +61,8 @@ export type Skill = {
   material?: string;
   /** The original files of the material (PDF, Word, PowerPoint …), stored like deck files and shown under „Dein Material“. */
   files?: DeckFile[];
+  /** Optional link to a course/module in the library (so skills, decks & module files live together). */
+  courseId?: string;
   /** Optional target date (YYYY-MM-DD) – the lessons can be spread over the days until then. */
   targetDate?: string;
   /** When the completion was celebrated (once). */

@@ -3153,7 +3153,7 @@ console.log('App-weite Upgrades: Offline-Quiz, Statistik-Analyse, Zusammenfassun
   const MA = await import('../src/lib/musicAudio');
   const AM = await import('../src/lib/ambient');
 
-  ok(M3.MODELS_3D.length === 8, '3D-Studio: alle 8 interaktiven 3D-Modelle vorhanden');
+  ok(M3.MODELS_3D.length >= 12, '3D-Studio: mindestens 12 interaktive 3D-Modelle vorhanden');
   const all3dValid = M3.MODELS_3D.every((m) => {
     const vars = m.variants?.length ? m.variants.map((v) => v.id) : [undefined];
     return vars.every((vid) => {
@@ -3207,12 +3207,138 @@ console.log('App-weite Upgrades: Offline-Quiz, Statistik-Analyse, Zusammenfassun
       SL.pickPiperVoiceForLang(['de_DE-thorsten-medium'], 'fr', 'de_DE-thorsten-medium', true) === undefined,
     'Piper-Stimmenwahl: wählt beste Qualität je Sprache und fällt sauber auf Systemstimme zurück, wenn Sprache fehlt',
   );
+
+  // 9. Modul-Materialbox & Course ↔ Skill linking
+  const CD = await import('../src/lib/courseDocs');
+  const ST2 = await import('../src/lib/store');
+  const mockCourse = {
+    id: 'crs-bio',
+    folders: [{ id: 'f1', name: 'Woche 1' }],
+    materials: [
+      { id: 'mat-1', name: 'VL01_Zelle.pdf', size: 120000, addedAt: 1, type: 'application/pdf', text: 'Zellmembran und Osmose', isFile: true },
+      { id: 'txt-1', name: 'Eigene Notizen', size: 42, addedAt: 2, type: 'text/plain', text: 'Mitochondrien sind die Kraftwerke', isFile: false },
+    ],
+  };
+  const mockDecks = [
+    // References same mat-1 (deduplicated!) + an older deck-only file mat-2
+    { id: 'dk1', name: 'Deck 1', courseId: 'crs-bio', folderId: 'f1', source: 'Text aus Deck 1', files: [{ id: 'mat-1', name: 'VL01_Zelle.pdf', size: 120000 }, { id: 'mat-2', name: 'Uebung.pdf', size: 50000 }] },
+    { id: 'dk2', name: 'Nur Text', courseId: 'crs-bio', source: 'Reines Textmaterial' },
+  ];
+  const unified = CD.unifiedCourseMaterials(mockCourse, mockDecks);
+  ok(
+    unified.length === 4 &&
+      unified.filter((u) => u.id === 'mat-1').length === 1 &&
+      unified.some((u) => u.id === 'mat-2' && u.origin === 'deck') &&
+      unified.some((u) => u.key === 'text:dk2'),
+    'Modul-Materialbox: vereint Modul-Dateien & Deck-Dokumente und dedupliziert geteilte Datei-IDs',
+  );
+  ok(
+    CD.stemOfName('VL01_Zellbiologie.pptx') === 'VL01_Zellbiologie' &&
+      CD.combineMaterialsText([
+        { name: 'A.pdf', text: 'Erster Teil' },
+        { name: 'B.pdf', text: 'Zweiter Teil' },
+      ]).includes('=== A.pdf ==='),
+    'Modul-Materialbox: Dateinamen-Stamm und Text-Kombination sauber formatiert',
+  );
+
+  // Store: add/remove course materials & deleteCourse detaches linked skills without deleting them
+  const wsM = ST2.addWorkspace('Modul-WS');
+  const crsM = ST2.addCourse(wsM.id, 'Biologie 101');
+  ST2.addCourseMaterials(crsM.id, [
+    { id: 'mat-bio', name: 'Skript.pdf', size: 5000, addedAt: 1, type: 'application/pdf', text: 'DNA Replikation', isFile: true },
+  ]);
+  ok(ST2.getState().data.courses.find((c) => c.id === crsM.id)?.materials?.length === 1, 'Store: Modul-Material gespeichert');
+  ST2.addSkill({
+    id: 'sk-bio',
+    topic: 'Biologie 101',
+    title: 'Biologie 101',
+    domain: 'general',
+    levels: [],
+    targetLevel: 0,
+    level: '',
+    courseId: crsM.id,
+    status: 'planning',
+    plan: {},
+    stages: [],
+    createdAt: 1,
+    updatedAt: 1,
+  });
+  ST2.removeCourseMaterial(crsM.id, 'mat-bio');
+  ok((ST2.getState().data.courses.find((c) => c.id === crsM.id)?.materials?.length ?? 0) === 0, 'Store: Modul-Material entfernt');
+  ST2.deleteCourse(crsM.id);
+  const keptSkill = ST2.getState().data.skills?.find((s) => s.id === 'sk-bio');
+  ok(Boolean(keptSkill) && keptSkill?.courseId === undefined, 'Store: Kurs löschen erhält verknüpfte Skills und löst nur courseId');
+
+  // 10. Offline-OCR helpers, Real Studio Audio Library (Yamaha C5 + Real Ambience) & WebGL2 3D Studio Pro
+  const OCR = await import('../src/lib/ocr');
+  ok(
+    OCR.isImageFile({ name: 'Tafelbild.JPG', type: '' }) &&
+      OCR.isImageFile({ name: 'scan.png', type: 'image/png' }) &&
+      !OCR.isImageFile({ name: 'skript.pdf', type: 'application/pdf' }),
+    'Offline-OCR: erkennt Bildformate (JPG/PNG/WebP) zuverlässig',
+  );
+  ok(
+    OCR.cleanOcrText('Zell-\nmembran   und\n|\n\n\nOsmose\r\n') === 'Zellmembran und\n\nOsmose',
+    'Offline-OCR: repariert Silbentrennungen und säubert Scan-Rauschen',
+  );
+
+  const FK = await import('../src/lib/fileKind');
+  ok(FK.fileKind('foto.jpeg') === 'image' && FK.FILE_KIND_LABEL.image === 'Foto / Scan', 'FileKind: Fotos/Scans als Bild-Material erkannt');
+
+  ok(
+    MA.PIANO_SAMPLES.length >= 20 &&
+      MA.nearestPianoSample(60).note === 'C4' &&
+      Math.abs(MA.nearestPianoSample(60).rate - 1) < 0.001 &&
+      MA.nearestPianoSample(61).note === 'C4' &&
+      MA.nearestPianoSample(61).rate > 1.05 &&
+      MA.nearestPianoSample(61).rate < 1.07,
+    'Studio-Klavier: 21 echte Yamaha-C5-Samples mit exakter Halbton-Interpolation',
+  );
+  ok(
+    Boolean(AM.REAL_SOUND_URL.rain && AM.REAL_SOUND_URL.library && AM.REAL_SOUND_URL.train && AM.REAL_SOUND_URL.keyboard && AM.REAL_SOUND_URL.fire) &&
+      !AM.REAL_SOUND_URL.brown &&
+      AM.SOUNDS.some((s) => s.id === 'library' && s.real) &&
+      AM.SOUNDS.some((s) => s.id === 'train' && s.real) &&
+      AM.PRESETS.some((p) => p.name.includes('Nachtzug')),
+    'Lerngeräusche: echte Studio-Aufnahmen + neue Fokus-Orte (Bibliothek, Zugfahrt, Tastatur)',
+  );
+
+  const M3D = await import('../src/lib/models3d');
+  const MIMP = await import('../src/lib/modelImport');
+  const WGL = await import('../src/lib/webgl3d');
+  ok(
+    M3D.MODELS_3D.length >= 12 &&
+      M3D.MODELS_3D.some((m) => m.id === 'brain' && (m.layers?.length ?? 0) >= 5) &&
+      M3D.MODELS_3D.some((m) => m.id === 'motor' && (m.layers?.length ?? 0) >= 4) &&
+      M3D.MODELS_3D.some((m) => m.id === 'atom') &&
+      M3D.MODELS_3D.some((m) => m.id === 'surfaces'),
+    '3D-Studio Pro: 12 wissenschaftliche Modelle inkl. Gehirn, Elektromotor, Atom-Orbitale & 3D-Flächen mit Schichten',
+  );
+  const objScene = MIMP.parseCustom3DFile('cube.obj', 'v 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\nf 1 2 3 4\n');
+  const xyzScene = MIMP.parseCustom3DFile('h2o.xyz', '3\nWater\nO 0.0 0.0 0.0\nH 0.757 0.586 0.0\nH -0.757 0.586 0.0\n');
+  const pdbScene = MIMP.parseCustom3DFile('mini.pdb', 'ATOM      1  CA  ALA A   1       1.000   2.000   3.000  1.00 20.00           C\nATOM      2  O   ALA A   1       2.200   2.000   3.000  1.00 20.00           O\n');
+  ok(
+    objScene.primitives.length === 2 &&
+      xyzScene.primitives.filter((p) => p.kind === 'sphere').length === 3 &&
+      xyzScene.primitives.filter((p) => p.kind === 'bond').length === 2 &&
+      pdbScene.primitives.filter((p) => p.kind === 'sphere').length === 2 &&
+      WGL.applyExplode([1, 0, 0], [0, 2, 0], 0.5)[1] === 1,
+    '3D-Studio Pro: .obj/.xyz/.pdb-Import & Explosionsansicht funktionieren sauber',
+  );
+  const PR = await import('../src/lib/practice');
+  const mLab = PR.parseLab({ type: 'model3d', modelId: 'brain', focusPart: 'limbic', ask: 'Finde den Hippocampus' });
+  const badLab = PR.parseLab({ type: 'model3d', modelId: 'does-not-exist' });
+  ok(
+    mLab?.type === 'model3d' &&
+      mLab.modelId === 'brain' &&
+      mLab.focusPart === 'limbic' &&
+      badLab === null &&
+      M3D.matchModel3DForTopic('Aufbau der eukaryotischen Zelle')?.modelId === 'cell' &&
+      M3D.matchModel3DForTopic('Koffein und Adenosin-Rezeptoren')?.variantId === 'caffeine' &&
+      M3D.matchModel3DForTopic('Französische Revolution') === null,
+    'Skills-Lektionen: 3D-Modelle werden als Lab geparst und bei passenden Themen automatisch eingebettet',
+  );
 }
 
 console.log(failures ? `\n${failures} Test(s) fehlgeschlagen` : '\nAlle SRS-Tests bestanden');
 process.exit(failures ? 1 : 0);
-
-
-
-
-

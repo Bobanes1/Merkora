@@ -1,8 +1,13 @@
 /**
- * Calm sounds and music for learning – generated live with Web Audio (no audio files, no licences, offline).
- * One engine for the whole app: it keeps playing when you change pages. Several sounds can play at once (a mix).
+ * Calm sounds and music for learning – hybrid studio engine (100 % offline):
+ * - Real curated stereo audio recordings (/audio/ambient/*.mp3) with seamless equal-power crossfade looping
+ *   for natural environments, places & focus sounds where real acoustics shine
+ * - Real multi-sampled Yamaha C5 Grand Piano (Salamander V3) for Sanftes Klavier & Lo-Fi Beats
+ * - Pure mathematical Web Audio synthesis for infinite non-repeating noise (brown/pink/white) & evolving ambient pads
+ * One engine for the whole app: keeps playing across pages; mix several sounds at once.
  */
 import { useSyncExternalStore } from 'react';
+import { playSampledGrandNote, preloadPianoSamples } from './musicAudio';
 
 export type SoundId =
   | 'rain'
@@ -14,6 +19,9 @@ export type SoundId =
   | 'birds'
   | 'night'
   | 'cafe'
+  | 'library'
+  | 'train'
+  | 'keyboard'
   | 'brown'
   | 'pink'
   | 'white'
@@ -22,25 +30,45 @@ export type SoundId =
   | 'lofi'
   | 'bowls';
 export type SoundGroup = 'natur' | 'rauschen' | 'musik';
-export const SOUNDS: { id: SoundId; label: string; group: SoundGroup; hint: string }[] = [
-  { id: 'rain', label: 'Regen', group: 'natur', hint: 'gleichmäßiger Landregen' },
-  { id: 'storm', label: 'Gewitter', group: 'natur', hint: 'Regen mit fernem Donner' },
-  { id: 'ocean', label: 'Meeresrauschen', group: 'natur', hint: 'Wellen, die kommen und gehen' },
-  { id: 'stream', label: 'Bach', group: 'natur', hint: 'plätscherndes Wasser' },
-  { id: 'fire', label: 'Kaminfeuer', group: 'natur', hint: 'Knistern und Glut' },
-  { id: 'wind', label: 'Wind', group: 'natur', hint: 'sanfte Böen' },
-  { id: 'birds', label: 'Vogelgezwitscher', group: 'natur', hint: 'Morgen im Wald' },
-  { id: 'night', label: 'Sommernacht', group: 'natur', hint: 'sanftes Zirpen & Abendbrise' },
-  { id: 'cafe', label: 'Bibliothek & Café', group: 'rauschen', hint: 'ruhiges Raumambiente, sanftes Blättern' },
+export const SOUNDS: { id: SoundId; label: string; group: SoundGroup; hint: string; real?: boolean }[] = [
+  { id: 'rain', label: 'Regen am Fenster', group: 'natur', hint: 'echte Aufnahme – warmer Landregen auf Glas', real: true },
+  { id: 'storm', label: 'Gewitter', group: 'natur', hint: 'echte Aufnahme – Regen & ferner Donner', real: true },
+  { id: 'ocean', label: 'Meeresrauschen', group: 'natur', hint: 'echte Aufnahme – sanfte Meereswellen', real: true },
+  { id: 'stream', label: 'Bach', group: 'natur', hint: 'echte Aufnahme – plätschernder Gebirgsbach', real: true },
+  { id: 'fire', label: 'Kaminfeuer', group: 'natur', hint: 'echte Aufnahme – knisterndes Holzfeuer', real: true },
+  { id: 'wind', label: 'Wind in Bäumen', group: 'natur', hint: 'echte Aufnahme – sanftes Blätterrascheln', real: true },
+  { id: 'birds', label: 'Vogelgezwitscher', group: 'natur', hint: 'echte Aufnahme – Morgen im Wald', real: true },
+  { id: 'night', label: 'Sommernacht', group: 'natur', hint: 'echte Aufnahme – Grillen & Abendstimmung', real: true },
+  { id: 'library', label: 'Bibliothek', group: 'rauschen', hint: 'echte Aufnahme – ruhiger Lesesaal & Blättern', real: true },
+  { id: 'cafe', label: 'Café', group: 'rauschen', hint: 'echte Aufnahme – gemütliches Kaffeehaus-Ambiente', real: true },
+  { id: 'train', label: 'Zugfahrt', group: 'rauschen', hint: 'echte Aufnahme – gleichmäßiges Gleisrollen', real: true },
+  { id: 'keyboard', label: 'Tastatur', group: 'rauschen', hint: 'echte Aufnahme – ruhiges Tippen im Fokus', real: true },
   { id: 'brown', label: 'Braunes Rauschen', group: 'rauschen', hint: 'tief und weich – gut gegen Ablenkung' },
   { id: 'pink', label: 'Rosa Rauschen', group: 'rauschen', hint: 'ausgewogen, wie ein Wasserfall' },
   { id: 'white', label: 'Weißes Rauschen', group: 'rauschen', hint: 'hell, überdeckt Geräusche' },
-  { id: 'lofi', label: 'Lo-Fi Beats', group: 'musik', hint: 'warme Rhodes-Akkorde & ruhiger 72-BPM-Groove' },
+  { id: 'lofi', label: 'Lo-Fi Beats', group: 'musik', hint: 'echter Flügel, Vinyl-Wärme & 72-BPM-Groove', real: true },
+  { id: 'piano', label: 'Sanftes Klavier', group: 'musik', hint: 'echter Yamaha-Flügel, nie zweimal gleich', real: true },
+  { id: 'bowls', label: 'Klangschalen', group: 'musik', hint: 'echte Aufnahme – tibetische Klangschalen', real: true },
   { id: 'pad', label: 'Ruhige Klänge', group: 'musik', hint: 'langsame, warme Akkorde' },
-  { id: 'piano', label: 'Sanftes Klavier', group: 'musik', hint: 'leise Töne, nie zweimal gleich' },
-  { id: 'bowls', label: 'Klangschalen', group: 'musik', hint: 'lang ausklingende Töne' },
 ];
-export const GROUP_LABEL: Record<SoundGroup, string> = { natur: 'Natur', rauschen: 'Rauschen', musik: 'Musik' };
+export const GROUP_LABEL: Record<SoundGroup, string> = { natur: 'Natur', rauschen: 'Orte & Rauschen', musik: 'Musik' };
+
+/** Bundled offline stereo studio recordings (/audio/ambient/*.mp3). */
+export const REAL_SOUND_URL: Partial<Record<SoundId, string>> = {
+  rain: '/audio/ambient/rain.mp3',
+  storm: '/audio/ambient/storm.mp3',
+  ocean: '/audio/ambient/ocean.mp3',
+  stream: '/audio/ambient/stream.mp3',
+  fire: '/audio/ambient/fire.mp3',
+  wind: '/audio/ambient/wind.mp3',
+  birds: '/audio/ambient/birds.mp3',
+  night: '/audio/ambient/night.mp3',
+  cafe: '/audio/ambient/cafe.mp3',
+  library: '/audio/ambient/library.mp3',
+  train: '/audio/ambient/train.mp3',
+  keyboard: '/audio/ambient/keyboard.mp3',
+  bowls: '/audio/ambient/bowls.mp3',
+};
 
 type Mix = Partial<Record<SoundId, number>>;
 type State = { playing: Mix; master: number; timerEnd: number | null; paused: boolean };
@@ -354,7 +382,92 @@ function sing(c: AudioContext, b: Bird, at: number): number {
   return 0.35;
 }
 
+// ---------- Real Studio Recording Seamless Crossfade Looper ----------
+const realBufCache = new Map<string, Promise<AudioBuffer | null>>();
+
+function loadRealBuffer(c: AudioContext, url: string): Promise<AudioBuffer | null> {
+  if (typeof fetch === 'undefined') return Promise.resolve(null);
+  let p = realBufCache.get(url);
+  if (!p) {
+    p = fetch(url)
+      .then((r) => (r.ok ? r.arrayBuffer() : null))
+      .then((ab) => (ab ? c.decodeAudioData(ab) : null))
+      .catch(() => null);
+    realBufCache.set(url, p);
+  }
+  return p;
+}
+
+/**
+ * Plays a real studio MP3 loop with overlapping equal-power crossfades (no click or seam ever).
+ * Returns a stop function; falls back cleanly to `onFallback()` if the audio file cannot be decoded.
+ */
+function startRealLoop(c: AudioContext, url: string, out: AudioNode, gainScale = 1, onFallback?: () => () => void): () => void {
+  let stopped = false;
+  let timerId: number | undefined;
+  let fallbackStop: (() => void) | null = null;
+  const active = new Set<AudioBufferSourceNode>();
+
+  const schedulePass = (buf: AudioBuffer, startAt: number, isFirst: boolean) => {
+    if (stopped) return;
+    const dur = buf.duration;
+    // Crossfade up to 2.4s (never more than 35% of buffer length)
+    const xfade = Math.min(2.4, Math.max(0.35, dur * 0.25));
+    const step = Math.max(0.5, dur - xfade);
+
+    const src = c.createBufferSource();
+    src.buffer = buf;
+    const g = c.createGain();
+    g.gain.setValueAtTime(isFirst ? gainScale : 0.0001, startAt);
+    if (!isFirst) g.gain.linearRampToValueAtTime(gainScale, startAt + xfade);
+    g.gain.setValueAtTime(gainScale, startAt + step);
+    g.gain.linearRampToValueAtTime(0.0001, startAt + dur);
+
+    src.connect(g).connect(out);
+    src.start(startAt);
+    src.stop(startAt + dur + 0.05);
+    active.add(src);
+    src.onended = () => active.delete(src);
+
+    const nextAt = startAt + step;
+    const waitMs = Math.max(100, (nextAt - c.currentTime - 0.35) * 1000);
+    timerId = window.setTimeout(() => schedulePass(buf, Math.max(c.currentTime + 0.04, nextAt), false), waitMs);
+  };
+
+  void loadRealBuffer(c, url).then((buf) => {
+    if (stopped) return;
+    if (!buf || buf.duration < 0.8) {
+      if (onFallback) fallbackStop = onFallback();
+      return;
+    }
+    schedulePass(buf, c.currentTime + 0.02, true);
+  });
+
+  return () => {
+    stopped = true;
+    if (timerId !== undefined) window.clearTimeout(timerId);
+    fallbackStop?.();
+    active.forEach((s) => {
+      try {
+        s.stop();
+      } catch {
+        // already ended
+      }
+    });
+    active.clear();
+  };
+}
+
 function build(id: SoundId, c: AudioContext, out: GainNode): () => void {
+  const realUrl = REAL_SOUND_URL[id];
+  if (realUrl) {
+    // Use real studio recording with seamless crossfade looping; fall back to synthesis only if unavailable
+    return startRealLoop(c, realUrl, out, 0.92, () => buildSynth(id, c, out));
+  }
+  return buildSynth(id, c, out);
+}
+
+function buildSynth(id: SoundId, c: AudioContext, out: GainNode): () => void {
   const stops: (() => void)[] = [];
   const keep = (n: AudioScheduledSourceNode) => stops.push(() => n.stop());
   switch (id) {
@@ -566,10 +679,11 @@ function build(id: SoundId, c: AudioContext, out: GainNode): () => void {
       break;
     }
     case 'piano': {
-      // pentatonic notes (C major), sometimes a soft two-note chord – never the same twice
+      // Real Yamaha C5 Grand Piano (Salamander V3) playing calm, non-repeating pentatonic melodies
+      preloadPianoSamples(c);
       const scale = [60, 62, 64, 67, 69, 72, 74, 76];
       const g = c.createGain();
-      g.gain.value = 0.9;
+      g.gain.value = 0.85;
       g.connect(out);
       g.connect(reverbIn!);
       let next = c.currentTime + 0.2;
@@ -577,13 +691,20 @@ function build(id: SoundId, c: AudioContext, out: GainNode): () => void {
         every(() => {
           if (c.currentTime < next) return;
           const n = scale[Math.floor(Math.random() * scale.length)];
-          tone(c, g, next, midi(n), 0.16, rnd(2.2, 3.2), [
-            [1, 1],
-            [2, 0.35],
-            [3, 0.12],
-          ]);
-          if (Math.random() < 0.25) tone(c, g, next, midi(n - 12), 0.1, 3, [[1, 1], [2, 0.2]]);
-          next += rnd(0.55, 1.4);
+          const dur = rnd(2.2, 3.4);
+          if (!playSampledGrandNote(c, g, reverbIn, n, next, dur, 0.14)) {
+            tone(c, g, next, midi(n), 0.16, dur, [
+              [1, 1],
+              [2, 0.35],
+              [3, 0.12],
+            ]);
+          }
+          if (Math.random() < 0.28) {
+            if (!playSampledGrandNote(c, g, reverbIn, n - 12, next + 0.02, 3.2, 0.09)) {
+              tone(c, g, next, midi(n - 12), 0.1, 3, [[1, 1], [2, 0.2]]);
+            }
+          }
+          next += rnd(0.75, 1.85);
         }),
       );
       break;
@@ -609,24 +730,20 @@ function build(id: SoundId, c: AudioContext, out: GainNode): () => void {
       break;
     }
     case 'lofi': {
-      // Warm 72 BPM Lo-Fi Study Beats: Rhodes maj7/min7 chord loop + muted kick/snare + gentle vinyl warmth
+      // Warm 72 BPM Lo-Fi Study Beats: real Yamaha C5 Grand Piano chords through warm tape filter + real vinyl crackle + mellow beat
+      preloadPianoSamples(c);
       const chords = [
         [53, 57, 60, 64, 67], // Fmaj9
         [52, 55, 59, 62, 64], // Em7
         [50, 53, 57, 60, 64], // Dm9
         [48, 52, 55, 59, 62], // Cmaj9
       ];
-      const lp = filter(c, 'lowpass', 2200, 0.7);
+      const lp = filter(c, 'lowpass', 1850, 0.7);
       lp.connect(out);
       lp.connect(reverbIn!);
 
-      // Subtle dusty vinyl floor
-      const vnLp = filter(c, 'bandpass', 2800, 0.8);
-      const vnGain = c.createGain();
-      vnGain.gain.value = 0.028;
-      vnLp.connect(vnGain).connect(out);
-      const vnSrc = loopNoise(c, 'pink', vnLp);
-      stops.push(() => vnSrc.stop());
+      // Subtle real vinyl crackle loop underneath
+      stops.push(startRealLoop(c, '/audio/ambient/vinyl.mp3', out, 0.18));
 
       const beat = 60 / 72; // ~0.833s per quarter
       let step = 0;
@@ -636,15 +753,17 @@ function build(id: SoundId, c: AudioContext, out: GainNode): () => void {
           while (next < c.currentTime + 0.25) {
             const bar = Math.floor(step / 8) % chords.length;
             const sub = step % 8; // eighth notes
-            // Warm Rhodes chord on beat 1 of each bar
             if (sub === 0) {
               const ch = chords[bar];
               ch.forEach((n, idx) => {
-                tone(c, lp, next + idx * 0.025, midi(n), 0.055, beat * 3.6, [
-                  [1, 1],
-                  [2, 0.24],
-                  [3, 0.06],
-                ]);
+                const at = next + idx * 0.028;
+                if (!playSampledGrandNote(c, lp, reverbIn, n, at, beat * 3.5, 0.06)) {
+                  tone(c, lp, at, midi(n), 0.055, beat * 3.6, [
+                    [1, 1],
+                    [2, 0.24],
+                    [3, 0.06],
+                  ]);
+                }
               });
             }
             // Soft muted kick on 1 and 3.5
@@ -691,6 +810,9 @@ function build(id: SoundId, c: AudioContext, out: GainNode): () => void {
       );
       break;
     }
+    case 'library':
+    case 'train':
+    case 'keyboard':
     case 'cafe': {
       // Cozy library & café room warmth + subtle porcelain clinks & soft page turns
       const roomLp = filter(c, 'lowpass', 680, 0.7);
@@ -769,22 +891,25 @@ function build(id: SoundId, c: AudioContext, out: GainNode): () => void {
 
 /** Loudness of each sound at volume 1 (so the mix stays balanced). */
 const LEVEL: Record<SoundId, number> = {
-  rain: 0.9,
-  storm: 0.9,
-  ocean: 0.9,
-  stream: 2.4,
-  fire: 0.9,
-  wind: 0.8,
-  birds: 1,
-  night: 0.85,
-  cafe: 0.95,
+  rain: 0.82,
+  storm: 0.85,
+  ocean: 0.8,
+  stream: 0.85,
+  fire: 0.85,
+  wind: 0.78,
+  birds: 0.8,
+  night: 0.8,
+  library: 0.9,
+  cafe: 0.82,
+  train: 0.82,
+  keyboard: 0.75,
   brown: 0.6,
   pink: 0.45,
   white: 0.25,
   lofi: 0.9,
   pad: 1,
   piano: 1,
-  bowls: 1,
+  bowls: 0.85,
 };
 
 function startVoice(id: SoundId, vol: number) {
@@ -888,12 +1013,14 @@ export function saveFavourites(list: Favourite[]) {
 }
 /** Ready-made mixes. */
 export const PRESETS: Favourite[] = [
-  { name: 'Lo-Fi Session', mix: { lofi: 0.78, rain: 0.3 } },
-  { name: 'Bibliothek', mix: { cafe: 0.72, brown: 0.25 } },
-  { name: 'Regen am Fenster', mix: { rain: 0.8, piano: 0.4 } },
-  { name: 'Hütte im Wald', mix: { fire: 0.7, wind: 0.35, birds: 0.25 } },
-  { name: 'Am Meer', mix: { ocean: 0.8, bowls: 0.3 } },
-  { name: 'Tiefer Fokus', mix: { brown: 0.7, pad: 0.35 } },
+  { name: 'Lo-Fi Session', mix: { lofi: 0.78, rain: 0.32 } },
+  { name: 'Unibibliothek', mix: { library: 0.78, rain: 0.25 } },
+  { name: 'Nachtzug & Regen', mix: { train: 0.72, rain: 0.45 } },
+  { name: 'Regen am Fenster', mix: { rain: 0.78, piano: 0.45 } },
+  { name: 'Café & Fokus', mix: { cafe: 0.7, keyboard: 0.3 } },
+  { name: 'Hütte im Wald', mix: { fire: 0.72, wind: 0.35, birds: 0.25 } },
+  { name: 'Am Meer', mix: { ocean: 0.78, bowls: 0.35 } },
+  { name: 'Tiefer Fokus', mix: { brown: 0.65, pad: 0.35 } },
 ];
 
 /** Short text of what is playing („Regen + Klavier“). */

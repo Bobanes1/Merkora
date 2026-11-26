@@ -1,15 +1,21 @@
+import { isImageFile, ocrImageBlob, ocrPdfPages } from './ocr';
 import { pagesToText, stripRepeatedLines } from './pdfText';
 
-/** File types the AI card creation can read. */
+/** File types the AI card creation & Materialbox can read (including photos/scans via Offline-OCR). */
 export const MATERIAL_ACCEPT =
-  '.pdf,.docx,.pptx,.odt,.odp,.txt,.md,.markdown,.csv,.html,.htm,text/*,application/pdf,' +
+  '.pdf,.docx,.pptx,.odt,.odp,.png,.jpg,.jpeg,.webp,.bmp,.txt,.md,.markdown,.csv,.html,.htm,text/*,image/png,image/jpeg,image/webp,image/bmp,application/pdf,' +
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document,' +
   'application/vnd.openxmlformats-officedocument.presentationml.presentation';
-export const MATERIAL_LABEL = 'PDF, Word, PowerPoint, Text oder Markdown';
+export const MATERIAL_LABEL = 'PDF, Word, PowerPoint, Fotos/Scans (Offline-OCR), Text oder Markdown';
 
-/** Reads text from a PDF, Word, PowerPoint, OpenDocument, text or Markdown file on this device (nothing is uploaded). */
-export async function readFileText(file: File): Promise<string> {
+/** Reads text from a PDF, Word, PowerPoint, OpenDocument, photo/scan (Offline-OCR), text or Markdown file on this device. */
+export async function readFileText(file: File, onProgress?: (status: string) => void): Promise<string> {
   const name = file.name.toLowerCase();
+  if (isImageFile(file)) {
+    const res = await ocrImageBlob(file, { onProgress });
+    if (!res.text) throw new Error('Auf diesem Bild wurde kein lesbarer Text erkannt.');
+    return res.text;
+  }
   if (/\.(docx|pptx|odt|odp)$/.test(name)) {
     const [{ unzipSync }, { officeText }] = await Promise.all([import('fflate'), import('./officeText')]);
     let files: Record<string, Uint8Array>;
@@ -38,11 +44,20 @@ export async function readFileText(file: File): Promise<string> {
         }
       }
       if (line) lines.push(line);
-      pages.push(lines.join('\n'));
+      pages.push(lines.join('\n').trim());
+    }
+    // Automatically run Offline-OCR on scanned/image-only pages when little or no embedded text exists
+    const emptyPageNums = pages.map((p, idx) => (p.length < 25 ? idx + 1 : 0)).filter(Boolean);
+    const totalChars = pages.reduce((n, p) => n + p.length, 0);
+    if (emptyPageNums.length > 0 && (totalChars < 40 || emptyPageNums.length >= Math.ceil(doc.numPages * 0.5))) {
+      const ocrPages = await ocrPdfPages(doc as never, emptyPageNums, { onProgress });
+      for (const [pageNum, txt] of ocrPages) {
+        if (txt && txt.length > pages[pageNum - 1].length) pages[pageNum - 1] = txt;
+      }
     }
     // headers / footers repeated on every slide are left out
     const text = pagesToText(stripRepeatedLines(pages));
-    if (!text) throw new Error('In diesem PDF wurde kein Text gefunden (vielleicht ist es eingescannt).');
+    if (!text) throw new Error('In diesem PDF wurde auch per Offline-OCR kein Text gefunden.');
     return text;
   }
   if (/\.(txt|md|markdown|csv|json|html?)$/.test(name) || file.type.startsWith('text/')) {
@@ -51,7 +66,7 @@ export async function readFileText(file: File): Promise<string> {
       ? new DOMParser().parseFromString(text, 'text/html').body.innerText
       : text;
   }
-  throw new Error('Dieses Dateiformat wird nicht unterstützt. Nutze PDF, Word (.docx), PowerPoint (.pptx), TXT oder Markdown.');
+  throw new Error('Dieses Dateiformat wird nicht unterstützt. Nutze PDF, Word (.docx), PowerPoint (.pptx), Fotos/Scans (PNG/JPG), TXT oder Markdown.');
 }
 
 export const isPdf = (file: File) => file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf';
@@ -67,7 +82,10 @@ async function loadPdf(file: Blob) {
  * PDF with the text of every slide and what each slide draws (pictures by size, number of shapes) –
  * used to find slides that show a model or figure (see lib/slides.ts).
  */
-export async function readPdfDetailed(file: File): Promise<{ pages: string[]; stats: { images: string[]; paths: number }[] }> {
+export async function readPdfDetailed(
+  file: File,
+  onProgress?: (status: string) => void,
+): Promise<{ pages: string[]; stats: { images: string[]; paths: number }[] }> {
   const { pdfjs, doc } = await loadPdf(file);
   const OPS = pdfjs.OPS as Record<string, number>;
   const imageOps = new Set([OPS.paintImageXObject, OPS.paintInlineImageXObject, OPS.paintImageMaskXObject, OPS.paintImageXObjectRepeat].filter((x) => x !== undefined));
@@ -102,7 +120,14 @@ export async function readPdfDetailed(file: File): Promise<{ pages: string[]; st
     stats.push({ images, paths });
     page.cleanup();
   }
-  if (!pages.some((p) => p)) throw new Error('In diesem PDF wurde kein Text gefunden (vielleicht ist es eingescannt).');
+  const emptyPageNums = pages.map((p, idx) => (p.length < 25 ? idx + 1 : 0)).filter(Boolean);
+  if (emptyPageNums.length > 0 && (!pages.some((p) => p.length >= 25) || emptyPageNums.length >= Math.ceil(doc.numPages * 0.5))) {
+    const ocrPages = await ocrPdfPages(doc as never, emptyPageNums, { onProgress });
+    for (const [pageNum, txt] of ocrPages) {
+      if (txt && txt.length > pages[pageNum - 1].length) pages[pageNum - 1] = txt;
+    }
+  }
+  if (!pages.some((p) => p)) throw new Error('In diesem PDF wurde auch per Offline-OCR kein Text gefunden.');
   return { pages: stripRepeatedLines(pages), stats };
 }
 

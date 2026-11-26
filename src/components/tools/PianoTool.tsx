@@ -1,17 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getPianoVoice, getSustain, playClick, playNote, setPianoVoice, setSustain, type PianoVoice } from '../../lib/musicAudio';
+import { getPianoVoice, getSustain, playClick, playNote, preloadPianoSamples, setPianoVoice, setSustain, type PianoVoice } from '../../lib/musicAudio';
 import { MUSIC_PATTERNS, patternMidis, PIANO_ROOTS } from '../../lib/pianoTheory';
 import { Piano } from '../practice/MusicTask';
 import { IconPause, IconPlay } from '../Icons';
 
 const BEATS_PER_BAR = [2, 3, 4, 6];
 const VOICES: { id: PianoVoice; label: string }[] = [
-  { id: 'grand', label: 'Konzertflügel' },
+  { id: 'grand', label: 'Flügel (Yamaha C5)' },
   { id: 'rhodes', label: 'E-Piano' },
   { id: 'warm', label: 'Warm Synth' },
 ];
 
-/** Studio Piano & Metronome tool with Grand/Rhodes/Synth voices, sustain pedal, scale/chord highlighting & woodblock metronome. */
+/** Studio Piano & Metronome tool with real Yamaha C5 samples, Rhodes/Synth voices, sustain pedal, scale/chord highlighting & woodblock metronome. */
 export function PianoTool() {
   const [rootPc, setRootPc] = useState(0); // C
   const [patternId, setPatternId] = useState<string>('');
@@ -22,6 +22,10 @@ export function PianoTool() {
   const [metroOn, setMetroOn] = useState(false);
   const [beatIdx, setBeatIdx] = useState(0);
   const tapsRef = useRef<number[]>([]);
+
+  useEffect(() => {
+    preloadPianoSamples();
+  }, []);
 
   const chooseVoice = (v: PianoVoice) => {
     setPianoVoice(v);

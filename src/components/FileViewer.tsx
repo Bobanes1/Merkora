@@ -16,6 +16,7 @@ type Content =
   | { kind: 'missing' }
   | { kind: 'error'; text: string }
   | { kind: 'pdf'; blob: Blob }
+  | { kind: 'image'; blob: Blob }
   | { kind: 'html'; html: string }
   | { kind: 'slides'; slides: Slide[] }
   | { kind: 'markdown'; text: string }
@@ -27,6 +28,7 @@ async function load(file: DeckFile): Promise<Content> {
   if (!blob) return { kind: 'missing' };
   const k = fileKind(file.name, file.type ?? 'application/pdf');
   if (k === 'pdf') return { kind: 'pdf', blob };
+  if (k === 'image') return { kind: 'image', blob };
   if (k === 'word' || k === 'powerpoint' || k === 'odt' || k === 'odp') {
     const [{ unzipSync }, office, text] = await Promise.all([import('fflate'), import('../lib/officeHtml'), import('../lib/officeText')]);
     const zip = unzipSync(new Uint8Array(await blob.arrayBuffer()));
@@ -201,6 +203,7 @@ export function FileViewer({ file, deck, onClose }: { file: DeckFile; deck?: Dec
         {content.kind === 'missing' && <p className="fv-msg">Diese Datei ist auf diesem Gerät nicht gespeichert (vielleicht noch nicht synchronisiert).</p>}
         {content.kind === 'error' && <p className="fv-msg">{content.text}</p>}
         {content.kind === 'pdf' && (mode === 'slides' && deck ? <div className="fv-slides-wrap"><SlideViewer deck={deck} fileId={file.id} /></div> : <PdfDocument blob={content.blob} />)}
+        {content.kind === 'image' && <ImageDocument blob={content.blob} alt={file.name} />}
         {content.kind === 'html' && <article className="fv-doc" dangerouslySetInnerHTML={{ __html: content.html }} />}
         {content.kind === 'slides' && (
           <div className="fv-deck">
@@ -248,5 +251,20 @@ export function FileViewer({ file, deck, onClose }: { file: DeckFile; deck?: Dec
       </div>
     </div>,
     document.body,
+  );
+}
+
+function ImageDocument({ blob, alt }: { blob: Blob; alt: string }) {
+  const [url, setUrl] = useState('');
+  useEffect(() => {
+    const u = URL.createObjectURL(blob);
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [blob]);
+  if (!url) return null;
+  return (
+    <div className="fv-doc" style={{ display: 'flex', justifyContent: 'center', padding: 16 }}>
+      <img src={url} alt={alt} style={{ maxWidth: '100%', maxHeight: '78vh', borderRadius: 10, objectFit: 'contain' }} />
+    </div>
   );
 }

@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { CreateWithAI } from '../../components/CreateWithAI';
-import { IconSparkle, IconUpload } from '../../components/Icons';
+import { IconSparkle, IconStar, IconUpload } from '../../components/Icons';
 import { DeckFileList } from '../../components/DeckFileList';
+import { StartSkillModal } from '../../components/StartSkillModal';
+import { materialFrom } from '../../lib/ai';
 import { attachFiles } from '../../lib/deckFiles';
 import { MATERIAL_ACCEPT, readFileText } from '../../lib/files';
 import { updateDeck, type Deck } from '../../lib/store';
@@ -12,6 +14,7 @@ export default function SourceTab({ deck }: { deck: Deck }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [ai, setAi] = useState(false);
+  const [skillModal, setSkillModal] = useState(false);
   /** PDFs picked while the deck already has text: show only as slides, or also add their text? */
   const [pending, setPending] = useState<File[] | null>(null);
   const hasFiles = (deck.files?.length ?? 0) > 0;
@@ -75,16 +78,21 @@ export default function SourceTab({ deck }: { deck: Deck }) {
     </>
   );
 
+  const skillMaterial = text.trim() || materialFrom(deck.source, deck.cards);
+
   return (
     <div className="panel source">
       <div className="toolbar">
         <div>
           <b className="toolbar-title">Lernmaterial</b>
-          <p className="muted small">Grundlage für Zusammenfassung, Quiz und Tutor. {saved ? 'Gespeichert.' : 'Wird gespeichert …'}</p>
+          <p className="muted small">Grundlage für Zusammenfassung, Quiz, Tutor und Skills. {saved ? 'Gespeichert.' : 'Wird gespeichert …'}</p>
         </div>
         <span className="grow" />
         <button type="button" className="btn outline sm" onClick={() => fileRef.current?.click()} disabled={busy}>
           <IconUpload size={15} /> {busy ? 'Wird gelesen …' : 'Dateien hinzufügen'}
+        </button>
+        <button type="button" className="btn outline sm" onClick={() => setSkillModal(true)} disabled={skillMaterial.trim().length < 20}>
+          <IconStar size={14} /> Als Skill starten
         </button>
         <button type="button" className="btn primary sm" onClick={() => setAi(true)} disabled={text.trim().length < 40}>
           <IconSparkle size={15} /> Karten daraus erstellen
@@ -134,6 +142,15 @@ export default function SourceTab({ deck }: { deck: Deck }) {
         </div>
       )}
       {ai && <CreateWithAI deckId={deck.id} onClose={() => setAi(false)} />}
+      {skillModal && (
+        <StartSkillModal
+          initialTopic={deck.name}
+          material={skillMaterial}
+          files={deck.files}
+          courseId={deck.courseId}
+          onClose={() => setSkillModal(false)}
+        />
+      )}
     </div>
   );
 }

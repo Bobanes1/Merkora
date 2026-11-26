@@ -22,8 +22,10 @@ import {
 } from '../../lib/labs';
 import { compileExpr } from '../../lib/plotExpr';
 import { niceTicks } from '../../lib/diagram';
+import { MODELS_3D } from '../../lib/models3d';
 import { withParams, type LabSpec } from '../../lib/practice';
 import { formulaCurve, formulaValue, type FormulaLab as FormulaSpec } from '../../lib/visuals';
+import { Model3DLab } from './Model3DLab';
 
 /**
  * Interactive labs: Merkora's own, tested building blocks (lib/labs.ts). The AI only picks a type and
@@ -43,6 +45,7 @@ export const LAB_TITLES: Record<LabSpec['type'], string> = {
   function: 'Funktionen: Ableitung und Fläche',
   vectors: 'Vektoren und Matrizen',
   formula: 'Formel zum Ausprobieren',
+  model3d: 'Interaktives 3D-Modell',
 };
 
 /** Default starting values for every lab (for „Labore“ without an AI set). */
@@ -602,11 +605,19 @@ export function Lab({ spec }: { spec: LabSpec }) {
         return <VectorsLab spec={spec} />;
       case 'formula':
         return <FormulaLab spec={spec} />;
+      case 'model3d':
+        return <Model3DLab spec={spec} />;
     }
   })();
+  const heading =
+    spec.type === 'formula'
+      ? spec.title
+      : spec.type === 'model3d'
+        ? spec.title ?? `3D-Modell: ${MODELS_3D.find((m) => m.id === spec.modelId)?.title ?? LAB_TITLES.model3d}`
+        : LAB_TITLES[spec.type];
   return (
     <section className="panel lab">
-      <h3>{spec.type === 'formula' ? spec.title : LAB_TITLES[spec.type]}</h3>
+      <h3>{heading}</h3>
       {spec.ask && <p className="lab-ask">{spec.ask}</p>}
       {body}
     </section>
