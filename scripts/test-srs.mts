@@ -3153,7 +3153,7 @@ console.log('App-weite Upgrades: Offline-Quiz, Statistik-Analyse, Zusammenfassun
   const MA = await import('../src/lib/musicAudio');
   const AM = await import('../src/lib/ambient');
 
-  ok(M3.MODELS_3D.length === 8, '3D-Studio: alle 8 interaktiven 3D-Modelle vorhanden');
+  ok(M3.MODELS_3D.length >= 12, '3D-Studio: mindestens 12 interaktive 3D-Modelle vorhanden');
   const all3dValid = M3.MODELS_3D.every((m) => {
     const vars = m.variants?.length ? m.variants.map((v) => v.id) : [undefined];
     return vars.every((vid) => {
