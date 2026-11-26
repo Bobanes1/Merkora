@@ -147,9 +147,30 @@ export type Deck = {
 };
 /** A stored material file (media id = `id`). */
 export type DeckFile = { id: string; name: string; size: number; addedAt: number; /** MIME type (missing on older entries = PDF) */ type?: string };
+/** A file or text note stored directly in a course/module Materialbox (reusable for decks & skills without re-uploading). */
+export type CourseMaterial = {
+  id: string;
+  name: string;
+  size: number;
+  addedAt: number;
+  type?: string;
+  /** Extracted text cached once at upload time so creating decks or skills is immediate. */
+  text: string;
+  /** True when the original binary file lives in the media store under `id`. */
+  isFile?: boolean;
+};
 /** A folder inside a course that groups decks. */
 export type Folder = { id: string; name: string };
-export type Course = { id: string; workspaceId: string; name: string; slug: string; folders?: Folder[]; pinned?: boolean; archived?: boolean };
+export type Course = {
+  id: string;
+  workspaceId: string;
+  name: string;
+  slug: string;
+  folders?: Folder[];
+  materials?: CourseMaterial[];
+  pinned?: boolean;
+  archived?: boolean;
+};
 export type Workspace = { id: string; name: string; slug: string };
 export type Review = { deckId: string; cardId: string; at: number; rating: Rating };
 /** An exam date linked to the decks it covers. */
@@ -268,6 +289,9 @@ export type Settings = {
   homeTodosCollapsed?: boolean;
   statsOpen?: { section?: boolean; groups?: string[] };
   libraryView?: 'tiles' | 'list';
+  /** Merkora Tools: pinned favorite tools and sidebar collapse state. */
+  pinnedTools?: string[];
+  toolsSidebarCollapsed?: boolean;
   /** Daily goals on the start page (cards learned, minutes). */
   cardGoal?: number;
   minuteGoal?: number;
@@ -765,14 +789,36 @@ export function moveDeck(deckId: string, folderId: string | undefined, courseId?
     return { ...d, decks: d.decks.map((x) => (x.id === deckId ? { ...x, courseId: target, folderId, slug, updatedAt: Date.now() } : x)) };
   });
 }
+export function addCourseMaterials(courseId: string, items: CourseMaterial[]) {
+  if (!items.length) return;
+  update((d) => ({
+    ...d,
+    courses: d.courses.map((c) => {
+      if (c.id !== courseId) return c;
+      const keep = (c.materials ?? []).filter((x) => !items.some((a) => a.name === x.name));
+      return { ...c, materials: [...keep, ...items] };
+    }),
+  }));
+}
+export function removeCourseMaterial(courseId: string, materialId: string) {
+  update((d) => ({
+    ...d,
+    courses: d.courses.map((c) => (c.id === courseId ? { ...c, materials: (c.materials ?? []).filter((m) => m.id !== materialId) } : c)),
+    deleted: tomb(d, [materialId]),
+  }));
+  void collectMediaGarbage();
+}
 export function deleteCourse(id: string) {
   const deckIds = data.decks.filter((x) => x.courseId === id).map((x) => x.id);
+  const matIds = (data.courses.find((c) => c.id === id)?.materials ?? []).map((m) => m.id);
   update((d) => ({
     ...d,
     courses: d.courses.filter((c) => c.id !== id),
     decks: d.decks.filter((x) => x.courseId !== id),
-    deleted: tomb(d, [id, ...deckIds]),
+    skills: (d.skills ?? []).map((s) => (s.courseId === id ? { ...s, courseId: undefined } : s)),
+    deleted: tomb(d, [id, ...deckIds, ...matIds]),
   }));
+  void collectMediaGarbage();
 }
 // ---------- skills ----------
 export function addSkill(skill: Skill) {
@@ -1089,6 +1135,8 @@ export async function collectMediaGarbage() {
         for (const s of [c.front, c.back]) for (const m of s.matchAll(re)) used.add(m[1]);
       }
     for (const d of data.decks) for (const f of d.files ?? []) used.add(f.id);
+    // module-level materials are kept too (shared cleanly across decks & skills)
+    for (const c of data.courses) for (const m of c.materials ?? []) if (m.isFile) used.add(m.id);
     // material files of skills are kept too
     for (const s of data.skills ?? []) for (const f of s.files ?? []) used.add(f.id);
     const keys = (await mediaKeys()).map(String);

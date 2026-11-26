@@ -1,5 +1,5 @@
 /** What kind of material file this is (for the icon and the viewer). Pure – tested in scripts/test-srs.mts. */
-export type FileKind = 'pdf' | 'word' | 'powerpoint' | 'odt' | 'odp' | 'markdown' | 'csv' | 'html' | 'text' | 'other';
+export type FileKind = 'pdf' | 'word' | 'powerpoint' | 'odt' | 'odp' | 'image' | 'markdown' | 'csv' | 'html' | 'text' | 'other';
 
 export function fileKind(name: string, type = ''): FileKind {
   const ext = (name.toLowerCase().match(/\.([a-z0-9]+)$/) ?? [])[1] ?? '';
@@ -9,6 +9,7 @@ export function fileKind(name: string, type = ''): FileKind {
   if (ext === 'pptx' || t.includes('presentationml')) return 'powerpoint';
   if (ext === 'odt') return 'odt';
   if (ext === 'odp') return 'odp';
+  if (/^(png|jpe?g|webp|bmp|gif)$/.test(ext) || (t.startsWith('image/') && t !== 'image/svg+xml')) return 'image';
   if (ext === 'md' || ext === 'markdown') return 'markdown';
   if (ext === 'csv') return 'csv';
   if (ext === 'html' || ext === 'htm') return 'html';
@@ -22,6 +23,7 @@ export const FILE_KIND_LABEL: Record<FileKind, string> = {
   powerpoint: 'PowerPoint',
   odt: 'Text-Dokument',
   odp: 'Präsentation',
+  image: 'Foto / Scan',
   markdown: 'Markdown',
   csv: 'Tabelle',
   html: 'Webseite',
@@ -35,6 +37,7 @@ const MIME: Partial<Record<FileKind, string>> = {
   powerpoint: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   odt: 'application/vnd.oasis.opendocument.text',
   odp: 'application/vnd.oasis.opendocument.presentation',
+  image: 'image/png',
   markdown: 'text/markdown',
   csv: 'text/csv',
   html: 'text/html',

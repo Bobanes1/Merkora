@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactElement } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   IconCalendar,
@@ -14,7 +14,11 @@ import {
   IconMusic,
   IconNote,
   IconPopout,
+  IconSearch,
+  IconSidebar,
   IconSparkle,
+  IconStar,
+  IconStarLine,
   IconTarget,
   IconTimer,
 } from '../components/Icons';
@@ -32,12 +36,10 @@ import { SoundsTool } from '../components/tools/SoundsTool';
 import { VisualLibraryTool } from '../components/tools/VisualLibraryTool';
 import { WorkPlanner } from '../components/tools/WorkPlanner';
 import { useAmbient } from '../lib/ambient';
-import { MODELS_3D } from '../lib/models3d';
-import { VISUAL_PRESETS } from '../lib/visualPresets';
 import { usePhone } from '../lib/phone';
 import { fmtClock, usePomodoro } from '../lib/pomodoro';
 import { remaining } from '../lib/pomodoroRule';
-import { useStore } from '../lib/store';
+import { setSettings, useStore } from '../lib/store';
 import { toolWindows, type ToolWindowId } from '../lib/toolWindows';
 import { DAY, dayKey } from '../lib/util';
 import CalendarPage from './Calendar';
@@ -59,43 +61,39 @@ type Tab =
   | 'periodic'
   | 'piano';
 
-type TabGroup = 'focus' | 'subject';
+type TabGroup = 'plan' | 'focus' | 'stem' | 'creative';
 
 type TabDef = {
   id: Tab;
   group: TabGroup;
   label: string;
-  icon: (p: { size?: number }) => JSX.Element;
+  keywords: string;
+  popupId?: ToolWindowId;
+  icon: (p: { size?: number }) => ReactElement;
 };
 
 const TABS: TabDef[] = [
-  { id: 'todos', group: 'focus', label: 'To-do-Liste', icon: IconChecklist },
-  { id: 'plan', group: 'focus', label: 'Arbeitsplanung', icon: IconSparkle },
-  { id: 'exams', group: 'focus', label: 'Prüfungen', icon: IconCalendar },
-  { id: 'pomodoro', group: 'focus', label: 'Pomodoro-Timer', icon: IconTimer },
-  { id: 'sounds', group: 'focus', label: 'Klänge', icon: IconHeadphones },
-  { id: 'notes', group: 'focus', label: 'Notizblock', icon: IconNote },
-  { id: 'breath', group: 'focus', label: 'Atem-Reset', icon: IconHeart },
-  { id: 'visuals', group: 'subject', label: 'Grafiken', icon: IconImage },
-  { id: 'models3d', group: 'subject', label: '3D-Modelle', icon: IconMindmap },
-  { id: 'code', group: 'subject', label: 'Code-Spielwiese', icon: IconCode },
-  { id: 'calc', group: 'subject', label: 'Rechner', icon: IconTarget },
-  { id: 'labs', group: 'subject', label: 'Mathe-Labore', icon: IconChart },
-  { id: 'periodic', group: 'subject', label: 'Periodensystem', icon: IconGrid },
-  { id: 'piano', group: 'subject', label: 'Klavier', icon: IconMusic },
+  { id: 'todos', group: 'plan', label: 'To-do-Liste', keywords: 'aufgaben liste check', popupId: 'todos', icon: IconChecklist },
+  { id: 'plan', group: 'plan', label: 'Arbeitsplanung', keywords: 'zeitplan woche plan', icon: IconSparkle },
+  { id: 'exams', group: 'plan', label: 'Prüfungen', keywords: 'kalender klausur termin', icon: IconCalendar },
+  { id: 'pomodoro', group: 'focus', label: 'Pomodoro-Timer', keywords: 'timer uhr fokus pause', popupId: 'pomodoro', icon: IconTimer },
+  { id: 'sounds', group: 'focus', label: 'Klänge', keywords: 'musik regen lofi ambient audio', popupId: 'sounds', icon: IconHeadphones },
+  { id: 'notes', group: 'focus', label: 'Notizblock', keywords: 'notizen schreiben skizze', popupId: 'notes', icon: IconNote },
+  { id: 'breath', group: 'focus', label: 'Atem-Reset', keywords: 'entspannen pause atmen', icon: IconHeart },
+  { id: 'code', group: 'stem', label: 'Code-Spielwiese', keywords: 'java python javascript sql programmieren', icon: IconCode },
+  { id: 'calc', group: 'stem', label: 'Rechner', keywords: 'taschenrechner formel mathe', popupId: 'calc', icon: IconTarget },
+  { id: 'labs', group: 'stem', label: 'Mathe-Labore', keywords: 'simulation graphen statistik funktionen', icon: IconChart },
+  { id: 'periodic', group: 'stem', label: 'Periodensystem', keywords: 'chemie elemente pse', icon: IconGrid },
+  { id: 'visuals', group: 'creative', label: 'Grafiken', keywords: 'diagramme bilder vorlagen', icon: IconImage },
+  { id: 'models3d', group: 'creative', label: '3D-Modelle', keywords: 'dna herz molekül 3d anatomie', icon: IconMindmap },
+  { id: 'piano', group: 'creative', label: 'Klavier', keywords: 'musik klaviatur akkorde tonleiter', icon: IconMusic },
 ];
 
 const GROUPS: { id: TabGroup; label: string }[] = [
-  { id: 'focus', label: 'Planen & Fokus' },
-  { id: 'subject', label: 'Fach-Werkzeuge' },
-];
-
-const QUICK_POPUPS: { id: ToolWindowId; label: string; icon: (p: { size?: number }) => JSX.Element }[] = [
-  { id: 'pomodoro', label: 'Pomodoro', icon: IconTimer },
-  { id: 'todos', label: 'To-dos', icon: IconChecklist },
-  { id: 'sounds', label: 'Klänge', icon: IconHeadphones },
-  { id: 'notes', label: 'Notizen', icon: IconNote },
-  { id: 'calc', label: 'Rechner', icon: IconTarget },
+  { id: 'plan', label: 'Planen' },
+  { id: 'focus', label: 'Fokus' },
+  { id: 'stem', label: 'MINT & Code' },
+  { id: 'creative', label: 'Visuell & Kreativ' },
 ];
 
 /** Phone: grouped area picker sheet with live badges. */
@@ -137,7 +135,7 @@ function ToolPicker({ tab, setTab, badges }: { tab: Tab; setTab: (t: Tab) => voi
 }
 
 /**
- * Merkora Tools: central hub for planning, focus & subject tools – all working offline.
+ * Merkora Tools: calm left-sidebar workspace for planning, focus & subject tools – all working offline.
  */
 export default function Tools() {
   const [params, setParams] = useSearchParams();
@@ -147,10 +145,21 @@ export default function Tools() {
   const tab: Tab = mapped && TABS.some((t) => t.id === mapped) ? (mapped as Tab) : 'todos';
   const setTab = (id: Tab) => setParams({ tab: id }, { replace: true });
   const phone = usePhone();
+  const [query, setQuery] = useState('');
 
   const data = useStore((s) => s.data);
   const pomo = usePomodoro();
   const amb = useAmbient();
+
+  const collapsed = !!data.settings.toolsSidebarCollapsed;
+  const pinnedIds = (data.settings.pinnedTools ?? []).filter((id): id is Tab => TABS.some((t) => t.id === id));
+  const pinnedSet = new Set<Tab>(pinnedIds);
+
+  const togglePin = (id: Tab) => {
+    const next = pinnedSet.has(id) ? pinnedIds.filter((x) => x !== id) : [...pinnedIds, id];
+    setSettings({ pinnedTools: next });
+  };
+  const toggleCollapsed = () => setSettings({ toolsSidebarCollapsed: !collapsed });
 
   const now = Date.now();
   const today = dayKey(now);
@@ -165,66 +174,78 @@ export default function Tools() {
   })();
   const soundCount = Object.keys(amb.playing).length;
 
+  // Only live / actionable badges in the sidebar to keep navigation calm
   const badges: Partial<Record<Tab, string>> = {
     ...(openToday > 0 ? { todos: String(openToday) } : openAll > 0 ? { todos: String(openAll) } : {}),
     ...(pomo.running ? { pomodoro: fmtClock(remaining(pomo, now)) } : {}),
     ...(soundCount > 0 ? { sounds: amb.paused ? '⏸' : '●' } : {}),
     ...(nextExamDays !== null ? { exams: nextExamDays === 0 ? 'Heute' : `${nextExamDays} T` } : {}),
-    visuals: String(VISUAL_PRESETS.length),
-    models3d: String(MODELS_3D.length),
   };
 
-  return (
-    <div className="page tools-page" data-mode={tab}>
-      <div className="page-head">
-        <div>
-          <h1>Merkora Tools</h1>
-          <p className="muted">Planen, fokussieren, rechnen, programmieren, forschen &amp; verstehen – alles direkt offline in Merkora.</p>
-        </div>
-        {!phone && (
-          <div className="tools-popups-bar" aria-label="Als schwebendes Popup öffnen">
-            <small className="muted">Popups:</small>
-            {QUICK_POPUPS.map((w) => (
-              <button key={w.id} type="button" className="btn ghost sm" title={`${w.label} als Popup öffnen`} onClick={() => toolWindows.toggle(w.id)}>
-                <w.icon size={13} /> {w.label}
+  const q = query.trim().toLowerCase();
+  const matches = (t: TabDef) => !q || t.label.toLowerCase().includes(q) || t.keywords.includes(q);
+  const pinnedTabs = !q ? pinnedIds.map((id) => TABS.find((t) => t.id === id)!).filter(Boolean) : [];
+  const curTab = TABS.find((t) => t.id === tab)!;
+
+  const renderNavItem = (t: TabDef, keyPrefix: string) => {
+    const active = tab === t.id;
+    const pinned = pinnedSet.has(t.id);
+    const badge = badges[t.id];
+    return (
+      <div key={`${keyPrefix}-${t.id}`} className={`tools-nav-row mode-${t.id}${active ? ' on' : ''}`}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={active}
+          className="tools-nav-btn"
+          title={collapsed ? t.label : undefined}
+          onClick={() => setTab(t.id)}
+        >
+          <span className="tools-nav-ico" aria-hidden="true">
+            <t.icon size={16} />
+          </span>
+          {!collapsed && <span className="tools-nav-label">{t.label}</span>}
+          {!collapsed && badge && (
+            <span className={`tab-badge${t.id === 'sounds' && !amb.paused ? ' live' : ''}`}>{badge}</span>
+          )}
+          {collapsed && badge && <span className={`tools-nav-dot${t.id === 'sounds' && !amb.paused ? ' live' : ''}`} aria-hidden="true" />}
+        </button>
+        {!collapsed && (
+          <div className="tools-nav-actions">
+            {t.popupId && (
+              <button
+                type="button"
+                className="tools-nav-act"
+                title={`${t.label} als schwebendes Popup öffnen`}
+                aria-label={`${t.label} als Popup öffnen`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toolWindows.toggle(t.popupId!);
+                }}
+              >
+                <IconPopout size={13} />
               </button>
-            ))}
+            )}
+            <button
+              type="button"
+              className={`tools-nav-act${pinned ? ' pinned' : ''}`}
+              title={pinned ? 'Aus Favoriten lösen' : 'Oben anheften'}
+              aria-label={pinned ? `${t.label} lösen` : `${t.label} anheften`}
+              onClick={(e) => {
+                e.stopPropagation();
+                togglePin(t.id);
+              }}
+            >
+              {pinned ? <IconStar size={13} /> : <IconStarLine size={13} />}
+            </button>
           </div>
         )}
       </div>
+    );
+  };
 
-      {phone ? (
-        <ToolPicker tab={tab} setTab={setTab} badges={badges} />
-      ) : (
-        <nav className="tools-dock" role="tablist" aria-label="Tools-Bereiche">
-          {GROUPS.map((g) => (
-            <div key={g.id} className="tools-dock-row">
-              <span className="tools-group-label">{g.label}</span>
-              <div className="tools-dock-items">
-                {TABS.filter((t) => t.group === g.id).map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={tab === t.id}
-                    className={`tool-tab mode-${t.id}${tab === t.id ? ' on' : ''}`}
-                    onClick={() => setTab(t.id)}
-                  >
-                    <span className="tool-tab-ico" aria-hidden="true">
-                      <t.icon size={15} />
-                    </span>
-                    <span className="tool-tab-label">{t.label}</span>
-                    {badges[t.id] && (
-                      <span className={`tab-badge${t.id === 'sounds' && !amb.paused ? ' live' : ''}`}>{badges[t.id]}</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-        </nav>
-      )}
-
+  const content = (
+    <div className="tools-content" key={tab}>
       {tab === 'todos' && <Todos embedded />}
 
       {tab === 'plan' && <WorkPlanner />}
@@ -283,6 +304,98 @@ export default function Tools() {
       {tab === 'periodic' && <PeriodicTableTool />}
 
       {tab === 'piano' && <PianoTool />}
+    </div>
+  );
+
+  if (phone) {
+    return (
+      <div className="page tools-page" data-mode={tab}>
+        <div className="page-head">
+          <div>
+            <h1>Merkora Tools</h1>
+          </div>
+        </div>
+        <ToolPicker tab={tab} setTab={setTab} badges={badges} />
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <div className="page wide tools-page" data-mode={tab}>
+      <div className={`tools-shell${collapsed ? ' collapsed' : ''}`}>
+        <aside className="tools-sidebar" aria-label="Merkora Tools Navigation">
+          <div className="tools-sidebar-head">
+            {!collapsed && <span className="tools-sidebar-title">Tools</span>}
+            <button
+              type="button"
+              className="icon-btn sm"
+              title={collapsed ? 'Seitenleiste ausklappen' : 'Seitenleiste einklappen'}
+              aria-label={collapsed ? 'Seitenleiste ausklappen' : 'Seitenleiste einklappen'}
+              aria-expanded={!collapsed}
+              onClick={toggleCollapsed}
+            >
+              <IconSidebar size={16} />
+            </button>
+          </div>
+
+          {!collapsed && (
+            <div className="tools-sidebar-search">
+              <IconSearch size={13} />
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Tool filtern …"
+                aria-label="Tools filtern"
+              />
+              {query && (
+                <button type="button" className="tools-search-clear" aria-label="Filter leeren" onClick={() => setQuery('')}>
+                  ×
+                </button>
+              )}
+            </div>
+          )}
+
+          <nav className="tools-nav" role="tablist" aria-orientation="vertical" aria-label="Tools-Bereiche">
+            {pinnedTabs.length > 0 && (
+              <div className="tools-nav-group">
+                {!collapsed && <span className="tools-nav-group-label">Angeheftet</span>}
+                {pinnedTabs.map((t) => renderNavItem(t, 'pin'))}
+              </div>
+            )}
+
+            {GROUPS.map((g) => {
+              const items = TABS.filter((t) => t.group === g.id && matches(t));
+              if (!items.length) return null;
+              return (
+                <div key={g.id} className="tools-nav-group">
+                  {!collapsed ? <span className="tools-nav-group-label">{g.label}</span> : <div className="tools-nav-sep" />}
+                  {items.map((t) => renderNavItem(t, g.id))}
+                </div>
+              );
+            })}
+
+            {q && TABS.every((t) => !matches(t)) && !collapsed && (
+              <p className="muted small tools-nav-empty">Kein Tool für „{query}“.</p>
+            )}
+          </nav>
+        </aside>
+
+        <div className="tools-main">
+          {collapsed && curTab.popupId && (
+            <div className="tools-main-bar">
+              <span className="tools-main-bar-title">
+                <curTab.icon size={15} /> {curTab.label}
+              </span>
+              <button type="button" className="btn ghost sm" onClick={() => toolWindows.toggle(curTab.popupId!)}>
+                <IconPopout size={13} /> Als Popup öffnen
+              </button>
+            </div>
+          )}
+          {content}
+        </div>
+      </div>
     </div>
   );
 }

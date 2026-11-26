@@ -1,68 +1,157 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import {
-  faceNormal,
   MODELS_3D,
-  project3D,
-  rotate3D,
   type Model3DCat,
-  type Vec3,
+  type Model3DDef,
+  type Model3DScene,
 } from '../../lib/models3d';
-import { IconPause, IconPlay, IconRefresh } from '../Icons';
+import { parseCustom3DFile } from '../../lib/modelImport';
+import { applyExplode, projectWebGL3D, WebGL3DRenderer } from '../../lib/webgl3d';
+import { IconPause, IconPlay, IconRefresh, IconUpload } from '../Icons';
 
 const CATS: ('Alle' | Model3DCat)[] = ['Alle', 'Biologie', 'Chemie', 'Physik', 'Astronomie', 'Mathematik'];
 
-function hexToRgb(hex: string): [number, number, number] {
-  const clean = hex.replace('#', '');
-  const n = parseInt(clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean, 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
-
-function shadeHex(hex: string, factor: number): string {
-  const [r, g, b] = hexToRgb(hex);
-  const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
-  return `rgb(${clamp(r * factor)}, ${clamp(g * factor)}, ${clamp(b * factor)})`;
-}
-
-function mixWhite(hex: string, ratio: number): string {
-  const [r, g, b] = hexToRgb(hex);
-  const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
-  return `rgb(${clamp(r + (255 - r) * ratio)}, ${clamp(g + (255 - g) * ratio)}, ${clamp(b + (255 - b) * ratio)})`;
-}
-
-/** Interactive 60-FPS 3D Models Studio with mouse/touch orbit rotation, zoom, variants & clickable German hotspots. */
+/**
+ * Interactive 60-FPS GPU WebGL2 3D Models Studio:
+ * - Hardware PBR-style 3-point lighting, Fresnel rim glow, Z-buffer & translucent X-Ray glass pass
+ * - 12 built-in scientific models + custom .obj / .pdb / .xyz 3D file import
+ * - Removable anatomical/structural layers, 0–100 % Exploded View slider, and interactive 3D Quiz mode
+ */
 export function Models3DTool() {
   const [cat, setCat] = useState<'Alle' | Model3DCat>('Alle');
   const [modelId, setModelId] = useState(MODELS_3D[0].id);
   const [variantId, setVariantId] = useState<string | undefined>(undefined);
+  const [customModel, setCustomModel] = useState<{ name: string; scene: Model3DScene } | null>(null);
+  const [customError, setCustomError] = useState('');
   const [autoSpin, setAutoSpin] = useState(true);
   const [showLabels, setShowLabels] = useState(true);
+  const [xray, setXray] = useState(false);
+  const [explode, setExplode] = useState(0);
+  const [hiddenLayers, setHiddenLayers] = useState<string[]>([]);
   const [zoom, setZoom] = useState(1);
   const [activeSpot, setActiveSpot] = useState<string | null>(null);
+  const [quizOn, setQuizOn] = useState(false);
+  const [quizTargetId, setQuizTargetId] = useState<string | null>(null);
+  const [quizFeedback, setQuizFeedback] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [quizScore, setQuizScore] = useState({ right: 0, total: 0 });
+  const [webglReady, setWebglReady] = useState(true);
 
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const glCanvasRef = useRef<HTMLCanvasElement>(null);
+  const hudCanvasRef = useRef<HTMLCanvasElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const rotRef = useRef<[number, number]>([MODELS_3D[0].defaultRot[0], MODELS_3D[0].defaultRot[1]]);
   const velRef = useRef<[number, number]>([0, 0]);
   const dragRef = useRef<{ down: boolean; x: number; y: number; moved: boolean }>({ down: false, x: 0, y: 0, moved: false });
   const spotsScreenRef = useRef<{ id: string; x: number; y: number }[]>([]);
 
-  const model = useMemo(() => MODELS_3D.find((m) => m.id === modelId) ?? MODELS_3D[0], [modelId]);
+  const builtInModel = useMemo(() => MODELS_3D.find((m) => m.id === modelId) ?? MODELS_3D[0], [modelId]);
+  const model: Model3DDef = useMemo(() => {
+    if (customModel) {
+      return {
+        id: '__custom__',
+        title: customModel.name,
+        category: 'Chemie',
+        summary: 'Eigenes 3D-Modell / Molekül – lokal per WebGL2 gerendert.',
+        defaultRot: [0.32, 0.55],
+        build: () => customModel.scene,
+      };
+    }
+    return builtInModel;
+  }, [builtInModel, customModel]);
+
   const currentVariant = variantId && model.variants?.some((v) => v.id === variantId) ? variantId : model.variants?.[0]?.id;
   const filteredModels = useMemo(() => MODELS_3D.filter((m) => cat === 'Alle' || m.category === cat), [cat]);
+  const hiddenSet = useMemo(() => new Set(hiddenLayers), [hiddenLayers]);
 
-  const selectModel = (id: string) => {
-    const next = MODELS_3D.find((m) => m.id === id);
-    if (!next) return;
-    setModelId(next.id);
-    setVariantId(next.variants?.[0]?.id);
+  const staticScene = useMemo(() => model.build(0, currentVariant), [model, currentVariant]);
+  const visibleHotspots = useMemo(
+    () => staticScene.hotspots.filter((h) => !h.layer || !hiddenSet.has(h.layer)),
+    [staticScene, hiddenSet],
+  );
+  const selectedHotspot = visibleHotspots.find((h) => h.id === activeSpot) ?? visibleHotspots[0] ?? null;
+
+  const pickNextQuiz = (spots: typeof visibleHotspots, excludeId?: string | null) => {
+    const pool = spots.filter((s) => s.id !== excludeId);
+    const list = pool.length ? pool : spots;
+    if (!list.length) return null;
+    return list[Math.floor(Math.random() * list.length)].id;
+  };
+
+  const resetViewFor = (next: Model3DDef) => {
     setActiveSpot(null);
+    setHiddenLayers([]);
+    setExplode(0);
+    setXray(false);
     setZoom(1);
+    setQuizOn(false);
+    setQuizTargetId(null);
+    setQuizFeedback(null);
     rotRef.current = [next.defaultRot[0], next.defaultRot[1]];
     velRef.current = [0, 0];
   };
 
-  // Keep current hotspots metadata accessible for detail panel
-  const staticScene = useMemo(() => model.build(0, currentVariant), [model, currentVariant]);
-  const selectedHotspot = staticScene.hotspots.find((h) => h.id === activeSpot) ?? staticScene.hotspots[0] ?? null;
+  const selectModel = (id: string) => {
+    const next = MODELS_3D.find((m) => m.id === id);
+    if (!next) return;
+    setCustomModel(null);
+    setCustomError('');
+    setModelId(next.id);
+    setVariantId(next.variants?.[0]?.id);
+    resetViewFor(next);
+  };
+
+  const toggleLayer = (id: string) => {
+    setHiddenLayers((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
+  };
+
+  const startOrStopQuiz = () => {
+    if (quizOn) {
+      setQuizOn(false);
+      setQuizTargetId(null);
+      setQuizFeedback(null);
+      return;
+    }
+    if (visibleHotspots.length < 2) return;
+    setQuizOn(true);
+    setQuizScore({ right: 0, total: 0 });
+    setQuizFeedback(null);
+    setActiveSpot(null);
+    setQuizTargetId(pickNextQuiz(visibleHotspots, null));
+  };
+
+  const handleImportFile = async (file: File | undefined) => {
+    if (!file) return;
+    setCustomError('');
+    try {
+      const text = await file.text();
+      const scene = parseCustom3DFile(file.name, text);
+      setCustomModel({ name: file.name, scene });
+      resetViewFor({
+        id: '__custom__',
+        title: file.name,
+        category: 'Chemie',
+        summary: '',
+        defaultRot: [0.32, 0.55],
+        build: () => scene,
+      });
+    } catch (e) {
+      setCustomError((e as Error).message || 'Datei konnte nicht als 3D-Modell gelesen werden.');
+    }
+  };
+
+  // Persistent WebGL2 renderer lifecycle
+  const rendererRef = useRef<WebGL3DRenderer | null>(null);
+  useEffect(() => {
+    const glCanvas = glCanvasRef.current;
+    if (!glCanvas) return;
+    const r = WebGL3DRenderer.create(glCanvas);
+    rendererRef.current = r;
+    setWebglReady(Boolean(r));
+    return () => {
+      r?.dispose();
+      rendererRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     let raf = 0;
@@ -70,22 +159,29 @@ export function Models3DTool() {
     const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
     const frame = (nowMs: number) => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
+      const glCanvas = glCanvasRef.current;
+      const hudCanvas = hudCanvasRef.current;
+      if (!glCanvas || !hudCanvas) return;
+
       const dpr = Math.min(2, window.devicePixelRatio || 1);
-      const rect = canvas.getBoundingClientRect();
+      const rect = hudCanvas.getBoundingClientRect();
       const w = Math.max(280, Math.round(rect.width));
       const h = Math.max(260, Math.round(rect.height));
-      if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
-        canvas.width = Math.round(w * dpr);
-        canvas.height = Math.round(h * dpr);
+      const pw = Math.round(w * dpr);
+      const ph = Math.round(h * dpr);
+
+      if (glCanvas.width !== pw || glCanvas.height !== ph) {
+        glCanvas.width = pw;
+        glCanvas.height = ph;
       }
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
+      if (hudCanvas.width !== pw || hudCanvas.height !== ph) {
+        hudCanvas.width = pw;
+        hudCanvas.height = ph;
+      }
 
       const t = reduced ? 0 : (nowMs - startMs) / 1000;
       if (!dragRef.current.down) {
-        if (autoSpin && !reduced) rotRef.current[1] += 0.0055;
+        if (autoSpin && !reduced) rotRef.current[1] += 0.0052;
         rotRef.current[0] = Math.max(-1.45, Math.min(1.45, rotRef.current[0] + velRef.current[0]));
         rotRef.current[1] += velRef.current[1];
         velRef.current[0] *= 0.91;
@@ -94,218 +190,106 @@ export function Models3DTool() {
 
       const [rx, ry] = rotRef.current;
       const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-      // Clean subtle radial studio backdrop
-      const bg = ctx.createRadialGradient(w * 0.5, h * 0.45, 20, w * 0.5, h * 0.5, Math.max(w, h) * 0.7);
-      bg.addColorStop(0, isDark ? '#142423' : '#f4faf9');
-      bg.addColorStop(1, isDark ? '#0a1212' : '#e6f0ef');
-      ctx.fillStyle = bg;
-      ctx.fillRect(0, 0, w, h);
-
-      const cx = w / 2;
-      const cy = h / 2;
-      const fov = Math.min(w, h) * 0.96;
       const scene = model.build(t, currentVariant);
 
-      type DrawItem = { z: number; draw: () => void };
-      const drawList: DrawItem[] = [];
-
-      const rotP = (p: Vec3) => rotate3D(p, rx, ry);
-      const proj = (p: Vec3) => project3D(p, cx, cy, fov, 5.4, zoom);
-
-      for (const prim of scene.primitives) {
-        const dimmed = activeSpot && prim.partId && prim.partId !== activeSpot;
-        const baseAlpha = (prim.alpha ?? 1) * (dimmed ? 0.25 : 1);
-
-        if (prim.kind === 'sphere') {
-          const rp = rotP(prim.pos);
-          const pp = proj(rp);
-          const sr = Math.max(1.5, prim.r * pp.scale);
-          drawList.push({
-            z: pp.z,
-            draw: () => {
-              ctx.save();
-              ctx.globalAlpha = baseAlpha;
-              // Optional planetary ring (Saturn)
-              if (prim.ring) {
-                ctx.save();
-                ctx.translate(pp.x, pp.y);
-                ctx.rotate(prim.ring.tilt);
-                ctx.beginPath();
-                ctx.ellipse(0, 0, prim.ring.rOuter * pp.scale, prim.ring.rOuter * pp.scale * 0.34, 0, 0, Math.PI * 2);
-                ctx.strokeStyle = prim.ring.color;
-                ctx.lineWidth = Math.max(2, (prim.ring.rOuter - prim.ring.rInner) * pp.scale * 0.55);
-                ctx.globalAlpha = baseAlpha * 0.72;
-                ctx.stroke();
-                ctx.restore();
-              }
-              if (prim.glow) {
-                const gl = ctx.createRadialGradient(pp.x, pp.y, sr * 0.2, pp.x, pp.y, sr * 2.0);
-                gl.addColorStop(0, prim.color);
-                gl.addColorStop(1, 'transparent');
-                ctx.fillStyle = gl;
-                ctx.globalAlpha = baseAlpha * 0.32;
-                ctx.beginPath();
-                ctx.arc(pp.x, pp.y, sr * 2.0, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.globalAlpha = baseAlpha;
-              }
-              // Phong-style 3D sphere shading (specular top-left highlight + deep shadow)
-              const grad = ctx.createRadialGradient(pp.x - sr * 0.32, pp.y - sr * 0.34, sr * 0.08, pp.x, pp.y, sr);
-              grad.addColorStop(0, mixWhite(prim.color, 0.72));
-              grad.addColorStop(0.45, prim.color);
-              grad.addColorStop(1, shadeHex(prim.color, 0.38));
-              ctx.fillStyle = grad;
-              ctx.beginPath();
-              ctx.arc(pp.x, pp.y, sr, 0, Math.PI * 2);
-              ctx.fill();
-
-              if (prim.label && showLabels && sr >= 8) {
-                ctx.fillStyle = isDark ? '#ffffff' : '#0f172a';
-                ctx.font = `700 ${Math.min(13, Math.max(10, Math.round(sr * 0.58)))}px system-ui, sans-serif`;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(prim.label, pp.x, pp.y);
-              }
-              ctx.restore();
-            },
-          });
-        } else if (prim.kind === 'bond') {
-          const ra = rotP(prim.a);
-          const rb = rotP(prim.b);
-          const pa = proj(ra);
-          const pb = proj(rb);
-          const midZ = (pa.z + pb.z) / 2;
-          const lw = Math.max(1.5, prim.radius * 2 * ((pa.scale + pb.scale) / 2));
-          drawList.push({
-            z: midZ,
-            draw: () => {
-              ctx.save();
-              ctx.globalAlpha = baseAlpha;
-              ctx.strokeStyle = prim.color;
-              ctx.lineCap = 'round';
-              if (prim.double) {
-                const dx = pb.x - pa.x;
-                const dy = pb.y - pa.y;
-                const len = Math.hypot(dx, dy) || 1;
-                const nx = (-dy / len) * (lw * 0.45);
-                const ny = (dx / len) * (lw * 0.45);
-                ctx.lineWidth = lw * 0.55;
-                ctx.beginPath();
-                ctx.moveTo(pa.x + nx, pa.y + ny);
-                ctx.lineTo(pb.x + nx, pb.y + ny);
-                ctx.moveTo(pa.x - nx, pa.y - ny);
-                ctx.lineTo(pb.x - nx, pb.y - ny);
-                ctx.stroke();
-              } else {
-                ctx.lineWidth = lw;
-                ctx.beginPath();
-                ctx.moveTo(pa.x, pa.y);
-                ctx.lineTo(pb.x, pb.y);
-                ctx.stroke();
-              }
-              ctx.restore();
-            },
-          });
-        } else if (prim.kind === 'curve' && prim.pts.length > 1) {
-          const rPts = prim.pts.map(rotP);
-          const pPts = rPts.map(proj);
-          const avgZ = pPts.reduce((s, p) => s + p.z, 0) / pPts.length;
-          drawList.push({
-            z: avgZ,
-            draw: () => {
-              ctx.save();
-              ctx.globalAlpha = baseAlpha;
-              ctx.strokeStyle = prim.color;
-              ctx.lineWidth = prim.width * Math.max(0.75, zoom * 0.95);
-              ctx.lineCap = 'round';
-              ctx.lineJoin = 'round';
-              if (prim.dashed) ctx.setLineDash([6, 6]);
-              ctx.beginPath();
-              ctx.moveTo(pPts[0].x, pPts[0].y);
-              for (let i = 1; i < pPts.length; i++) ctx.lineTo(pPts[i].x, pPts[i].y);
-              ctx.stroke();
-              ctx.restore();
-            },
-          });
-        } else if (prim.kind === 'face' && prim.pts.length >= 3) {
-          const rPts = prim.pts.map(rotP);
-          const pPts = rPts.map(proj);
-          const avgZ = pPts.reduce((s, p) => s + p.z, 0) / pPts.length;
-          const n = faceNormal(rPts);
-          // Lambert lighting from top-left-front light vector
-          const light = Math.abs(n[0] * -0.4 + n[1] * 0.65 + n[2] * 0.65);
-          const shade = 0.55 + light * 0.65;
-          drawList.push({
-            z: avgZ,
-            draw: () => {
-              ctx.save();
-              ctx.globalAlpha = baseAlpha;
-              ctx.fillStyle = shadeHex(prim.fill, shade);
-              ctx.beginPath();
-              ctx.moveTo(pPts[0].x, pPts[0].y);
-              for (let i = 1; i < pPts.length; i++) ctx.lineTo(pPts[i].x, pPts[i].y);
-              ctx.closePath();
-              ctx.fill();
-              if (prim.stroke) {
-                ctx.strokeStyle = prim.stroke;
-                ctx.lineWidth = 1.6;
-                ctx.stroke();
-              }
-              ctx.restore();
-            },
-          });
-        }
+      // 1. Hardware-accelerated WebGL2 PBR-shaded 3D geometry pass
+      const renderer = rendererRef.current;
+      if (renderer) {
+        renderer.render(scene, pw, ph, {
+          rx,
+          ry,
+          zoom,
+          isDark,
+          activeSpot: quizOn ? null : activeSpot,
+          hiddenLayers: hiddenSet,
+          explode,
+          xray,
+        });
       }
 
-      // Painter's algorithm: farthest first (smallest z -> largest z)
-      drawList.sort((a, b) => a.z - b.z);
-      for (const item of drawList) item.draw();
+      // 2. Crisp Retina 2D HUD overlay pass (atom labels, hotspot pins & quiz markers)
+      const ctx = hudCanvas.getContext('2d');
+      if (ctx) {
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, w, h);
+        const expMap = scene.layerExplode ?? {};
 
-      // Render interactive hotspot pins on top
-      const screenSpots: { id: string; x: number; y: number }[] = [];
-      if (showLabels) {
-        for (const hs of scene.hotspots) {
-          const pp = proj(rotP(hs.pos));
-          screenSpots.push({ id: hs.id, x: pp.x, y: pp.y });
-          const isSel = activeSpot === hs.id;
-          ctx.save();
-          ctx.beginPath();
-          ctx.arc(pp.x, pp.y, isSel ? 8.5 : 6.5, 0, Math.PI * 2);
-          ctx.fillStyle = isSel ? hs.color : isDark ? 'rgba(15, 25, 25, 0.85)' : 'rgba(255,255,255,0.92)';
-          ctx.fill();
-          ctx.lineWidth = 2.2;
-          ctx.strokeStyle = hs.color;
-          ctx.stroke();
-
-          ctx.font = '600 11.5px system-ui, sans-serif';
-          const tw = ctx.measureText(hs.label).width;
-          const bx = pp.x + 11;
-          const by = pp.y - 11;
-          ctx.fillStyle = isDark ? 'rgba(12, 22, 22, 0.84)' : 'rgba(255, 255, 255, 0.9)';
-          ctx.strokeStyle = isSel ? hs.color : isDark ? 'rgba(255,255,255,0.14)' : 'rgba(15,23,42,0.14)';
-          ctx.lineWidth = isSel ? 1.5 : 1;
-          ctx.beginPath();
-          if (typeof ctx.roundRect === 'function') ctx.roundRect(bx, by, tw + 12, 21, 6);
-          else ctx.rect(bx, by, tw + 12, 21);
-          ctx.fill();
-          ctx.stroke();
-          ctx.fillStyle = isDark ? '#e6f4f3' : '#0f172a';
+        // Atom / planet short labels projected onto spheres
+        if (showLabels && !quizOn) {
+          ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.textAlign = 'left';
-          ctx.fillText(hs.label, bx + 6, by + 10.5);
-          ctx.restore();
+          for (const prim of scene.primitives) {
+            if (prim.kind !== 'sphere' || !prim.label) continue;
+            const lk = prim.layer ?? prim.partId;
+            if (lk && hiddenSet.has(lk)) continue;
+            const pos = applyExplode(prim.pos, prim.explode ?? (lk ? expMap[lk] : undefined), explode);
+            const pp = projectWebGL3D(pos, rx, ry, w, h, zoom);
+            const sr = prim.r * pp.scale;
+            if (sr < 11) continue;
+            ctx.font = `700 ${Math.min(13, Math.max(10, Math.round(sr * 0.52)))}px system-ui, sans-serif`;
+            ctx.fillStyle = 'rgba(0,0,0,0.45)';
+            ctx.fillText(prim.label, pp.x + 1, pp.y + 1);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(prim.label, pp.x, pp.y);
+          }
         }
+
+        // Interactive hotspot pins (always shown in Quiz mode without text labels!)
+        const screenSpots: { id: string; x: number; y: number }[] = [];
+        if (showLabels || quizOn) {
+          for (const hs of scene.hotspots) {
+            const lk = hs.layer ?? hs.id;
+            if (lk && hiddenSet.has(lk)) continue;
+            const pos = applyExplode(hs.pos, expMap[lk], explode);
+            const pp = projectWebGL3D(pos, rx, ry, w, h, zoom);
+            screenSpots.push({ id: hs.id, x: pp.x, y: pp.y });
+            const isSel = !quizOn && activeSpot === hs.id;
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(pp.x, pp.y, isSel || quizOn ? 9 : 6.5, 0, Math.PI * 2);
+            ctx.fillStyle = isSel ? hs.color : isDark ? 'rgba(12, 22, 22, 0.88)' : 'rgba(255, 255, 255, 0.94)';
+            ctx.fill();
+            ctx.lineWidth = 2.4;
+            ctx.strokeStyle = quizOn ? '#f59e0b' : hs.color;
+            ctx.stroke();
+
+            if (quizOn) {
+              ctx.fillStyle = isDark ? '#fef3c7' : '#92400e';
+              ctx.font = '700 11px system-ui, sans-serif';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText('?', pp.x, pp.y + 0.5);
+            } else {
+              ctx.font = '600 11.5px system-ui, sans-serif';
+              const tw = ctx.measureText(hs.label).width;
+              const bx = Math.min(w - tw - 18, pp.x + 11);
+              const by = Math.max(8, Math.min(h - 28, pp.y - 11));
+              ctx.fillStyle = isDark ? 'rgba(12, 22, 22, 0.86)' : 'rgba(255, 255, 255, 0.92)';
+              ctx.strokeStyle = isSel ? hs.color : isDark ? 'rgba(255,255,255,0.16)' : 'rgba(15,23,42,0.16)';
+              ctx.lineWidth = isSel ? 1.6 : 1;
+              ctx.beginPath();
+              if (typeof ctx.roundRect === 'function') ctx.roundRect(bx, by, tw + 12, 21, 6);
+              else ctx.rect(bx, by, tw + 12, 21);
+              ctx.fill();
+              ctx.stroke();
+              ctx.fillStyle = isDark ? '#e6f4f3' : '#0f172a';
+              ctx.textBaseline = 'middle';
+              ctx.textAlign = 'left';
+              ctx.fillText(hs.label, bx + 6, by + 10.5);
+            }
+            ctx.restore();
+          }
+        }
+        spotsScreenRef.current = screenSpots;
       }
-      spotsScreenRef.current = screenSpots;
 
       raf = requestAnimationFrame(frame);
     };
 
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [model, currentVariant, autoSpin, showLabels, zoom, activeSpot]);
+  }, [model, currentVariant, autoSpin, showLabels, zoom, activeSpot, hiddenSet, explode, xray, quizOn]);
 
   const onPointerDown = (e: ReactPointerEvent<HTMLCanvasElement>) => {
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -333,38 +317,73 @@ export function Models3DTool() {
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
     const hit = spotsScreenRef.current.find((s) => Math.hypot(s.x - mx, s.y - my) < 28);
-    if (hit) setActiveSpot((cur) => (cur === hit.id ? null : hit.id));
+    if (!hit) return;
+    if (quizOn && quizTargetId) {
+      const target = visibleHotspots.find((h) => h.id === quizTargetId);
+      const clicked = visibleHotspots.find((h) => h.id === hit.id);
+      if (hit.id === quizTargetId) {
+        setQuizScore((s) => ({ right: s.right + 1, total: s.total + 1 }));
+        setQuizFeedback({ ok: true, msg: `Richtig! ${target?.label ?? ''}` });
+        setQuizTargetId(pickNextQuiz(visibleHotspots, quizTargetId));
+      } else {
+        setQuizScore((s) => ({ right: s.right, total: s.total + 1 }));
+        setQuizFeedback({ ok: false, msg: `Das war „${clicked?.label ?? ''}“ – gesucht ist „${target?.label ?? ''}“.` });
+      }
+      return;
+    }
+    setActiveSpot((cur) => (cur === hit.id ? null : hit.id));
   };
+
+  const quizTarget = quizOn && quizTargetId ? visibleHotspots.find((h) => h.id === quizTargetId) : null;
+  const hasLayers = Boolean(model.layers?.length);
 
   return (
     <section className="panel">
       <div className="panel-head">
         <div>
-          <h2>Interaktive 3D-Modelle</h2>
-          <p className="muted small">Mit Maus oder Finger frei drehen, zoomen und Punkte anklicken – alle 8 Modelle laufen 100 % offline.</p>
+          <h2>Interaktive 3D-Modelle {webglReady && <span className="badge">WebGL2</span>}</h2>
+          <p className="muted small">
+            {MODELS_3D.length} zerlegbare 3D-Modelle mit Echtzeit-Beleuchtung, Röntgen-Modus, 3D-Quiz &amp; eigenem .obj/.pdb/.xyz-Import – 100 % offline.
+          </p>
         </div>
         <div className="row-gap" style={{ flexWrap: 'wrap' }}>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".obj,.pdb,.xyz"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              void handleImportFile(e.target.files?.[0]);
+              e.target.value = '';
+            }}
+          />
+          <button type="button" className="btn outline sm" onClick={() => fileRef.current?.click()} title="Eigenes 3D-Modell (.obj) oder Molekül (.pdb, .xyz) laden">
+            <IconUpload size={13} /> .obj / .pdb laden
+          </button>
           <button type="button" className="btn ghost sm" onClick={() => setAutoSpin((v) => !v)}>
-            {autoSpin ? <IconPause size={13} /> : <IconPlay size={13} />} {autoSpin ? 'Drehung stoppen' : 'Auto-Drehung'}
+            {autoSpin ? <IconPause size={13} /> : <IconPlay size={13} />} {autoSpin ? 'Stopp' : 'Drehen'}
           </button>
           <button type="button" className={'chip' + (showLabels ? ' on' : '')} onClick={() => setShowLabels((v) => !v)}>
             Labels
           </button>
+          <button type="button" className={'chip' + (xray ? ' on' : '')} onClick={() => setXray((v) => !v)} title="Röntgen- / Glas-Ansicht">
+            Röntgen
+          </button>
+          {visibleHotspots.length >= 2 && (
+            <button type="button" className={'chip' + (quizOn ? ' on' : '')} onClick={startOrStopQuiz}>
+              3D-Quiz
+            </button>
+          )}
           <button type="button" className="btn ghost sm" onClick={() => setZoom((z) => Math.max(0.65, Number((z - 0.15).toFixed(2))))} aria-label="Verkleinern">
             −
           </button>
-          <button type="button" className="btn ghost sm" onClick={() => setZoom((z) => Math.min(1.7, Number((z + 0.15).toFixed(2))))} aria-label="Vergrößern">
+          <button type="button" className="btn ghost sm" onClick={() => setZoom((z) => Math.min(1.8, Number((z + 0.15).toFixed(2))))} aria-label="Vergrößern">
             +
           </button>
           <button
             type="button"
             className="btn ghost sm"
-            onClick={() => {
-              rotRef.current = [model.defaultRot[0], model.defaultRot[1]];
-              velRef.current = [0, 0];
-              setZoom(1);
-              setActiveSpot(null);
-            }}
+            onClick={() => resetViewFor(model)}
             title="Ansicht zurücksetzen"
           >
             <IconRefresh size={13} /> Reset
@@ -372,12 +391,17 @@ export function Models3DTool() {
         </div>
       </div>
 
+      {customError && <p className="form-error" style={{ marginBottom: 10 }}>{customError}</p>}
+
       <div className="chips" style={{ marginBottom: 10 }}>
         {CATS.map((c) => (
-          <button key={c} type="button" className={'chip' + (cat === c ? ' on' : '')} onClick={() => setCat(c)}>
+          <button key={c} type="button" className={'chip' + (cat === c && !customModel ? ' on' : '')} onClick={() => (setCustomModel(null), setCat(c))}>
             {c}
           </button>
         ))}
+        {customModel && (
+          <span className="chip on">Eigene Datei: {customModel.name}</span>
+        )}
       </div>
 
       <div className="m3d-layout">
@@ -386,7 +410,7 @@ export function Models3DTool() {
             <button
               key={m.id}
               type="button"
-              className={`m3d-card${m.id === model.id ? ' on' : ''}`}
+              className={`m3d-card${!customModel && m.id === builtInModel.id ? ' on' : ''}`}
               onClick={() => selectModel(m.id)}
             >
               <small className="muted">{m.category}</small>
@@ -414,10 +438,62 @@ export function Models3DTool() {
             </div>
           )}
 
-          <div className="m3d-canvas-wrap">
+          {hasLayers && (
+            <div className="m3d-pro-bar">
+              <div className="m3d-layers">
+                <small className="muted">Schichten:</small>
+                {model.layers!.map((l) => {
+                  const visible = !hiddenSet.has(l.id);
+                  return (
+                    <button
+                      key={l.id}
+                      type="button"
+                      className={`chip sm${visible ? ' on' : ''}`}
+                      onClick={() => toggleLayer(l.id)}
+                      title={visible ? `${l.label} ausblenden` : `${l.label} einblenden`}
+                    >
+                      <i className="m3d-layer-dot" style={{ background: l.color }} aria-hidden="true" />
+                      {l.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <label className="m3d-explode">
+                <small className="muted">Explosion</small>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.02}
+                  value={explode}
+                  onChange={(e) => setExplode(Number(e.target.value))}
+                  aria-label="Explosionsansicht"
+                />
+                <small className="muted">{Math.round(explode * 100)}%</small>
+              </label>
+            </div>
+          )}
+
+          {quizOn && quizTarget && (
+            <div className="m3d-quiz-banner">
+              <div>
+                <small className="muted">3D-Quiz ({quizScore.right}/{quizScore.total} richtig)</small>
+                <b>Finde im 3D-Modell: {quizTarget.label}</b>
+                {quizFeedback && (
+                  <small className={quizFeedback.ok ? 'm3d-q-ok' : 'm3d-q-err'}>{quizFeedback.msg}</small>
+                )}
+              </div>
+              <button type="button" className="btn ghost sm" onClick={startOrStopQuiz}>
+                Quiz beenden
+              </button>
+            </div>
+          )}
+
+          <div className="m3d-canvas-wrap m3d-studio-bg">
+            <canvas ref={glCanvasRef} className="m3d-canvas m3d-gl-canvas" />
             <canvas
-              ref={canvasRef}
-              className="m3d-canvas"
+              ref={hudCanvasRef}
+              className="m3d-canvas m3d-hud-canvas"
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
@@ -426,35 +502,41 @@ export function Models3DTool() {
               }}
               onWheel={(e) => {
                 e.preventDefault();
-                setZoom((z) => Math.max(0.65, Math.min(1.7, Number((z - Math.sign(e.deltaY) * 0.08).toFixed(2)))));
+                setZoom((z) => Math.max(0.65, Math.min(1.8, Number((z - Math.sign(e.deltaY) * 0.08).toFixed(2)))));
               }}
             />
-            <span className="m3d-hint">Ziehen zum Drehen · Scrollen zum Zoomen · Punkte anklicken</span>
+            <span className="m3d-hint">
+              {quizOn
+                ? 'Drehe das Modell und klicke den gesuchten ?-Punkt an'
+                : 'Ziehen zum Drehen · Scrollen zum Zoomen · Punkte anklicken'}
+            </span>
           </div>
 
-          <div className="m3d-info">
-            <div className="chips" style={{ marginTop: 0 }}>
-              {staticScene.hotspots.map((hs) => (
-                <button
-                  key={hs.id}
-                  type="button"
-                  className={'chip' + (selectedHotspot?.id === hs.id ? ' on' : '')}
-                  onClick={() => setActiveSpot((cur) => (cur === hs.id ? null : hs.id))}
-                >
-                  {hs.label}
-                </button>
-              ))}
+          {!quizOn && (
+            <div className="m3d-info">
+              <div className="chips" style={{ marginTop: 0 }}>
+                {visibleHotspots.map((hs) => (
+                  <button
+                    key={hs.id}
+                    type="button"
+                    className={'chip' + (selectedHotspot?.id === hs.id ? ' on' : '')}
+                    onClick={() => setActiveSpot((cur) => (cur === hs.id ? null : hs.id))}
+                  >
+                    {hs.label}
+                  </button>
+                ))}
+              </div>
+              {selectedHotspot ? (
+                <p className="m3d-note">
+                  <b>{selectedHotspot.label}:</b> {selectedHotspot.note}
+                </p>
+              ) : (
+                <p className="muted small" style={{ margin: 0 }}>
+                  {model.summary}
+                </p>
+              )}
             </div>
-            {selectedHotspot ? (
-              <p className="m3d-note">
-                <b>{selectedHotspot.label}:</b> {selectedHotspot.note}
-              </p>
-            ) : (
-              <p className="muted small" style={{ margin: 0 }}>
-                {model.summary}
-              </p>
-            )}
-          </div>
+          )}
         </div>
       </div>
     </section>

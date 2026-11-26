@@ -52,7 +52,10 @@ function cardHost(skill: Skill, progress: SetHost['progress'], updateSet?: SetHo
       const d = getState().data;
       let deck = d.decks.find((x) => x.name === name);
       if (!deck) {
-        let course = d.courses.find((c) => c.name === 'Skills') ?? d.courses[0];
+        let course =
+          (skill.courseId ? d.courses.find((c) => c.id === skill.courseId) : undefined) ??
+          d.courses.find((c) => c.name === 'Skills') ??
+          d.courses[0];
         if (!course) course = addCourse((d.workspaces[0] ?? addWorkspace('Erster Workspace')).id, 'Skills');
         deck = addDeck(course.id, name);
       }
@@ -403,9 +406,12 @@ type ReviewPlan = { focus?: string[]; count?: number };
 type View = { kind: 'lesson'; id: string } | { kind: 'test'; stageId: string } | { kind: 'project'; stageId: string } | { kind: 'sheet'; stageId: string } | { kind: 'review'; plan?: ReviewPlan } | null;
 
 function Path({ skill }: { skill: Skill }) {
+  const data = useData();
   const navigate = useNavigate();
   const [view, setView] = useState<View>(null);
   const [confirm, setConfirm] = useState(false);
+  const linkedCourse = skill.courseId ? data.courses.find((c) => c.id === skill.courseId) : undefined;
+  const linkedWs = linkedCourse ? data.workspaces.find((w) => w.id === linkedCourse.workspaceId) : undefined;
   const p = skillProgress(skill);
   const next = nextLesson(skill);
   // the smart „Weiter“: a short review, a weak spot or the next lesson – whatever is best now
@@ -443,9 +449,16 @@ function Path({ skill }: { skill: Skill }) {
 
   return (
     <>
-      <Link to="/skills" className="btn ghost sm">
-        ‹ Skills
-      </Link>
+      <div className="row-gap" style={{ flexWrap: 'wrap' }}>
+        <Link to="/skills" className="btn ghost sm">
+          ‹ Skills
+        </Link>
+        {linkedCourse && linkedWs && (
+          <Link to={`/library/${linkedWs.slug}/${linkedCourse.slug}`} className="chip skill-course-pill">
+            Modul: {linkedCourse.name} ›
+          </Link>
+        )}
+      </div>
       <header className="page-head skill-head">
         <span className={'badge ' + skill.domain} data-domain={skill.domain}>{DOMAIN_LABEL[skill.domain]}</span>
         <h1>{skill.title}</h1>

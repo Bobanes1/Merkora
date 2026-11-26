@@ -34,7 +34,10 @@ const SOUND_ICON: Record<SoundId, string> = {
   wind: 'M3 8h11a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h7',
   birds: 'M3 9c2-2 4-2 6 0 2-2 4-2 6 0M10 16c1.5-1.5 3-1.5 4.5 0 1.5-1.5 3-1.5 4.5 0',
   night: 'M17 14.5A6.5 6.5 0 0 1 9.5 7a6.5 6.5 0 1 0 7.5 7.5zM17 5l.5 1.5L19 7l-1.5.5L17 9l-.5-1.5L15 7l1.5-.5z',
+  library: 'M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2zM9 7h7M9 11h5',
   cafe: 'M4 10h12v5a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4v-5zM16 11h2a2 2 0 0 1 0 4h-2M7 6c0-1 .8-1.5 1-2.5M11 6c0-1 .8-1.5 1-2.5',
+  train: 'M5 15V6a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3zM5 11h14M9 15h.01M15 15h.01M8 18l-2 3M16 18l2 3',
+  keyboard: 'M3 7h18a1.5 1.5 0 0 1 1.5 1.5v7A1.5 1.5 0 0 1 21 17H3a1.5 1.5 0 0 1-1.5-1.5v-7A1.5 1.5 0 0 1 3 7zM6 10h.01M9 10h.01M12 10h.01M15 10h.01M18 10h.01M7 14h10',
   brown: 'M2 12c2-6 4 6 6 0s4 6 6 0 4 6 6 0 2-3 2-3',
   pink: 'M2 12c1.5-5 3 5 4.5 0s3 5 4.5 0 3 5 4.5 0 3 5 4.5 0',
   white: 'M2 12l2-4 2 8 2-8 2 8 2-8 2 8 2-8 2 8 2-8 2 4',
@@ -186,7 +189,7 @@ export function SoundsTool({ compact = false }: { compact?: boolean }) {
           <span className="grow">
             <b>{active ? mixLabel(a.playing) : 'Wähle einen Klang oder eine Mischung'}</b>
             <small className="muted">
-              {active ? (a.paused ? 'pausiert' : 'läuft') : 'Alles wird live in Merkora erzeugt – ohne Internet, beliebig lange.'}
+              {active ? (a.paused ? 'pausiert' : 'läuft') : 'Echte Studio-Aufnahmen, Yamaha-Flügel & Fokus-Rauschen – 100 % offline, nahtlos geloopt.'}
               {timerLeft !== null && ` · stoppt in ${timerLeft} Min.`}
             </small>
           </span>

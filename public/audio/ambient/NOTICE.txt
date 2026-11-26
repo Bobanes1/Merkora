@@ -1,0 +1,2 @@
+Ambient study soundscape recordings curated from the Moodist open-source project
+(https://github.com/remvze/moodist, MIT License; third-party recordings under CC0 and Pixabay Content License).

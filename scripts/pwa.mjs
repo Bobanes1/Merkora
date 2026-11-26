@@ -84,7 +84,15 @@ const files = [];
     else files.push('/' + relative(dist, p).split(sep).join('/'));
   }
 })(dist);
-const precache = files.filter((f) => f !== '/sw.js' && !(/\/index\.html$/.test(f) && f !== '/index.html') && f !== '/404.html' && !/\.(ttf|woff)$/.test(f));
+const precache = files.filter(
+  (f) =>
+    f !== '/sw.js' &&
+    !(/\/index\.html$/.test(f) && f !== '/index.html') &&
+    f !== '/404.html' &&
+    !/\.(ttf|woff)$/.test(f) &&
+    !f.startsWith('/audio/') &&
+    !f.startsWith('/ocr/'),
+);
 const version = `${pkg.version}-${Date.now().toString(36)}`;
 writeFileSync(
   join(dist, 'sw.js'),
@@ -106,7 +114,18 @@ self.addEventListener('fetch', (e) => {
     e.respondWith(fetch(req).catch(() => caches.match('/index.html')));
     return;
   }
-  e.respondWith(caches.match(req).then((hit) => hit || fetch(req)));
+  e.respondWith(
+    caches.match(req).then((hit) => {
+      if (hit) return hit;
+      return fetch(req).then((res) => {
+        if (res.ok && (url.pathname.startsWith('/audio/') || url.pathname.startsWith('/ocr/'))) {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+        }
+        return res;
+      });
+    }),
+  );
 });
 `,
 );

@@ -492,7 +492,11 @@ export function mergeData(local: Data, remote: Data): Data {
   return {
     ...local,
     workspaces: unionById(local.workspaces, remote.workspaces ?? [], isDel),
-    courses: unionById(local.courses, remote.courses ?? [], isDel, (x, y) => ({ ...x, folders: unionById(x.folders ?? [], y.folders ?? [], isDel) })),
+    courses: unionById(local.courses, remote.courses ?? [], isDel, (x, y) => ({
+      ...x,
+      folders: unionById(x.folders ?? [], y.folders ?? [], isDel),
+      materials: unionById(x.materials ?? [], y.materials ?? [], isDel),
+    })),
     decks: unionById(local.decks, remote.decks ?? [], isDel, (x, y) => mergeDeck(x, y, isDel)),
     skills: unionById(local.skills ?? [], remote.skills ?? [], isDel, mergeSkill),
     reviews: reviews.sort((x, y) => x.at - y.at),
@@ -510,6 +514,8 @@ function referencedMedia(d: Data) {
   for (const deck of d.decks)
     for (const c of deck.cards) if (c.html) for (const s of [c.front, c.back]) for (const m of s.matchAll(re)) ids.add(m[1]);
   for (const deck of d.decks) for (const f of deck.files ?? []) ids.add(f.id);
+  // module-level materials travel along too
+  for (const crs of d.courses) for (const m of crs.materials ?? []) if (m.isFile) ids.add(m.id);
   // the documents of skills travel along too
   for (const sk of d.skills ?? []) for (const f of sk.files ?? []) ids.add(f.id);
   return ids;

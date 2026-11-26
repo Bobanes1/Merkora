@@ -169,10 +169,31 @@ function checkSet(id: string, setId: string, spot: SetSpot) {
 }
 
 /** Step 1: a new skill from a broad topic – the AI asks its questions. Returns the skill id at once. */
-export function startSkill(topic: string, level: string, material?: string): string {
+export function startSkill(
+  topic: string,
+  level: string,
+  material?: string,
+  opts?: { courseId?: string; files?: import('./store').DeckFile[] },
+): string {
   const id = newId();
   const now = Date.now();
-  const draft: Skill = { id, topic: topic.trim(), title: topic.trim(), domain: 'general', levels: [], targetLevel: 0, level, ...(material?.trim() ? { material: material.trim().slice(0, 60000) } : {}), status: 'planning', plan: {}, stages: [], createdAt: now, updatedAt: now };
+  const draft: Skill = {
+    id,
+    topic: topic.trim(),
+    title: topic.trim(),
+    domain: 'general',
+    levels: [],
+    targetLevel: 0,
+    level,
+    ...(material?.trim() ? { material: material.trim().slice(0, 60000) } : {}),
+    ...(opts?.courseId ? { courseId: opts.courseId } : {}),
+    ...(opts?.files?.length ? { files: opts.files } : {}),
+    status: 'planning',
+    plan: {},
+    stages: [],
+    createdAt: now,
+    updatedAt: now,
+  };
   addSkill(draft);
   void askQuestions(id);
   return id;

@@ -1,0 +1,5 @@
+Salamander Grand Piano V3 (Yamaha C5) – MP3 sample subset
+Original recordings by Alexander Holm (https://github.com/sfzinstruments/SalamanderGrandPiano)
+MP3 distribution via Tone.js Audio (https://github.com/Tonejs/audio/tree/master/salamander)
+License: Creative Commons Attribution 3.0 Unported (CC BY 3.0)
+https://creativecommons.org/licenses/by/3.0/

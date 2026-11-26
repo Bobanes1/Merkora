@@ -37,8 +37,9 @@ import { StudySession, type SessionItem } from '../components/StudySession';
 import { countdownText, examCovers, upcomingExams } from '../lib/exams';
 import { courseSummary, masteryPercent, sortCourses, type CourseSort } from '../lib/stats';
 import { allAcross, dueAcross } from '../lib/sessions';
-import { courseDocs } from '../lib/courseDocs';
+import { unifiedCourseMaterials } from '../lib/courseDocs';
 import { CourseDocs } from '../components/CourseDocs';
+import { CourseSkills } from '../components/CourseSkills';
 import { usePhone } from '../lib/phone';
 import {
   addCourse,
@@ -626,11 +627,11 @@ function CourseView({
   );
   const activeCourseDecks = rawCourseDecks.filter((d) => !d.archived);
   const [selected, setSelected] = useState<string | null>(null);
-  // right column: the chosen deck's cards or all documents of the course
-  const [view, setView] = useState<'deck' | 'docs'>('deck');
+  // right column: the chosen deck's cards, the module Materialbox, or linked skills
+  const [view, setView] = useState<'deck' | 'docs' | 'skills'>(() => (activeCourseDecks.length === 0 ? 'docs' : 'deck'));
   const phone = usePhone();
-  const docs = courseDocs(course, data.decks);
-  const docCount = docs.files.length + docs.texts.length;
+  const docCount = unifiedCourseMaterials(course, data.decks).length;
+  const skillCount = (data.skills ?? []).filter((s) => s.courseId === course.id).length;
   const [closed, setClosed] = useState<Record<string, boolean>>({});
   const [addMenu, setAddMenu] = useState(false);
   const deck = decks.find((d) => d.id === selected) ?? decks[0];
@@ -759,11 +760,12 @@ function CourseView({
             <IconEdit size={16} />
           </button>
           <span className="grow" />
-          {docCount > 0 && (
-            <button type="button" className={'btn sm ' + (view === 'docs' ? 'soft' : 'outline')} aria-pressed={view === 'docs'} onClick={() => setView(view === 'docs' ? 'deck' : 'docs')}>
-              <IconFolder size={14} /> Dokumente ({docCount})
-            </button>
-          )}
+          <button type="button" className={'btn sm ' + (view === 'docs' ? 'soft' : 'outline')} aria-pressed={view === 'docs'} onClick={() => setView(view === 'docs' ? 'deck' : 'docs')}>
+            <IconFolder size={14} /> Material{docCount > 0 ? ` (${docCount})` : ''}
+          </button>
+          <button type="button" className={'btn sm ' + (view === 'skills' ? 'soft' : 'outline')} aria-pressed={view === 'skills'} onClick={() => setView(view === 'skills' ? 'deck' : 'skills')}>
+            <IconStar size={14} /> Skills{skillCount > 0 ? ` (${skillCount})` : ''}
+          </button>
           {studyButton(`Kurs: ${course.name}`, activeCourseDecks, (n) => (n ? `Ganzen Kurs lernen (${n}${dueEst ? ` · ${dueEst}` : ''})` : 'Ganzen Kurs üben'), 'btn primary sm')}
         </div>
         <div className="course-stats">
@@ -801,6 +803,10 @@ function CourseView({
         {phone && view === 'docs' ? (
           <section className="panel">
             <CourseDocs course={course} />
+          </section>
+        ) : phone && view === 'skills' ? (
+          <section className="panel">
+            <CourseSkills course={course} onOpenMaterial={() => setView('docs')} />
           </section>
         ) : (
         <section className="panel course-decks">
@@ -913,10 +919,15 @@ function CourseView({
               <b>{showArchived ? 'Keine archivierten Decks' : deckQuery ? 'Kein Deck gefunden' : 'Noch keine Decks'}</b>
               {!showArchived && !deckQuery && (
                 <>
-                  <p className="muted">Lege ein Deck an – leer, mit KI, per CSV/Quizlet oder aus einem Anki-Stapel.</p>
-                  <button type="button" className="btn primary" onClick={() => setDialog({ kind: 'deck', course })}>
-                    <IconPlus size={16} /> Neues Deck
-                  </button>
+                  <p className="muted">Lade deine Modul-Dateien hoch oder lege direkt ein Deck an.</p>
+                  <div className="row-gap" style={{ justifyContent: 'center', flexWrap: 'wrap' }}>
+                    <button type="button" className="btn primary" onClick={() => setDialog({ kind: 'deck', course })}>
+                      <IconPlus size={16} /> Neues Deck
+                    </button>
+                    <button type="button" className="btn outline" onClick={() => setView('docs')}>
+                      <IconFolder size={15} /> Dateien hochladen
+                    </button>
+                  </div>
                 </>
               )}
             </div>
@@ -926,18 +937,21 @@ function CourseView({
 
         {!phone && (
         <section className="panel course-preview">
-          {docCount > 0 && (
-            <div className="seg compact preview-switch" role="tablist" aria-label="Ansicht">
-              <button type="button" role="tab" aria-selected={view === 'deck'} className={view === 'deck' ? 'on' : ''} onClick={() => setView('deck')}>
-                Kartendeck
-              </button>
-              <button type="button" role="tab" aria-selected={view === 'docs'} className={view === 'docs' ? 'on' : ''} onClick={() => setView('docs')}>
-                Dokumente ({docCount})
-              </button>
-            </div>
-          )}
-          {view === 'docs' && docCount > 0 ? (
+          <div className="seg compact preview-switch" role="tablist" aria-label="Ansicht">
+            <button type="button" role="tab" aria-selected={view === 'deck'} className={view === 'deck' ? 'on' : ''} onClick={() => setView('deck')}>
+              Kartendeck
+            </button>
+            <button type="button" role="tab" aria-selected={view === 'docs'} className={view === 'docs' ? 'on' : ''} onClick={() => setView('docs')}>
+              Material{docCount > 0 ? ` (${docCount})` : ''}
+            </button>
+            <button type="button" role="tab" aria-selected={view === 'skills'} className={view === 'skills' ? 'on' : ''} onClick={() => setView('skills')}>
+              Skills{skillCount > 0 ? ` (${skillCount})` : ''}
+            </button>
+          </div>
+          {view === 'docs' ? (
             <CourseDocs course={course} />
+          ) : view === 'skills' ? (
+            <CourseSkills course={course} onOpenMaterial={() => setView('docs')} />
           ) : deck ? (
             <>
               <div className="preview-head">
@@ -958,7 +972,7 @@ function CourseView({
               <CardsTab key={deck.id} deck={deck} onLearn={() => navigate(deckUrl(data, deck, 'learn'))} />
             </>
           ) : (
-            <p className="muted">Wähle links ein Deck aus.</p>
+            <CourseDocs course={course} />
           )}
         </section>
         )}
