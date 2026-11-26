@@ -135,8 +135,8 @@ export default function Skills() {
   const pokeTimer = useRef<number | null>(null);
   useEffect(() => () => { if (pokeTimer.current) window.clearTimeout(pokeTimer.current); }, []);
   const pokePip = () => {
-    const move = pokeMove(poke?.move);
     const n = (poke?.n ?? 0) + 1;
+    const move = pokeMove(n);
     setPoke({ move, n, active: true });
     if (pokeTimer.current) window.clearTimeout(pokeTimer.current);
     pokeTimer.current = window.setTimeout(() => setPoke((p) => (p && p.n === n ? { ...p, active: false } : p)), 1500);

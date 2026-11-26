@@ -98,7 +98,7 @@ export function buildAutopilotPlan(data: Data, budget: AutopilotBudget = 30, now
           skillId: activeSkill.id,
           title: activeSkill.title,
           lessonTitle: nl.lesson.title,
-          pct: skillProgress(activeSkill).pct,
+          pct: Math.round(skillProgress(activeSkill).share * 100),
         }
       : undefined;
 

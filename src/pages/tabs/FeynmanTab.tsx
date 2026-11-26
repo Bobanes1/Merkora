@@ -108,7 +108,7 @@ export default function FeynmanTab({ deck }: { deck: Deck }) {
       <div className="feynman-head">
         <Mascot
           who="pip"
-          mood={busy ? 'think' : assessment?.done ? 'celebrate' : messages.length ? 'happy' : 'wave'}
+          mood={busy ? 'think' : assessment?.done ? 'cheer' : messages.length ? 'happy' : 'wave'}
           size={64}
         />
         <div className="feynman-head-info">

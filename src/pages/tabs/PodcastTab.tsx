@@ -168,7 +168,7 @@ export default function PodcastTab({ deck }: { deck: Deck }) {
       }
       setExporting('Füge WAV zusammen …');
       const combined = concatWavPcm(buffers, 280);
-      const blob = new Blob([combined], { type: 'audio/wav' });
+      const blob = new Blob([combined.buffer as ArrayBuffer], { type: 'audio/wav' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

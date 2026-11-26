@@ -64,7 +64,7 @@ function termsOfCard(c: Card): Set<string> {
  */
 export function buildCourseGraph(data: Data, courseId?: string, targetAt = Date.now()): KnowledgeGraph {
   const decks: Deck[] = data.decks.filter((d) => !d.archived && (!courseId || d.courseId === courseId));
-  const skills = (data.skills ?? []).filter((s) => s.status !== 'archived' && (!courseId || s.courseId === courseId));
+  const skills = (data.skills ?? []).filter((s) => s.status === 'active' && (!courseId || s.courseId === courseId));
 
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
@@ -166,14 +166,14 @@ export function buildCourseGraph(data: Data, courseId?: string, targetAt = Date.
     const prog = skillProgress(sk);
     const angle = hashAngle(sk.id) + si * 0.4;
     const skId = `skill:${sk.id}`;
-    const skWords = new Set(normKey(`${sk.title} ${sk.goal}`).split(' ').filter((w) => w.length >= 4));
+    const skWords = new Set(normKey(`${sk.title} ${sk.topic}`).split(' ').filter((w) => w.length >= 4));
     nodes.push({
       id: skId,
       label: sk.title,
       kind: 'skill',
       skillId: sk.id,
       cardRefs: [],
-      retention: prog.pct,
+      retention: Math.round(prog.share * 100),
       weight: Math.max(2, prog.total),
       x: Math.cos(angle) * 0.78,
       y: Math.sin(angle) * 0.78,

@@ -185,7 +185,7 @@ export function VoiceStudyMode({
           </button>
         </div>
         <div className="empty">
-          <Mascot who="pip" mood="celebrate" size={88} />
+          <Mascot who="pip" mood="cheer" size={88} />
           <b>Audio-Runde geschafft!</b>
           <p className="muted">
             {done} {done === 1 ? 'Karte' : 'Karten'} freihändig geübt.
